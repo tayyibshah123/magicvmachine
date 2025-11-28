@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#050011">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="Protocol: Magic. A Cyber-Roguelite. Infiltrate the Silicon Empire.">
+    
+    <title>Protocol: Magic</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+
+    </script>
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- Main Game Canvas -->
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- UI Overlay Layer -->
+        <div id="ui-layer">
+            
+            <!-- Tooltip -->
+            <div id="tooltip" class="tooltip hidden"></div>
+
+            <!-- Main Menu -->
+            <div id="screen-start" class="screen active">
+                <div style="position: absolute; top: 20px; right: 20px; z-index: 20;">
+                    <button id="btn-settings-main" class="btn-icon">⚙️</button>
+                </div>
+                <div class="glow-container">
+                    <h1 class="title">PROTOCOL: <span class="vs">MAGIC</span></h1>
+                    <div class="subtitle"></div>
+                </div>
+                <div class="spacer"></div>
+                <!-- CHANGED ID: btn-load-save -->
+                <button id="btn-load-save" class="btn primary hidden" style="border-color: var(--neon-gold); color: var(--neon-gold);">RESUME RUN</button>
+                
+                <button id="btn-start" class="btn primary">INITIATE RUN</button>
+                <button id="btn-debrief" class="btn secondary">DEBRIEFING</button>
+                <button id="btn-intel" class="btn secondary">INTEL</button>
+                <button id="btn-upgrades" class="btn secondary neon-border-gold">SANCTUARY</button>
+                <div class="version" style="font-family: 'Orbitron'; margin-top: 20px; opacity: 0.5;">ALPHA V1</div>
+            </div>
+
+            <!-- Character Select -->
+            <div id="screen-char-select" class="screen hidden">
+                <h2 class="neon-text-blue">SELECT OPERATOR</h2>
+                <div id="char-grid" class="char-grid">
+                    <!-- Populated by JS -->
+                </div>
+                <button id="btn-back-char" class="btn secondary">ABORT</button>
+            </div>
+
+            <!-- Debriefing / Tutorial Screen -->
+            <div id="screen-tutorial" class="screen hidden">
+                <h2 class="neon-text-blue">DEBRIEFING</h2>
+                <div class="tutorial-container glass-panel">
+                    <h3 id="tut-title" class="neon-text-gold" style="font-family: 'Orbitron'; margin-top: 0;">TOPIC</h3>
+                    <div id="tut-content" class="tut-content">
+                        <!-- Dynamic Content -->
+                    </div>
+                    
+                    <div class="tut-nav">
+                        <button id="btn-tut-prev" class="btn secondary small">PREV</button>
+                        <span id="tut-page-num" class="neon-text-blue" style="font-family: 'Orbitron';">1 / 5</span>
+                        <button id="btn-tut-next" class="btn secondary small">NEXT</button>
+                    </div>
+                </div>
+                <div class="spacer"></div>
+                <button id="btn-back-tutorial" class="btn primary">CLOSE DEBRIEFING</button>
+            </div>
+
+           <!-- Meta Progression (Sanctuary) -->
+            <div id="screen-meta" class="screen hidden">
+                <h2 class="neon-text-green" style="text-shadow: 0 0 15px lime; margin-top: 20px; margin-bottom: 10px;">SANCTUARY</h2>
+                <div id="fragment-count" class="currency-display neon-text-gold">Fragments: 0</div>
+                
+                <div id="upgrade-list" class="meta-grid">
+                    <!-- Populated by JS -->
+                </div>
+                
+                <div class="meta-controls">
+                    <button id="btn-view-sanctuary" class="btn secondary" style="width: auto; min-width: 150px;">👁️ VIEW WORLD</button>
+                    <button id="btn-back-meta" class="btn secondary" style="width: auto; min-width: 150px;">RETURN TO MENU</button>
+                </div>
+            </div>
+
+            <!-- Intel / Debriefing Screen -->
+            <div id="screen-intel" class="screen hidden">
+                <h2 class="neon-text-blue">INTEL DATABASE</h2>
+                <div id="intel-stats" class="currency-display neon-text-pink" style="font-size: 1rem; margin-bottom: 10px;">
+                    Encrypted Files: <span id="encrypted-count">0</span>
+                </div>
+                
+                <div id="lore-grid" class="lore-grid">
+                    <!-- Populated by JS -->
+                </div>
+
+                <div class="spacer"></div>
+                
+                <div style="display: flex; gap: 20px;">
+                    <button id="btn-decrypt" class="btn primary neon-border-pink">DECRYPT FILE</button>
+                    <button id="btn-back-intel" class="btn secondary">RETURN</button>
+                </div>
+            </div>
+
+            <!-- Hex Breach Minigame Overlay -->
+            <div id="screen-hex" class="screen hidden" style="background: rgba(0,0,0,0.95); z-index: 200;">
+                <h2 class="neon-text-pink">HEX BREACH</h2>
+                <p id="hex-status" style="font-family: 'Orbitron'; color: #fff;">MEMORIZE THE PATTERN</p>
+                
+                <div id="hex-grid" class="hex-grid">
+                    <!-- 9 Hex Nodes generated by JS -->
+                </div>
+
+                <div id="hex-progress" class="neon-text-blue" style="margin-top: 20px; font-family: 'Orbitron';">
+                    SEQUENCE: <span id="hex-round">1</span> / <span id="hex-max-round">3</span>
+                </div>
+            </div>
+            <!-- Event Screen -->
+            <div id="screen-event" class="screen hidden">
+                <h2 id="event-title" class="neon-text-purple">SIGNAL DETECTED</h2>
+                <div class="event-content glass-panel">
+                    <p id="event-desc" class="event-text">...</p>
+                    <div id="event-options" class="event-options">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Game HUD (Hidden by default) -->
+            <div id="hud" class="hidden">
+                <div class="top-bar">
+                    <div class="resources">
+                        <div id="sector-display" class="neon-text-purple" style="font-family: 'Orbitron'; font-size: 1.2rem;">SECTOR 1</div>
+                    </div>
+                    <!-- Relic/Upgrade Dropdown -->
+                    <div id="relic-menu-wrapper" style="position: relative;">
+                        <button id="btn-relics" class="btn-icon" style="font-size: 1.5rem;">🔼</button>
+                        <div id="relic-dropdown" class="relic-dropdown hidden">
+                            <h3 class="neon-text-blue" style="margin: 0 0 10px 0; font-size: 1rem; border-bottom: 1px solid #333; padding-bottom: 5px; font-family: 'Orbitron';">MODULES</h3>
+                            <div id="relic-list" class="relic-grid"></div>
+                        </div>
+                    </div>
+
+                    <button id="btn-settings" class="btn-icon">⚙️</button>
+                </div>
+                
+                <!-- Bottom Area: Dice & Controls -->
+                <div class="bottom-controls">
+                    <div id="dice-container"></div>
+                    
+                    <div class="control-bar">
+                        <!-- Reroll Button (Circular with Badge) -->
+                        <div class="reroll-wrapper">
+                            <button id="btn-reroll" class="btn-circle">
+                                🔄
+                            </button>
+                            <div id="reroll-badge" class="badge">2</div>
+                        </div>
+
+                        <button id="btn-end-turn" class="btn primary">END PHASE</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Map Screen -->
+            <div id="screen-map" class="screen hidden">
+                <h2 class="neon-text-blue">SECTOR MAP <span id="map-sector-display" style="font-size: 0.6em; color: var(--neon-gold); margin-left: 15px;"></span></h2>
+                <div id="map-nodes" class="map-container"></div>
+            </div>
+
+            <!-- Shop Screen -->
+            <div id="screen-shop" class="screen hidden">
+                <h2 class="neon-text-gold">FABRICATOR</h2>
+                <div class="currency-display neon-text-gold">Fragments: <span id="shop-frag-count">0</span></div>
+                <div class="spacer"></div>
+                <div id="shop-grid" class="shop-grid"></div>
+                <div class="spacer"></div>
+                <button id="btn-leave-shop" class="btn primary">EXIT SHOP</button>
+            </div>
+
+	<!-- Rest Screen -->
+            <div id="screen-rest" class="screen hidden">
+                <h2 class="neon-text-green">SYSTEM RESTORE</h2>
+                <div class="event-content glass-panel">
+                    <p style="margin-bottom: 30px;">Select maintenance protocol:</p>
+                    <div class="event-options">
+                        <button id="btn-rest-sleep" class="btn secondary">
+                            <div>💤 SLEEP</div>
+                            <div style="font-size: 0.8rem; color: #aaa;">Heal 50% HP</div>
+                        </button>
+                        <button id="btn-rest-meditate" class="btn secondary">
+                            <div>🧘 MEDITATE</div>
+                            <div style="font-size: 0.8rem; color: #aaa;">+1 Max Reroll (Permanent)</div>
+                        </button>
+                        <button id="btn-rest-tinker" class="btn secondary">
+                            <div>🔧 TINKER</div>
+                            <div style="font-size: 0.8rem; color: #aaa;">Upgrade a Random Skill</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reward Screen -->
+            <div id="screen-reward" class="screen hidden">
+                <h2 class="neon-text-gold">SECTOR CLEARED</h2>
+                <p style="font-family: 'Orbitron'; margin-bottom: 20px;">Select augmentation:</p>
+                <div id="reward-options" class="card-container"></div>
+            </div>
+
+            <!-- Game Over -->
+            <div id="screen-gameover" class="screen hidden">
+                <h2 id="go-title" class="neon-text-pink">CRITICAL ERROR</h2>
+                <p id="go-desc" style="font-family: 'Orbitron'; font-size: 1.2rem;">System integrity compromised.</p>
+                <div class="currency-display neon-text-gold" style="margin-top: 20px;">Fragments: <span id="run-fragments">0</span></div>
+                <button id="btn-menu" class="btn primary">REBOOT SYSTEM</button>
+            </div>
+            
+            <!-- Pause/Settings Modal -->
+            <div id="modal-settings" class="modal hidden">
+                <div class="modal-content glass-panel neon-border-white">
+                    <h3 class="neon-text-white" style="font-family: 'Orbitron'; margin-bottom: 20px;">SYSTEM SETTINGS</h3>
+                    <div class="setting-row">
+                        <label>Music</label>
+                        <input type="checkbox" id="chk-music" checked>
+                    </div>
+                    <div class="setting-row">
+                        <label>SFX Module</label>
+                        <input type="checkbox" id="chk-sfx" checked>
+                    </div>
+                    <div class="spacer"></div>
+                    <button id="btn-resume" class="btn primary">RESUME</button>
+                    <button id="btn-quit" class="btn danger">ABORT RUN</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
