@@ -609,7 +609,10 @@ class Entity {
         this.radius = 120;
         this.effects = [];
         this.anim = { type: 'idle', timer: 0, startVal: 0 };
-        this.flashTimer = 0; // NEW: Visual flash timer
+        this.flashTimer = 0; 
+        // NEW: Spawn Animation State
+        this.spawnTimer = 0; 
+        this.maxSpawnTimer = 1.0; // 1 second spawn in
     }
 
     takeDamage(amount, source = null) {
@@ -1522,7 +1525,9 @@ const Game = {
         if(!hoveredEntity) TooltipMgr.hide();
     },
 
-    startDrag(e, die, el) {
+startDrag(e, die, el) {
+        // NEW: Check Input Lock
+        if (this.inputLocked) return;
         // 1. Prevent default browser behavior (scrolling/zooming)
         if (e.cancelable) e.preventDefault();
         
@@ -2959,11 +2964,42 @@ const Game = {
         } catch(e) {}
     },
 
-    startCombat(type) {
+// NEW: Cinematic Phase Banner
+    showPhaseBanner(text, subtext, type) {
+        return new Promise(resolve => {
+            const banner = document.getElementById('phase-banner');
+            const txt = banner.querySelector('.banner-text');
+            const sub = banner.querySelector('.banner-sub');
+            
+            // Setup
+            banner.className = ''; // Reset classes
+            banner.classList.add(type === 'player' ? 'player-phase' : 'enemy-phase');
+            txt.innerText = text;
+            sub.innerText = subtext;
+            
+            // Slide In
+            // Force reflow
+            void banner.offsetWidth;
+            banner.classList.add('active');
+            
+            AudioMgr.playSound('mana'); // Reuse mana sound for "whoosh" effect
+
+            // Wait, then Slide Out
+            setTimeout(() => {
+                banner.classList.add('exit');
+                setTimeout(() => {
+                    banner.classList.remove('active', 'exit');
+                    resolve();
+                }, 500); // Wait for exit animation
+            }, 1500); // Duration on screen
+        });
+    },
+
+async startCombat(type) { // Note: Made async
         this.turnCount = 0;
         this.deadMinionsThisTurn = 0; 
-	this.player.emergencyKitUsed = false; // NEW
-	this.player.firewallTriggered = false; // NEW: Reset Firewall
+        this.player.emergencyKitUsed = false; 
+        this.player.firewallTriggered = false; 
         const isBoss = type === 'boss';
         const isElite = type === 'elite';
         
@@ -3050,16 +3086,31 @@ const Game = {
              ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "GUARDIANS ACTIVE", "#f00");
         }
 
-        this.enemy.decideTurn();
+        // NEW: Trigger Spawn Animations
+        this.player.spawnTimer = 1.0;
+        this.player.minions.forEach(m => m.spawnTimer = 1.0);
+        this.enemy.spawnTimer = 1.0;
+        this.enemy.minions.forEach(m => m.spawnTimer = 1.0);
+
         this.changeState(STATE.COMBAT);
+        
+        // Wait for spawn to finish visually (handled in drawEntity)
+        await this.sleep(1000);
+
+        this.enemy.decideTurn();
         this.startTurn();
     },
 
-    startTurn() {
+async startTurn() { // Note: Made async
+        // Lock Input
+        this.inputLocked = true;
+
+        // Show Banner
+        await this.showPhaseBanner("PLAYER PHASE", "COMMAND LINK ESTABLISHED", 'player');
+
         this.turnCount++;
         this.attacksThisTurn = 0; 
         this.player.shield = 0; 
-	// NEW: Reset Charge Multipliers
         this.player.nextAttackMult = 1;
         this.player.incomingDamageMult = 1;
         
@@ -3134,7 +3185,9 @@ const Game = {
             ParticleSys.createFloatingText(this.player.x, this.player.y - 150, "JAMMED!", "#ff0000");
         }
 
-        this.rollDice(diceToRoll); 
+        this.inputLocked = false;
+        
+        this.rollDice(this.player.diceCount); // Logic handles jamming
         
         const btnEnd = document.getElementById('btn-end-turn');
         if(btnEnd) {
@@ -3758,12 +3811,18 @@ const Game = {
         
         if(!this.enemy) return;
         
+        // Lock Input
+        this.inputLocked = true;
+
         const btnEnd = document.getElementById('btn-end-turn');
         if(btnEnd) {
              btnEnd.disabled = true;
              btnEnd.innerText = "ENEMY PHASE";
              btnEnd.style.opacity = 0.5;
         }
+
+        // Show Banner
+        await this.showPhaseBanner("ENEMY PHASE", "INCOMING DATA STREAM", 'enemy');
 
         // --- PLAYER MINION PHASE ---
         for (const m of this.player.minions) {
@@ -3924,7 +3983,7 @@ const Game = {
         this.enemy.minions = this.enemy.minions.filter(m => m.currentHp > 0);
         
         this.updateHUD();
-        this.startTurn();
+        this.startTurn(); // This will trigger the next Player Phase banner
     },
 
     winCombat() {
@@ -3937,7 +3996,6 @@ const Game = {
             return;
         }
         
-        // ... (rest of standard winCombat logic)
 
         let frags = 0;
         
@@ -3955,6 +4013,11 @@ const Game = {
         } else {
             frags = Math.floor(Math.random() * (27 - 11 + 1)) + 11;
         }
+
+	// Enhanced Explosion
+        ParticleSys.createExplosion(this.enemy.x, this.enemy.y, 100, COLORS.MECH_LIGHT); // More particles
+        ParticleSys.createExplosion(this.enemy.x, this.enemy.y, 50, '#fff'); // White flash
+        AudioMgr.playSound('explosion'); // Maybe play twice or a heavier sound if available
 
         if (droppedFile) {
             this.encryptedFiles++;
@@ -4481,15 +4544,33 @@ const Game = {
         requestAnimationFrame(this.loop.bind(this));
     },
 
-    drawEntity(entity) {
+drawEntity(entity) {
         if (!entity) return;
 
         const ctx = this.ctx;
         let animX = 0, animY = 0;
         
-        // Handle Flash Timer
+        // FIX: Decrement flash timer
         if (entity.flashTimer > 0) {
-            entity.flashTimer -= 0.05; // Reduce timer (~4 frames to clear)
+            entity.flashTimer -= 0.05; 
+        }
+        
+        // Capture spawn state
+        const isSpawning = entity.spawnTimer > 0;
+
+        // Handle Spawn Animation
+        if (isSpawning) {
+            entity.spawnTimer -= 0.02; 
+            const progress = 1.0 - Math.max(0, entity.spawnTimer);
+            
+            ctx.save();
+            ctx.globalAlpha = progress;
+            
+            const clipHeight = entity.radius * 2 * progress;
+            
+            ctx.beginPath();
+            ctx.rect(entity.x - entity.radius, entity.y + entity.radius - clipHeight, entity.radius*2, clipHeight);
+            ctx.clip();
         }
 
         if (entity.anim && entity.anim.timer > 0) {
@@ -4525,7 +4606,7 @@ const Game = {
             else if (entity instanceof Minion && Game.player) themeColor = Game.player.classColor || COLORS.NATURE_LIGHT;
 
             ctx.strokeStyle = themeColor;
-            // NEW: Check for Flash
+            // FIX: Correctly check flashTimer > 0
             ctx.fillStyle = (entity.flashTimer > 0) ? '#ffffff' : themeColor;
             
             ctx.shadowColor = themeColor;
@@ -4548,7 +4629,7 @@ const Game = {
                 ctx.arc(renderX, renderY + pulse, 20, 0, Math.PI*2);
                 ctx.fill();
 
-                // NEW: Check for Flash on center orb too
+                // FIX: Correctly check flashTimer > 0 for center orb
                 ctx.fillStyle = (entity.flashTimer > 0) ? '#ffffff' : themeColor;
                 ctx.beginPath();
                 ctx.arc(renderX, renderY + pulse, 10, 0, Math.PI*2);
@@ -4563,7 +4644,7 @@ const Game = {
         } else {
             const color = isMinion ? '#333' : '#1a0505';
             ctx.strokeStyle = COLORS.MECH_LIGHT;
-            // NEW: Check for Flash
+            // FIX: Correctly check flashTimer > 0
             ctx.fillStyle = (entity.flashTimer > 0) ? '#ffffff' : color;
             
             ctx.shadowColor = COLORS.MECH_LIGHT;
@@ -4584,7 +4665,8 @@ const Game = {
                 ctx.fill();
                 ctx.stroke();
 
-                ctx.fillStyle = COLORS.MECH_LIGHT;
+                // FIX: Ensure fillStyle is set back to mech color if not flashing for the inner rect
+                ctx.fillStyle = (entity.flashTimer > 0) ? '#ffffff' : COLORS.MECH_LIGHT;
                 ctx.fillRect(renderX - 40, renderY - 10 + hover, 80, 20);
 
                 if(entity.nextIntent) {
@@ -4638,8 +4720,20 @@ const Game = {
             ctx.stroke();
             ctx.shadowBlur = 0;
         }
-    },
 
+        // Restore context if we were spawning
+        if (isSpawning) {
+            const scanY = entity.y + entity.radius - (entity.radius * 2 * (1.0 - Math.max(0, entity.spawnTimer)));
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(entity.x - entity.radius, scanY);
+            ctx.lineTo(entity.x + entity.radius, scanY);
+            ctx.stroke();
+            
+            ctx.restore(); 
+        }
+    },
     // --- TUTORIAL SYSTEM ---
 
     startTutorial() {

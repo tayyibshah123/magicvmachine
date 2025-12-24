@@ -24,6 +24,49 @@ body {
     display: flex; justify-content: center; align-items: center;
 }
 
+/* --- VISUAL FX & ANIMATIONS --- */
+
+/* CRT Scanline & Vignette Overlay */
+#crt-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 9000; /* Above almost everything, below debug/settings if needed */
+    pointer-events: none; /* Let clicks pass through */
+    background: 
+        /* Scanlines */
+        linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%),
+        /* RGB Split hint */
+        linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+    background-size: 100% 3px, 3px 100%;
+    box-shadow: inset 0 0 100px rgba(0,0,0,0.7); /* Vignette */
+    opacity: 0.8;
+}
+
+/* Breathing Glow Animation */
+@keyframes neon-pulse {
+    0% { box-shadow: 0 0 5px var(--neon-color), 0 0 10px var(--neon-color); }
+    50% { box-shadow: 0 0 10px var(--neon-color), 0 0 20px var(--neon-color); }
+    100% { box-shadow: 0 0 5px var(--neon-color), 0 0 10px var(--neon-color); }
+}
+
+/* Floating Animation for UI elements */
+@keyframes float-ui {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-3px); }
+    100% { transform: translateY(0px); }
+}
+
+/* Glitch Text Effect (Subtle) */
+@keyframes text-flicker {
+    0% { opacity: 1; }
+    98% { opacity: 1; }
+    99% { opacity: 0.8; text-shadow: 2px 0 red; }
+    100% { opacity: 1; }
+}
+
 #game-container {
     position: relative;
     width: 100%; height: 100%;
@@ -265,11 +308,12 @@ canvas {
 /* Typography */
 h1.title { 
     font-family: var(--font-cyber); font-size: 3rem; margin: 0; 
-    letter-spacing: 2px; text-align: center; 
-    background: linear-gradient(to right, var(--neon-blue), var(--neon-pink));
+    letter-spacing: 4px; text-align: center; 
+    background: linear-gradient(to right, var(--neon-blue), #fff, var(--neon-pink));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    filter: drop-shadow(0 0 5px rgba(0,243,255,0.5));
+    filter: drop-shadow(0 0 10px rgba(0,243,255,0.8));
+    animation: text-flicker 5s infinite;
 }
 .vs { font-family: var(--font-cyber); font-style: italic; font-size: 1.5rem; color: #fff; -webkit-text-fill-color: #fff; }
 .subtitle { 
@@ -284,23 +328,57 @@ h2 {
 .spacer { height: 40px; }
 
 /* Buttons */
+/* Buttons - Cyberpunk Style */
 .btn {
     padding: 16px 32px; margin: 12px;
-    border: none; border-radius: 4px;
+    border: none; 
     font-family: var(--font-cyber); font-size: 1.1rem; font-weight: 700; cursor: pointer;
-    text-transform: uppercase; letter-spacing: 1px;
+    text-transform: uppercase; letter-spacing: 2px;
     transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
     width: 80%; max-width: 320px;
     position: relative; overflow: hidden;
-    background: rgba(0,0,0,0.5);
     color: #fff;
-    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    
+    /* Tech Shape */
+    clip-path: polygon(
+        10px 0, 100% 0, 
+        100% calc(100% - 10px), calc(100% - 10px) 100%, 
+        0 100%, 0 10px
+    );
 }
-/* Only apply hover effects on devices with a mouse pointer */
+
+.primary {
+    background: linear-gradient(135deg, #006064 0%, #00acc1 100%);
+    border-left: 2px solid var(--neon-blue);
+    box-shadow: 0 0 15px rgba(0, 243, 255, 0.2);
+    --neon-color: var(--neon-blue);
+    animation: neon-pulse 3s infinite;
+}
+
+.secondary {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-left: 2px solid #fff;
+}
+
+.secondary:hover {
+    background: rgba(255,255,255,0.1);
+    border-color: #fff;
+    box-shadow: 0 0 10px rgba(255,255,255,0.3);
+}
+
+.btn.danger { 
+    background: linear-gradient(135deg, #880e4f 0%, #d81b60 100%); 
+    border-left: 2px solid var(--neon-pink);
+    --neon-color: var(--neon-pink);
+    animation: neon-pulse 2s infinite;
+}
+
 @media (hover: hover) {
     .btn:hover { 
-        transform: translateY(-3px) scale(1.02); 
+        transform: translateY(-2px) scale(1.02); 
         filter: brightness(1.2); 
+        letter-spacing: 3px; /* Text expands on hover */
     }
 }
 .btn:active { transform: scale(0.98); }
@@ -334,22 +412,38 @@ h2 {
 
 /* Dice */
 #dice-container { display: flex; gap: 12px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
+/* Dice - Data Cubes */
 .die {
     width: 64px; height: 64px;
-    background: rgba(10, 10, 20, 0.8);
-    border: 2px solid #555;
-    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(20, 30, 40, 0.9), rgba(10, 10, 20, 0.95));
+    border: 1px solid #444;
+    border-radius: 6px;
     display: flex; flex-direction: column;
     justify-content: center; align-items: center;
     font-size: 1.8rem; cursor: pointer;
-    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5), inset 0 0 10px rgba(255,255,255,0.05);
     transition: all 0.2s; position: relative;
     backdrop-filter: blur(5px);
     overflow: hidden;
     touch-action: none; 
 }
-.die:hover { transform: translateY(-5px); border-color: #fff; box-shadow: 0 0 15px rgba(255,255,255,0.3); }
-.die.selected { border-color: var(--neon-pink); transform: translateY(-8px); box-shadow: 0 0 20px var(--neon-pink); }
+
+/* Glowing border for dice based on type (JS sets border-color) */
+.die {
+    box-shadow: 0 0 5px currentColor; /* Uses the inline color set by JS */
+}
+
+.die:hover { 
+    transform: translateY(-5px) scale(1.05); 
+    box-shadow: 0 0 15px currentColor; 
+    z-index: 10;
+}
+
+.die.selected { 
+    border-color: var(--neon-pink) !important; 
+    transform: translateY(-8px); 
+    box-shadow: 0 0 20px var(--neon-pink), inset 0 0 10px var(--neon-pink); 
+}
 .die.used { opacity: 0.3; filter: grayscale(1); transform: scale(0.9); cursor: default; border-color: #333; box-shadow: none; }
 .die.rerolling { animation: spin 0.5s ease-in-out; }
 
@@ -389,24 +483,39 @@ h2 {
 .map-svg-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
 .map-node-abs {
     position: absolute; width: 45px; height: 45px; border-radius: 50%;
-    background: #000; border: 2px solid #555;
+    background: #050011; border: 2px solid #555;
     display: flex; justify-content: center; align-items: center;
     font-size: 1.2rem; cursor: pointer; z-index: 2;
     transition: all 0.3s ease; transform: translate(-50%, -50%);
-    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    box-shadow: 0 0 10px rgba(0,0,0,0.8);
 }
-.map-node-abs:hover { transform: translate(-50%, -50%) scale(1.2); border-color: #fff; }
-.map-node-abs.available { border-color: var(--neon-blue); box-shadow: 0 0 15px var(--neon-blue); animation: pulse-node 2s infinite; }
+.map-node-abs:hover { transform: translate(-50%, -50%) scale(1.2); border-color: #fff; z-index: 10; }
+
+.map-node-abs.available { 
+    border-color: var(--neon-blue); 
+    box-shadow: 0 0 15px var(--neon-blue), inset 0 0 10px var(--neon-blue); 
+    animation: pulse-node 2s infinite; 
+}
 .map-node-abs.completed { border-color: var(--neon-green); color: var(--neon-green); opacity: 0.6; }
 @keyframes pulse-node { 0% { box-shadow: 0 0 10px var(--neon-blue); } 50% { box-shadow: 0 0 25px var(--neon-blue); } 100% { box-shadow: 0 0 10px var(--neon-blue); } }
 
-/* Panels */
+/* Panels - High Quality Glass */
 .glass-panel {
-    background: rgba(10, 10, 20, 0.8);
-    border-radius: 8px; padding: 25px;
-    border: 1px solid rgba(0, 243, 255, 0.2);
-    box-shadow: 0 0 30px rgba(0,0,0,0.5);
+    background: rgba(10, 15, 25, 0.75);
+    border-radius: 4px; padding: 25px;
+    border: 1px solid rgba(0, 243, 255, 0.15);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.8), inset 0 0 20px rgba(0, 243, 255, 0.05);
     backdrop-filter: blur(12px);
+    position: relative;
+}
+/* Add a tech corner accent */
+.glass-panel::after {
+    content: '';
+    position: absolute;
+    bottom: -1px; right: -1px;
+    width: 20px; height: 20px;
+    border-bottom: 2px solid var(--neon-blue);
+    border-right: 2px solid var(--neon-blue);
 }
 
 /* Tutorial */
@@ -1047,6 +1156,22 @@ h2 {
         box-shadow: 0 0 10px rgba(0, 243, 255, 0.3) !important;
     }
 
+    /* --- MOBILE BANNER FIXES --- */
+    #phase-banner {
+        height: 100px !important; /* Smaller height */
+        top: 40% !important;
+    }
+    
+    .banner-text {
+        font-size: 2rem !important; /* Significantly smaller font */
+        letter-spacing: 3px !important;
+    }
+    
+    .banner-sub {
+        font-size: 0.8rem !important;
+        letter-spacing: 2px !important;
+    }
+
 }
 
 /* --- TUTORIAL FOCUS HIGHLIGHT --- */
@@ -1064,4 +1189,71 @@ h2 {
     0% { box-shadow: 0 0 20px var(--neon-gold); }
     50% { box-shadow: 0 0 50px var(--neon-gold); } 
     100% { box-shadow: 0 0 20px var(--neon-gold); }
+}
+
+/* --- PHASE BANNERS --- */
+#phase-banner {
+    position: absolute;
+    top: 35%;
+    left: -150%; /* Start off-screen left */
+    width: 120%; /* 120% width to cover the skewed edges */
+    height: 140px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 8000;
+    transform: skewX(-20deg); 
+    transition: left 0.5s cubic-bezier(0.1, 0.7, 0.1, 1);
+    pointer-events: none;
+    border-top: 2px solid rgba(255,255,255,0.5);
+    border-bottom: 2px solid rgba(255,255,255,0.5);
+    backdrop-filter: blur(5px);
+    margin-left: -10%; /* Center the 120% width */
+    box-sizing: border-box;
+}
+
+.banner-text {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 3.5rem;
+    font-weight: 900;
+    letter-spacing: 8px;
+    color: #fff;
+    text-shadow: 0 0 20px currentColor;
+    transform: skewX(20deg); /* Counter-skew text */
+    white-space: nowrap; /* Prevent wrapping */
+}
+
+.banner-sub {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1.2rem;
+    letter-spacing: 5px;
+    color: #fff;
+    opacity: 0.8;
+    transform: skewX(20deg);
+    margin-top: 5px;
+}
+
+/* Player Phase Variant */
+#phase-banner.player-phase {
+    background: linear-gradient(90deg, transparent 0%, rgba(0, 243, 255, 0.6) 50%, transparent 100%);
+    border-color: var(--neon-blue);
+}
+#phase-banner.player-phase .banner-text { color: #fff; text-shadow: 0 0 20px var(--neon-blue); }
+
+/* Enemy Phase Variant */
+#phase-banner.enemy-phase {
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 0, 85, 0.6) 50%, transparent 100%);
+    border-color: var(--neon-pink);
+}
+#phase-banner.enemy-phase .banner-text { color: #fff; text-shadow: 0 0 20px var(--neon-pink); }
+
+/* Active State (Slide In) */
+#phase-banner.active {
+    left: 0%; 
+}
+
+/* Exit State (Slide Out Right) */
+#phase-banner.exit {
+    left: 150%;
 }
