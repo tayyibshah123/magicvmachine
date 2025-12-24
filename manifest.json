@@ -1,0 +1,17 @@
+{
+  "name": "Protocol: Magic",
+  "short_name": "Protocol",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#050011",
+  "theme_color": "#050011",
+  "orientation": "portrait",
+  "scope": "./",
+  "icons": [
+    {
+      "src": "https://www.gstatic.com/aistudio/starter-apps/gemini_runner/gemini_runner.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
