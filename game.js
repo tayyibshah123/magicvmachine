@@ -3101,7 +3101,7 @@ async startCombat(type) { // Note: Made async
         this.startTurn();
     },
 
-async startTurn() { // Note: Made async
+async startTurn() { 
         // Lock Input
         this.inputLocked = true;
 
@@ -3123,7 +3123,7 @@ async startTurn() { // Note: Made async
         const manaStacks = this.player.relics.filter(r => r.id === 'mana_syphon').length;
         if(manaStacks > 0) this.player.mana += manaStacks;
 
-	// NEW: Static Field Relic
+        // Static Field Relic
         if (this.player.hasRelic('static_field') && this.enemy) {
              const targets = [this.enemy, ...this.enemy.minions];
              const t = targets[Math.floor(Math.random() * targets.length)];
@@ -3150,14 +3150,14 @@ async startTurn() { // Note: Made async
         if(this.enemy) {
              this.enemy.updateEffects();
              
-             // MODIFIED: Shielded Affix Logic
-             // Sector 1: 10% HP (approx 5 Shield for Heavy Loader)
-             // Sector 2+: 20% HP (approx 10 Shield for Heavy Loader)
+             // MODIFIED: Shielded Affix Logic - Only regen if shield is broken
              if (this.enemy.affixes && this.enemy.affixes.includes('Shielded')) {
-                 const ratio = (this.sector === 1) ? 0.1 : 0.2;
-                 const regen = Math.floor(this.enemy.maxHp * ratio);
-                 this.enemy.addShield(regen);
-                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y, "SHIELD REGEN", COLORS.SHIELD);
+                 if (this.enemy.shield <= 0) {
+                     const ratio = (this.sector === 1) ? 0.1 : 0.2;
+                     const regen = Math.floor(this.enemy.maxHp * ratio);
+                     this.enemy.addShield(regen);
+                     ParticleSys.createFloatingText(this.enemy.x, this.enemy.y, "SHIELD REGEN", COLORS.SHIELD);
+                 }
              }
              
              this.enemy.decideTurn();
@@ -3185,9 +3185,10 @@ async startTurn() { // Note: Made async
             ParticleSys.createFloatingText(this.player.x, this.player.y - 150, "JAMMED!", "#ff0000");
         }
 
+        // Unlock Input
         this.inputLocked = false;
-        
-        this.rollDice(this.player.diceCount); // Logic handles jamming
+
+        this.rollDice(diceToRoll); 
         
         const btnEnd = document.getElementById('btn-end-turn');
         if(btnEnd) {
