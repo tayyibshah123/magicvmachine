@@ -397,7 +397,8 @@ const EVENTS_DB = [
         desc: "A shady algorithm offers you a random module in exchange for raw data.",
         options: [
             { 
-                text: "Trade (-50 Fragments)", 
+                // FIX: Clarified text from "Trade" to "Buy Random Module"
+                text: "Buy Random Module (-50 Fragments)", 
                 effect: (g) => { 
                     if (g.techFragments >= 50) {
                         g.techFragments -= 50;
@@ -3155,11 +3156,15 @@ startQTE(type, x, y, callback) {
 
 async startCombat(type) { 
         // --- CLEANUP PHASE ---
-        this.enemy = null; // Force clear previous enemy
-        this.effects = []; // Clear VFX
-        ParticleSys.particles = []; // Clear particles
-        this.player.minions = []; // Clear minions (re-added below)
+        this.enemy = null; 
+        this.effects = []; 
+        ParticleSys.particles = []; 
+        this.player.minions = []; 
         
+        // FIX: Update Sector Display in HUD
+        const sectorDisplay = document.getElementById('sector-display');
+        if(sectorDisplay) sectorDisplay.innerText = `SECTOR ${this.sector}`;
+
         this.turnCount = 0;
         this.deadMinionsThisTurn = 0; 
         this.player.emergencyKitUsed = false; 
