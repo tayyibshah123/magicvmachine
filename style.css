@@ -12,7 +12,14 @@
     --font-cyber: 'Orbitron', sans-serif;
 }
 
-* { box-sizing: border-box; touch-action: manipulation; user-select: none; }
+* { 
+    box-sizing: border-box; 
+    touch-action: manipulation; 
+    user-select: none; 
+    -webkit-user-select: none;       /* Safari/Chrome specific */
+    -webkit-tap-highlight-color: transparent; /* Removes the blue tap box */
+    -webkit-touch-callout: none;     /* Disables the long-press context menu */
+}
 
 body {
     margin: 0; padding: 0;
