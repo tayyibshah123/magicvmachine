@@ -303,10 +303,8 @@ canvas {
     color: #fff; padding: 12px 16px; border-radius: 4px;
     font-family: var(--font-main);
     font-size: 0.9rem; 
-    z-index: 1000;
+    z-index: 10000; /* FIX: Ensure it's above everything (Banner is 8000, CRT is 9000) */
     white-space: pre-line; max-width: 250px; text-align: center;
-    
-    /* CRITICAL FIX: Prevent tooltip from capturing clicks or interfering with game */
     pointer-events: none !important; 
 }
 
@@ -1202,8 +1200,8 @@ h2 {
     position: absolute;
     top: 35%;
     left: -150%; /* Start off-screen left */
-    width: 120%; /* 120% width to cover the skewed edges */
-    height: 140px;
+    width: 120%; /* Reduced width to fit better on PC/Tablet */
+    height: 110px; /* Reduced height by ~30% */
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -1217,23 +1215,26 @@ h2 {
     backdrop-filter: blur(5px);
     margin-left: -10%; /* Center the 120% width */
     box-sizing: border-box;
+    overflow: hidden;
 }
 
 .banner-text {
     font-family: 'Orbitron', sans-serif;
-    font-size: 3.5rem;
+    font-size: 2.5rem; /* Reduced from 3.5rem */
     font-weight: 900;
-    letter-spacing: 8px;
+    letter-spacing: 4px; /* Reduced from 8px */
     color: #fff;
     text-shadow: 0 0 20px currentColor;
-    transform: skewX(20deg); /* Counter-skew text */
-    white-space: nowrap; /* Prevent wrapping */
+    transform: skewX(20deg); 
+    white-space: nowrap; 
+    text-align: center;
+    width: 100%;
 }
 
 .banner-sub {
     font-family: 'Rajdhani', sans-serif;
-    font-size: 1.2rem;
-    letter-spacing: 5px;
+    font-size: 1rem; /* Reduced from 1.2rem */
+    letter-spacing: 3px; /* Reduced from 5px */
     color: #fff;
     opacity: 0.8;
     transform: skewX(20deg);
