@@ -75,6 +75,7 @@ body {
     background: #050011;
     box-shadow: 0 0 50px rgba(0, 243, 255, 0.1);
     border: 1px solid #333;
+overflow: hidden; /* FIX: Clips the sliding banner so it doesn't resize the screen */
 }
 
 canvas { 
@@ -875,20 +876,21 @@ h2 {
     }
 
     #game-container {
-        zoom: normal; /* Remove previous problematic zoom */
+        zoom: normal; 
         
         /* Scale game to 95% of screen width/height to create "padding" */
         width: 95vw;
         height: 95vh;
         
         /* Maintain Aspect Ratio Logic */
-        max-width: 540px; /* Prevent getting too wide */
+        max-width: 540px; 
         
         /* Center the game */
         margin: 0 auto;
         position: relative;
-        box-shadow: 0 0 30px rgba(0,0,0,1); /* Shadow to separate game from black bg */
+        box-shadow: 0 0 30px rgba(0,0,0,1); 
         border: 1px solid #333;
+        overflow: hidden; /* FIX: Clips banner on mobile/tablet */
     }
 
     /* 2. CANVAS FIX: Ensure it fills container without distorting */
