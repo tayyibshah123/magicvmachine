@@ -692,7 +692,7 @@ class Entity {
         this.maxSpawnTimer = 1.0; // 1 second spawn in
     }
 
-    takeDamage(amount, source = null) {
+    takeDamage(amount, source = null, suppressBlockText = false) {
         let actualDmg = amount;
 
         // Apply Player Incoming Damage Multiplier
@@ -749,11 +749,12 @@ class Entity {
         ParticleSys.createExplosion(this.x, this.y, 15, (this instanceof Player) ? '#f00' : '#fff');
         
         if (actualDmg > 0) {
-             this.flashTimer = 0.2; // NEW: Trigger White Flash (0.2 seconds)
+             this.flashTimer = 0.2; 
              ParticleSys.createFloatingText(this.x, this.y - 60, "-" + actualDmg, '#ff3333');
              AudioMgr.playSound('hit');
         } else {
-             if (amount > 0) ParticleSys.createFloatingText(this.x, this.y - 60, "BLOCKED", COLORS.SHIELD);
+             // FIX: Suppress "BLOCKED" if requested (e.g. during QTE which shows its own text)
+             if (amount > 0 && !suppressBlockText) ParticleSys.createFloatingText(this.x, this.y - 60, "BLOCKED", COLORS.SHIELD);
              AudioMgr.playSound('defend');
         }
 
@@ -1112,14 +1113,25 @@ const ParticleSys = {
         ctx.save();
         for (let p of this.particles) {
             ctx.globalAlpha = p.alpha;
-            ctx.fillStyle = p.color;
+            
             if(p.text) {
-                ctx.font = "bold 40px 'Orbitron'";
+                // FIX: Larger Font & Black Outline
+                ctx.font = "900 48px 'Orbitron'"; // Increased size and weight
+                ctx.textAlign = 'center';
+                
+                // Black Outline
+                ctx.lineWidth = 8;
+                ctx.strokeStyle = '#000000';
+                ctx.lineJoin = 'round';
+                ctx.strokeText(p.text, p.x, p.y);
+                
+                // Colored Text
+                ctx.fillStyle = p.color;
                 ctx.shadowColor = p.color;
                 ctx.shadowBlur = 10;
-                ctx.textAlign = 'center';
                 ctx.fillText(p.text, p.x, p.y);
             } else {
+                ctx.fillStyle = p.color;
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
                 ctx.fill();
@@ -1141,12 +1153,13 @@ const ParticleSys = {
     },
     createFloatingText(x, y, text, color) {
         this.particles.push({
-            x: x, y: y, vx: 0, vy: -2, life: 1.0, maxLife: 1.0,
+            x: x, y: y, 
+            vx: 0, vy: -1.5, // Slower float up
+            life: 1.5, maxLife: 1.5, // FIX: 50% Slower fade (1.0 -> 1.5)
             size: 0, color: color, text: text, alpha: 1
         });
     }
 };
-
 const TooltipMgr = {
     el: null,
     init() { this.el = document.getElementById('tooltip'); },
@@ -1211,12 +1224,12 @@ const Game = {
         this.canvas.width = CONFIG.CANVAS_WIDTH;
         this.canvas.height = CONFIG.CANVAS_HEIGHT;
         this.shopInventory = null;
-	
-	this.tutorialStep = 0; // Track tutorial progress
-	this.tutorialData = TUTORIAL_PAGES; // NEW: Default to standard help
+        this.inputCooldown = 0; // NEW: Global input cooldown
+    
+        this.tutorialStep = 0; 
+        this.tutorialData = TUTORIAL_PAGES; 
 
         try {
-            // Load Meta Data
             const savedFrags = localStorage.getItem('mvm_fragments');
             this.techFragments = savedFrags ? parseInt(savedFrags) : 0;
             
@@ -1229,9 +1242,7 @@ const Game = {
             const savedLore = localStorage.getItem('mvm_lore');
             this.unlockedLore = savedLore ? JSON.parse(savedLore) : [];
             
-            // CHECK ACTIVE RUN
             const saveFile = localStorage.getItem('mvm_save_v1');
-            // CHANGED: Target the new unique ID
             const btnLoad = document.getElementById('btn-load-save');
             
             if (saveFile && saveFile !== "null") {
@@ -1273,17 +1284,10 @@ const Game = {
      bindEvents() {
         const d = document;
         
-        // HELPER: Clean Click Handler for Mobile/Desktop
         const attachButtonEvent = (id, callback) => {
             const btn = d.getElementById(id);
             if (!btn) return;
-
-            // Handle Touch Start (Stop propagation immediately)
-            btn.addEventListener('touchstart', (e) => {
-                e.stopPropagation(); 
-            }, { passive: false });
-
-            // Handle Click
+            btn.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: false });
             btn.onclick = (e) => {
                 e.stopPropagation(); 
                 e.preventDefault();  
@@ -1294,51 +1298,28 @@ const Game = {
             };
         };
 
-        // --- BUTTON BINDINGS ---
         attachButtonEvent('btn-load-save', () => this.loadGame());
         attachButtonEvent('btn-resume', () => d.getElementById('modal-settings').classList.add('hidden'));
-
         attachButtonEvent('btn-start', () => this.goToCharSelect());
         attachButtonEvent('btn-back-char', () => this.changeState(STATE.MENU));
-        
         attachButtonEvent('btn-tutorial-mode', () => this.startTutorial());
-        
-        attachButtonEvent('btn-finish-story', () => { 
-            AudioMgr.startMusic(); 
-            this.changeState(STATE.MENU); 
-        });
-
-        attachButtonEvent('btn-debrief', () => {
-            this.tutorialData = TUTORIAL_PAGES;
-            this.changeState(STATE.TUTORIAL); 
-        });
-        attachButtonEvent('btn-back-tutorial', () => {
-            this.tutorialData = TUTORIAL_PAGES;
-            this.changeState(STATE.MENU); 
-        });
-
+        attachButtonEvent('btn-finish-story', () => { AudioMgr.startMusic(); this.changeState(STATE.MENU); });
+        attachButtonEvent('btn-debrief', () => { this.tutorialData = TUTORIAL_PAGES; this.changeState(STATE.TUTORIAL); });
+        attachButtonEvent('btn-back-tutorial', () => { this.tutorialData = TUTORIAL_PAGES; this.changeState(STATE.MENU); });
         attachButtonEvent('btn-intel', () => this.changeState(STATE.INTEL));
         attachButtonEvent('btn-back-intel', () => this.changeState(STATE.MENU));
         attachButtonEvent('btn-decrypt', () => this.startHexBreach());
-        
-        attachButtonEvent('btn-upgrades', () => {
-            this.renderMeta();
-            this.changeState(STATE.META);
-        });
+        attachButtonEvent('btn-upgrades', () => { this.renderMeta(); this.changeState(STATE.META); });
 
         attachButtonEvent('btn-back-meta', () => {
             const screen = d.getElementById('screen-meta');
             const btn = d.getElementById('btn-view-sanctuary');
-            
             screen.classList.remove('viewing-mode');
             btn.innerText = "👁️ VIEW WORLD";
-            
-            // Clear inline styles
             d.getElementById('upgrade-list').style.opacity = "";
             d.getElementById('fragment-count').style.opacity = "";
             const h2 = d.querySelector('#screen-meta h2');
             if(h2) h2.style.opacity = "";
-            
             this.changeState(STATE.MENU);
         });
 
@@ -1396,18 +1377,13 @@ const Game = {
             };
         }
 
-        // --- GLOBAL CLICK HANDLER ---
         window.addEventListener('click', (e) => {
             const el = d.getElementById('relic-dropdown');
             const btn = d.getElementById('btn-relics');
-            
-            // 1. Close Dropdown
             if(el && !el.classList.contains('hidden') && e.target !== btn && !el.contains(e.target)) {
                 el.classList.add('hidden');
                 el.classList.remove('active');
             }
-            
-            // 2. Tutorial Step 0 Advance
             if (this.currentState === STATE.TUTORIAL_COMBAT) {
                 if (this.tutorialStep === 0) {
                     AudioMgr.playSound('click');
@@ -1417,7 +1393,6 @@ const Game = {
             }
         });
 
-        // --- MOBILE TUTORIAL ADVANCE ---
         const tutorialOverlay = d.getElementById('tutorial-overlay');
         if (tutorialOverlay) {
             tutorialOverlay.addEventListener('touchstart', (e) => {
@@ -1431,7 +1406,6 @@ const Game = {
             }, { passive: false });
         }
 
-        // --- CANVAS INTERACTIONS ---
         this.canvas.addEventListener('mousemove', (e) => {
             const rect = this.canvas.getBoundingClientRect();
             const scaleX = this.canvas.width / rect.width;
@@ -1442,10 +1416,12 @@ const Game = {
         });
         
         const handleInteraction = (e) => {
+             // NEW: Check Input Cooldown
+             if (this.inputCooldown > 0) return;
+
              if (this.qte.active) { this.checkQTE(); return; }
              if (this.dragState.active) return;
 
-             // Update coords for click/tap interactions
              const rect = this.canvas.getBoundingClientRect();
              const scaleX = this.canvas.width / rect.width;
              const scaleY = this.canvas.height / rect.height;
@@ -1472,8 +1448,10 @@ const Game = {
                     if (this.enemy.showIntent) {
                         ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "INTENT REVEALED", COLORS.MANA);
                         AudioMgr.playSound('click');
-                        
-                        // REMOVED TUTORIAL ADVANCEMENT LOGIC FROM HERE
+                        if (this.currentState === STATE.TUTORIAL_COMBAT && (this.tutorialStep === 2 || this.tutorialStep === 4)) {
+                            this.tutorialStep++;
+                            this.updateTutorialStep();
+                        }
                     }
                 }
             }
@@ -1734,60 +1712,57 @@ startDrag(e, die, el) {
         return null;
     },
 
-    startQTE(type, x, y, callback) {
+startQTE(type, x, y, callback) {
         return new Promise(resolve => {
+            this.inputCooldown = 0.5; // NEW: Enforce global input cooldown
+
             this.qte = {
                 active: true,
                 canInteract: false, 
+                startTime: Date.now(), 
                 type: type,
                 targetX: x,
                 targetY: y,
                 maxRadius: 100,
                 radius: 100,
                 timer: 0,
+                warmupTimer: 0.5, 
                 callback: callback || resolve
             };
             
-            // NEW: Trigger Wind-Up Animation
             if (type === 'ATTACK') {
-                // Player is attacking
                 this.player.anim.type = 'windup';
             } else if (type === 'DEFEND') {
-                // Enemy is attacking
                 if (this.enemy) this.enemy.anim.type = 'windup';
             }
 
             this.drawQTE();
 
             setTimeout(() => {
-                if (this.qte.active) this.qte.canInteract = true;
-            }, 200);
-
-            setTimeout(() => {
                 if (this.qte.active && (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT)) {
                     console.log("QTE Failsafe Triggered");
                     this.resolveQTE('fail'); 
                 }
-            }, 5000);
+            }, 6000); 
         });
     },
 
     updateQTE(dt) {
         if (!this.qte.active) return;
 
-        let shrinkSpeed = 128; // Base speed
+        if (this.qte.warmupTimer > 0) {
+            this.qte.warmupTimer -= dt;
+            return; 
+        }
 
-        // TIME DILATION: Slow down when inside the "Sweet Spot"
-        // The target radius for a perfect hit is 30 pixels.
+        let shrinkSpeed = 128; 
+
         const dist = Math.abs(this.qte.radius - 30);
         
-        // If we are close to the target (within 25px), slow down time
         if (dist < 25) { 
-            shrinkSpeed = 32;
-            
-            // In Tutorial Mode, slow it down even more (almost a pause) to let the player learn
+            shrinkSpeed = 32; 
             if (this.currentState === STATE.TUTORIAL_COMBAT) {
-                shrinkSpeed = 10; // 16x Slower (Virtual Pause)
+                shrinkSpeed = 8; 
             }
         }
 
@@ -1799,96 +1774,114 @@ startDrag(e, die, el) {
     },
 
     drawQTE() {
-        if (!this.qte.active) return;
+        if (!this.qte.active || !this.qte.targetX || !this.qte.targetY) return;
+        
         const ctx = this.ctx;
-        const { targetX, targetY, radius } = this.qte;
+        const { targetX, targetY, radius, warmupTimer } = this.qte;
         
         ctx.save();
         
-        // 1. Draw Static Target Zone (The "Goal")
-        // Perfect Zone (Inner)
+        // 1. Draw Static Target Zone
         ctx.beginPath();
         ctx.arc(targetX, targetY, 30, 0, Math.PI*2);
-        
-        // FIX: Black Outline for visibility
         ctx.lineWidth = 8;
         ctx.strokeStyle = '#000000';
         ctx.stroke();
         
-        // Main Color
         ctx.lineWidth = 4;
         ctx.strokeStyle = COLORS.GOLD;
         ctx.shadowColor = COLORS.GOLD;
         ctx.shadowBlur = 15;
         ctx.stroke();
         
-        // Good Zone (Outer) - Only for Defend
         if (this.qte.type === 'DEFEND') {
             ctx.beginPath();
             ctx.arc(targetX, targetY, 60, 0, Math.PI*2);
-            
-            // Black Outline
             ctx.lineWidth = 6;
             ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
             ctx.shadowBlur = 0;
             ctx.stroke();
-
-            // Main Color
             ctx.lineWidth = 2;
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.stroke();
         }
 
-        // 2. Draw Dynamic Shrinking Ring
+        // 2. Draw Dynamic Ring
         let ringColor = '#fff';
-        const diff = Math.abs(radius - 30);
         
-        if (diff < 25) ringColor = COLORS.GOLD; // Perfect timing
-        else if (radius < 30) ringColor = '#ff0000'; // Too late (inside)
-        else ringColor = this.qte.type === 'ATTACK' ? COLORS.MECH_LIGHT : COLORS.SHIELD; // Approaching
+        // Warmup Visuals
+        if (warmupTimer > 0) {
+            ringColor = '#888'; 
+            
+            // Draw "Locking On" brackets
+            ctx.strokeStyle = COLORS.GOLD;
+            ctx.lineWidth = 4;
+            const size = 110;
+            const gap = 20;
+            
+            ctx.beginPath();
+            // Top Left
+            ctx.moveTo(targetX - size/2, targetY - size/2 + gap);
+            ctx.lineTo(targetX - size/2, targetY - size/2);
+            ctx.lineTo(targetX - size/2 + gap, targetY - size/2);
+            // Top Right
+            ctx.moveTo(targetX + size/2 - gap, targetY - size/2);
+            ctx.lineTo(targetX + size/2, targetY - size/2);
+            ctx.lineTo(targetX + size/2, targetY - size/2 + gap);
+            // Bottom Right
+            ctx.moveTo(targetX + size/2, targetY + size/2 - gap);
+            ctx.lineTo(targetX + size/2, targetY + size/2);
+            ctx.lineTo(targetX + size/2 - gap, targetY + size/2);
+            // Bottom Left
+            ctx.moveTo(targetX - size/2 + gap, targetY + size/2);
+            ctx.lineTo(targetX - size/2, targetY + size/2);
+            ctx.lineTo(targetX - size/2, targetY + size/2 - gap);
+            ctx.stroke();
+
+        } else {
+            // Normal Colors
+            const diff = Math.abs(radius - 30);
+            if (diff < 25) ringColor = COLORS.GOLD; 
+            else if (radius < 30) ringColor = '#ff0000'; 
+            else ringColor = this.qte.type === 'ATTACK' ? COLORS.MECH_LIGHT : COLORS.SHIELD; 
+        }
 
         ctx.beginPath();
         ctx.arc(targetX, targetY, Math.max(0, radius), 0, Math.PI*2);
-        
-        // FIX: Thick Black Outline
         ctx.lineWidth = 10;
         ctx.strokeStyle = '#000000';
         ctx.shadowBlur = 0;
         ctx.stroke();
 
-        // Main Ring
         ctx.lineWidth = 6;
         ctx.strokeStyle = ringColor;
         ctx.shadowColor = ringColor;
         ctx.shadowBlur = 20;
         ctx.stroke();
 
-        // 3. Draw Connecting Lines (Visual Guide)
-        ctx.globalAlpha = 0.5;
-        ctx.strokeStyle = ringColor; // Keep these subtle, no outline needed
-        ctx.lineWidth = 2;
-        for(let i=0; i<4; i++) {
-            const angle = (Math.PI/2) * i;
-            ctx.beginPath();
-            ctx.moveTo(targetX + Math.cos(angle)*30, targetY + Math.sin(angle)*30);
-            ctx.lineTo(targetX + Math.cos(angle)*radius, targetY + Math.sin(angle)*radius);
-            ctx.stroke();
-        }
-
-        // 4. Text Instruction
+        // 3. Text Instruction
         ctx.globalAlpha = 1.0;
         ctx.fillStyle = "#fff";
         ctx.font = "bold 24px 'Orbitron'";
         ctx.textAlign = "center";
-        // Stronger shadow for text visibility
         ctx.shadowColor = "#000";
         ctx.shadowBlur = 0;
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = "#000";
         
-        const txt = (this.qte.type === 'ATTACK') ? "CLICK TO CRIT!" : "CLICK TO BLOCK!";
-        ctx.strokeText(txt, targetX, targetY - 130); // Black outline for text
-        ctx.fillText(txt, targetX, targetY - 130);
+        // FIX: Thick black outline for visibility
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = "#000000";
+        ctx.lineJoin = "round"; // Smoother corners on text stroke
+        
+        let txt = (this.qte.type === 'ATTACK') ? "CLICK TO CRIT!" : "CLICK TO BLOCK!";
+        
+        if (warmupTimer > 0) {
+            txt = "LOCKED ON...";
+            ctx.fillStyle = COLORS.GOLD;
+        }
+        
+        // FIX: Moved Y position to +140 (Below entity) to avoid HP bar overlap
+        ctx.strokeText(txt, targetX, targetY + 140); 
+        ctx.fillText(txt, targetX, targetY + 140);
 
         ctx.restore();
     },
@@ -1896,21 +1889,36 @@ startDrag(e, die, el) {
     checkQTE() {
         if (!this.qte.active) return;
         
-        const diff = Math.abs(this.qte.radius - 30);
+        // Double check cooldown
+        if (this.inputCooldown > 0) return;
+        if (this.qte.warmupTimer > 0) return;
+
+        const radius = this.qte.radius;
+        const diff = Math.abs(radius - 30);
+        
+        // FIX: Correct thresholds
+        // Target is 30.
+        // Perfect: 20-40 (diff < 10)
+        // Good: 10-50 (diff < 20)
+        // Early: > 50 (radius > 80)
+        // Late: < 10 (radius < 10)
+
+        if (radius > 60) { 
+             this.resolveQTE('early');
+             return;
+        }
+
         let quality = 'fail';
         
         if (this.qte.type === 'ATTACK') {
-             // Attack: Hit inside ring (25px tolerance)
              if (diff < 25) quality = 'perfect'; 
+             else quality = 'fail'; 
         } else {
-             // Defend: Perfect (20px) or Good (50px)
              if (diff < 20) quality = 'perfect'; 
              else if (diff < 50) quality = 'good';
+             else quality = 'fail';
         }
         
-        // TUTORIAL OVERRIDE:
-        // If in tutorial, give them the 'perfect' result even if they missed slightly,
-        // to ensure the flow continues and they see the "Critical Hit" message.
         if (this.currentState === STATE.TUTORIAL_COMBAT) {
             quality = 'perfect';
         }
@@ -1922,19 +1930,21 @@ startDrag(e, die, el) {
         const cb = this.qte.callback;
         this.qte.active = false;
         
-        // NEW: Stop Wind-Up Animation
+        // Stop Wind-Up Animation
         this.player.anim.type = 'idle';
         if (this.enemy) this.enemy.anim.type = 'idle';
         
         let multiplier = 1.0;
-        let msg = "TOO LATE";
+        let msg = "TOO LATE"; // Default for 'fail' (timeout)
         let color = "#888";
 
-        if (this.currentState === STATE.TUTORIAL_COMBAT && quality === 'fail') {
-             quality = 'perfect'; 
+        // FIX: Handle Early Click Feedback
+        if (quality === 'early') {
+            msg = "TOO EARLY";
+            color = "#888";
         }
 
-        if (quality !== 'fail') {
+        if (quality !== 'fail' && quality !== 'early') {
              if (this.qte.type === 'ATTACK') {
                  if (quality === 'perfect') {
                      multiplier = 1.3; 
@@ -3130,6 +3140,12 @@ startDrag(e, die, el) {
     },
 
 async startCombat(type) { 
+        // --- CLEANUP PHASE ---
+        this.enemy = null; // Force clear previous enemy
+        this.effects = []; // Clear VFX
+        ParticleSys.particles = []; // Clear particles
+        this.player.minions = []; // Clear minions (re-added below)
+        
         this.turnCount = 0;
         this.deadMinionsThisTurn = 0; 
         this.player.emergencyKitUsed = false; 
@@ -3138,7 +3154,7 @@ async startCombat(type) {
         const isBoss = type === 'boss';
         const isElite = type === 'elite';
         
-        // --- RESTORED ENEMY GENERATION LOGIC ---
+        // --- ENEMY GENERATION ---
         let pool = ENEMIES.filter(e => e.sector === this.sector);
         if (pool.length === 0) pool = ENEMIES.filter(e => e.sector === 3); 
         if (pool.length === 0) pool = ENEMIES.filter(e => e.sector === 1); 
@@ -3163,6 +3179,7 @@ async startCombat(type) {
             sectorMult = 2.0 * Math.pow(1.3, this.sector - 3);
         }
 
+        // Create New Enemy
         this.enemy = new Enemy(template, level, isElite);
         
         // Apply Scaling
@@ -3171,8 +3188,7 @@ async startCombat(type) {
         this.enemy.baseDmg = Math.floor(this.enemy.baseDmg * sectorMult);
 
         this.player.mana = this.player.baseMana;
-        this.player.minions = [];
-
+        
         // Minion spawning
         if(this.player.traits.startMinions) {
             for(let i=0; i<this.player.traits.startMinions; i++) {
@@ -3210,7 +3226,6 @@ async startCombat(type) {
              this.enemy.minions.push(m1, m2);
              ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "GUARDIANS ACTIVE", "#f00");
         }
-        // ---------------------------------------
 
         // Trigger Spawn Animations
         this.player.spawnTimer = 1.0;
@@ -3390,7 +3405,7 @@ async startTurn() {
                 this.renderDiceUI();
                 return;
             } 
-            // Step 10: Reroll (Minion + Attack)
+            // Step 10: Reroll (Minion + Attack) - FIX: Ensure Minion is generated
             if (this.tutorialStep === 10) {
                 this.dicePool = [
                     { id: 0, type: 'MINION', used: false, selected: false },
@@ -4335,21 +4350,20 @@ drawEffects() {
             this.tutorialStep = 9;
             this.updateTutorialStep(); 
             
-            // FIX: Play enemy animation for visual feedback
             if (this.enemy) this.enemy.playAnim('lunge');
 
             // Wait for player to read "INCOMING ATTACK"
-            await this.sleep(1000);
+            await this.sleep(2000);
 
             // 2. Trigger Defend QTE
-            // Explicitly reset QTE properties to ensure visibility
             this.qte.radius = 100; 
             const multiplier = await this.startQTE('DEFEND', this.player.x, this.player.y);
             
             // 3. Resolve Damage
             let dmg = 5;
             dmg = Math.floor(dmg * multiplier);
-            this.player.takeDamage(dmg);
+            // FIX: Suppress "BLOCKED" text
+            this.player.takeDamage(dmg, this.enemy, true);
             
             await this.sleep(1000);
 
@@ -4383,16 +4397,13 @@ drawEffects() {
             const t = targets[Math.floor(Math.random() * targets.length)];
             
             if(t && t.currentHp > 0) {
-                // NEW: Use Nature Dart (or Bomb Bot logic)
                 if (this.player.traits.minionName === "Bomb Bot") {
-                    // Keep Bomb Bot logic instant/explosive
                     ParticleSys.createExplosion(t.x, t.y, 30, "#ff8800");
                     AudioMgr.playSound('explosion');
                     if(this.enemy.takeDamage(10) && this.enemy.currentHp <= 0) { this.winCombat(); return; }
                     this.enemy.minions.forEach(m => m.takeDamage(10));
-                    this.player.minions = this.player.minions.filter(min => min !== m); // Self destruct
+                    this.player.minions = this.player.minions.filter(min => min !== m); 
                 } else {
-                    // Wisp Attack
                     this.triggerVFX('nature_dart', m, t, () => {
                         if (t.takeDamage(m.dmg, m) && t === this.enemy) { this.winCombat(); return; }
                         if (t !== this.enemy && t.currentHp <= 0) {
@@ -4420,15 +4431,12 @@ drawEffects() {
         
         if (intent.secondary) {
             const isImproved = (this.enemy.isElite || this.enemy.isBoss);
-            
             if (intent.secondary.type === 'buff') {
                 const hpGain = isImproved ? 15 : 5;
                 const dmgGain = isImproved ? 5 : 2;
-                
                 this.enemy.maxHp += hpGain;
                 this.enemy.currentHp += hpGain;
                 this.enemy.baseDmg += dmgGain;
-                
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "EMPOWERED!", "#ff00ff");
                 AudioMgr.playSound('upgrade');
                 await this.sleep(400);
@@ -4436,10 +4444,8 @@ drawEffects() {
                 const id = intent.secondary.id;
                 const duration = isImproved ? 3 : 2;
                 let desc = "";
-                
                 if (id === 'weak') desc = "Deals 50% less DMG.";
                 if (id === 'frail') desc = "Takes 30% more DMG.";
-                
                 this.player.addEffect(id, duration, 0, '🦠', desc);
                 ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "SYSTEM HACKED", "#00ff00");
                 AudioMgr.playSound('attack');
@@ -4456,14 +4462,13 @@ drawEffects() {
             if (validTarget === this.player) {
                 const multiplier = await this.startQTE('DEFEND', this.player.x, this.player.y);
                 
-                // NEW: Glitch Spike Attack
                 this.triggerVFX('glitch_spike', this.enemy, validTarget, () => {
                     let dmg = intent.val;
                     dmg = Math.floor(dmg * multiplier);
-                    if (validTarget.takeDamage(dmg, this.enemy) && validTarget === this.player) { this.gameOver(); return; }
+                    // FIX: Suppress "BLOCKED" text
+                    if (validTarget.takeDamage(dmg, this.enemy, true) && validTarget === this.player) { this.gameOver(); return; }
                 });
             } else {
-                // Enemy attacks Minion
                 this.triggerVFX('glitch_spike', this.enemy, validTarget, () => {
                     if (validTarget.takeDamage(intent.val, this.enemy)) {
                          if (this.player.traits.maxMinions === 3 && Math.random() < 0.3) { 
@@ -4490,7 +4495,7 @@ drawEffects() {
             await this.sleep(300);
             if(this.enemy.minions.length < 2) {
                 const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false);
-                m.spawnTimer = 1.0; // Spawn anim
+                m.spawnTimer = 1.0; 
                 this.enemy.minions.push(m);
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "REINFORCING", "#fff");
                 AudioMgr.playSound('mana');
@@ -4507,7 +4512,6 @@ drawEffects() {
             const targets = [this.player, ...this.player.minions];
             const t = targets[Math.floor(Math.random() * targets.length)];
             if(t) {
-                // NEW: Micro Laser
                 this.triggerVFX('micro_laser', min, t, () => {
                     if (t.takeDamage(min.dmg, min) && t === this.player) { this.gameOver(); return; }
                     if (t !== this.player && t.currentHp <= 0) {
@@ -5023,73 +5027,84 @@ drawEffects() {
     },
 
     loop(timestamp) {
-        // FIX: Clamp delta time to max 0.1s to prevent "instant" QTEs on lag spikes
         let dt = (timestamp - this.lastTime) / 1000;
         if (dt > 0.1) dt = 0.1; 
         
         this.lastTime = timestamp;
 
-        this.drawEnvironment(dt);
-
-        if (this.currentState === STATE.META) {
-            this.drawSanctuary(dt);
-            requestAnimationFrame(this.loop.bind(this));
-            return;
+        // NEW: Update Input Cooldown
+        if (this.inputCooldown > 0) {
+            this.inputCooldown -= dt;
         }
 
-        let shakeX = 0, shakeY = 0;
-        if(this.shakeTime > 0) {
-            shakeX = (Math.random() - 0.5) * 15;
-            shakeY = (Math.random() - 0.5) * 15;
-            this.shakeTime--;
+        try {
+            this.drawEnvironment(dt);
+
+            if (this.currentState === STATE.META) {
+                this.drawSanctuary(dt);
+                requestAnimationFrame(this.loop.bind(this));
+                return;
+            }
+
+            let shakeX = 0, shakeY = 0;
+            if(this.shakeTime > 0) {
+                shakeX = (Math.random() - 0.5) * 15;
+                shakeY = (Math.random() - 0.5) * 15;
+                this.shakeTime--;
+            }
+
+            this.ctx.save();
+            this.ctx.translate(shakeX, shakeY);
+            
+            this.updateMinionPositions();
+
+            if ((this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT) && this.player && this.enemy) {
+                this.drawEntity(this.player);
+                
+                if (this.player.minions) {
+                    this.player.minions.forEach(m => {
+                        if (m) this.drawEntity(m);
+                    });
+                }
+                
+                this.drawEntity(this.enemy);
+                
+                if (this.enemy.minions) {
+                    this.enemy.minions.forEach(m => {
+                        if (m) this.drawEntity(m);
+                    });
+                }
+                
+                this.drawIntentLine(this.enemy);
+                this.drawEffects();
+                
+                // QTE Updates
+                this.updateQTE(dt);
+                this.drawQTE();
+
+                this.drawHealthBar(this.player);
+                if (this.player.minions) {
+                    this.player.minions.forEach(m => {
+                        if (m) this.drawHealthBar(m);
+                    });
+                }
+                this.drawHealthBar(this.enemy);
+                if (this.enemy.minions) {
+                    this.enemy.minions.forEach(m => {
+                        if (m) this.drawHealthBar(m);
+                    });
+                }
+            }
+
+            ParticleSys.update(dt);
+            ParticleSys.draw(this.ctx);
+            
+        } catch (e) {
+            console.error("Render Error:", e);
+            this.ctx.restore(); 
+        } finally {
+            this.ctx.restore();
         }
-
-        this.ctx.save();
-        this.ctx.translate(shakeX, shakeY);
-        
-        this.updateMinionPositions();
-
-        if ((this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT) && this.player && this.enemy) {
-            this.drawEntity(this.player);
-            
-            if (this.player.minions) {
-                this.player.minions.forEach(m => {
-                    if (m) this.drawEntity(m);
-                });
-            }
-            
-            this.drawEntity(this.enemy);
-            
-            if (this.enemy.minions) {
-                this.enemy.minions.forEach(m => {
-                    if (m) this.drawEntity(m);
-                });
-            }
-            
-            this.drawIntentLine(this.enemy);
-            this.drawEffects();
-            
-            // QTE Updates
-            this.updateQTE(dt);
-            this.drawQTE();
-
-            this.drawHealthBar(this.player);
-            if (this.player.minions) {
-                this.player.minions.forEach(m => {
-                    if (m) this.drawHealthBar(m);
-                });
-            }
-            this.drawHealthBar(this.enemy);
-            if (this.enemy.minions) {
-                this.enemy.minions.forEach(m => {
-                    if (m) this.drawHealthBar(m);
-                });
-            }
-        }
-
-        ParticleSys.update(dt);
-        ParticleSys.draw(this.ctx);
-        this.ctx.restore();
         
         requestAnimationFrame(this.loop.bind(this));
     },
@@ -5101,260 +5116,259 @@ drawEntity(entity) {
         let animX = 0, animY = 0;
         let scale = 1.0; 
         
-        if (entity.flashTimer > 0) {
-            entity.flashTimer -= 0.05; 
-        }
+        // Logic updates (Timer management)
+        if (entity.flashTimer > 0) entity.flashTimer -= 0.05; 
         
+        // Capture spawn state
         const isSpawning = entity.spawnTimer > 0;
+        
+        // CRITICAL FIX: Wrap rendering in try/finally to ensure context is ALWAYS restored
+        // even if a drawing error occurs. This prevents the "Invisible Game" bug.
+        if (isSpawning) ctx.save();
 
-        // Handle Spawn Animation (Wireframe Effect)
-        if (isSpawning) {
-            entity.spawnTimer -= 0.02; 
-            const progress = 1.0 - Math.max(0, entity.spawnTimer);
-            
-            ctx.save();
-            ctx.globalAlpha = progress;
-            
-            const clipHeight = entity.radius * 2 * progress;
-            
-            ctx.beginPath();
-            ctx.rect(entity.x - entity.radius, entity.y + entity.radius - clipHeight, entity.radius*2, clipHeight);
-            ctx.clip();
-        }
-
-        // Handle Animations
-        if (entity.anim && entity.anim.timer > 0 || entity.anim.type === 'windup') {
-            if (entity.anim.type !== 'windup') entity.anim.timer--;
-            
-            const t = entity.anim.timer;
-            
-            if (entity.anim.type === 'lunge') {
-                const dir = (entity instanceof Player || (entity instanceof Minion && entity.isPlayerSide)) ? -1 : 1; 
-                animY = Math.sin(t * 0.5) * 40 * dir; 
-            } else if (entity.anim.type === 'shake') {
-                animX = (Math.random() - 0.5) * 20;
-            } else if (entity.anim.type === 'pulse') {
-                animY = Math.sin(t) * 10;
-            } else if (entity.anim.type === 'windup') {
-                animX = (Math.random() - 0.5) * 6; 
-                animY = (Math.random() - 0.5) * 6;
-                scale = 1.1; 
+        try {
+            // Handle Spawn Animation (Wireframe Effect)
+            if (isSpawning) {
+                entity.spawnTimer -= 0.02; 
+                const progress = 1.0 - Math.max(0, entity.spawnTimer);
                 
-                ctx.save();
-                ctx.globalAlpha = 0.6 + Math.sin(Date.now() / 50) * 0.2; 
-                ctx.fillStyle = (entity instanceof Player) ? COLORS.GOLD : COLORS.MECH_LIGHT;
+                ctx.globalAlpha = progress;
+                
+                const clipHeight = entity.radius * 2 * progress;
+                
                 ctx.beginPath();
-                ctx.arc(entity.x, entity.y, entity.radius * 1.2, 0, Math.PI*2);
-                ctx.fill();
+                ctx.rect(entity.x - entity.radius, entity.y + entity.radius - clipHeight, entity.radius*2, clipHeight);
+                ctx.clip();
+            }
+
+            // Handle Animations
+            if (entity.anim && entity.anim.timer > 0 || entity.anim.type === 'windup') {
+                if (entity.anim.type !== 'windup') entity.anim.timer--;
+                
+                const t = entity.anim.timer;
+                
+                if (entity.anim.type === 'lunge') {
+                    const dir = (entity instanceof Player || (entity instanceof Minion && entity.isPlayerSide)) ? -1 : 1; 
+                    animY = Math.sin(t * 0.5) * 40 * dir; 
+                } else if (entity.anim.type === 'shake') {
+                    animX = (Math.random() - 0.5) * 20;
+                } else if (entity.anim.type === 'pulse') {
+                    animY = Math.sin(t) * 10;
+                } else if (entity.anim.type === 'windup') {
+                    animX = (Math.random() - 0.5) * 6; 
+                    animY = (Math.random() - 0.5) * 6;
+                    scale = 1.1; 
+                }
+            }
+            
+            const renderX = entity.x + animX;
+            const renderY = entity.y + animY;
+
+            const isPlayerSide = (entity instanceof Player) || (entity instanceof Minion && entity.isPlayerSide);
+            const isMinion = entity instanceof Minion;
+
+            ctx.save(); 
+            ctx.translate(renderX, renderY);
+            ctx.scale(scale, scale);
+            ctx.translate(-renderX, -renderY);
+
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.beginPath();
+            ctx.ellipse(renderX, renderY + 40, entity.radius, entity.radius/3, 0, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.lineWidth = 4;
+            
+            if (isPlayerSide) {
+                let themeColor = COLORS.NATURE_LIGHT;
+                if (entity instanceof Player) themeColor = entity.classColor || COLORS.NATURE_LIGHT;
+                else if (entity instanceof Minion && Game.player) themeColor = Game.player.classColor || COLORS.NATURE_LIGHT;
+
+                ctx.strokeStyle = themeColor;
+                ctx.fillStyle = (entity.flashTimer > 0) ? '#ffffff' : themeColor;
+                
+                ctx.shadowColor = themeColor;
+                ctx.shadowBlur = 25;
+                
+                const pulse = Math.sin(Date.now() / 300) * 5;
+
+                if(entity instanceof Player) {
+                    ctx.beginPath();
+                    ctx.moveTo(renderX, renderY - 100 + pulse);
+                    ctx.lineTo(renderX + 60, renderY + pulse);
+                    ctx.lineTo(renderX, renderY + 100 + pulse);
+                    ctx.lineTo(renderX - 60, renderY + pulse);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.arc(renderX, renderY + pulse, 20, 0, Math.PI*2);
+                    ctx.fill();
+
+                    ctx.fillStyle = (entity.flashTimer > 0) ? '#ffffff' : themeColor;
+                    ctx.beginPath();
+                    ctx.arc(renderX, renderY + pulse, 10, 0, Math.PI*2);
+                    ctx.fill();
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(renderX, renderY + pulse, 30, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.stroke();
+                }
+
+            } else {
+                const color = isMinion ? '#333' : '#1a0505';
+                ctx.strokeStyle = COLORS.MECH_LIGHT;
+                ctx.fillStyle = (entity.flashTimer > 0) ? '#ffffff' : color;
+                
+                ctx.shadowColor = COLORS.MECH_LIGHT;
+                ctx.shadowBlur = 25;
+                
+                const hover = Math.cos(Date.now() / 250) * 5;
+
+                if(entity instanceof Enemy) {
+                    ctx.beginPath();
+                    const s = 100;
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (Math.PI / 3) * i;
+                        const x = renderX + s * Math.cos(angle);
+                        const y = renderY + hover + s * Math.sin(angle);
+                        if(i===0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+
+                    ctx.fillStyle = (entity.flashTimer > 0) ? '#ffffff' : COLORS.MECH_LIGHT;
+                    ctx.fillRect(renderX - 40, renderY - 10 + hover, 80, 20);
+
+                    if(entity.nextIntent) {
+                        ctx.fillStyle = '#fff';
+                        ctx.font = '50px "Segoe UI Emoji"';
+                        ctx.textAlign = 'center';
+                        ctx.shadowBlur = 0;
+                        let icon = '⚔️';
+                        if(entity.nextIntent.type === 'heal') icon = '💚';
+                        else if(entity.nextIntent.type === 'summon') icon = '🤖';
+                        
+                        ctx.fillText(icon, renderX, renderY - 220); 
+                        
+                        if (entity.nextIntent.secondary) {
+                            ctx.font = '24px "Segoe UI Emoji"';
+                            const secIcon = entity.nextIntent.secondary.type === 'buff' ? '💪' : '🦠';
+                            ctx.fillText(secIcon, renderX + 40, renderY - 215);
+                        }
+                        
+                        if(entity.nextIntent.val > 0) {
+                            ctx.font = 'bold 24px "Orbitron"';
+                            ctx.fillStyle = COLORS.MECH_LIGHT;
+                            ctx.fillText(entity.nextIntent.val, renderX, renderY - 190); 
+                        }
+                    }
+
+                } else {
+                    ctx.beginPath();
+                    ctx.moveTo(renderX - 30, renderY + hover - 20);
+                    ctx.lineTo(renderX + 30, renderY + hover - 20);
+                    ctx.lineTo(renderX, renderY + hover + 30);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    ctx.fillStyle = '#f00';
+                    ctx.beginPath();
+                    ctx.arc(renderX, renderY + hover, 8, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            }
+            ctx.shadowBlur = 0; 
+            
+            if(entity.shield > 0) {
+                ctx.strokeStyle = COLORS.SHIELD;
+                ctx.lineWidth = 2;
+                ctx.shadowColor = COLORS.SHIELD;
+                ctx.shadowBlur = 15;
+                ctx.beginPath();
+                ctx.arc(renderX, renderY, entity.radius + 15, 0, Math.PI*2);
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+            }
+
+            // --- DEBUFF VISUALS ---
+            if (entity.hasEffect('weak')) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(0, 0, entity.radius, 0, Math.PI*2); 
+                ctx.clip();
+                ctx.strokeStyle = 'rgba(0, 0, 50, 0.5)';
+                ctx.lineWidth = 2;
+                const time = Date.now() / 1000;
+                const offset = (time * 20) % 20;
+                for(let y = -entity.radius; y < entity.radius; y+=10) {
+                    ctx.beginPath();
+                    ctx.moveTo(-entity.radius, y + offset);
+                    ctx.lineTo(entity.radius, y + offset);
+                    ctx.stroke();
+                }
                 ctx.restore();
             }
-        }
-        
-        const renderX = entity.x + animX;
-        const renderY = entity.y + animY;
 
-        const isPlayerSide = (entity instanceof Player) || (entity instanceof Minion && entity.isPlayerSide);
-        const isMinion = entity instanceof Minion;
-
-        ctx.save(); 
-        ctx.translate(renderX, renderY);
-        ctx.scale(scale, scale);
-        ctx.translate(-renderX, -renderY);
-
-        // Shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.beginPath();
-        ctx.ellipse(renderX, renderY + 40, entity.radius, entity.radius/3, 0, 0, Math.PI*2);
-        ctx.fill();
-
-        ctx.lineWidth = 4;
-        
-       if (isPlayerSide) {
-            let themeColor = COLORS.NATURE_LIGHT;
-            if (entity instanceof Player) themeColor = entity.classColor || COLORS.NATURE_LIGHT;
-            else if (entity instanceof Minion && Game.player) themeColor = Game.player.classColor || COLORS.NATURE_LIGHT;
-
-            ctx.strokeStyle = themeColor;
-            ctx.fillStyle = (entity.flashTimer > 0) ? '#ffffff' : themeColor;
-            
-            ctx.shadowColor = themeColor;
-            ctx.shadowBlur = 25;
-            
-            const pulse = Math.sin(Date.now() / 300) * 5;
-
-            if(entity instanceof Player) {
+            if (entity.hasEffect('frail')) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.lineWidth = 1;
                 ctx.beginPath();
-                ctx.moveTo(renderX, renderY - 100 + pulse);
-                ctx.lineTo(renderX + 60, renderY + pulse);
-                ctx.lineTo(renderX, renderY + 100 + pulse);
-                ctx.lineTo(renderX - 60, renderY + pulse);
-                ctx.closePath();
-                ctx.fill();
-                ctx.stroke();
-                
-                ctx.fillStyle = '#fff';
-                ctx.beginPath();
-                ctx.arc(renderX, renderY + pulse, 20, 0, Math.PI*2);
-                ctx.fill();
-
-                ctx.fillStyle = (entity.flashTimer > 0) ? '#ffffff' : themeColor;
-                ctx.beginPath();
-                ctx.arc(renderX, renderY + pulse, 10, 0, Math.PI*2);
-                ctx.fill();
-            } else {
-                ctx.beginPath();
-                ctx.arc(renderX, renderY + pulse, 30, 0, Math.PI*2);
-                ctx.fill();
-                ctx.stroke();
-            }
-
-        } else {
-            const color = isMinion ? '#333' : '#1a0505';
-            ctx.strokeStyle = COLORS.MECH_LIGHT;
-            ctx.fillStyle = (entity.flashTimer > 0) ? '#ffffff' : color;
-            
-            ctx.shadowColor = COLORS.MECH_LIGHT;
-            ctx.shadowBlur = 25;
-            
-            const hover = Math.cos(Date.now() / 250) * 5;
-
-            if(entity instanceof Enemy) {
-                ctx.beginPath();
-                const s = 100;
-                for (let i = 0; i < 6; i++) {
-                    const angle = (Math.PI / 3) * i;
-                    const x = renderX + s * Math.cos(angle);
-                    const y = renderY + hover + s * Math.sin(angle);
-                    if(i===0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                const seed = entity.name.length; 
+                for(let k=0; k<3; k++) {
+                    ctx.moveTo(Math.sin(seed+k)*20, Math.cos(seed+k)*20);
+                    ctx.lineTo(Math.sin(seed+k+1)*40, Math.cos(seed+k+1)*40);
                 }
-                ctx.closePath();
-                ctx.fill();
                 ctx.stroke();
-
-                ctx.fillStyle = (entity.flashTimer > 0) ? '#ffffff' : COLORS.MECH_LIGHT;
-                ctx.fillRect(renderX - 40, renderY - 10 + hover, 80, 20);
-
-                if(entity.nextIntent) {
-                    ctx.fillStyle = '#fff';
-                    ctx.font = '50px "Segoe UI Emoji"';
-                    ctx.textAlign = 'center';
-                    ctx.shadowBlur = 0;
-                    let icon = '⚔️';
-                    if(entity.nextIntent.type === 'heal') icon = '💚';
-                    else if(entity.nextIntent.type === 'summon') icon = '🤖';
-                    
-                    ctx.fillText(icon, renderX, renderY - 220); 
-                    
-                    if (entity.nextIntent.secondary) {
-                        ctx.font = '24px "Segoe UI Emoji"';
-                        const secIcon = entity.nextIntent.secondary.type === 'buff' ? '💪' : '🦠';
-                        ctx.fillText(secIcon, renderX + 40, renderY - 215);
-                    }
-                    
-                    if(entity.nextIntent.val > 0) {
-                        ctx.font = 'bold 24px "Orbitron"';
-                        ctx.fillStyle = COLORS.MECH_LIGHT;
-                        ctx.fillText(entity.nextIntent.val, renderX, renderY - 190); 
-                    }
-                }
-
-            } else {
-                ctx.beginPath();
-                ctx.moveTo(renderX - 30, renderY + hover - 20);
-                ctx.lineTo(renderX + 30, renderY + hover - 20);
-                ctx.lineTo(renderX, renderY + hover + 30);
-                ctx.closePath();
-                ctx.fill();
-                ctx.stroke();
-                
-                ctx.fillStyle = '#f00';
-                ctx.beginPath();
-                ctx.arc(renderX, renderY + hover, 8, 0, Math.PI*2);
-                ctx.fill();
+                ctx.restore();
             }
-        }
-        ctx.shadowBlur = 0; 
-        
-        if(entity.shield > 0) {
-            ctx.strokeStyle = COLORS.SHIELD;
-            ctx.lineWidth = 2;
-            ctx.shadowColor = COLORS.SHIELD;
-            ctx.shadowBlur = 15;
-            ctx.beginPath();
-            ctx.arc(renderX, renderY, entity.radius + 15, 0, Math.PI*2);
-            ctx.stroke();
-            ctx.shadowBlur = 0;
-        }
 
-        // --- DEBUFF VISUALS ---
-        if (entity.hasEffect('weak')) {
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(0, 0, entity.radius, 0, Math.PI*2); 
-            ctx.clip();
-            ctx.strokeStyle = 'rgba(0, 0, 50, 0.5)';
-            ctx.lineWidth = 2;
-            const time = Date.now() / 1000;
-            const offset = (time * 20) % 20;
-            for(let y = -entity.radius; y < entity.radius; y+=10) {
+            if ((entity instanceof Player && entity.traits.vulnerable) || entity.hasEffect('vulnerable')) {
+                ctx.save();
+                const time = Date.now() / 1000;
+                ctx.rotate(time); 
+                ctx.strokeStyle = '#ff0000';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([10, 10]);
                 ctx.beginPath();
-                ctx.moveTo(-entity.radius, y + offset);
-                ctx.lineTo(entity.radius, y + offset);
+                ctx.arc(0, 0, entity.radius + 10, 0, Math.PI*2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                ctx.moveTo(0, -entity.radius - 15); ctx.lineTo(0, -entity.radius - 5);
+                ctx.moveTo(0, entity.radius + 5); ctx.lineTo(0, entity.radius + 15);
+                ctx.moveTo(-entity.radius - 15, 0); ctx.lineTo(-entity.radius - 5, 0);
+                ctx.moveTo(entity.radius + 5, 0); ctx.lineTo(entity.radius + 15, 0);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            ctx.restore(); // Restore scaling context
+
+            // Draw scanline if spawning
+            if (isSpawning) {
+                const scanY = entity.y + entity.radius - (entity.radius * 2 * (1.0 - Math.max(0, entity.spawnTimer)));
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(entity.x - entity.radius, scanY);
+                ctx.lineTo(entity.x + entity.radius, scanY);
                 ctx.stroke();
             }
-            ctx.restore();
+        } finally {
+            // ALWAYS restore if we saved for spawning, preventing the "Frozen Canvas" bug
+            if (isSpawning) ctx.restore();
         }
+    },    
 
-        if (entity.hasEffect('frail')) {
-            ctx.save();
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            const seed = entity.name.length; 
-            for(let k=0; k<3; k++) {
-                ctx.moveTo(Math.sin(seed+k)*20, Math.cos(seed+k)*20);
-                ctx.lineTo(Math.sin(seed+k+1)*40, Math.cos(seed+k+1)*40);
-            }
-            ctx.stroke();
-            ctx.restore();
-        }
-
-        if ((entity instanceof Player && entity.traits.vulnerable) || entity.hasEffect('vulnerable')) {
-            ctx.save();
-            const time = Date.now() / 1000;
-            ctx.rotate(time); 
-            ctx.strokeStyle = '#ff0000';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([10, 10]);
-            ctx.beginPath();
-            ctx.arc(0, 0, entity.radius + 10, 0, Math.PI*2);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.beginPath();
-            ctx.moveTo(0, -entity.radius - 15); ctx.lineTo(0, -entity.radius - 5);
-            ctx.moveTo(0, entity.radius + 5); ctx.lineTo(0, entity.radius + 15);
-            ctx.moveTo(-entity.radius - 15, 0); ctx.lineTo(-entity.radius - 5, 0);
-            ctx.moveTo(entity.radius + 5, 0); ctx.lineTo(entity.radius + 15, 0);
-            ctx.stroke();
-            ctx.restore();
-        }
-
-        ctx.restore(); // Restore scaling context
-
-        // Restore context if we were spawning
-        if (isSpawning) {
-            const scanY = entity.y + entity.radius - (entity.radius * 2 * (1.0 - Math.max(0, entity.spawnTimer)));
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(entity.x - entity.radius, scanY);
-            ctx.lineTo(entity.x + entity.radius, scanY);
-            ctx.stroke();
-            
-            ctx.restore(); 
-        }
-    },
-    // --- TUTORIAL SYSTEM ---
+// --- TUTORIAL SYSTEM ---
 
     startTutorial() {
         this.changeState(STATE.TUTORIAL_COMBAT);
