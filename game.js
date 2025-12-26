@@ -1431,12 +1431,10 @@ const Game = {
         });
         
         const handleInteraction = (e) => {
-             // NEW: Check Input Cooldown
+             // Check Input Cooldown
              if (this.inputCooldown > 0) return;
 
-             if (this.qte.active) { this.checkQTE(); return; }
-             if (this.dragState.active) return;
-
+             // Update coords
              const rect = this.canvas.getBoundingClientRect();
              const scaleX = this.canvas.width / rect.width;
              const scaleY = this.canvas.height / rect.height;
@@ -1456,6 +1454,38 @@ const Game = {
                 this.mouseY = (clientY - rect.top) * scaleY;
              }
 
+             // 1. PARRY CHECK (High Priority)
+             for (let i = this.effects.length - 1; i >= 0; i--) {
+                 const eff = this.effects[i];
+                 if (eff.type === 'micro_laser' && !eff.parried) {
+                     const dist = Math.hypot(this.mouseX - eff.x, this.mouseY - eff.y);
+                     // Generous hitbox (radius + 30px buffer)
+                     if (dist < eff.radius + 30) {
+                         eff.parried = true;
+                         eff.onHit = null; // Cancel damage
+                         
+                         // NEW: Deflect AWAY from the click point
+                         const angle = Math.atan2(eff.y - this.mouseY, eff.x - this.mouseX);
+                         const deflectSpeed = 25; // Fast deflection
+                         
+                         eff.vx = Math.cos(angle) * deflectSpeed;
+                         eff.vy = Math.sin(angle) * deflectSpeed;
+                         
+                         AudioMgr.playSound('defend'); 
+                         ParticleSys.createFloatingText(eff.x, eff.y, "PARRY!", "#00f3ff");
+                         ParticleSys.createExplosion(eff.x, eff.y, 20, '#00f3ff');
+                         return; // Stop processing other clicks
+                     }
+                 }
+             }
+
+             // 2. QTE Check
+             if (this.qte.active) { this.checkQTE(); return; }
+             
+             // 3. Drag Check
+             if (this.dragState.active) return;
+
+             // 4. Enemy Info Toggle
              if ((this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT) && this.enemy && this.enemy.currentHp > 0) {
                 const dist = Math.hypot(this.mouseX - this.enemy.x, this.mouseY - this.enemy.y);
                 if (dist < this.enemy.radius) {
@@ -1463,6 +1493,7 @@ const Game = {
                     if (this.enemy.showIntent) {
                         ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "INTENT REVEALED", COLORS.MANA);
                         AudioMgr.playSound('click');
+                        // Tutorial Advance Logic
                         if (this.currentState === STATE.TUTORIAL_COMBAT && (this.tutorialStep === 2 || this.tutorialStep === 4)) {
                             this.tutorialStep++;
                             this.updateTutorialStep();
@@ -4023,27 +4054,41 @@ triggerVFX(type, source, target, onHitCallback = null) {
         else if (type === 'nature_dart') {
             this.effects.push({
                 type: 'nature_dart',
-                x: source.x, y: source.y,
-                target: target,
-                speed: 15,
+                sx: source.x, sy: source.y, // Start
+                tx: target.x, ty: target.y, // Target
+                x: source.x, y: source.y,   // Current
+                progress: 0,
+                speed: 0.02, // Speed of interpolation (0 to 1)
+                amplitude: 30, // How wide the wave is
+                frequency: 10, // How fast it waves
                 color: COLORS.NATURE_LIGHT,
-                trail: [],
                 onHit: onHitCallback
             });
             AudioMgr.playSound('dart');
         }
         else if (type === 'micro_laser') {
+            // NEW: Projectile Logic for Parry
+            const speed = 6; // Slow enough to tap
+            const angle = Math.atan2(target.y - source.y, target.x - source.x);
+            
             this.effects.push({
                 type: 'micro_laser',
-                sx: source.x, sy: source.y,
+                x: source.x, y: source.y,
                 tx: target.x, ty: target.y,
-                life: 10, maxLife: 10,
-                color: '#ff0055'
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                radius: 40, // Hitbox size
+                life: 100, // Safety timeout
+                maxLife: 100,
+                color: '#ff0055',
+                parried: false,
+                onHit: onHitCallback
             });
             AudioMgr.playSound('laser');
-            if (onHitCallback) setTimeout(onHitCallback, 100);
+            // Note: Removed setTimeout, damage is now handled in drawEffects upon collision
         }
     },
+
 drawEffects() {
         const ctx = this.ctx;
         const w = this.canvas.width;
@@ -4052,16 +4097,77 @@ drawEffects() {
         for(let i = this.effects.length - 1; i >= 0; i--) {
             const e = this.effects[i];
             
-            // --- DIGITAL SEVER (Slash) ---
+            // --- MICRO LASER (Enemy Minion - Parriable) ---
+            if (e.type === 'micro_laser') {
+                // Move
+                e.x += e.vx;
+                e.y += e.vy;
+
+                // Draw
+                ctx.save();
+                ctx.translate(e.x, e.y);
+                ctx.rotate(Math.atan2(e.vy, e.vx));
+                
+                // Visual: Electrical Plasma Bolt
+                const boltColor = e.parried ? '#00f3ff' : '#ff0055'; // Cyan if parried, Red if hostile
+                
+                // 1. Glow
+                ctx.shadowColor = boltColor;
+                ctx.shadowBlur = 20;
+                
+                // 2. Core (Mechanical Slug)
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                // A capsule shape
+                ctx.roundRect(-15, -4, 30, 8, 4);
+                ctx.fill();
+                
+                // 3. Electrical Arcs (Jittery)
+                ctx.strokeStyle = boltColor;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(-20, 0);
+                // Draw random jagged lines around the core
+                for(let k=0; k<4; k++) {
+                    ctx.lineTo(-10 + k*10, (Math.random() - 0.5) * 15);
+                }
+                ctx.stroke();
+                
+                // 4. Trail Sparks
+                if (Math.random() > 0.5) {
+                    ctx.fillStyle = boltColor;
+                    ctx.fillRect(-30 - Math.random()*20, (Math.random()-0.5)*10, 4, 4);
+                }
+                
+                ctx.restore();
+
+                // Logic: Parried (Fly off screen)
+                if (e.parried) {
+                    // Remove if off-screen
+                    if (e.x < -100 || e.x > w + 100 || e.y < -100 || e.y > h + 100) {
+                        this.effects.splice(i, 1);
+                    }
+                    continue;
+                }
+
+                // Logic: Hit Detection (Target)
+                const dist = Math.hypot(e.x - e.tx, e.y - e.ty);
+                if (dist < 20) {
+                    if (e.onHit) e.onHit();
+                    this.effects.splice(i, 1);
+                    ParticleSys.createExplosion(e.x, e.y, 15, e.color);
+                }
+                continue;
+            }
+
+            // ... [KEEP ALL OTHER EFFECTS BELOW UNCHANGED] ...
+            
             if (e.type === 'digital_sever') {
                 e.life--;
                 if(e.life <= 0) { this.effects.splice(i, 1); continue; }
-                
                 ctx.save();
                 ctx.translate(e.x, e.y);
                 ctx.rotate(e.angle);
-                
-                // Draw Line
                 ctx.beginPath();
                 ctx.moveTo(-100, 0);
                 ctx.lineTo(100, 0);
@@ -4070,31 +4176,24 @@ drawEffects() {
                 ctx.shadowColor = e.color;
                 ctx.shadowBlur = 20;
                 ctx.stroke();
-                
-                // Glitch Rectangles
                 if (Math.random() > 0.5) {
                     ctx.fillStyle = '#fff';
                     ctx.fillRect(Math.random()*100 - 50, -10, Math.random()*20, 20);
                 }
-                
                 ctx.restore();
                 continue;
             }
 
-            // --- HEX BARRIER (Shield) ---
             if (e.type === 'hex_barrier') {
                 e.life--;
                 if(e.life <= 0) { this.effects.splice(i, 1); continue; }
-                
-                e.radius += (e.maxRadius - e.radius) * 0.2; // Ease out
-                
+                e.radius += (e.maxRadius - e.radius) * 0.2; 
                 ctx.save();
                 ctx.strokeStyle = e.color;
                 ctx.lineWidth = 3;
                 ctx.shadowColor = e.color;
                 ctx.shadowBlur = 10;
                 ctx.globalAlpha = e.life / e.maxLife;
-                
                 ctx.beginPath();
                 for (let k = 0; k < 6; k++) {
                     const angle = (Math.PI / 3) * k;
@@ -4108,36 +4207,29 @@ drawEffects() {
                 continue;
             }
 
-            // --- BINARY FLOW (Mana) ---
             if (e.type === 'binary_flow') {
                 e.life--;
                 if(e.life <= 0) { this.effects.splice(i, 1); continue; }
-                
                 ctx.save();
                 ctx.font = "20px 'Orbitron'";
                 ctx.fillStyle = COLORS.MANA;
                 ctx.globalAlpha = e.life / e.maxLife;
-                
                 const char = Math.random() > 0.5 ? "1" : "0";
                 ctx.fillText(char, e.x + (Math.random()-0.5)*40, e.y - (40 - e.life)*3);
                 ctx.restore();
                 continue;
             }
 
-            // --- ORBITAL STRIKE (Meteor) ---
             if (e.type === 'orbital_strike') {
                 e.y += e.speed;
-                
-                // Draw Falling Monolith
                 ctx.save();
                 ctx.fillStyle = e.color;
                 ctx.shadowColor = e.color;
                 ctx.shadowBlur = 30;
-                ctx.fillRect(e.x - 20, e.y - 60, 40, 120); // Long rectangle
+                ctx.fillRect(e.x - 20, e.y - 60, 40, 120); 
                 ctx.fillStyle = '#fff';
-                ctx.fillRect(e.x - 10, e.y - 50, 20, 100); // Core
+                ctx.fillRect(e.x - 10, e.y - 50, 20, 100); 
                 ctx.restore();
-
                 if (e.y >= e.targetY) {
                     this.effects.splice(i, 1);
                     if (e.onHit) e.onHit();
@@ -4145,11 +4237,9 @@ drawEffects() {
                 continue;
             }
 
-            // --- GRID FRACTURE (Earthquake) ---
             if (e.type === 'grid_fracture') {
                 e.life--;
                 if(e.life <= 0) { this.effects.splice(i, 1); continue; }
-                
                 if (e.cracks.length === 0) {
                     for(let k=0; k<6; k++) {
                         e.cracks.push({
@@ -4158,42 +4248,33 @@ drawEffects() {
                         });
                     }
                 }
-
                 ctx.save();
                 ctx.strokeStyle = COLORS.ORANGE;
                 ctx.lineWidth = 4;
                 ctx.shadowColor = '#ff4400';
                 ctx.shadowBlur = 15;
                 ctx.globalAlpha = e.life / e.maxLife;
-
                 e.cracks.forEach(c => {
-                    c.len += 5; // Grow outward
+                    c.len += 5; 
                     const ex = e.x + Math.cos(c.angle) * c.len;
                     const ey = e.y + Math.sin(c.angle) * c.len;
-                    
                     ctx.beginPath();
                     ctx.moveTo(e.x, e.y);
-                    // Jagged line
                     ctx.lineTo(ex + (Math.random()-0.5)*10, ey + (Math.random()-0.5)*10);
                     ctx.stroke();
                 });
-                
                 Game.shake(5);
                 ctx.restore();
                 continue;
             }
 
-            // --- CHAINS (Constrict) ---
             if (e.type === 'chains') {
                 e.life--;
                 if(e.life <= 0) { this.effects.splice(i, 1); continue; }
-                
                 ctx.save();
                 ctx.strokeStyle = COLORS.MECH_LIGHT;
                 ctx.lineWidth = 3;
                 ctx.globalAlpha = e.life / e.maxLife;
-                
-                // Draw wrapping curves
                 ctx.beginPath();
                 ctx.ellipse(e.x, e.y, 60, 20, Math.PI/4, 0, Math.PI*2);
                 ctx.stroke();
@@ -4204,20 +4285,16 @@ drawEffects() {
                 continue;
             }
 
-            // --- LOGIC BOMB (Voodoo) ---
             if (e.type === 'logic_bomb') {
                 e.life--;
                 if(e.life <= 0) { this.effects.splice(i, 1); continue; }
-                
                 if (e.life % 20 === 0) AudioMgr.playSound('ticking');
-
                 ctx.save();
                 ctx.fillStyle = '#ff0000';
                 ctx.font = "bold 40px 'Orbitron'";
                 ctx.textAlign = "center";
                 ctx.shadowColor = 'red';
                 ctx.shadowBlur = 20;
-                
                 const scale = 1 + Math.sin(e.life) * 0.2;
                 ctx.translate(e.x, e.y);
                 ctx.scale(scale, scale);
@@ -4226,17 +4303,14 @@ drawEffects() {
                 continue;
             }
 
-            // --- LIGHTNING (Overcharge) ---
             if (e.type === 'lightning') {
                 e.life--;
                 if(e.life <= 0) { this.effects.splice(i, 1); continue; }
-                
                 ctx.save();
                 ctx.strokeStyle = '#ffff00';
                 ctx.lineWidth = 2;
                 ctx.shadowColor = '#ffff00';
                 ctx.shadowBlur = 15;
-                
                 ctx.beginPath();
                 ctx.moveTo(e.x, e.y - 50);
                 let ly = e.y - 50;
@@ -4251,110 +4325,79 @@ drawEffects() {
                 continue;
             }
             
-            // --- OVERHEAT (Reckless) ---
             if (e.type === 'overheat') {
                 e.life--;
                 if(e.life <= 0) { this.effects.splice(i, 1); continue; }
-                
                 ParticleSys.createExplosion(e.x, e.y, 2, '#ff4400');
                 continue;
             }
- 		if (e.type === 'glitch_spike') {
+
+            if (e.type === 'glitch_spike') {
                 e.life--;
                 if(e.life <= 0) { this.effects.splice(i, 1); continue; }
-
                 ctx.save();
                 ctx.strokeStyle = e.color;
                 ctx.lineWidth = 3;
                 ctx.shadowColor = e.color;
                 ctx.shadowBlur = 10;
-                
-                // Draw jagged line
                 ctx.beginPath();
                 ctx.moveTo(e.sx, e.sy);
-                
                 const segments = 5;
                 const dx = (e.tx - e.sx) / segments;
                 const dy = (e.ty - e.sy) / segments;
-                
                 for(let k=1; k<segments; k++) {
-                    // Jitter
                     const jx = (Math.random() - 0.5) * 50;
                     const jy = (Math.random() - 0.5) * 50;
                     ctx.lineTo(e.sx + dx*k + jx, e.sy + dy*k + jy);
                 }
                 ctx.lineTo(e.tx, e.ty);
                 ctx.stroke();
-                
-                // RGB Split
                 ctx.strokeStyle = '#00ffff';
                 ctx.globalAlpha = 0.5;
                 ctx.stroke();
-                
                 ctx.restore();
                 continue;
             }
 
-            // --- NATURE DART (Wisp Attack) ---
             if (e.type === 'nature_dart') {
-                // Homing logic
-                const dx = e.target.x - e.x;
-                const dy = e.target.y - e.y;
-                const dist = Math.hypot(dx, dy);
-                
-                if (dist < e.speed) {
-                    // Hit!
+                e.progress += e.speed;
+                if (e.progress >= 1) {
                     if (e.onHit) e.onHit();
                     this.effects.splice(i, 1);
-                    ParticleSys.createExplosion(e.x, e.y, 10, e.color);
+                    ParticleSys.createExplosion(e.tx, e.ty, 15, e.color);
+                    ParticleSys.createExplosion(e.tx, e.ty, 10, '#fff');
                     continue;
                 }
-                
-                const angle = Math.atan2(dy, dx);
-                e.x += Math.cos(angle) * e.speed;
-                e.y += Math.sin(angle) * e.speed;
-                
-                e.trail.push({x: e.x, y: e.y});
-                if (e.trail.length > 5) e.trail.shift();
-
+                const lx = e.sx + (e.tx - e.sx) * e.progress;
+                const ly = e.sy + (e.ty - e.sy) * e.progress;
+                const angle = Math.atan2(e.ty - e.sy, e.tx - e.sx);
+                const perpAngle = angle + Math.PI / 2;
+                const wave = Math.sin(e.progress * e.frequency) * e.amplitude * (1 - Math.pow(2 * e.progress - 1, 2));
+                e.x = lx + Math.cos(perpAngle) * wave;
+                e.y = ly + Math.sin(perpAngle) * wave;
+                ParticleSys.particles.push({
+                    x: e.x + (Math.random() - 0.5) * 10, 
+                    y: e.y + (Math.random() - 0.5) * 10,
+                    vx: (Math.random() - 0.5) * 0.5, 
+                    vy: (Math.random() - 0.5) * 0.5,
+                    life: 0.6, maxLife: 0.6,
+                    size: Math.random() * 4 + 2,
+                    color: e.color, 
+                    alpha: 0.6 
+                });
                 ctx.save();
-                // Trail
-                ctx.beginPath();
-                if(e.trail.length > 0) ctx.moveTo(e.trail[0].x, e.trail[0].y);
-                for(let p of e.trail) ctx.lineTo(p.x, p.y);
-                ctx.strokeStyle = e.color;
-                ctx.lineWidth = 4;
-                ctx.stroke();
-                
-                // Head (Diamond)
                 ctx.translate(e.x, e.y);
-                ctx.rotate(angle);
+                ctx.rotate(angle); 
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 20;
                 ctx.fillStyle = '#fff';
                 ctx.beginPath();
-                ctx.moveTo(10, 0);
-                ctx.lineTo(-5, 5);
-                ctx.lineTo(-5, -5);
+                ctx.moveTo(8, 0);
+                ctx.lineTo(0, 6);
+                ctx.lineTo(-15, 0); 
+                ctx.lineTo(0, -6);
+                ctx.closePath();
                 ctx.fill();
-                ctx.restore();
-                continue;
-            }
-
-            // --- MICRO LASER (Enemy Minion) ---
-            if (e.type === 'micro_laser') {
-                e.life--;
-                if(e.life <= 0) { this.effects.splice(i, 1); continue; }
-                
-                ctx.save();
-                ctx.strokeStyle = e.color;
-                ctx.lineWidth = 2;
-                ctx.globalAlpha = e.life / e.maxLife;
-                ctx.shadowColor = e.color;
-                ctx.shadowBlur = 5;
-                
-                ctx.beginPath();
-                ctx.moveTo(e.sx, e.sy);
-                ctx.lineTo(e.tx, e.ty);
-                ctx.stroke();
                 ctx.restore();
                 continue;
             }
@@ -4362,35 +4405,20 @@ drawEffects() {
     },
 
     async endTurn() {
-        // TUTORIAL LOGIC: Step 8 (End Phase) -> Step 9 (Incoming) -> Step 10 (Reroll)
+        // ... [KEEP TUTORIAL LOGIC] ...
         if (this.currentState === STATE.TUTORIAL_COMBAT && this.tutorialStep === 8) {
-            
-            // 1. Move to Incoming Attack Step
             this.tutorialStep = 9;
             this.updateTutorialStep(); 
-            
             if (this.enemy) this.enemy.playAnim('lunge');
-
-            // Wait for player to read "INCOMING ATTACK"
             await this.sleep(2000);
-
-            // 2. Trigger Defend QTE
             this.qte.radius = 100; 
             const multiplier = await this.startQTE('DEFEND', this.player.x, this.player.y);
-            
-            // 3. Resolve Damage
             let dmg = 5;
             dmg = Math.floor(dmg * multiplier);
-            // FIX: Suppress "BLOCKED" text
             this.player.takeDamage(dmg, this.enemy, true);
-            
             await this.sleep(1000);
-
-            // 4. Move to Reroll Step
             this.tutorialStep = 10;
             this.updateTutorialStep();
-            
-            // 5. Deal new cards (Minion + Attack for next steps)
             this.startTurn();
             return;
         }
@@ -4484,7 +4512,6 @@ drawEffects() {
                 this.triggerVFX('glitch_spike', this.enemy, validTarget, () => {
                     let dmg = intent.val;
                     dmg = Math.floor(dmg * multiplier);
-                    // FIX: Suppress "BLOCKED" text
                     if (validTarget.takeDamage(dmg, this.enemy, true) && validTarget === this.player) { this.gameOver(); return; }
                 });
             } else {
@@ -4555,6 +4582,11 @@ drawEffects() {
         
         this.enemy.minions = this.enemy.minions.filter(m => m.currentHp > 0);
         
+        // NEW: Wait for projectiles to clear before starting player turn
+        while (this.effects.some(e => e.type === 'micro_laser' && !e.parried)) {
+            await this.sleep(100);
+        }
+
         this.updateHUD();
         this.startTurn();
     },
