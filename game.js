@@ -359,6 +359,8 @@ const EVENTS_DB = [
     {
         title: "MALFUNCTIONING FABRICATOR",
         desc: "An unstable upgrade station sparks wildly. You might be able to force an upgrade, but it will hurt.",
+        // FIX: Only appear if player has upgrades available
+        condition: (g) => Object.keys(DICE_UPGRADES).some(k => !g.player.hasDiceUpgrade(k)),
         options: [
             { 
                 text: "Force Upgrade (-20 HP)", 
@@ -370,6 +372,7 @@ const EVENTS_DB = [
                         g.player.diceUpgrades.push(up);
                         return "SYSTEM UPGRADED: " + DICE_UPGRADES[up].name;
                     } else {
+                        // Fallback just in case
                         g.techFragments += 100;
                         return "Maximum Upgrades Reached. (+100 Frags)";
                     }
@@ -397,7 +400,6 @@ const EVENTS_DB = [
         desc: "A shady algorithm offers you a random module in exchange for raw data.",
         options: [
             { 
-                // FIX: Clarified text from "Trade" to "Buy Random Module"
                 text: "Buy Random Module (-50 Fragments)", 
                 effect: (g) => { 
                     if (g.techFragments >= 50) {
@@ -1760,19 +1762,20 @@ startDrag(e, die, el) {
 
 startQTE(type, x, y, callback) {
         return new Promise(resolve => {
-            this.inputCooldown = 0.5; // NEW: Enforce global input cooldown
+            const now = Date.now();
+            this.inputCooldown = 0.6; 
 
             this.qte = {
+                id: now, // NEW: Unique ID for this QTE instance
                 active: true,
-                canInteract: false, 
-                startTime: Date.now(), 
+                phase: 'warmup', // NEW: Explicit phase
+                startTime: now, 
                 type: type,
                 targetX: x,
                 targetY: y,
                 maxRadius: 100,
                 radius: 100,
-                timer: 0,
-                warmupTimer: 0.5, 
+                warmupTimer: 0.6, 
                 callback: callback || resolve
             };
             
@@ -1784,8 +1787,11 @@ startQTE(type, x, y, callback) {
 
             this.drawQTE();
 
+            // Failsafe with ID Check
             setTimeout(() => {
-                if (this.qte.active && (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT)) {
+                // Only trigger if QTE is active AND IDs match (prevents killing future QTEs)
+                if (this.qte.active && this.qte.id === now && 
+                   (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT)) {
                     console.log("QTE Failsafe Triggered");
                     this.resolveQTE('fail'); 
                 }
@@ -1796,8 +1802,14 @@ startQTE(type, x, y, callback) {
     updateQTE(dt) {
         if (!this.qte.active) return;
 
-        if (this.qte.warmupTimer > 0) {
+        // Handle Warmup
+        if (this.qte.phase === 'warmup') {
             this.qte.warmupTimer -= dt;
+            this.qte.radius = 100; // Force reset to prevent leakage
+            
+            if (this.qte.warmupTimer <= 0) {
+                this.qte.phase = 'active';
+            }
             return; 
         }
 
@@ -1935,35 +1947,24 @@ startQTE(type, x, y, callback) {
     checkQTE() {
         if (!this.qte.active) return;
         
-        // Double check cooldown
+        // Strict Phase Check
+        if (this.qte.phase !== 'active') return;
         if (this.inputCooldown > 0) return;
-        if (this.qte.warmupTimer > 0) return;
 
         const radius = this.qte.radius;
-        const diff = Math.abs(radius - 30);
-        
-        // FIX: Correct thresholds
-        // Target is 30.
-        // Perfect: 20-40 (diff < 10)
-        // Good: 10-50 (diff < 20)
-        // Early: > 50 (radius > 80)
-        // Late: < 10 (radius < 10)
-
-        if (radius > 60) { 
-             this.resolveQTE('early');
-             return;
-        }
+        const targetRadius = 30;
+        const diff = Math.abs(radius - targetRadius);
+        const tolerance = 25; 
 
         let quality = 'fail';
-        
-        if (this.qte.type === 'ATTACK') {
-             if (diff < 25) quality = 'perfect'; 
-             else quality = 'fail'; 
-        } else {
-             if (diff < 20) quality = 'perfect'; 
-             else if (diff < 50) quality = 'good';
-             else quality = 'fail';
-        }
+
+        if (radius > (targetRadius + tolerance)) {
+            this.resolveQTE('early');
+            return;
+        } 
+        else if (diff <= tolerance) {
+            quality = 'perfect';
+        } 
         
         if (this.currentState === STATE.TUTORIAL_COMBAT) {
             quality = 'perfect';
@@ -1976,15 +1977,13 @@ startQTE(type, x, y, callback) {
         const cb = this.qte.callback;
         this.qte.active = false;
         
-        // Stop Wind-Up Animation
         this.player.anim.type = 'idle';
         if (this.enemy) this.enemy.anim.type = 'idle';
         
         let multiplier = 1.0;
-        let msg = "TOO LATE"; // Default for 'fail' (timeout)
+        let msg = "TOO LATE"; 
         let color = "#888";
 
-        // FIX: Handle Early Click Feedback
         if (quality === 'early') {
             msg = "TOO EARLY";
             color = "#888";
@@ -2727,7 +2726,14 @@ startQTE(type, x, y, callback) {
     },
 
     startEvent() {
-        const event = EVENTS_DB[Math.floor(Math.random() * EVENTS_DB.length)];
+        // FIX: Filter events based on conditions (e.g. don't show upgrade events if maxed)
+        const validEvents = EVENTS_DB.filter(e => !e.condition || e.condition(this));
+        
+        // Fallback to all events if filter leaves none (unlikely but safe)
+        const pool = validEvents.length > 0 ? validEvents : EVENTS_DB;
+        
+        const event = pool[Math.floor(Math.random() * pool.length)];
+        
         this.changeState(STATE.EVENT);
         document.getElementById('event-title').innerText = event.title;
         document.getElementById('event-desc').innerText = event.desc;
@@ -2742,17 +2748,12 @@ startQTE(type, x, y, callback) {
             btn.onclick = () => {
                 const msg = opt.effect(this);
                 
-                // NEW: If the event triggered combat, stop here.
-                // The combat system will handle completion and state changes.
                 if (msg === "COMBAT_STARTED") return;
 
-                // Standard Text Event Outcome
                 ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH/2, CONFIG.CANVAS_HEIGHT/2, msg, COLORS.GOLD);
                 
-                // Mark node as completed and Save (replaces the manual logic)
                 this.completeCurrentNode();
                 
-                // Return to map
                 setTimeout(() => this.changeState(STATE.MAP), 1000);
             };
             opts.appendChild(btn);
@@ -3314,13 +3315,23 @@ async startTurn() {
         const manaStacks = this.player.relics.filter(r => r.id === 'mana_syphon').length;
         if(manaStacks > 0) this.player.mana += manaStacks;
 
-        // Static Field Relic
+        // FIX: Static Field Relic - Handle Death
         if (this.player.hasRelic('static_field') && this.enemy) {
              const targets = [this.enemy, ...this.enemy.minions];
              const t = targets[Math.floor(Math.random() * targets.length)];
              if (t) {
-                 t.takeDamage(5);
+                 const isDead = t.takeDamage(5);
                  ParticleSys.createFloatingText(t.x, t.y - 80, "STATIC", "#00f3ff");
+                 
+                 if (isDead) {
+                     if (t === this.enemy) {
+                         this.winCombat();
+                         return; // Stop turn if boss dies
+                     } else {
+                         // Remove dead minion immediately
+                         this.enemy.minions = this.enemy.minions.filter(m => m !== t);
+                     }
+                 }
              }
         }
 
@@ -3341,7 +3352,7 @@ async startTurn() {
         if(this.enemy) {
              this.enemy.updateEffects();
              
-             // MODIFIED: Shielded Affix Logic - Only regen if shield is broken
+             // Shielded Affix Logic - Only regen if shield is broken
              if (this.enemy.affixes && this.enemy.affixes.includes('Shielded')) {
                  if (this.enemy.shield <= 0) {
                      const ratio = (this.sector === 1) ? 0.1 : 0.2;
@@ -4068,7 +4079,7 @@ triggerVFX(type, source, target, onHitCallback = null) {
         }
         else if (type === 'micro_laser') {
             // NEW: Projectile Logic for Parry
-            const speed = 6; // Slow enough to tap
+            const speed = 9; // FIX: Increased speed (was 6) to make parrying harder
             const angle = Math.atan2(target.y - source.y, target.x - source.x);
             
             this.effects.push({
@@ -4085,7 +4096,6 @@ triggerVFX(type, source, target, onHitCallback = null) {
                 onHit: onHitCallback
             });
             AudioMgr.playSound('laser');
-            // Note: Removed setTimeout, damage is now handled in drawEffects upon collision
         }
     },
 
