@@ -460,7 +460,8 @@ const EVENTS_DB = [
 const AudioMgr = {
     ctx: null,
     bgm: null,
-    isMuted: false,
+    musicEnabled: true, // Track Music state
+    sfxEnabled: true,   // Track SFX state
 
     init() {
         if (!this.ctx) {
@@ -471,13 +472,17 @@ const AudioMgr = {
     },
 
     toggleMusic(enabled) {
-        this.isMuted = !enabled;
+        this.musicEnabled = enabled;
         if (this.bgm) {
-            if (this.isMuted) this.bgm.pause();
+            if (!this.musicEnabled) this.bgm.pause();
             else this.bgm.play().catch(e => console.log(e));
         } else if (enabled) {
             this.startMusic();
         }
+    },
+
+    toggleSFX(enabled) {
+        this.sfxEnabled = enabled;
     },
 
     startMusic() {
@@ -486,13 +491,15 @@ const AudioMgr = {
             this.bgm.loop = true;
             this.bgm.volume = 0.3;
         }
-        if (!this.isMuted && this.bgm.paused) {
+        // Only play if music is specifically enabled
+        if (this.musicEnabled && this.bgm.paused) {
             this.bgm.play().catch(e => console.log("Music waiting for interaction"));
         }
     },
 
     playSound(type) {
-        if (!this.ctx || this.isMuted) return;
+        // Check SFX flag specifically
+        if (!this.ctx || !this.sfxEnabled) return;
         if (this.ctx.state === 'suspended') this.ctx.resume();
 
         const t = this.ctx.currentTime;
@@ -503,98 +510,92 @@ const AudioMgr = {
         gain.connect(this.ctx.destination);
 
         switch (type) {
-            case 'digital_sever': // High pitch glitch slash
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(800, t);
-                osc.frequency.exponentialRampToValueAtTime(100, t + 0.1);
-                gain.gain.setValueAtTime(0.15, t);
-                gain.gain.linearRampToValueAtTime(0, t + 0.1);
+            case 'attack': 
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(600, t);
+                osc.frequency.exponentialRampToValueAtTime(100, t + 0.15);
+                gain.gain.setValueAtTime(0.2, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.15);
                 osc.start(t);
-                osc.stop(t + 0.1);
+                osc.stop(t + 0.15);
                 break;
-            case 'hex_barrier': // Sci-fi shield hum
+            case 'hit': 
+                this.createNoise(0.1, 0.3);
+                break;
+            case 'meteor': 
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, t);
+                osc.frequency.exponentialRampToValueAtTime(100, t + 0.5);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.5);
+                osc.start(t);
+                osc.stop(t + 0.5);
+                
+                setTimeout(() => {
+                    if (!this.sfxEnabled) return; // Double check in async callback
+                    const osc2 = this.ctx.createOscillator();
+                    const g2 = this.ctx.createGain();
+                    osc2.connect(g2);
+                    g2.connect(this.ctx.destination);
+                    
+                    osc2.type = 'sawtooth';
+                    osc2.frequency.setValueAtTime(100, t + 0.5);
+                    osc2.frequency.exponentialRampToValueAtTime(10, t + 1.5);
+                    g2.gain.setValueAtTime(1.0, t + 0.5);
+                    g2.gain.exponentialRampToValueAtTime(0.01, t + 1.5);
+                    osc2.start(t + 0.5);
+                    osc2.stop(t + 1.5);
+                    
+                    this.createNoise(1.0, 0.8); 
+                }, 400);
+                break;
+            case 'earthquake':
+                const osc3 = this.ctx.createOscillator();
+                const g3 = this.ctx.createGain();
+                osc3.connect(g3);
+                g3.connect(this.ctx.destination);
+                osc3.type = 'square';
+                osc3.frequency.setValueAtTime(50, t);
+                osc3.frequency.linearRampToValueAtTime(20, t + 2.0);
+                g3.gain.setValueAtTime(0.3, t);
+                g3.gain.linearRampToValueAtTime(0, t + 2.0);
+                osc3.start(t);
+                osc3.stop(t + 2.0);
+                this.createNoise(2.0, 0.5);
+                break;
+            case 'heartbeat':
+                this.playTone(100, 0.1, 'sine', 0.5);
+                setTimeout(() => { if(this.sfxEnabled) this.playTone(80, 0.1, 'sine', 0.4) }, 150);
+                break;
+            case 'snap':
+                this.createNoise(0.05, 0.8);
+                break;
+            case 'beam': 
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(800, t);
+                osc.frequency.linearRampToValueAtTime(400, t + 0.3);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.3);
+                osc.start(t);
+                osc.stop(t + 0.3);
+                break;
+            case 'defend':
                 osc.type = 'sine';
                 osc.frequency.setValueAtTime(200, t);
-                osc.frequency.linearRampToValueAtTime(600, t + 0.4);
+                osc.frequency.linearRampToValueAtTime(600, t + 0.3);
                 gain.gain.setValueAtTime(0.2, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.3);
+                osc.start(t);
+                osc.stop(t + 0.3);
+                break;
+            case 'mana':
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(440, t);
+                osc.frequency.setValueAtTime(880, t + 0.1);
+                gain.gain.setValueAtTime(0.1, t);
                 gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
                 osc.start(t);
                 osc.stop(t + 0.4);
-                break;
-            case 'overclock': // Rising computing noise
-                osc.type = 'square';
-                osc.frequency.setValueAtTime(220, t);
-                osc.frequency.linearRampToValueAtTime(880, t + 0.3);
-                gain.gain.setValueAtTime(0.05, t);
-                gain.gain.linearRampToValueAtTime(0, t + 0.3);
-                osc.start(t);
-                osc.stop(t + 0.3);
-                break;
-            case 'print': // Modem-like noise
-                this.createNoise(0.3, 0.2);
-                break;
-            case 'orbital_strike': // Falling whistle + Boom
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(1200, t);
-                osc.frequency.exponentialRampToValueAtTime(100, t + 0.4);
-                gain.gain.setValueAtTime(0.1, t);
-                gain.gain.linearRampToValueAtTime(0, t + 0.4);
-                osc.start(t);
-                osc.stop(t + 0.4);
-                setTimeout(() => this.createNoise(0.8, 0.8), 400); // Impact
-                break;
-            case 'grid_fracture': // Sub-bass rumble
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(60, t);
-                osc.frequency.linearRampToValueAtTime(20, t + 1.5);
-                gain.gain.setValueAtTime(0.5, t);
-                gain.gain.linearRampToValueAtTime(0, t + 1.5);
-                osc.start(t);
-                osc.stop(t + 1.5);
-                break;
-            case 'chains': // Metallic rattle (simulated)
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(1000, t);
-                osc.frequency.exponentialRampToValueAtTime(100, t + 0.2);
-                gain.gain.setValueAtTime(0.1, t);
-                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
-                osc.start(t);
-                osc.stop(t + 0.2);
-                setTimeout(() => this.createNoise(0.1, 0.2), 100);
-                break;
-            case 'ticking': // Clock tick
-                osc.type = 'square';
-                osc.frequency.setValueAtTime(800, t);
-                gain.gain.setValueAtTime(0.05, t);
-                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
-                osc.start(t);
-                osc.stop(t + 0.05);
-                break;
-            case 'zap': // Electricity
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(500, t);
-                osc.frequency.linearRampToValueAtTime(1500, t + 0.1);
-                gain.gain.setValueAtTime(0.1, t);
-                gain.gain.linearRampToValueAtTime(0, t + 0.1);
-                osc.start(t);
-                osc.stop(t + 0.1);
-                break;
-            case 'siren': // Alarm
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(400, t);
-                osc.frequency.linearRampToValueAtTime(600, t + 0.3);
-                gain.gain.setValueAtTime(0.1, t);
-                gain.gain.linearRampToValueAtTime(0, t + 0.3);
-                osc.start(t);
-                osc.stop(t + 0.3);
-                break;
-            case 'click':
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(800, t);
-                gain.gain.setValueAtTime(0.05, t);
-                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
-                osc.start(t);
-                osc.stop(t + 0.05);
                 break;
             case 'buy':
                 osc.type = 'square';
@@ -614,8 +615,103 @@ const AudioMgr = {
                 osc.start(t);
                 osc.stop(t + 1.0);
                 break;
-	case 'glitch_attack': 
-                // Distorted Sawtooth
+            case 'click':
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, t);
+                gain.gain.setValueAtTime(0.05, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+                osc.start(t);
+                osc.stop(t + 0.05);
+                break;
+            case 'explosion':
+                this.createNoise(0.5, 0.8);
+                break;
+            case 'digital_sever': 
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(800, t);
+                osc.frequency.exponentialRampToValueAtTime(100, t + 0.1);
+                gain.gain.setValueAtTime(0.15, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.1);
+                osc.start(t);
+                osc.stop(t + 0.1);
+                break;
+            case 'hex_barrier': 
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(200, t);
+                osc.frequency.linearRampToValueAtTime(600, t + 0.4);
+                gain.gain.setValueAtTime(0.2, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+                osc.start(t);
+                osc.stop(t + 0.4);
+                break;
+            case 'overclock': 
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(220, t);
+                osc.frequency.linearRampToValueAtTime(880, t + 0.3);
+                gain.gain.setValueAtTime(0.05, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.3);
+                osc.start(t);
+                osc.stop(t + 0.3);
+                break;
+            case 'print': 
+                this.createNoise(0.3, 0.2);
+                break;
+            case 'orbital_strike': 
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1200, t);
+                osc.frequency.exponentialRampToValueAtTime(100, t + 0.4);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.4);
+                osc.start(t);
+                osc.stop(t + 0.4);
+                setTimeout(() => { if(this.sfxEnabled) this.createNoise(0.8, 0.8) }, 400); 
+                break;
+            case 'grid_fracture': 
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(60, t);
+                osc.frequency.linearRampToValueAtTime(20, t + 1.5);
+                gain.gain.setValueAtTime(0.5, t);
+                gain.gain.linearRampToValueAtTime(0, t + 1.5);
+                osc.start(t);
+                osc.stop(t + 1.5);
+                break;
+            case 'chains': 
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(1000, t);
+                osc.frequency.exponentialRampToValueAtTime(100, t + 0.2);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+                osc.start(t);
+                osc.stop(t + 0.2);
+                setTimeout(() => { if(this.sfxEnabled) this.createNoise(0.1, 0.2) }, 100);
+                break;
+            case 'ticking': 
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(800, t);
+                gain.gain.setValueAtTime(0.05, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+                osc.start(t);
+                osc.stop(t + 0.05);
+                break;
+            case 'zap': 
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(500, t);
+                osc.frequency.linearRampToValueAtTime(1500, t + 0.1);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.1);
+                osc.start(t);
+                osc.stop(t + 0.1);
+                break;
+            case 'siren': 
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, t);
+                osc.frequency.linearRampToValueAtTime(600, t + 0.3);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.3);
+                osc.start(t);
+                osc.stop(t + 0.3);
+                break;
+            case 'glitch_attack': 
                 osc.type = 'sawtooth';
                 osc.frequency.setValueAtTime(150, t);
                 osc.frequency.linearRampToValueAtTime(50, t + 0.2);
@@ -623,10 +719,9 @@ const AudioMgr = {
                 gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
                 osc.start(t);
                 osc.stop(t + 0.2);
-                this.createNoise(0.2, 0.4); // Static burst
+                this.createNoise(0.2, 0.4); 
                 break;
             case 'dart':
-                // Soft "Thwip"
                 osc.type = 'triangle';
                 osc.frequency.setValueAtTime(800, t);
                 osc.frequency.exponentialRampToValueAtTime(200, t + 0.15);
@@ -636,7 +731,6 @@ const AudioMgr = {
                 osc.stop(t + 0.15);
                 break;
             case 'laser':
-                // Quick Zap
                 osc.type = 'square';
                 osc.frequency.setValueAtTime(1500, t);
                 osc.frequency.exponentialRampToValueAtTime(500, t + 0.1);
@@ -648,8 +742,23 @@ const AudioMgr = {
         }
     },
 
+    playTone(freq, dur, type, vol) {
+        if (!this.ctx || !this.sfxEnabled) return;
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(vol, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + dur);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(t);
+        osc.stop(t + dur);
+    },
+
     createNoise(duration, volume) {
-        if (!this.ctx) return;
+        if (!this.ctx || !this.sfxEnabled) return;
         const t = this.ctx.currentTime;
         const bSize = this.ctx.sampleRate * duration;
         const buffer = this.ctx.createBuffer(1, bSize, this.ctx.sampleRate);
@@ -951,7 +1060,6 @@ class Player extends Entity {
 
 class Minion extends Entity {
     constructor(x, y, id, isPlayerSide) {
-        // FIX: Replaced backticks with standard string concatenation
         let name = isPlayerSide ? "Wisp Lv." + id : "Bot Unit " + id;
         
         if (isPlayerSide && Game.player) {
@@ -965,7 +1073,7 @@ class Minion extends Entity {
         }
         
         super(x, y, name, 5);
-        this.radius = 50;
+        this.radius = 75; // FIX: Increased size by 50% (was 50)
         this.dmg = isPlayerSide ? 1 : 2;
         
         if (isPlayerSide && Game.hasMetaUpgrade('m_minion_atk')) {
@@ -1384,6 +1492,8 @@ const Game = {
         attachButtonEvent('btn-menu', () => this.changeState(STATE.MENU));
         
         d.getElementById('chk-music').onchange = (e) => AudioMgr.toggleMusic(e.target.checked);
+        // ADD THIS LINE:
+        d.getElementById('chk-sfx').onchange = (e) => AudioMgr.toggleSFX(e.target.checked);
         
         attachButtonEvent('btn-tut-next', () => this.nextTutorial());
         attachButtonEvent('btn-tut-prev', () => this.prevTutorial());
@@ -1473,27 +1583,40 @@ const Game = {
                 this.mouseY = (clientY - rect.top) * scaleY;
              }
 
-             // 1. PARRY CHECK (High Priority)
+             // 1. PROJECTILE INTERACTION CHECK (Parry & Empower)
              for (let i = this.effects.length - 1; i >= 0; i--) {
                  const eff = this.effects[i];
+                 
+                 // Parry Enemy Laser
                  if (eff.type === 'micro_laser' && !eff.parried) {
                      const dist = Math.hypot(this.mouseX - eff.x, this.mouseY - eff.y);
-                     // Generous hitbox (radius + 30px buffer)
                      if (dist < eff.radius + 30) {
                          eff.parried = true;
-                         eff.onHit = null; // Cancel damage
-                         
-                         // NEW: Deflect AWAY from the click point
+                         eff.onHit = null; 
                          const angle = Math.atan2(eff.y - this.mouseY, eff.x - this.mouseX);
-                         const deflectSpeed = 25; // Fast deflection
-                         
+                         const deflectSpeed = 25; 
                          eff.vx = Math.cos(angle) * deflectSpeed;
                          eff.vy = Math.sin(angle) * deflectSpeed;
-                         
                          AudioMgr.playSound('defend'); 
                          ParticleSys.createFloatingText(eff.x, eff.y, "PARRY!", "#00f3ff");
                          ParticleSys.createExplosion(eff.x, eff.y, 20, '#00f3ff');
-                         return; // Stop processing other clicks
+                         return; 
+                     }
+                 }
+                 
+                 // NEW: Empower Player Dart
+                 if (eff.type === 'nature_dart' && !eff.empowered) {
+                     const dist = Math.hypot(this.mouseX - eff.x, this.mouseY - eff.y);
+                     if (dist < 60) { // Generous hitbox
+                         eff.empowered = true;
+                         eff.dmgMultiplier = 1.1 + Math.random() * 0.3; // 10-40% extra damage
+                         eff.speed *= 2.5; // Move much faster
+                         eff.color = COLORS.GOLD; // Visual change
+                         
+                         AudioMgr.playSound('upgrade'); 
+                         ParticleSys.createFloatingText(eff.x, eff.y, "EMPOWERED!", COLORS.GOLD);
+                         ParticleSys.createExplosion(eff.x, eff.y, 20, COLORS.GOLD);
+                         return;
                      }
                  }
              }
@@ -1512,7 +1635,6 @@ const Game = {
                     if (this.enemy.showIntent) {
                         ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "INTENT REVEALED", COLORS.MANA);
                         AudioMgr.playSound('click');
-                        // Tutorial Advance Logic
                         if (this.currentState === STATE.TUTORIAL_COMBAT && (this.tutorialStep === 2 || this.tutorialStep === 4)) {
                             this.tutorialStep++;
                             this.updateTutorialStep();
@@ -4082,15 +4204,17 @@ triggerVFX(type, source, target, onHitCallback = null) {
         else if (type === 'nature_dart') {
             this.effects.push({
                 type: 'nature_dart',
-                sx: source.x, sy: source.y, // Start
-                tx: target.x, ty: target.y, // Target
-                x: source.x, y: source.y,   // Current
+                sx: source.x, sy: source.y, 
+                tx: target.x, ty: target.y, 
+                x: source.x, y: source.y,   
                 progress: 0,
-                speed: 0.02, // Speed of interpolation (0 to 1)
-                amplitude: 30, // How wide the wave is
-                frequency: 10, // How fast it waves
+                speed: 0.015, // FIX: Reduced speed for easier clicking
+                amplitude: 30, 
+                frequency: 10, 
                 color: COLORS.NATURE_LIGHT,
-                onHit: onHitCallback
+                onHit: onHitCallback,
+                empowered: false, 
+                dmgMultiplier: 1.0 
             });
             AudioMgr.playSound('dart');
         }
@@ -4386,22 +4510,32 @@ drawEffects() {
                 continue;
             }
 
+            // --- NATURE DART (Wisp Attack - Wavy & Wispy) ---
             if (e.type === 'nature_dart') {
                 e.progress += e.speed;
+                
                 if (e.progress >= 1) {
-                    if (e.onHit) e.onHit();
+                    // Hit! Pass the multiplier
+                    if (e.onHit) e.onHit(e.dmgMultiplier);
                     this.effects.splice(i, 1);
-                    ParticleSys.createExplosion(e.tx, e.ty, 15, e.color);
+                    // Impact Explosion
+                    ParticleSys.createExplosion(e.tx, e.ty, 20, e.color);
                     ParticleSys.createExplosion(e.tx, e.ty, 10, '#fff');
                     continue;
                 }
+
                 const lx = e.sx + (e.tx - e.sx) * e.progress;
                 const ly = e.sy + (e.ty - e.sy) * e.progress;
+
                 const angle = Math.atan2(e.ty - e.sy, e.tx - e.sx);
                 const perpAngle = angle + Math.PI / 2;
+                
                 const wave = Math.sin(e.progress * e.frequency) * e.amplitude * (1 - Math.pow(2 * e.progress - 1, 2));
+                
                 e.x = lx + Math.cos(perpAngle) * wave;
                 e.y = ly + Math.sin(perpAngle) * wave;
+
+                // Trail
                 ParticleSys.particles.push({
                     x: e.x + (Math.random() - 0.5) * 10, 
                     y: e.y + (Math.random() - 0.5) * 10,
@@ -4412,12 +4546,16 @@ drawEffects() {
                     color: e.color, 
                     alpha: 0.6 
                 });
+
+                // Draw Head
                 ctx.save();
                 ctx.translate(e.x, e.y);
                 ctx.rotate(angle); 
+                
                 ctx.shadowColor = e.color;
-                ctx.shadowBlur = 20;
+                ctx.shadowBlur = e.empowered ? 30 : 20; // Brighter if empowered
                 ctx.fillStyle = '#fff';
+                
                 ctx.beginPath();
                 ctx.moveTo(8, 0);
                 ctx.lineTo(0, 6);
@@ -4425,6 +4563,7 @@ drawEffects() {
                 ctx.lineTo(0, -6);
                 ctx.closePath();
                 ctx.fill();
+                
                 ctx.restore();
                 continue;
             }
@@ -4478,8 +4617,11 @@ drawEffects() {
                     this.enemy.minions.forEach(m => m.takeDamage(10));
                     this.player.minions = this.player.minions.filter(min => min !== m); 
                 } else {
-                    this.triggerVFX('nature_dart', m, t, () => {
-                        if (t.takeDamage(m.dmg, m) && t === this.enemy) { this.winCombat(); return; }
+                    // NEW: Callback accepts multiplier
+                    this.triggerVFX('nature_dart', m, t, (multiplier = 1.0) => {
+                        const dmg = Math.floor(m.dmg * multiplier);
+                        
+                        if (t.takeDamage(dmg, m) && t === this.enemy) { this.winCombat(); return; }
                         if (t !== this.enemy && t.currentHp <= 0) {
                              if (this.player.traits.lifesteal && !t.isPlayerSide) {
                                  this.player.heal(10);
@@ -4849,7 +4991,7 @@ drawEffects() {
     updateHUD() {},
 
     updateMinionPositions() {
-        const spacing = 180;
+        const spacing = 280; // FIX: Increased spacing (was 180) to move minions further out
         if (this.player) {
             if (this.player.minions[0]) {
                 this.player.minions[0].x = this.player.x - spacing;
@@ -5011,23 +5153,9 @@ drawEffects() {
         }
         ctx.globalAlpha = 1;
 
+        // REMOVED: Sun/Moon and stripes drawing logic
+
         const cx = w/2;
-        const cy = h * 0.35;
-        const sunGrad = ctx.createLinearGradient(0, cy - 80, 0, cy + 80);
-        sunGrad.addColorStop(0, conf.sun[0]); 
-        sunGrad.addColorStop(1, conf.sun[1]); 
-        ctx.fillStyle = sunGrad;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 80, 0, Math.PI*2);
-        ctx.fill();
-
-        ctx.fillStyle = conf.bgTop;
-        for(let i=0; i<8; i++) {
-            const y = cy + 10 + (i*10);
-            const hStrip = 2 + i; 
-            ctx.fillRect(cx - 90, y, 180, hStrip);
-        }
-
         const horizon = h * 0.45;
         const gridSpeed = 40;
         const offsetY = (time * gridSpeed) % 40;
@@ -5187,264 +5315,478 @@ drawEffects() {
         requestAnimationFrame(this.loop.bind(this));
     },
 
+// --- DRAWING HELPERS ---
+    drawPolygon(ctx, x, y, radius, sides, rotation) {
+        ctx.beginPath();
+        for (let i = 0; i < sides; i++) {
+            const angle = rotation + (i * 2 * Math.PI / sides);
+            const px = x + radius * Math.cos(angle);
+            const py = y + radius * Math.sin(angle);
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fill();
+    },
+
+    drawSpikedCircle(ctx, x, y, radius, spikes, spikeDepth, rotation) {
+        ctx.beginPath();
+        for (let i = 0; i < spikes * 2; i++) {
+            const angle = rotation + (i * Math.PI / spikes);
+            const r = (i % 2 === 0) ? radius : radius + spikeDepth;
+            const px = x + r * Math.cos(angle);
+            const py = y + r * Math.sin(angle);
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fill();
+    },
+
 drawEntity(entity) {
         if (!entity) return;
 
         const ctx = this.ctx;
+        const time = Date.now() / 1000;
         let animX = 0, animY = 0;
         let scale = 1.0; 
         
-        // Logic updates (Timer management)
-        if (entity.flashTimer > 0) entity.flashTimer -= 0.05; 
+        if (entity.flashTimer > 0) {
+            entity.flashTimer -= 0.05; 
+        }
         
-        // Capture spawn state
         const isSpawning = entity.spawnTimer > 0;
-        
-        // CRITICAL FIX: Wrap rendering in try/finally to ensure context is ALWAYS restored
-        // even if a drawing error occurs. This prevents the "Invisible Game" bug.
-        if (isSpawning) ctx.save();
 
-        try {
-            // Handle Spawn Animation (Wireframe Effect)
-            if (isSpawning) {
-                entity.spawnTimer -= 0.02; 
-                const progress = 1.0 - Math.max(0, entity.spawnTimer);
-                
-                ctx.globalAlpha = progress;
-                
-                const clipHeight = entity.radius * 2 * progress;
-                
-                ctx.beginPath();
-                ctx.rect(entity.x - entity.radius, entity.y + entity.radius - clipHeight, entity.radius*2, clipHeight);
-                ctx.clip();
-            }
+        // --- SPAWN ANIMATION (Wireframe) ---
+        if (isSpawning) {
+            ctx.save();
+            entity.spawnTimer -= 0.02; 
+            const progress = 1.0 - Math.max(0, entity.spawnTimer);
+            ctx.globalAlpha = progress;
+            const clipHeight = entity.radius * 2.5 * progress;
+            ctx.beginPath();
+            ctx.rect(entity.x - entity.radius*1.5, entity.y + entity.radius*1.5 - clipHeight, entity.radius*3, clipHeight);
+            ctx.clip();
+        }
 
-            // Handle Animations
-            if (entity.anim && entity.anim.timer > 0 || entity.anim.type === 'windup') {
-                if (entity.anim.type !== 'windup') entity.anim.timer--;
-                
-                const t = entity.anim.timer;
-                
-                if (entity.anim.type === 'lunge') {
-                    const dir = (entity instanceof Player || (entity instanceof Minion && entity.isPlayerSide)) ? -1 : 1; 
-                    animY = Math.sin(t * 0.5) * 40 * dir; 
-                } else if (entity.anim.type === 'shake') {
-                    animX = (Math.random() - 0.5) * 20;
-                } else if (entity.anim.type === 'pulse') {
-                    animY = Math.sin(t) * 10;
-                } else if (entity.anim.type === 'windup') {
-                    animX = (Math.random() - 0.5) * 6; 
-                    animY = (Math.random() - 0.5) * 6;
-                    scale = 1.1; 
-                }
-            }
+        // --- ANIMATION HANDLING ---
+        if (entity.anim && entity.anim.timer > 0 || entity.anim.type === 'windup') {
+            if (entity.anim.type !== 'windup') entity.anim.timer--;
+            const t = entity.anim.timer;
             
-            const renderX = entity.x + animX;
-            const renderY = entity.y + animY;
+            if (entity.anim.type === 'lunge') {
+                const dir = (entity instanceof Player || (entity instanceof Minion && entity.isPlayerSide)) ? -1 : 1; 
+                animY = Math.sin(t * 0.5) * 40 * dir; 
+            } else if (entity.anim.type === 'shake') {
+                animX = (Math.random() - 0.5) * 20;
+            } else if (entity.anim.type === 'pulse') {
+                scale = 1.0 + Math.sin(t) * 0.1;
+            } else if (entity.anim.type === 'windup') {
+                animX = (Math.random() - 0.5) * 6; 
+                animY = (Math.random() - 0.5) * 6;
+                scale = 1.1; 
+            }
+        }
+        
+        const renderX = entity.x + animX;
+        const renderY = entity.y + animY;
 
-            const isPlayerSide = (entity instanceof Player) || (entity instanceof Minion && entity.isPlayerSide);
-            const isMinion = entity instanceof Minion;
+        // --- RENDER CONTEXT SETUP ---
+        ctx.save(); 
+        ctx.translate(renderX, renderY);
+        ctx.scale(scale, scale);
 
-            ctx.save(); 
-            ctx.translate(renderX, renderY);
-            ctx.scale(scale, scale);
-            ctx.translate(-renderX, -renderY);
+        // --- SECTOR PROGRESSION VISUALS ---
+        const sectorPower = Math.min(5, Math.ceil(this.sector / 2)); 
+        const baseGlow = 20 + (sectorPower * 5);
+        const baseWidth = 3 + sectorPower;
 
-            // Shadow
+        // --- SHADOW (Ground) ---
+        if (!(entity instanceof Minion)) {
             ctx.fillStyle = 'rgba(0,0,0,0.6)';
             ctx.beginPath();
-            ctx.ellipse(renderX, renderY + 40, entity.radius, entity.radius/3, 0, 0, Math.PI*2);
+            ctx.ellipse(0, 40, entity.radius, entity.radius/3, 0, 0, Math.PI*2);
             ctx.fill();
+        }
 
-            ctx.lineWidth = 4;
-            
-            if (isPlayerSide) {
-                let themeColor = COLORS.NATURE_LIGHT;
-                if (entity instanceof Player) themeColor = entity.classColor || COLORS.NATURE_LIGHT;
-                else if (entity instanceof Minion && Game.player) themeColor = Game.player.classColor || COLORS.NATURE_LIGHT;
+        // ============================================================
+        // 1. PLAYER CLASSES
+        // ============================================================
+        if (entity instanceof Player) {
+            const color = entity.classColor || COLORS.NATURE_LIGHT;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = baseWidth;
+            ctx.shadowColor = color;
+            ctx.shadowBlur = baseGlow;
+            ctx.fillStyle = '#050505'; 
 
-                ctx.strokeStyle = themeColor;
-                ctx.fillStyle = (entity.flashTimer > 0) ? '#ffffff' : themeColor;
-                
-                ctx.shadowColor = themeColor;
-                ctx.shadowBlur = 25;
-                
-                const pulse = Math.sin(Date.now() / 300) * 5;
-
-                if(entity instanceof Player) {
-                    ctx.beginPath();
-                    ctx.moveTo(renderX, renderY - 100 + pulse);
-                    ctx.lineTo(renderX + 60, renderY + pulse);
-                    ctx.lineTo(renderX, renderY + 100 + pulse);
-                    ctx.lineTo(renderX - 60, renderY + pulse);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
-                    
-                    ctx.fillStyle = '#fff';
-                    ctx.beginPath();
-                    ctx.arc(renderX, renderY + pulse, 20, 0, Math.PI*2);
-                    ctx.fill();
-
-                    ctx.fillStyle = (entity.flashTimer > 0) ? '#ffffff' : themeColor;
-                    ctx.beginPath();
-                    ctx.arc(renderX, renderY + pulse, 10, 0, Math.PI*2);
-                    ctx.fill();
-                } else {
-                    ctx.beginPath();
-                    ctx.arc(renderX, renderY + pulse, 30, 0, Math.PI*2);
-                    ctx.fill();
-                    ctx.stroke();
+            if (entity.classId === 'tactician') {
+                this.drawPolygon(ctx, 0, 0, entity.radius, 6, time * 0.5);
+                for(let i=0; i<3; i++) {
+                    const angle = time * 2 + (i * (Math.PI*2/3));
+                    const sx = Math.cos(angle) * (entity.radius + 25);
+                    const sy = Math.sin(angle) * (entity.radius + 25);
+                    ctx.fillStyle = color;
+                    ctx.fillRect(sx-6, sy-6, 12, 12);
                 }
-
-            } else {
-                const color = isMinion ? '#333' : '#1a0505';
-                ctx.strokeStyle = COLORS.MECH_LIGHT;
-                ctx.fillStyle = (entity.flashTimer > 0) ? '#ffffff' : color;
-                
-                ctx.shadowColor = COLORS.MECH_LIGHT;
-                ctx.shadowBlur = 25;
-                
-                const hover = Math.cos(Date.now() / 250) * 5;
-
-                if(entity instanceof Enemy) {
-                    ctx.beginPath();
-                    const s = 100;
-                    for (let i = 0; i < 6; i++) {
-                        const angle = (Math.PI / 3) * i;
-                        const x = renderX + s * Math.cos(angle);
-                        const y = renderY + hover + s * Math.sin(angle);
-                        if(i===0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-                    }
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
-
-                    ctx.fillStyle = (entity.flashTimer > 0) ? '#ffffff' : COLORS.MECH_LIGHT;
-                    ctx.fillRect(renderX - 40, renderY - 10 + hover, 80, 20);
-
-                    if(entity.nextIntent) {
-                        ctx.fillStyle = '#fff';
-                        ctx.font = '50px "Segoe UI Emoji"';
-                        ctx.textAlign = 'center';
-                        ctx.shadowBlur = 0;
-                        let icon = '⚔️';
-                        if(entity.nextIntent.type === 'heal') icon = '💚';
-                        else if(entity.nextIntent.type === 'summon') icon = '🤖';
-                        
-                        ctx.fillText(icon, renderX, renderY - 220); 
-                        
-                        if (entity.nextIntent.secondary) {
-                            ctx.font = '24px "Segoe UI Emoji"';
-                            const secIcon = entity.nextIntent.secondary.type === 'buff' ? '💪' : '🦠';
-                            ctx.fillText(secIcon, renderX + 40, renderY - 215);
-                        }
-                        
-                        if(entity.nextIntent.val > 0) {
-                            ctx.font = 'bold 24px "Orbitron"';
-                            ctx.fillStyle = COLORS.MECH_LIGHT;
-                            ctx.fillText(entity.nextIntent.val, renderX, renderY - 190); 
-                        }
-                    }
-
-                } else {
-                    ctx.beginPath();
-                    ctx.moveTo(renderX - 30, renderY + hover - 20);
-                    ctx.lineTo(renderX + 30, renderY + hover - 20);
-                    ctx.lineTo(renderX, renderY + hover + 30);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
-                    
-                    ctx.fillStyle = '#f00';
-                    ctx.beginPath();
-                    ctx.arc(renderX, renderY + hover, 8, 0, Math.PI*2);
-                    ctx.fill();
-                }
+            } 
+            else if (entity.classId === 'bloodstalker') {
+                const pulse = Math.sin(time * 5) * 5;
+                this.drawSpikedCircle(ctx, 0, 0, entity.radius - 5, 8, 15 + pulse, time);
             }
-            ctx.shadowBlur = 0; 
-            
-            if(entity.shield > 0) {
+            else if (entity.classId === 'arcanist') {
+                this.drawPolygon(ctx, 0, 0, entity.radius, 4, 0); 
+                ctx.strokeStyle = COLORS.PURPLE;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, entity.radius + 15, entity.radius * 0.4, time * 2, 0, Math.PI*2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.ellipse(0, 0, entity.radius + 15, entity.radius * 0.4, -time * 2, 0, Math.PI*2);
+                ctx.stroke();
+            }
+            else if (entity.classId === 'sentinel') {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(-entity.radius, -entity.radius, entity.radius*2, entity.radius*2);
+                ctx.strokeRect(-entity.radius, -entity.radius, entity.radius*2, entity.radius*2);
                 ctx.strokeStyle = COLORS.SHIELD;
-                ctx.lineWidth = 2;
-                ctx.shadowColor = COLORS.SHIELD;
-                ctx.shadowBlur = 15;
+                ctx.globalAlpha = 0.4 + Math.sin(time*3)*0.1;
+                ctx.lineWidth = 4;
                 ctx.beginPath();
-                ctx.arc(renderX, renderY, entity.radius + 15, 0, Math.PI*2);
+                ctx.arc(0, 0, entity.radius + 20, 0, Math.PI*2);
                 ctx.stroke();
-                ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1.0;
             }
-
-            // --- DEBUFF VISUALS ---
-            if (entity.hasEffect('weak')) {
-                ctx.save();
-                ctx.beginPath();
-                ctx.arc(0, 0, entity.radius, 0, Math.PI*2); 
-                ctx.clip();
-                ctx.strokeStyle = 'rgba(0, 0, 50, 0.5)';
-                ctx.lineWidth = 2;
-                const time = Date.now() / 1000;
-                const offset = (time * 20) % 20;
-                for(let y = -entity.radius; y < entity.radius; y+=10) {
+            else if (entity.classId === 'annihilator') {
+                this.drawSpikedCircle(ctx, 0, 0, entity.radius - 10, 5, 25, time * 3);
+            }
+            else {
+                for(let i=0; i<5; i++) {
+                    const angle = (Math.PI*2/5) * i + time;
+                    const ox = Math.cos(angle) * 10;
+                    const oy = Math.sin(angle) * 10;
                     ctx.beginPath();
-                    ctx.moveTo(-entity.radius, y + offset);
-                    ctx.lineTo(entity.radius, y + offset);
+                    ctx.arc(ox, oy, entity.radius * 0.8, 0, Math.PI*2);
                     ctx.stroke();
                 }
-                ctx.restore();
             }
 
-            if (entity.hasEffect('frail')) {
-                ctx.save();
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-                ctx.lineWidth = 1;
+            ctx.fillStyle = '#fff';
+            ctx.shadowBlur = 50;
+            ctx.beginPath();
+            ctx.arc(0, 0, 8, 0, Math.PI*2);
+            ctx.fill();
+        }
+
+        // ============================================================
+        // 2. MINIONS
+        // ============================================================
+        else if (entity instanceof Minion && entity.isPlayerSide) {
+            ctx.save(); 
+            ctx.scale(1.5, 1.5); 
+
+            const color = COLORS.NATURE_LIGHT;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 15;
+
+            if (entity.name.includes("Bomb")) {
+                ctx.fillStyle = (Math.floor(time * 10) % 2 === 0) ? '#ff4400' : '#550000';
                 ctx.beginPath();
-                const seed = entity.name.length; 
-                for(let k=0; k<3; k++) {
-                    ctx.moveTo(Math.sin(seed+k)*20, Math.cos(seed+k)*20);
-                    ctx.lineTo(Math.sin(seed+k+1)*40, Math.cos(seed+k+1)*40);
-                }
+                ctx.arc(0, 0, 20, 0, Math.PI*2);
+                ctx.fill();
                 ctx.stroke();
-                ctx.restore();
-            }
-
-            if ((entity instanceof Player && entity.traits.vulnerable) || entity.hasEffect('vulnerable')) {
-                ctx.save();
-                const time = Date.now() / 1000;
-                ctx.rotate(time); 
-                ctx.strokeStyle = '#ff0000';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([10, 10]);
                 ctx.beginPath();
-                ctx.arc(0, 0, entity.radius + 10, 0, Math.PI*2);
+                ctx.moveTo(0, -20);
+                ctx.quadraticCurveTo(10, -30, 15, -25);
+                ctx.strokeStyle = '#fff';
+                ctx.stroke();
+            } 
+            else if (entity.name.includes("Guardian")) {
+                ctx.fillStyle = 'rgba(0, 243, 255, 0.3)';
+                this.drawPolygon(ctx, 0, 0, 25, 3, Math.PI/2); 
+            }
+            else {
+                // WISP
+                ctx.save();
+                ctx.globalAlpha = 0.3;
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.moveTo(-10, 0);
+                ctx.quadraticCurveTo(0, 40 + Math.sin(time*10)*5, 10, 0); 
+                ctx.arc(0, 0, 15, 0, Math.PI, true); 
+                ctx.fill();
+                ctx.restore();
+
+                ctx.fillStyle = '#fff';
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = color;
+                ctx.beginPath();
+                ctx.arc(0, 0, 8, 0, Math.PI*2);
+                ctx.fill();
+
+                ctx.fillStyle = color;
+                for(let i=0; i<3; i++) {
+                    const angle = time * 3 + (i * (Math.PI*2/3));
+                    const dist = 18 + Math.sin(time * 5 + i)*3;
+                    const px = Math.cos(angle) * dist;
+                    const py = Math.sin(angle) * dist;
+                    ctx.beginPath();
+                    ctx.arc(px, py, 3, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            }
+            ctx.restore(); 
+        }
+
+        // ============================================================
+        // 3. ENEMIES
+        // ============================================================
+        else if (entity instanceof Enemy) {
+            const color = COLORS.MECH_LIGHT;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = baseWidth;
+            ctx.shadowColor = color;
+            ctx.shadowBlur = baseGlow;
+            ctx.fillStyle = '#1a0505'; 
+
+            if (entity.isBoss) {
+                ctx.lineWidth += 3;
+                ctx.shadowBlur += 20;
+                ctx.strokeStyle = '#ff0000';
+                ctx.beginPath();
+                ctx.arc(0, 0, entity.radius * 1.5, 0, Math.PI*2);
+                ctx.setLineDash([5, 15]);
                 ctx.stroke();
                 ctx.setLineDash([]);
-                ctx.beginPath();
-                ctx.moveTo(0, -entity.radius - 15); ctx.lineTo(0, -entity.radius - 5);
-                ctx.moveTo(0, entity.radius + 5); ctx.lineTo(0, entity.radius + 15);
-                ctx.moveTo(-entity.radius - 15, 0); ctx.lineTo(-entity.radius - 5, 0);
-                ctx.moveTo(entity.radius + 5, 0); ctx.lineTo(entity.radius + 15, 0);
-                ctx.stroke();
-                ctx.restore();
+                this.drawSpikedCircle(ctx, 0, 0, entity.radius, 12, 10, -time);
             }
+            else if (entity.isElite) {
+                const gx = (Math.random() - 0.5) * 5; 
+                this.drawPolygon(ctx, gx, 0, entity.radius, 5, time * 0.2); 
 
-            ctx.restore(); // Restore scaling context
-
-            // Draw scanline if spawning
-            if (isSpawning) {
-                const scanY = entity.y + entity.radius - (entity.radius * 2 * (1.0 - Math.max(0, entity.spawnTimer)));
-                ctx.strokeStyle = '#fff';
+                ctx.save();
                 ctx.lineWidth = 2;
+                for(let i=0; i<5; i++) {
+                    const angle = (Math.PI*2/5) * i + (time * 0.2);
+                    const grad = ctx.createLinearGradient(0, 0, Math.cos(angle)*entity.radius, Math.sin(angle)*entity.radius);
+                    grad.addColorStop(0, '#fff');
+                    grad.addColorStop(1, 'transparent');
+                    ctx.strokeStyle = grad;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    const midX = Math.cos(angle) * (entity.radius * 0.5) + Math.sin(time*10+i)*5;
+                    const midY = Math.sin(angle) * (entity.radius * 0.5) + Math.cos(time*10+i)*5;
+                    ctx.lineTo(midX, midY);
+                    ctx.lineTo(Math.cos(angle)*entity.radius, Math.sin(angle)*entity.radius);
+                    ctx.stroke();
+                }
+                ctx.restore();
+
+                ctx.fillStyle = '#fff';
+                ctx.shadowColor = '#ff0055';
+                ctx.shadowBlur = 30;
                 ctx.beginPath();
-                ctx.moveTo(entity.x - entity.radius, scanY);
-                ctx.lineTo(entity.x + entity.radius, scanY);
-                ctx.stroke();
+                ctx.rect(-15, -15, 30, 30);
+                ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.fillRect(-5, -5, 10, 10);
             }
-        } finally {
-            // ALWAYS restore if we saved for spawning, preventing the "Frozen Canvas" bug
-            if (isSpawning) ctx.restore();
+            else {
+                if (entity.name.includes("Drone")) {
+                    this.drawPolygon(ctx, 0, 0, entity.radius, 3, Math.PI); 
+                    ctx.fillStyle = '#f00';
+                    ctx.shadowColor = '#f00';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 12, 0, Math.PI*2); 
+                    ctx.fill();
+                }
+                else if (entity.name.includes("Loader") || entity.name.includes("Construct")) {
+                    ctx.fillStyle = '#220000';
+                    ctx.fillRect(-entity.radius, -entity.radius*0.6, entity.radius*2, entity.radius*1.2);
+                    ctx.strokeRect(-entity.radius, -entity.radius*0.6, entity.radius*2, entity.radius*1.2);
+                    ctx.setLineDash([5, 5]);
+                    ctx.beginPath();
+                    ctx.moveTo(-entity.radius, entity.radius*0.6);
+                    ctx.lineTo(entity.radius, entity.radius*0.6);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+                else if (entity.name.includes("Arachnid")) {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 20, 0, Math.PI*2);
+                    ctx.stroke();
+                    ctx.fill();
+                    for(let i=0; i<8; i++) {
+                        const angle = (i / 8) * Math.PI * 2;
+                        const legLen = entity.radius + Math.sin(time * 10 + i) * 5;
+                        ctx.beginPath();
+                        ctx.moveTo(Math.cos(angle)*20, Math.sin(angle)*20);
+                        ctx.lineTo(Math.cos(angle)*legLen, Math.sin(angle)*legLen);
+                        ctx.stroke();
+                    }
+                }
+                else {
+                    this.drawSpikedCircle(ctx, 0, 0, entity.radius, 6, 5, time);
+                }
+            }
         }
-    },    
+        
+        // ============================================================
+        // 4. ENEMY MINIONS
+        // ============================================================
+        else {
+            ctx.save(); 
+            ctx.scale(1.5, 1.5); 
+
+            const color = '#ff0055'; 
+            const hover = Math.cos(time * 5) * 5;
+
+            ctx.beginPath();
+            ctx.moveTo(0, hover - 20); 
+            ctx.lineTo(20, hover + 15); 
+            ctx.lineTo(-20, hover + 15); 
+            ctx.closePath();
+            
+            ctx.fillStyle = '#1a0505';
+            ctx.fill();
+            
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = color;
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 10;
+            ctx.stroke();
+            
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(0, hover + 5, 6, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.restore(); 
+        }
+
+        // --- FLASH EFFECT (On Hit) ---
+        if (entity.flashTimer > 0) {
+            ctx.globalCompositeOperation = 'source-atop';
+            ctx.fillStyle = `rgba(255, 255, 255, ${entity.flashTimer * 3})`; 
+            ctx.fillRect(-100, -100, 200, 200); 
+            ctx.globalCompositeOperation = 'source-over';
+        }
+
+        // --- SHIELD VISUAL (NEW) ---
+        if (entity.shield > 0) {
+            ctx.save();
+            ctx.strokeStyle = COLORS.SHIELD;
+            ctx.lineWidth = 2;
+            ctx.shadowColor = COLORS.SHIELD;
+            ctx.shadowBlur = 10;
+            ctx.globalAlpha = 0.6 + Math.sin(time * 5) * 0.2; // Pulse opacity
+
+            // Draw Hexagon Shield
+            const shieldRadius = entity.radius + 15;
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle = time + (i * 2 * Math.PI / 6);
+                const px = shieldRadius * Math.cos(angle);
+                const py = shieldRadius * Math.sin(angle);
+                if (i === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.stroke();
+            
+            // Low opacity fill
+            ctx.fillStyle = 'rgba(0, 243, 255, 0.1)';
+            ctx.fill();
+            
+            ctx.restore();
+        }
+
+        // --- DEBUFF VISUALS ---
+        if (entity.hasEffect('weak')) {
+            ctx.strokeStyle = 'rgba(0, 0, 50, 0.5)';
+            ctx.lineWidth = 2;
+            const offset = (time * 20) % 20;
+            ctx.beginPath();
+            for(let y = -entity.radius; y < entity.radius; y+=10) {
+                ctx.moveTo(-entity.radius, y + offset);
+                ctx.lineTo(entity.radius, y + offset);
+            }
+            ctx.stroke();
+        }
+
+        if (entity.hasEffect('frail')) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            const seed = entity.name.length; 
+            for(let k=0; k<3; k++) {
+                ctx.moveTo(Math.sin(seed+k)*20, Math.cos(seed+k)*20);
+                ctx.lineTo(Math.sin(seed+k+1)*40, Math.cos(seed+k+1)*40);
+            }
+            ctx.stroke();
+        }
+
+        if ((entity instanceof Player && entity.traits.vulnerable) || entity.hasEffect('vulnerable')) {
+            ctx.rotate(time); 
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([10, 10]);
+            ctx.beginPath();
+            ctx.arc(0, 0, entity.radius + 15, 0, Math.PI*2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // --- ENEMY INTENT ICON ---
+        if (entity instanceof Enemy && entity.nextIntent) {
+            ctx.restore(); 
+            ctx.save();
+            ctx.translate(renderX, renderY);
+            
+            ctx.fillStyle = COLORS.MECH_LIGHT;
+            const hover = Math.cos(time * 5) * 5;
+            ctx.fillRect(-40, -entity.radius - 40 + hover, 80, 25);
+            
+            ctx.fillStyle = '#fff';
+            ctx.font = '40px "Segoe UI Emoji"';
+            ctx.textAlign = 'center';
+            ctx.shadowBlur = 0;
+            let icon = '⚔️';
+            if(entity.nextIntent.type === 'heal') icon = '💚';
+            else if(entity.nextIntent.type === 'summon') icon = '🤖';
+            
+            ctx.fillText(icon, 0, -entity.radius - 50 + hover); 
+
+            if(entity.nextIntent.val > 0) {
+                ctx.font = 'bold 20px "Orbitron"';
+                ctx.fillStyle = '#fff';
+                ctx.fillText(entity.nextIntent.val, 0, -entity.radius - 20 + hover); 
+            }
+            
+            ctx.restore();
+            return; 
+        }
+
+        ctx.restore(); 
+
+        // --- SPAWN SCANLINE ---
+        if (isSpawning) {
+            const scanY = entity.y + entity.radius - (entity.radius * 2 * (1.0 - Math.max(0, entity.spawnTimer)));
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(entity.x - entity.radius, scanY);
+            ctx.lineTo(entity.x + entity.radius, scanY);
+            ctx.stroke();
+            
+            ctx.restore(); 
+        }
+    },
 
 // --- TUTORIAL SYSTEM ---
 
