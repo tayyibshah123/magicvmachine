@@ -867,8 +867,25 @@ class Entity {
                         }
                         dmg = Game.calculateCardDamage(base);
                     }
-                    this.takeDamage(dmg);
+                    
+                    // FIX: Capture death result and trigger appropriate game logic
+                    const isDead = this.takeDamage(dmg);
                     ParticleSys.createFloatingText(this.x, this.y, "CURSE TRIGGERED!", "#f00");
+
+                    if (isDead) {
+                        // Check if it's the main boss/enemy
+                        if (this === Game.enemy) {
+                            Game.winCombat();
+                        } 
+                        // Check if it's an enemy minion
+                        else if (Game.enemy && Game.enemy.minions.includes(this)) {
+                            Game.enemy.minions = Game.enemy.minions.filter(m => m !== this);
+                        } 
+                        // Check if it's a player minion
+                        else if (Game.player && Game.player.minions.includes(this)) {
+                            Game.player.minions = Game.player.minions.filter(m => m !== this);
+                        }
+                    }
                 }, 300);
             }
         }
