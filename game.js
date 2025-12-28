@@ -2434,7 +2434,7 @@ startQTE(type, x, y, callback) {
         ctx.fillStyle = COLORS.NATURE_DARK;
         ctx.fillRect(0, groundY, w, 2);
 
-        // --- 3. PROCEDURAL TREES (Optimized & Organic) ---
+        // --- 3. PROCEDURAL TREES (Optimised & Organic) ---
         const treeCount = Math.min(8, 2 + Math.ceil(unlockedCount / 1.2));
         const maxDepth = Math.min(5, 3 + Math.floor(progress * 2)); // Cap depth at 5 for performance
         const spacing = w / (treeCount + 1);
@@ -3461,7 +3461,8 @@ startQTE(type, x, y, callback) {
     },
 
 updateHexBreach(dt) {
-        if (this.currentState !== STATE.HEX || !this.hex.nodes) return;
+        // FIX: Stop movement while sequence is playing to prevent visual conflicts
+        if (this.currentState !== STATE.HEX || !this.hex.nodes || this.hex.showingSequence) return;
         
         const w = 300;
         const h = 350;
@@ -3485,10 +3486,11 @@ updateHexBreach(dt) {
     async nextHexRound() {
         this.hex.playerInput = [];
         this.hex.acceptingInput = false;
+        this.hex.showingSequence = true; // FIX: Flag to stop movement
+        
         document.getElementById('hex-status').innerText = "OBSERVE PATTERN";
         document.getElementById('hex-status').className = "neon-text-blue";
         
-        // Only add new step if we aren't retrying
         if (!this.hex.retrying) {
             this.hex.sequence.push(Math.floor(Math.random() * 9));
         }
@@ -3502,15 +3504,16 @@ updateHexBreach(dt) {
             const id = this.hex.sequence[i];
             const node = this.hex.nodes[id];
             
-            // Flash Effect (Bright & Scale)
+            // Flash Effect
             node.el.style.backgroundColor = node.color;
             node.el.style.color = '#fff';
             node.el.style.boxShadow = `0 0 25px ${node.color}`;
+            // Apply scale transform manually since update loop is paused
             node.el.style.transform = `translate(${node.x}px, ${node.y}px) scale(1.2)`;
             node.el.style.zIndex = "10";
             
             AudioMgr.playSound('mana');
-            await this.sleep(500); // Slower flash for better memorization
+            await this.sleep(600); // Increased duration slightly
             
             // Reset Effect
             node.el.style.backgroundColor = 'rgba(20, 0, 20, 0.8)';
@@ -3519,9 +3522,10 @@ updateHexBreach(dt) {
             node.el.style.transform = `translate(${node.x}px, ${node.y}px) scale(1.0)`;
             node.el.style.zIndex = "1";
             
-            await this.sleep(200); // Pause between flashes
+            await this.sleep(200); 
         }
 
+        this.hex.showingSequence = false; // FIX: Resume movement
         this.hex.acceptingInput = true;
         document.getElementById('hex-status').innerText = "REPEAT PATTERN";
         document.getElementById('hex-status').className = "neon-text-green";
@@ -3978,13 +3982,31 @@ async startTurn() {
                 this.renderDiceUI();
                 return;
             } 
-            // Step 10: Reroll (Minion + Attack) - FIX: Ensure Minion is generated
+            // Step 10: Reroll (Minion + Attack)
             if (this.tutorialStep === 10) {
                 this.dicePool = [
                     { id: 0, type: 'MINION', used: false, selected: false },
                     { id: 1, type: 'ATTACK', used: false, selected: false }
                 ];
                 this.rerolls--; 
+                this.renderDiceUI();
+                return;
+            }
+            // FIX: Step 11 (Force Minion if not present)
+            if (this.tutorialStep === 11) {
+                 this.dicePool = [
+                    { id: 0, type: 'MINION', used: false, selected: false },
+                    { id: 1, type: 'ATTACK', used: false, selected: false }
+                ];
+                this.renderDiceUI();
+                return;
+            }
+            // FIX: Step 12 (Force Attack to kill)
+            if (this.tutorialStep === 12) {
+                 this.dicePool = [
+                    { id: 0, type: 'ATTACK', used: false, selected: false },
+                    { id: 1, type: 'DEFEND', used: false, selected: false }
+                ];
                 this.renderDiceUI();
                 return;
             }
@@ -5783,14 +5805,7 @@ drawEntity(entity) {
         const baseGlow = 20 + (sectorPower * 5);
         const baseWidth = 3 + sectorPower;
 
-        // --- SHADOW (Ground) ---
-        // FIX: Only draw shadow for Player. Removed for Enemies and Minions.
-        if (entity instanceof Player) {
-            ctx.fillStyle = 'rgba(0,0,0,0.6)';
-            ctx.beginPath();
-            ctx.ellipse(0, 40, entity.radius, entity.radius/3, 0, 0, Math.PI*2);
-            ctx.fill();
-        }
+        // FIX: Removed Shadow Drawing Block entirely
 
         // ============================================================
         // 1. PLAYER CLASSES (Unique Avatars)
@@ -5804,56 +5819,251 @@ drawEntity(entity) {
             ctx.fillStyle = '#050505'; 
 
             if (entity.classId === 'tactician') {
+                // HEXAGON + NETWORK
                 this.drawPolygon(ctx, 0, 0, entity.radius, 6, time * 0.5);
+                
+                // Orbiting Data Cubes with connecting lines
                 for(let i=0; i<3; i++) {
                     const angle = time * 2 + (i * (Math.PI*2/3));
                     const sx = Math.cos(angle) * (entity.radius + 25);
                     const sy = Math.sin(angle) * (entity.radius + 25);
+                    
+                    // Connection line
+                    ctx.beginPath();
+                    ctx.moveTo(0,0);
+                    ctx.lineTo(sx, sy);
+                    ctx.strokeStyle = 'rgba(0, 243, 255, 0.3)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+
+                    // Cube
                     ctx.fillStyle = color;
                     ctx.fillRect(sx-6, sy-6, 12, 12);
                 }
             } 
             else if (entity.classId === 'bloodstalker') {
+                // SPIKED SPHERE (Pulsing)
                 const pulse = Math.sin(time * 5) * 5;
                 this.drawSpikedCircle(ctx, 0, 0, entity.radius - 5, 8, 15 + pulse, time);
+                
+                // Inner "Blood" Pulse
+                ctx.fillStyle = '#550000';
+                ctx.beginPath();
+                ctx.arc(0, 0, (entity.radius - 15) + Math.sin(time * 10)*2, 0, Math.PI*2);
+                ctx.fill();
             }
             else if (entity.classId === 'arcanist') {
-                this.drawPolygon(ctx, 0, 0, entity.radius, 4, 0); 
+                // GYROSCOPE RINGS + PULSING CORE (FIXED ROTATION)
+                
+                // Inner Glow
+                const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, entity.radius);
+                grad.addColorStop(0, '#fff');
+                grad.addColorStop(0.5, COLORS.PURPLE);
+                grad.addColorStop(1, 'transparent');
+                ctx.fillStyle = grad;
+                ctx.globalAlpha = 0.3 + Math.sin(time * 5) * 0.1;
+                this.drawPolygon(ctx, 0, 0, entity.radius * 1.2, 4, time * 0.5);
+                ctx.globalAlpha = 1.0;
+
+                // Main Diamond
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 3;
+                this.drawPolygon(ctx, 0, 0, entity.radius, 4, -time * 0.5); 
+
+                // Gyroscope Rings (3 axes)
                 ctx.strokeStyle = COLORS.PURPLE;
                 ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.ellipse(0, 0, entity.radius + 15, entity.radius * 0.4, time * 2, 0, Math.PI*2);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.ellipse(0, 0, entity.radius + 15, entity.radius * 0.4, -time * 2, 0, Math.PI*2);
-                ctx.stroke();
+                
+                const ringCount = 3;
+                const majorRadius = entity.radius + 20;
+                
+                for (let i = 0; i < ringCount; i++) {
+                    ctx.save();
+                    
+                    // 1. Calculate Rotation
+                    const rotationSpeed = 1.0; 
+                    const currentRotation = (i * (Math.PI / 3)) + (time * rotationSpeed);
+                    
+                    ctx.rotate(currentRotation);
+                    
+                    // 2. Simulate 3D Tilt
+                    const tilt = 0.35 + Math.sin(time * 0.5 + i) * 0.1;
+                    
+                    ctx.beginPath();
+                    // Draw a flat ellipse aligned with the rotated context
+                    ctx.ellipse(0, 0, majorRadius, majorRadius * tilt, 0, 0, Math.PI * 2);
+                    ctx.stroke();
+                    
+                    // 3. Draw Orbiting Electron
+                    const electronSpeed = 3.0;
+                    const electronAngle = (time * electronSpeed) + (i * 2);
+                    
+                    // Calculate position on the un-rotated ellipse
+                    const ex = majorRadius * Math.cos(electronAngle);
+                    const ey = (majorRadius * tilt) * Math.sin(electronAngle);
+                    
+                    ctx.fillStyle = '#fff';
+                    ctx.shadowColor = COLORS.PURPLE;
+                    ctx.shadowBlur = 10;
+                    ctx.beginPath();
+                    ctx.arc(ex, ey, 4, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                    
+                    ctx.restore();
+                }
             }
             else if (entity.classId === 'sentinel') {
-                ctx.fillStyle = '#000';
-                ctx.fillRect(-entity.radius, -entity.radius, entity.radius*2, entity.radius*2);
-                ctx.strokeRect(-entity.radius, -entity.radius, entity.radius*2, entity.radius*2);
-                ctx.strokeStyle = COLORS.SHIELD;
-                ctx.globalAlpha = 0.4 + Math.sin(time*3)*0.1;
+                // HEAVY FORTRESS (Redesigned)
+                // Removed the solid fillRect/strokeRect box
+                
+                // Inner rotating core
+                ctx.save();
+                ctx.rotate(time * 0.5);
+                ctx.strokeStyle = '#444';
+                ctx.lineWidth = 6;
+                ctx.strokeRect(-entity.radius*0.5, -entity.radius*0.5, entity.radius, entity.radius);
+                ctx.restore();
+
+                // Outer heavy plating (Non-rotating)
+                ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 4;
                 ctx.beginPath();
-                ctx.arc(0, 0, entity.radius + 20, 0, Math.PI*2);
+                // Draw 4 corner brackets
+                const r = entity.radius;
+                const len = 15;
+                // Top Left
+                ctx.moveTo(-r, -r + len); ctx.lineTo(-r, -r); ctx.lineTo(-r + len, -r);
+                // Top Right
+                ctx.moveTo(r - len, -r); ctx.lineTo(r, -r); ctx.lineTo(r, -r + len);
+                // Bottom Right
+                ctx.moveTo(r, r - len); ctx.lineTo(r, r); ctx.lineTo(r - len, r);
+                // Bottom Left
+                ctx.moveTo(-r + len, r); ctx.lineTo(-r, r); ctx.lineTo(-r, r - len);
                 ctx.stroke();
+
+                // Forcefield Bubble (Kept dynamic)
+                ctx.strokeStyle = COLORS.SHIELD;
+                ctx.globalAlpha = 0.4 + Math.sin(time*3)*0.1;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0, 0, entity.radius + 15, 0, Math.PI*2);
+                ctx.stroke();
+                
+                // Scanline on shield
+                ctx.save();
+                ctx.clip(); 
+                ctx.fillStyle = COLORS.SHIELD;
+                ctx.globalAlpha = 0.15;
+                const scanY = (time * 40) % (entity.radius * 2 + 30) - (entity.radius + 15);
+                ctx.fillRect(-(entity.radius+15), scanY, (entity.radius+15)*2, 8);
+                ctx.restore();
+                
                 ctx.globalAlpha = 1.0;
             }
             else if (entity.classId === 'annihilator') {
-                this.drawSpikedCircle(ctx, 0, 0, entity.radius - 10, 5, 25, time * 3);
+                // CHAOS STAR
+                this.drawSpikedCircle(ctx, 0, 0, entity.radius - 10, 5, 25, time * 5);
+                
+                // Inner spinning triangle
+                ctx.strokeStyle = '#ff4400';
+                this.drawPolygon(ctx, 0, 0, entity.radius * 0.5, 3, -time * 8);
+                
+                // Core pulse
+                ctx.fillStyle = '#ff8800';
+                ctx.globalAlpha = 0.5 + Math.sin(time * 20) * 0.5;
+                ctx.beginPath();
+                ctx.arc(0, 0, 10, 0, Math.PI*2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
             }
             else {
-                for(let i=0; i<5; i++) {
-                    const angle = (Math.PI*2/5) * i + time;
-                    const ox = Math.cos(angle) * 10;
-                    const oy = Math.sin(angle) * 10;
+                // Default (Summoner) - BIO-DIGITAL LOTUS
+                const petals = 8;
+                
+                // Layer 1: Outer Petals (Undulating & Rotating)
+                ctx.save();
+                ctx.rotate(time * 0.2); // Slow base rotation
+                
+                for(let i=0; i<petals; i++) {
+                    const angle = (Math.PI*2 / petals) * i;
+                    
+                    // Dynamic length: Creates a wave effect around the flower
+                    const wave = Math.sin(time * 3 + i) * 15; 
+                    const len = entity.radius * 1.2 + wave;
+                    
+                    ctx.save();
+                    ctx.rotate(angle);
                     ctx.beginPath();
-                    ctx.arc(ox, oy, entity.radius * 0.8, 0, Math.PI*2);
+                    
+                    // Organic petal shape using Bezier curves
+                    ctx.moveTo(0, 0);
+                    // Control points create a wider, leaf-like shape
+                    ctx.bezierCurveTo(25, -len/2, 5, -len, 0, -len);
+                    ctx.bezierCurveTo(-5, -len, -25, -len/2, 0, 0);
+                    
+                    // Gradient Fill
+                    const grad = ctx.createLinearGradient(0, 0, 0, -len);
+                    grad.addColorStop(0, 'rgba(0, 255, 153, 0.1)');
+                    grad.addColorStop(1, 'rgba(0, 255, 153, 0.5)');
+                    ctx.fillStyle = grad;
+                    
+                    ctx.strokeStyle = COLORS.NATURE_LIGHT;
+                    ctx.lineWidth = 2;
+                    
+                    ctx.fill();
                     ctx.stroke();
+                    ctx.restore();
                 }
+                ctx.restore();
+
+                // Layer 2: Inner Bloom (Breathing)
+                ctx.save();
+                const breath = 1.0 + Math.sin(time * 2) * 0.15;
+                ctx.scale(breath, breath);
+                ctx.rotate(-time * 0.5); // Counter-rotate
+                
+                for(let i=0; i<5; i++) {
+                    const angle = (Math.PI*2 / 5) * i;
+                    ctx.save();
+                    ctx.rotate(angle);
+                    ctx.beginPath();
+                    // Smaller, sharper inner petals
+                    ctx.moveTo(0, 0);
+                    ctx.quadraticCurveTo(10, -30, 0, -50);
+                    ctx.quadraticCurveTo(-10, -30, 0, 0);
+                    
+                    ctx.fillStyle = COLORS.NATURE_DARK;
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    ctx.restore();
+                }
+                ctx.restore();
+
+                // Layer 3: Floating "Pollen" Particles (Procedural)
+                ctx.save();
+                for(let i=0; i<12; i++) {
+                    // Orbiting math: Particles move at different speeds and radii
+                    const pAngle = time * (0.5 + (i%3)*0.3) + (i * (Math.PI*2/12));
+                    const pDist = entity.radius * (0.6 + Math.sin(time * 1.5 + i)*0.2);
+                    
+                    const px = Math.cos(pAngle) * pDist;
+                    const py = Math.sin(pAngle) * pDist;
+                    
+                    ctx.fillStyle = (i % 2 === 0) ? COLORS.GOLD : COLORS.NATURE_LIGHT;
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = ctx.fillStyle;
+                    
+                    ctx.beginPath();
+                    ctx.arc(px, py, (i%2===0) ? 3 : 2, 0, Math.PI*2);
+                    ctx.fill();
+                }
+                ctx.restore();
             }
 
+            // Core Light
             ctx.fillStyle = '#fff';
             ctx.shadowBlur = 50;
             ctx.beginPath();
@@ -5895,7 +6105,7 @@ drawEntity(entity) {
                 ctx.globalAlpha = 1.0;
             }
             else {
-                // WISP
+                // WISP DESIGN: Magical Plasma Soul
                 ctx.save();
                 ctx.globalAlpha = 0.3;
                 ctx.fillStyle = color;
@@ -5949,6 +6159,7 @@ drawEntity(entity) {
                 ctx.setLineDash([]);
                 this.drawSpikedCircle(ctx, 0, 0, entity.radius, 12, 10, -time);
             }
+            // ELITES (Nullifier / Jammer)
             else if (entity.isElite) {
                 const gx = (Math.random() - 0.5) * 5; 
                 this.drawPolygon(ctx, gx, 0, entity.radius, 5, time * 0.2); 
@@ -5981,6 +6192,7 @@ drawEntity(entity) {
                 ctx.fillStyle = '#000';
                 ctx.fillRect(-5, -5, 10, 10);
             }
+            // STANDARD UNITS
             else {
                 if (entity.name.includes("Drone")) {
                     this.drawPolygon(ctx, 0, 0, entity.radius, 3, Math.PI); 
@@ -6216,10 +6428,7 @@ drawEntity(entity) {
 
         text.classList.remove('tutorial-transparent');
         text.classList.remove('hidden');
-        
-        // Reset visibility
         overlay.classList.remove('hidden');
-        overlay.style.display = ''; 
         spotlight.classList.add('hidden'); 
         
         // Default: Overlay blocks game interaction
@@ -6232,10 +6441,11 @@ drawEntity(entity) {
         if(canvas) canvas.onclick = null;
         overlay.onclick = null;
         
-        // --- HELPER: Wait for Tap ---
+        // --- HELPER: Wait for Tap (Robust onclick version) ---
         const waitForTap = () => {
             overlay.style.pointerEvents = 'auto';
             overlay.onclick = null; 
+            
             setTimeout(() => {
                 overlay.onclick = (e) => {
                     e.preventDefault();
@@ -6266,9 +6476,11 @@ drawEntity(entity) {
             const rect = canvas.getBoundingClientRect();
             const scaleX = rect.width / canvas.width; 
             const scaleY = rect.height / canvas.height;
+            
             const screenX = rect.left + (entity.x * scaleX);
             const screenY = rect.top + (entity.y * scaleY);
             const radius = entity.radius * scaleX; 
+            
             return {
                 top: screenY - radius - 10, 
                 left: screenX - radius - 10,
@@ -6283,16 +6495,21 @@ drawEntity(entity) {
             const rect = canvas.getBoundingClientRect();
             const scaleX = rect.width / canvas.width; 
             const scaleY = rect.height / canvas.height;
+            
             const width = (entity instanceof Minion) ? 80 : 160;
             const height = 24; 
+            
             const gameX = entity.x - width / 2;
             const gameY = entity.y - entity.radius - 40;
+            
             const screenLeft = rect.left + (gameX * scaleX);
             const screenTop = rect.top + (gameY * scaleY);
             const screenWidth = width * scaleX;
             const screenHeight = height * scaleY;
+            
             const padding = 15;
             const manaOffset = (entity instanceof Player) ? (50 * scaleX) : 0; 
+
             return {
                 top: screenTop - padding,
                 left: screenLeft - padding - manaOffset,
@@ -6361,10 +6578,12 @@ drawEntity(entity) {
                 
             case 2:
                 text.innerHTML = "ENEMY THREAT: This is the <strong>Enemy Health Bar</strong>. The icon above them shows their <strong>Intent</strong> (what they will do on their turn). <strong>Buffs/Debuffs</strong> also appear near their HP.<br>Click or hold the Enemy to get a detailed combat prognosis.<br><strong>[TAP SCREEN TO CONTINUE]</strong>";
+                
                 const enemyEntityRect = getEntityRect(this.enemy);
                 const enemyHpRect = getHpBarRect(this.enemy);
                 enemyHpRect.top -= 40; 
                 enemyHpRect.height += 40;
+                
                 setSpotlight(getUnionRect(enemyEntityRect, enemyHpRect), 'rect');
                 waitForTap();
                 break;
@@ -6372,10 +6591,12 @@ drawEntity(entity) {
             case 3:
                 this.rollDice(2);
                 text.innerHTML = "MODULES: The bottom bar holds your <strong>Dice Modules</strong>. You can re-roll any un-used or selected module, then <strong>Drag & Drop</strong> it onto a valid target (Enemy or Self).<br><br><strong>[TAP SCREEN TO CONTINUE]</strong>";
+                
                 setTimeout(() => {
                     const diceCont = document.getElementById('dice-container');
                     if(diceCont) setSpotlight(diceCont.getBoundingClientRect(), 'rect');
                 }, 50);
+                
                 waitForTap();
                 break;
                 
@@ -6395,8 +6616,9 @@ drawEntity(entity) {
                     dice5[0].style.position = 'relative'; 
                     dice5[0].style.zIndex = '2000';
                 }
-                // FIX: Hide overlay for drag
+                // Allow interaction
                 overlay.classList.add('hidden');
+                spotlight.classList.add('hidden');
                 break;
 
             case 6: 
@@ -6407,8 +6629,7 @@ drawEntity(entity) {
 
             case 7: 
                 overlay.classList.remove('hidden');
-                // FIX: Hide overlay for drag
-                overlay.classList.add('hidden');
+                overlay.classList.add('hidden'); // FIX: Hide overlay for drag
                 text.innerHTML = `
                     CRITICAL REGISTERED.
                     <div style="font-size: 0.8rem; color: #ccc; margin: 5px 0; font-family: var(--font-main);">
@@ -6466,8 +6687,11 @@ drawEntity(entity) {
                 break;
 
             case 11: 
-                // FIX: Hide overlay for drag
-                overlay.classList.add('hidden');
+                // FIX: Ensure dice are rolled for this step
+                this.rollDice(2);
+                
+                overlay.classList.add('hidden'); 
+                spotlight.classList.add('hidden');
                 text.innerHTML = "REINFORCEMENTS: DRAG the <strong>Minion/Wisp Module</strong> onto empty canvas space. Your Wisp will attack automatically at the end of your turn.";
                 setTimeout(() => {
                     const dice = document.querySelectorAll('#dice-container .die');
@@ -6481,15 +6705,18 @@ drawEntity(entity) {
                 break;
                 
             case 12: 
+                // FIX: Ensure dice are rolled for this step
+                this.rollDice(2);
+                
                 text.classList.add('tutorial-transparent'); 
                 text.innerHTML = "PROTOCOL COMPLETE. DESTROY THE TARGET TO FINISH TRAINING.";
                 
-                // CRITICAL FIX: Ensure overlay is hidden so player can interact with canvas
+                // CRITICAL FIX: Hide overlay and spotlight to allow interaction
                 overlay.classList.add('hidden'); 
-                overlay.style.display = 'none';
                 spotlight.classList.add('hidden');
-                
-                // Do NOT focus canvas, as it covers the dice.
+                overlay.style.display = 'none';
+
+                // FIX: Do NOT focus canvas, as it covers the UI.
                 // Just highlight the dice to hint at action.
                 setTimeout(() => {
                     const dice = document.querySelectorAll('#dice-container .die');
