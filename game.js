@@ -217,15 +217,15 @@ const PLAYER_CLASSES = [
 ];
 
 const META_UPGRADES = [
-    { id: 'm_life', name: "Gaia's Heart", desc: "Start runs with +10 Max HP.", cost: 400, icon: "💚" },
+    { id: 'm_life', name: "Gaia's Heart", desc: "Start runs with +25 Max HP.", cost: 400, icon: "💚" },
     { id: 'm_mana', name: "Deep Roots", desc: "Start runs with +1 Base Mana.", cost: 600, icon: "💠" },
     { id: 'm_greed', name: "Recycler", desc: "+20% Fragment gain.", cost: 800, icon: "♻️" },
-    { id: 'm_start_frag', name: "Seed Capital", desc: "Start runs with 50 Fragments.", cost: 480, icon: "💰" },
+    { id: 'm_discount', name: "Merchant Protocol", desc: "Shop items are 25% cheaper.", cost: 500, icon: "🏷️" }, // REPLACED
     { id: 'm_thorn', name: "Thorns", desc: "Start runs with Spike Armor relic.", cost: 1200, icon: "🌵" },
     { id: 'm_reroll', name: "Tactical Link", desc: "+1 Reroll per turn.", cost: 1000, icon: "🎲" },
-    { id: 'm_dmg', name: "Solar Flare", desc: "All attacks deal +1 Damage.", cost: 1500, icon: "☀️" },
-    { id: 'm_minion_atk', name: "Nano-Swarm", desc: "Minions deal +1 Damage.", cost: 1100, icon: "🐝" },
-    { id: 'm_shield', name: "Hardened Hull", desc: "Start combat with 10 Shield.", cost: 900, icon: "🛡️" },
+    { id: 'm_dmg', name: "Solar Flare", desc: "All attacks deal +20% Damage.", cost: 1500, icon: "☀️" }, // BUFFED
+    { id: 'm_minion_atk', name: "Nano-Swarm", desc: "Minions deal +50% Damage.", cost: 1100, icon: "🐝" }, // BUFFED
+    { id: 'm_shield', name: "Hardened Hull", desc: "Start combat with 20 Shield.", cost: 900, icon: "🛡️" }, // BUFFED
     { id: 'm_relic', name: "Data Cache", desc: "Start run with a random Relic.", cost: 2000, icon: "💾" }
 ];
 
@@ -1010,6 +1010,7 @@ class Entity {
         this.anim.timer = 15;
     }
 }
+
 class Player extends Entity {
     constructor(classConfig) {
         super(540, 1150, classConfig.name, 100); 
@@ -1017,7 +1018,9 @@ class Player extends Entity {
         this.traits = classConfig.traits || {};
         this.baseMana = this.traits.baseMana || 3;
         
-        if(Game.hasMetaUpgrade('m_life')) this.maxHp += 10;
+        // FIX: Increased HP Bonus
+        if(Game.hasMetaUpgrade('m_life')) this.maxHp += 25;
+        
         if(Game.hasMetaUpgrade('m_mana')) this.baseMana += 1;
         if(Game.hasMetaUpgrade('m_thorn')) this.addRelic({ id: 'spike_armor', name: "Spike Armor", desc: "Meta Upgrade", icon: "🌵" });
         if(Game.hasMetaUpgrade('m_relic')) {
@@ -1034,8 +1037,11 @@ class Player extends Entity {
         this.minions = [];
         this.relics = [];
         this.diceUpgrades = [];
-	this.nextAttackMult = 1;
+        this.nextAttackMult = 1;
         this.incomingDamageMult = 1;
+        
+        // Spawn Timer for visual
+        this.spawnTimer = 0;
         
         if (this.traits.startMinions) {
             for(let i=0; i<this.traits.startMinions; i++) {
@@ -1073,11 +1079,13 @@ class Minion extends Entity {
         }
         
         super(x, y, name, 5);
-        this.radius = 75; // FIX: Increased size by 50% (was 50)
+        this.radius = 75; 
         this.dmg = isPlayerSide ? 1 : 2;
         
+        // FIX: Percentage Damage Boost
         if (isPlayerSide && Game.hasMetaUpgrade('m_minion_atk')) {
-            this.dmg += 1;
+            this.dmg = Math.floor(this.dmg * 1.5); // +50%
+            if (this.dmg === 1) this.dmg = 2; // Ensure at least +1 for low base
         }
 
         this.level = 1;
@@ -2450,10 +2458,7 @@ startQTE(type, x, y, callback) {
         this.sector = 1; 
         this.bossDefeated = false; 
         
-        if(this.hasMetaUpgrade('m_start_frag')) {
-            this.techFragments += 50; 
-            try { localStorage.setItem('mvm_fragments', this.techFragments); } catch(e) {}
-        }
+        // REMOVED: m_start_frag logic
         
         this.generateMap();
         this.renderRelics();
@@ -2902,6 +2907,9 @@ startQTE(type, x, y, callback) {
     generateShop() {
         this.shopInventory = [];
         
+        // FIX: Calculate Discount Multiplier
+        const discountMult = this.hasMetaUpgrade('m_discount') ? 0.75 : 1.0;
+
         // 1. Generate Consumables/Relics
         let items = [
             { 
@@ -2909,7 +2917,9 @@ startQTE(type, x, y, callback) {
                 desc: "Restores 25 HP.", 
                 action: () => { this.player.heal(25); } 
             },
-            { 
+            // ... (Keep existing items list) ...
+            // I will assume the list is the same as before, just ensure you apply the discount below
+             { 
                 id: 'hp_up', type: 'item', name: "Power Cell", cost: 30, icon: "⚙️", 
                 desc: "Max HP +10.", 
                 action: () => { this.player.maxHp += 10; this.player.currentHp += 10; } 
@@ -2956,14 +2966,12 @@ startQTE(type, x, y, callback) {
         const titanCount = this.player.relics.filter(r => r.id === 'titan_module').length;
         if(titanCount >= 3) items = items.filter(i => i.name !== "Titan Module");
 
-	// NEW: Filter Crit Lens (Max 5) - Checking by ID since we added IDs to shop items previously
         const lensCount = this.player.relics.filter(r => r.id === 'crit_lens').length;
         if(lensCount >= 5) items = items.filter(i => i.id !== 'crit_lens');
 
-	const holoCount = this.player.relics.filter(r => r.id === 'hologram').length;
+        const holoCount = this.player.relics.filter(r => r.id === 'hologram').length;
         if(holoCount >= 3) items = items.filter(i => i.id !== 'hologram');
 
-        // NEW: Firewall Limit (Max 3)
         const fireCount = this.player.relics.filter(r => r.id === 'firewall').length;
         if(fireCount >= 3) items = items.filter(i => i.id !== 'firewall');
 
@@ -2976,31 +2984,23 @@ startQTE(type, x, y, callback) {
         // Limit to 3 items
         const selectedItems = items.slice(0, 3);
 
-        // Update descriptions for selected items based on current stacks
         selectedItems.forEach(item => {
             const currentCount = this.player.relics.filter(r => r.id === item.id).length;
             item.desc = this.getRelicDescription(item, currentCount + 1);
+            // FIX: Apply Discount
+            item.cost = Math.floor(item.cost * discountMult);
         });
 
         this.shopInventory.push(...selectedItems);
 
         // 2. Generate Dice Upgrades
-        // Filter out upgrades for locked skills the player doesn't have
         const availableUpgrades = Object.keys(DICE_UPGRADES).filter(key => {
-            // If already upgraded, hide
             if (this.player.hasDiceUpgrade(key)) return false;
-
-            // Check if base die is available/unlocked
             const baseDie = DICE_TYPES[key];
             if (!baseDie.locked) return true; 
-
-            // If locked, check for specific relic
             if (key === 'VOODOO' && this.player.hasRelic('voodoo_doll')) return true;
             if (key === 'OVERCHARGE' && this.player.hasRelic('overcharge_chip')) return true;
-            
-            // NEW: Check for Reckless Charge unlock
             if (key === 'RECKLESS_CHARGE' && this.player.hasRelic('reckless_drive')) return true;
-
             return false;
         });
 
@@ -3009,7 +3009,6 @@ startQTE(type, x, y, callback) {
             [availableUpgrades[i], availableUpgrades[j]] = [availableUpgrades[j], availableUpgrades[i]];
         }
         
-        // Limit to 3 upgrades
         const shopUpgrades = availableUpgrades.slice(0, 3);
         let discountIndex = shopUpgrades.length > 0 ? Math.floor(Math.random() * shopUpgrades.length) : -1;
 
@@ -3021,6 +3020,9 @@ startQTE(type, x, y, callback) {
                 cost = Math.floor(cost * 0.6);
                 isDiscount = true;
             }
+            
+            // FIX: Apply Meta Discount on top of random discount
+            cost = Math.floor(cost * discountMult);
             
             this.shopInventory.push({
                 type: 'upgrade',
@@ -3446,13 +3448,18 @@ async startTurn() {
         this.player.incomingDamageMult = 1;
         
         if(this.player.traits.startShield) this.player.addShield(this.player.traits.startShield);
-        if(Game.hasMetaUpgrade('m_shield') && this.turnCount === 1) this.player.addShield(10);
+        
+        // FIX: Increased Shield Bonus
+        if(Game.hasMetaUpgrade('m_shield') && this.turnCount === 1) this.player.addShield(20);
+        
         const shieldStacks = this.player.relics.filter(r => r.id === 'nano_shield').length;
         if(shieldStacks > 0 && this.turnCount === 1) this.player.addShield(5 * shieldStacks);
         const shieldGen = this.player.relics.filter(r => r.id === 'shield_gen').length;
         if(shieldGen > 0) this.player.addShield(2 * shieldGen);
         const manaStacks = this.player.relics.filter(r => r.id === 'mana_syphon').length;
         if(manaStacks > 0) this.player.mana += manaStacks;
+
+        // ... (Rest of startTurn remains the same)
 
         // FIX: Static Field Relic - Handle Death
         if (this.player.hasRelic('static_field') && this.enemy) {
@@ -3546,8 +3553,10 @@ async startTurn() {
         
         // --- PLAYER SIDE MODIFIERS (Outgoing) ---
         
-        // 1. Meta Upgrades
-        if(this.hasMetaUpgrade('m_dmg')) dmg += 1;
+        // 1. Meta Upgrades (FIX: Percentage Boost)
+        if(this.hasMetaUpgrade('m_dmg')) {
+            dmg = Math.floor(dmg * 1.2); // +20%
+        }
 
         // 2. Class Traits
         const dmgMult = this.player.traits.dmgMultiplier || 1.0;
@@ -3570,14 +3579,11 @@ async startTurn() {
         }
         
         // --- TARGET SIDE MODIFIERS (Incoming / Preview) ---
-        // We only apply these if a specific target is provided (for UI Tooltips).
-        // In actual combat, 'takeDamage()' handles these calculations to avoid double-dipping.
         if (target && (target instanceof Enemy || target instanceof Minion)) {
             
             // Overcharge / Hyper Beam
             const overcharge = target.hasEffect('overcharge');
             if (overcharge) {
-                // val > 0 is Hyper Beam (2.0x), else Overcharge (1.5x)
                 const modifier = overcharge.val > 0 ? 2.0 : 1.5;
                 dmg = Math.floor(dmg * modifier);
             }
