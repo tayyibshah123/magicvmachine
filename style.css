@@ -782,7 +782,7 @@ h2 {
 
 /* --- TUTORIAL & STORY MODE --- */
 
-/* The dark overlay */
+/* The dark overlay - NOW TRANSPARENT */
 #tutorial-overlay {
     position: absolute;
     top: 0;
@@ -790,8 +790,8 @@ h2 {
     width: 100%;
     height: 100%;
     
-    /* FIX: Reduced opacity from 0.95 to 0.5 */
-    background: rgba(0, 0, 0, 0.5); 
+    /* FIX: Removed darkening (was rgba(0,0,0,0.5)) */
+    background: transparent; 
     z-index: 1500;
     pointer-events: auto;
     transition: opacity 0.3s;
@@ -1231,15 +1231,16 @@ h2 {
 .tutorial-focus {   
     position: relative !important; 
     z-index: 5000 !important; 
-    box-shadow: 0 0 50px var(--neon-gold) !important;
-    animation: pulse-focus 1.5s infinite;
+    /* FIX: Bigger glow and pulse */
+    box-shadow: 0 0 30px var(--neon-gold), 0 0 60px var(--neon-gold) !important;
+    border: 2px solid var(--neon-gold) !important;
+    animation: pulse-focus 1.0s infinite alternate !important;
 }
 
 /* Animation for the focus glow */
 @keyframes pulse-focus {
-    0% { box-shadow: 0 0 20px var(--neon-gold); }
-    50% { box-shadow: 0 0 50px var(--neon-gold); } 
-    100% { box-shadow: 0 0 20px var(--neon-gold); }
+    0% { box-shadow: 0 0 20px var(--neon-gold); transform: scale(1.0); }
+    100% { box-shadow: 0 0 50px var(--neon-gold), 0 0 10px #fff; transform: scale(1.05); } 
 }
 
 /* --- PHASE BANNERS --- */

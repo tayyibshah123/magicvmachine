@@ -6556,21 +6556,35 @@ drawEntity(entity) {
         if (isMobile) {
             switch (this.tutorialStep) {
                 case 0: // Intro
-                case 4: // Drag Defend Die
                 case 5: // End Phase
-                case 6: // QTE Defend
                 case 8: // Summon Die
                 case 9: // Destroy Target
                 case 11: // Summon (Actual step)
                 case 12: // Final Attack
                     topPercent = '40%'; 
                     break;
+                
                 case 1: // Player Stats
-                case 2: // Enemy/Intent
-                case 3: // Dice Overview
-                case 7: // Reroll Button
                 case 10: // Reroll (Actual step)
                     topPercent = '75%'; 
+                    break;
+
+                // --- FIX: Specific Adjustments ---
+                case 3: // Modules (Screenshot 1) - Move Higher
+                    topPercent = '30%'; // Was 40%
+                    break;
+                
+                case 2: // Enemy/Intent (Screenshot 2) - Move Lower
+                case 4: // Enemy Scan
+                    topPercent = '85%'; // Was 75%
+                    break;
+
+                case 6: // QTE Attack (Screenshot 3) - Move Lower
+                    topPercent = '50%'; // Was 40%
+                    break;
+
+                case 7: // Shield Module (Screenshot 4) - Move WAY Higher
+                    topPercent = '25%'; // Was 75% (Bottom) -> Now Top
                     break;
             }
         }
@@ -6663,6 +6677,7 @@ drawEntity(entity) {
                 break;
 
             case 8: 
+                // Button Click Required (Functional Step)
                 overlay.classList.remove('hidden'); 
                 overlay.style.pointerEvents = 'auto'; 
                 text.innerHTML = "Cycle complete. TAP the 'END PHASE' button. The Enemy will execute their Intent now.";
@@ -6685,6 +6700,7 @@ drawEntity(entity) {
                 break;
 
             case 10: 
+                // Button Click Required (Functional Step)
                 overlay.classList.remove('hidden');
                 overlay.style.pointerEvents = 'auto';
                 text.innerHTML = "MODULES EXHAUSTED: You get 2 free re-rolls per turn. TAP the <strong>Reroll icon</strong> to generate new data for the selected modules.";
