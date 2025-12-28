@@ -2185,7 +2185,22 @@ startQTE(type, x, y, callback) {
         };
 
         switch(newState) {
-            case STATE.MENU: activate('screen-start'); break;
+            case STATE.MENU: 
+                activate('screen-start'); 
+                
+                // NEW: Check for encrypted files and alert player
+                const btnIntel = document.getElementById('btn-intel');
+                if (btnIntel) {
+                    if (this.encryptedFiles > 0) {
+                        btnIntel.classList.add('intel-alert');
+                        btnIntel.innerText = `INTEL [${this.encryptedFiles}]`; 
+                    } else {
+                        btnIntel.classList.remove('intel-alert');
+                        btnIntel.innerText = "INTEL";
+                    }
+                }
+                break;
+
             case STATE.CHAR_SELECT: activate('screen-char-select'); this.renderCharSelect(); break;
             case STATE.TUTORIAL: 
                 activate('screen-tutorial'); 
@@ -2214,11 +2229,11 @@ startQTE(type, x, y, callback) {
                 this.renderIntel();
                 break;
             case STATE.HEX: activate('screen-hex'); break;
-		
-	case STATE.TUTORIAL_COMBAT:
+            
+            case STATE.TUTORIAL_COMBAT:
                 document.getElementById('hud').classList.remove('hidden');
                 break;
-        case STATE.STORY:
+            case STATE.STORY:
                 activate('screen-story');
                 break;
         }
@@ -3186,14 +3201,80 @@ startQTE(type, x, y, callback) {
         document.getElementById('hex-round').innerText = this.hex.round;
         document.getElementById('hex-max-round').innerText = this.hex.maxRounds;
 
+        this.hex.nodes = [];
+        // 9 Distinct Neon Colors
+        const colors = [
+            '#ff0000', // Red
+            '#00ff00', // Green
+            '#0088ff', // Blue
+            '#ffff00', // Yellow
+            '#00ffff', // Cyan
+            '#ff00ff', // Magenta
+            '#ff8800', // Orange
+            '#ccff00', // Lime
+            '#9900ff'  // Purple
+        ];
+
+        const w = 300; // Container width (must match CSS)
+        const h = 350; // Container height (must match CSS)
+        const size = 60; // Node size
+
         for(let i=0; i<9; i++) {
             const btn = document.createElement('div');
             btn.className = 'hex-btn';
             btn.id = `hex-${i}`;
             btn.innerText = "⬡"; 
+            
+            // Apply Unique Color Styling
+            btn.style.color = colors[i];
+            btn.style.borderColor = colors[i];
+            btn.style.boxShadow = `0 0 5px ${colors[i]}`;
+
+            // Random Position within bounds
+            let x = Math.random() * (w - size);
+            let y = Math.random() * (h - size);
+            
+            // Random Velocity (Slow movement)
+            let vx = (Math.random() - 0.5) * 30; 
+            let vy = (Math.random() - 0.5) * 30;
+
+            this.hex.nodes.push({
+                id: i,
+                el: btn,
+                x: x, y: y,
+                vx: vx, vy: vy,
+                color: colors[i],
+                size: size
+            });
+            
+            // Set initial position
+            btn.style.transform = `translate(${x}px, ${y}px)`;
+
             btn.onclick = () => this.handleHexInput(i);
             grid.appendChild(btn);
         }
+    },
+
+updateHexBreach(dt) {
+        if (this.currentState !== STATE.HEX || !this.hex.nodes) return;
+        
+        const w = 300;
+        const h = 350;
+        
+        this.hex.nodes.forEach(node => {
+            // Update Position
+            node.x += node.vx * dt;
+            node.y += node.vy * dt;
+
+            // Bounce off walls
+            if (node.x <= 0) { node.x = 0; node.vx *= -1; }
+            if (node.x >= w - node.size) { node.x = w - node.size; node.vx *= -1; }
+            if (node.y <= 0) { node.y = 0; node.vy *= -1; }
+            if (node.y >= h - node.size) { node.y = h - node.size; node.vy *= -1; }
+
+            // Apply Transform
+            node.el.style.transform = `translate(${node.x}px, ${node.y}px)`;
+        });
     },
 
     async nextHexRound() {
@@ -3208,11 +3289,20 @@ startQTE(type, x, y, callback) {
         for (let i = 0; i < this.hex.sequence.length; i++) {
             await this.sleep(600);
             const id = this.hex.sequence[i];
-            const el = document.getElementById(`hex-${id}`);
-            el.classList.add('flash');
+            const node = this.hex.nodes[id];
+            
+            // Flash Effect (Fill with color)
+            node.el.style.backgroundColor = node.color;
+            node.el.style.color = '#fff';
+            node.el.style.boxShadow = `0 0 20px ${node.color}`;
+            
             AudioMgr.playSound('mana');
             await this.sleep(400);
-            el.classList.remove('flash');
+            
+            // Reset Effect (Transparent background)
+            node.el.style.backgroundColor = 'rgba(20, 0, 20, 0.8)';
+            node.el.style.color = node.color;
+            node.el.style.boxShadow = `0 0 5px ${node.color}`;
         }
 
         this.hex.acceptingInput = true;
@@ -3223,9 +3313,19 @@ startQTE(type, x, y, callback) {
     handleHexInput(index) {
         if (!this.hex.acceptingInput) return;
 
-        const el = document.getElementById(`hex-${index}`);
-        el.classList.add('flash');
-        setTimeout(() => el.classList.remove('flash'), 200);
+        const node = this.hex.nodes[index];
+        
+        // Visual Feedback
+        node.el.style.backgroundColor = node.color;
+        node.el.style.color = '#fff';
+        node.el.style.boxShadow = `0 0 20px ${node.color}`;
+        
+        setTimeout(() => {
+            node.el.style.backgroundColor = 'rgba(20, 0, 20, 0.8)';
+            node.el.style.color = node.color;
+            node.el.style.boxShadow = `0 0 5px ${node.color}`;
+        }, 200);
+        
         AudioMgr.playSound('click');
 
         const currentStep = this.hex.playerInput.length;
@@ -3242,7 +3342,7 @@ startQTE(type, x, y, callback) {
                 }
             }
         } else {
-            this.failHexBreach(el);
+            this.failHexBreach(node.el);
         }
     },
 
@@ -5244,9 +5344,13 @@ drawEffects() {
         
         this.lastTime = timestamp;
 
-        // NEW: Update Input Cooldown
         if (this.inputCooldown > 0) {
             this.inputCooldown -= dt;
+        }
+        
+        // NEW: Update Hex Minigame Movement
+        if (this.currentState === STATE.HEX) {
+            this.updateHexBreach(dt);
         }
 
         try {

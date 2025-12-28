@@ -727,28 +727,35 @@ h2 {
 
 /* Hex Breach Minigame */
 .hex-grid {
-    display: grid;
-    grid-template-columns: repeat(3, auto);
-    gap: 15px;
-    margin-top: 30px;
+    position: relative;
+    width: 300px;
+    height: 350px;
+    margin: 30px auto;
+    border: 1px solid #333;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    /* Removed grid display */
 }
 
 .hex-btn {
-    width: 80px;
-    height: 80px;
+    position: absolute; /* Allows movement */
+    width: 60px;
+    height: 60px;
     background: rgba(20, 0, 20, 0.8);
     border: 2px solid #555;
     clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
     cursor: pointer;
-    transition: all 0.1s;
     display: flex;
     justify-content: center;
     align-items: center;
     font-size: 1.5rem;
     color: #333;
+    /* Removed transition to allow smooth frame-by-frame movement */
+    will-change: transform;
 }
 
 .hex-btn:active { transform: scale(0.95); }
+/* .hex-btn.flash and .error are handled via inline styles in JS now for dynamic colors */
 .hex-btn.flash {
     background: var(--neon-green);
     border-color: #fff;
@@ -1270,4 +1277,32 @@ h2 {
 /* Exit State (Slide Out Right) */
 #phase-banner.exit {
     left: 150%;
+}
+
+/* --- INTEL ALERT ANIMATION --- */
+@keyframes pulse-alert {
+    0% { 
+        transform: scale(1); 
+        box-shadow: 0 0 15px var(--neon-blue); 
+        border-color: var(--neon-blue); 
+    }
+    50% { 
+        transform: scale(1.15); 
+        box-shadow: 0 0 30px var(--neon-blue), 0 0 10px #fff; 
+        border-color: #fff; 
+        background: rgba(0, 243, 255, 0.2); 
+        text-shadow: 0 0 10px #fff;
+    }
+    100% { 
+        transform: scale(1); 
+        box-shadow: 0 0 15px var(--neon-blue); 
+        border-color: var(--neon-blue); 
+    }
+}
+
+.intel-alert {
+    animation: pulse-alert 1.5s infinite ease-in-out !important;
+    color: #fff !important;
+    font-weight: 900 !important;
+    z-index: 100;
 }
