@@ -201,7 +201,8 @@ const PLAYER_CLASSES = [
     },
     { 
         id: 'annihilator', name: 'Annihilator', icon: '💥', color: '#ff8800', 
-        desc: 'Deal +50% DMG (All sources).\nNo Rerolls.\nMinion: Bomb Bot (Deals 10 DMG to enemies on death)', 
+        // FIX: Updated description for Blood Reroll
+        desc: 'Deal +50% DMG.\nReroll costs 20% HP.\nMinion: Bomb Bot (Deals 10 DMG to enemies on death)', 
         traits: { dmgMultiplier: 1.5, noRerolls: true, minionName: "Bomb Bot", minionTrait: "Death: 10 DMG to Enemies." } 
     },
     { 
@@ -217,125 +218,121 @@ const PLAYER_CLASSES = [
 ];
 
 const META_UPGRADES = [
-    { id: 'm_life', name: "Gaia's Heart", desc: "Start runs with +25 Max HP.", cost: 400, icon: "💚" },
+    { id: 'm_life', name: "Gaia's Heart", desc: "Start runs with +10 Max HP.", cost: 400, icon: "💚" }, // Reduced from 25
     { id: 'm_mana', name: "Deep Roots", desc: "Start runs with +1 Base Mana.", cost: 600, icon: "💠" },
     { id: 'm_greed', name: "Recycler", desc: "+20% Fragment gain.", cost: 800, icon: "♻️" },
-    { id: 'm_discount', name: "Merchant Protocol", desc: "Shop items are 25% cheaper.", cost: 500, icon: "🏷️" }, // REPLACED
+    { id: 'm_discount', name: "Merchant Protocol", desc: "Shop items are 25% cheaper.", cost: 500, icon: "🏷️" },
     { id: 'm_thorn', name: "Thorns", desc: "Start runs with Spike Armor relic.", cost: 1200, icon: "🌵" },
     { id: 'm_reroll', name: "Tactical Link", desc: "+1 Reroll per turn.", cost: 1000, icon: "🎲" },
-    { id: 'm_dmg', name: "Solar Flare", desc: "All attacks deal +20% Damage.", cost: 1500, icon: "☀️" }, // BUFFED
-    { id: 'm_minion_atk', name: "Nano-Swarm", desc: "Minions deal +50% Damage.", cost: 1100, icon: "🐝" }, // BUFFED
-    { id: 'm_shield', name: "Hardened Hull", desc: "Start combat with 20 Shield.", cost: 900, icon: "🛡️" }, // BUFFED
+    { id: 'm_dmg', name: "Solar Flare", desc: "All attacks deal +20% Damage.", cost: 1500, icon: "☀️" },
+    { id: 'm_minion_atk', name: "Nano-Swarm", desc: "Minions deal +50% Damage.", cost: 1100, icon: "🐝" },
+    { id: 'm_shield', name: "Hardened Hull", desc: "Start combat with 5 Shield.", cost: 900, icon: "🛡️" }, // Reduced from 20
     { id: 'm_relic', name: "Data Cache", desc: "Start run with a random Relic.", cost: 2000, icon: "💾" }
 ];
 
 const UPGRADES_POOL = [
-    { id: 'nano_shield', name: "Nano-Shield", desc: "Start combat with 5 Block.", icon: "🛡️" },
+    { id: 'nano_shield', name: "Nano-Shield", desc: "Start combat with 3 Block.", icon: "🛡️" },
     { id: 'mana_syphon', name: "Mana Syphon", desc: "+1 Mana at start of turn.", icon: "🔮" },
-    { id: 'repair', name: "Field Repair", desc: "Heal 25 HP (Instant).", icon: "💚", instant: true },
+    { id: 'repair', name: "Field Repair", desc: "Heal 10 HP (Instant).", icon: "💚", instant: true },
     { id: 'titan_module', name: "Titan Module", desc: "+25% Damage Output.", icon: "💪", rarity: 'gold' },
-    { id: 'hull_plating', name: "Hull Plating", desc: "+15 Max HP.", icon: "⚙️", instant: true },
+    { id: 'hull_plating', name: "Hull Plating", desc: "+5 Max HP.", icon: "⚙️", instant: true },
     { id: 'minion_core', name: "Minion Core", desc: "Start combat with 1 Wisp.", icon: "🌱" },
-    { id: 'spike_armor', name: "Spike Armor", desc: "Deal 3 DMG when hit.", icon: "🌵" },
+    { id: 'spike_armor', name: "Spike Armor", desc: "Deal 1 DMG when hit.", icon: "🌵" },
     { id: 'crit_lens', name: "Crit Lens", desc: "15% chance to deal Double Damage. (Max 5)", icon: "🎯" },
     { id: 'loot_bot', name: "Loot Bot", desc: "+20% Fragment gain.", icon: "💰" },
-    { id: 'stim_pack', name: "Stim Pack", desc: "Heal 5 HP after combat.", icon: "💉" },
+    { id: 'stim_pack', name: "Stim Pack", desc: "Heal 2 HP after combat.", icon: "💉" },
     { id: 'reroll_chip', name: "Reroll Chip", desc: "+1 Reroll per turn.", icon: "🎲" },
     { id: 'mana_battery', name: "Mana Battery", desc: "+1 Base Mana.", icon: "🔋", instant: true },
     { id: 'shield_gen', name: "Shield Gen", desc: "Gain 2 Block every turn.", icon: "🌫️" },
-    { id: 'wisp_hp', name: "Wisp Vitality", desc: "Minions have +3 HP.", icon: "💖" },
+    { id: 'wisp_hp', name: "Wisp Vitality", desc: "Minions have +2 HP.", icon: "💖" },
     { id: 'second_life', name: "Second Life", desc: "Revive with 50% HP once.", icon: "✝️" },
     { id: 'voodoo_doll', name: "Voodoo Doll", desc: "Unlock 'Voodoo Curse' Dice.", icon: "🧶", rarity: 'red' },
     { id: 'overcharge_chip', name: "Overcharge Chip", desc: "Unlock 'Overcharge' Dice.", icon: "⚡", rarity: 'red' },
     { id: 'manifestor', name: "Manifestor", desc: "+1 Reward Choice. (Unique)", icon: "📜", rarity: 'gold' },
-    { id: 'brutalize', name: "Brutalize", desc: "Killing a minion deals (its DMG + 3) to others.", icon: "😤" },
+    { id: 'brutalize', name: "Brutalize", desc: "Killing a minion deals (its DMG + 2) to others.", icon: "😤" },
     { id: 'relentless', name: "Relentless", desc: "3rd Attack in a turn deals TRIPLE damage.", icon: "🔥" },
-
-    // NEW UPGRADES
     { id: 'reckless_drive', name: "Reckless Drive", desc: "Unlock 'Reckless Charge' Dice.", icon: "🐂", rarity: 'red' },
-    { id: 'static_field', name: "Static Field", desc: "Deal 5 DMG to random enemy at start of turn.", icon: "⚡" },
+    { id: 'static_field', name: "Static Field", desc: "Deal 2 DMG to random enemy at start of turn.", icon: "⚡" },
     { id: 'emergency_kit', name: "Emergency Kit", desc: "Heal 20% Max HP if you drop below 30% HP (Once/Combat).", icon: "⛑️" },
-    { id: 'gamblers_chip', name: "Gambler's Chip", desc: "+1 Reroll, but -5 Max HP.", icon: "🎰" },
+    { id: 'gamblers_chip', name: "Gambler's Chip", desc: "+2 Rerolls per turn, but -5 Max HP.", icon: "🎰" }, 
     { id: 'hologram', name: "Hologram", desc: "10% chance to dodge an attack completely.", icon: "👻" },
     { id: 'solar_battery', name: "Solar Battery", desc: "Every 3rd turn, gain increasing Mana. (1, 3, 5...)", icon: "☀️" },
-    { id: 'neural_link', name: "Neural Link", desc: "Minions gain +2 HP and +1 DMG.", icon: "🔗" },
+    { id: 'neural_link', name: "Neural Link", desc: "Minions gain +1 HP and +1 DMG.", icon: "🔗" },
     { id: 'recycle_bin', name: "Recycle Bin", desc: "Gaining Mana also heals 1 HP.", icon: "♻️" },
-    { id: 'firewall', name: "Firewall", desc: "First unblocked damage capped at 50. (Stacks lower cap)", icon: "🧱" },
+    // FIX: Updated Description
+    { id: 'firewall', name: "Firewall", desc: "First unblocked damage capped at 20. (Stacks improve cap)", icon: "🧱" }, 
     { id: 'thorn_mail', name: "Thorn Mail", desc: "Gain 1 Block whenever you deal damage.", icon: "🧥" },
     { id: 'data_miner', name: "Data Miner", desc: "Gain 5 Fragments if you end combat with full HP.", icon: "⛏️" }
 ];
 
 const DICE_TYPES = {
-    ATTACK: { icon: '🗡️', color: '#ff0055', desc: 'Deal 5 damage.\n[QTE]: Crit for x1.3', cost: 0, target: 'enemy' },
-    DEFEND: { icon: '🛡️', color: '#00f3ff', desc: 'Gain 5 Shield.', cost: 0, target: 'self' },
+    ATTACK: { icon: '🗡️', color: '#ff0055', desc: 'Deal 2 damage.\n[QTE]: Crit for x1.3', cost: 0, target: 'enemy' },
+    DEFEND: { icon: '🛡️', color: '#00f3ff', desc: 'Gain 3 Shield.', cost: 0, target: 'self' },
     MANA:   { icon: '💠', color: '#ffd700', desc: 'Gain 1 Mana.', cost: 0, target: 'self' },
     MINION: { icon: '🌱', color: '#00ff99', desc: 'Summon Wisp.\nDrag to Wisp to UPGRADE.', cost: 0, target: 'any' },
     
-    // CHANGED: Added QTE description
-    EARTHQUAKE: { icon: '📉', color: '#ff8800', desc: 'Deal 5 DMG to ALL enemies.\n[QTE]: Crit for x1.3', cost: 2, isSkill: true, target: 'all_enemies' },
-    METEOR:     { icon: '☄️', color: '#bc13fe', desc: 'Deal 30 DMG to target.\n[QTE]: Crit for x1.3', cost: 5, isSkill: true, target: 'enemy' },
+    EARTHQUAKE: { icon: '📉', color: '#ff8800', desc: 'Deal 2 DMG to ALL enemies.\n[QTE]: Crit for x1.3', cost: 2, isSkill: true, target: 'all_enemies' },
+    METEOR:     { icon: '☄️', color: '#bc13fe', desc: 'Deal 12 DMG to target.\n[QTE]: Crit for x1.3', cost: 5, isSkill: true, target: 'enemy' },
     CONSTRICT:  { icon: '⛓️', color: '#ff0055', desc: 'Reduce Enemy Atk and Healing by 50% for 2 turns.', cost: 3, isSkill: true, target: 'enemy' },
-    VOODOO:     { icon: '☠️', color: '#ff0000', desc: 'Apply Curse: Deal 100 Base DMG after 3 turns.', cost: 9, isSkill: true, locked: true, target: 'enemy' },
+    VOODOO:     { icon: '☠️', color: '#ff0000', desc: 'Apply Curse: Deal 30 Base DMG after 3 turns.', cost: 9, isSkill: true, locked: true, target: 'enemy' },
     OVERCHARGE: { icon: '⚡', color: '#ff4400', desc: 'Enemy: +25% Dmg Dealt, +50% Dmg Taken.', cost: 1, isSkill: true, locked: true, target: 'enemy' },
-    
     RECKLESS_CHARGE: { icon: '🐂', color: '#ff2200', desc: 'Next Attack x2 DMG.\nTake x3 DMG until next turn.', cost: 2, isSkill: true, locked: true, target: 'self' }
 };
 
 const DICE_UPGRADES = {
-    ATTACK:     { name: "Blade Storm", desc: "Deal 8 DMG. 25% chance to hit ALL enemies.", cost: 190, icon: "⚔️" },
-    DEFEND:     { name: "Aegis Field", desc: "Gain 8 Shield. All allies gain 3 Shield.", cost: 175, icon: "🏰" },
-    MANA:       { name: "Soul Battery", desc: "Gain 2 Mana and Heal 2 HP.", cost: 200, icon: "🔋" },
-    MINION:     { name: "Alpha Call", desc: "Summon Level 2 Wisp.\n(+5 Block, +5 DMG)", cost: 200, icon: "🌳" },
-    // CHANGED: Added QTE description
-    EARTHQUAKE: { name: "Cataclysm", desc: "Deal 8 DMG to ALL. Apply WEAK (50% less dmg).\n[QTE]: Crit x1.3.", cost: 225, icon: "🌋" },
-    METEOR:     { name: "Starfall", desc: "Deal 50 DMG. [QTE]: Crit x1.3.", cost: 350, icon: "🌠" },
+    ATTACK:     { name: "Blade Storm", desc: "Deal 4 DMG. 25% chance to hit ALL enemies.", cost: 190, icon: "⚔️" },
+    DEFEND:     { name: "Aegis Field", desc: "Gain 5 Shield. All allies gain 2 Shield.", cost: 175, icon: "🏰" },
+    MANA:       { name: "Soul Battery", desc: "Gain 2 Mana and Heal 1 HP.", cost: 200, icon: "🔋" },
+    MINION:     { name: "Alpha Call", desc: "Summon Level 2 Wisp.\n(+3 Block, +2 DMG)", cost: 200, icon: "🌳" },
+    EARTHQUAKE: { name: "Cataclysm", desc: "Deal 4 DMG to ALL. Apply WEAK (50% less dmg).\n[QTE]: Crit x1.3.", cost: 225, icon: "🌋" },
+    METEOR:     { name: "Starfall", desc: "Deal 20 DMG. [QTE]: Crit x1.3.", cost: 350, icon: "🌠" },
     CONSTRICT:  { name: "Digital Rot", desc: "Reduce Atk/Heal by 75% for 3 turns.", cost: 250, icon: "🕸️" },
-    VOODOO:     { name: "Void Curse", desc: "Apply Curse: After 3 turns, 50% chance for 500 Base DMG, else 100 Base DMG.", cost: 350, icon: "🕳️" },
+    VOODOO:     { name: "Void Curse", desc: "Apply Curse: After 3 turns, 50% chance for 150 Base DMG, else 30 Base DMG.", cost: 350, icon: "🕳️" },
     OVERCHARGE: { name: "Hyper Beam", desc: "Enemy takes +100% Damage from all sources.", cost: 300, icon: "☢️" },
     RECKLESS_CHARGE: { name: "Vicious Charge", desc: "Next Attack x3 DMG.\nTake +50% DMG until next turn.", cost: 500, icon: "👹" }
 };
 
 const ENEMIES = [
-    // Sector 1
-    { name: "Sentry Drone", hp: 30, dmg: 5, sector: 1 },
-    { name: "Heavy Loader", hp: 45, dmg: 8, sector: 1 },
-    { name: "Cyber Arachnid", hp: 40, dmg: 12, sector: 1 },
+    // Sector 1 (Damage Doubled)
+    { name: "Sentry Drone", hp: 15, dmg: 6, sector: 1 }, 
+    { name: "Heavy Loader", hp: 22, dmg: 8, sector: 1 }, 
+    { name: "Cyber Arachnid", hp: 20, dmg: 12, sector: 1 }, 
     // Sector 2
-    { name: "Cryo Bot", hp: 60, dmg: 10, sector: 2 },
-    { name: "Data Leech", hp: 50, dmg: 15, sector: 2 },
-    { name: "Firewall Sentinel", hp: 80, dmg: 8, sector: 2 },
+    { name: "Cryo Bot", hp: 30, dmg: 10, sector: 2 }, 
+    { name: "Data Leech", hp: 25, dmg: 14, sector: 2 }, 
+    { name: "Firewall Sentinel", hp: 40, dmg: 8, sector: 2 }, 
     // Sector 3
-    { name: "Magma Construct", hp: 100, dmg: 18, sector: 3 },
-    { name: "Core Guardian", hp: 120, dmg: 12, sector: 3 },
-    { name: "Nullifier", hp: 90, dmg: 25, sector: 3 }
+    { name: "Magma Construct", hp: 50, dmg: 18, sector: 3 }, 
+    { name: "Core Guardian", hp: 60, dmg: 12, sector: 3 }, 
+    { name: "Nullifier", hp: 45, dmg: 24, sector: 3 } 
 ];
 
 const BOSS_DATA = {
     1: { 
         name: "OMEGA CORE", 
         subtitle: "THE FIRST FIREWALL",
-        hp: 300, 
-        dmg: 15, 
+        hp: 150, 
+        dmg: 20, // Doubled from 10
         actionsPerTurn: 2,
-        color: '#ff0000', // Red
+        color: '#ff0000', 
         moves: ['attack', 'shield', 'summon']
     },
     2: { 
         name: "THE ARCHITECT", 
         subtitle: "HUMANITY'S RECKONING",
-        hp: 500, 
-        dmg: 20, 
+        hp: 250, 
+        dmg: 24, // Doubled from 12
         actionsPerTurn: 2,
-        color: '#bc13fe', // Purple
+        color: '#bc13fe', 
         moves: ['attack', 'buff', 'debuff', 'multi_attack']
     },
     3: { 
         name: "SYSTEM PRIME", 
         subtitle: "GOD OF SILICON",
-        hp: 800, 
-        dmg: 30, 
+        hp: 400, 
+        dmg: 34, // Doubled from 17
         actionsPerTurn: 3,
-        color: '#ffd700', // Gold
+        color: '#ffd700', 
         moves: ['attack', 'consume', 'cataclysm', 'shield']
     }
 };
@@ -346,9 +343,9 @@ const EVENTS_DB = [
         desc: "You intercept an encrypted transmission. It seems to be a distress signal from a rogue AI.",
         options: [
             { 
-                text: "Decrypt (-10 HP, +40 Fragments)", 
+                text: "Decrypt (-4 HP, +40 Fragments)", // Reduced from 10
                 effect: (g) => { 
-                    g.player.takeDamage(10); 
+                    g.player.takeDamage(4); 
                     g.techFragments += 40; 
                     return "You gained 40 Fragments."; 
                 } 
@@ -371,32 +368,29 @@ const EVENTS_DB = [
                 } 
             },
             { 
-                text: "Salvage Parts (+15 HP)", 
+                text: "Salvage Parts (+5 HP)", // Reduced from 15
                 effect: (g) => { 
-                    g.player.heal(15); 
-                    return "Restored 15 HP."; 
+                    g.player.heal(5); 
+                    return "Restored 5 HP."; 
                 } 
             }
         ]
     },
-    // NEW EVENTS
     {
         title: "MALFUNCTIONING FABRICATOR",
         desc: "An unstable upgrade station sparks wildly. You might be able to force an upgrade, but it will hurt.",
-        // FIX: Only appear if player has upgrades available
         condition: (g) => Object.keys(DICE_UPGRADES).some(k => !g.player.hasDiceUpgrade(k)),
         options: [
             { 
-                text: "Force Upgrade (-20 HP)", 
+                text: "Force Upgrade (-8 HP)", // Reduced from 20
                 effect: (g) => { 
-                    g.player.takeDamage(20);
+                    g.player.takeDamage(8);
                     const available = Object.keys(DICE_UPGRADES).filter(k => !g.player.hasDiceUpgrade(k));
                     if (available.length > 0) {
                         const up = available[Math.floor(Math.random() * available.length)];
                         g.player.diceUpgrades.push(up);
                         return "SYSTEM UPGRADED: " + DICE_UPGRADES[up].name;
                     } else {
-                        // Fallback just in case
                         g.techFragments += 100;
                         return "Maximum Upgrades Reached. (+100 Frags)";
                     }
@@ -445,15 +439,15 @@ const EVENTS_DB = [
         desc: "This node is leaking data. You can absorb it, but it will corrupt your max integrity.",
         options: [
             { 
-                text: "Absorb (-10 Max HP, +150 Fragments)", 
+                text: "Absorb (-4 Max HP, +150 Fragments)", // Reduced from 10
                 effect: (g) => { 
-                    g.player.maxHp -= 10;
+                    g.player.maxHp -= 4;
                     if (g.player.currentHp > g.player.maxHp) g.player.currentHp = g.player.maxHp;
                     g.techFragments += 150;
                     return "Data absorbed. Integrity compromised.";
                 } 
             },
-            { text: "Purge (+20 HP)", effect: (g) => { g.player.heal(20); return "Node stabilized."; } }
+            { text: "Purge (+7 HP)", effect: (g) => { g.player.heal(7); return "Node stabilized."; } } // Reduced from 20
         ]
     },
     {
@@ -831,7 +825,6 @@ class Entity {
     takeDamage(amount, source = null, suppressBlockText = false) {
         let actualDmg = amount;
 
-        // Apply Player Incoming Damage Multiplier
         if (this instanceof Player && this.incomingDamageMult > 1) {
             actualDmg = Math.floor(actualDmg * this.incomingDamageMult);
         }
@@ -857,10 +850,12 @@ class Entity {
             }
         }
 
-        // 2. Firewall Relic
+        // 2. Firewall Relic (FIXED LOGIC)
         if (this instanceof Player && this.hasRelic('firewall') && !this.firewallTriggered && actualDmg > 0) {
             const stacks = this.relics.filter(r => r.id === 'firewall').length;
-            const cap = 50 - ((stacks - 1) * 10); 
+            let cap = 20; // Default x1
+            if (stacks === 2) cap = 10;
+            if (stacks >= 3) cap = 0;
             
             if (actualDmg > cap) {
                 actualDmg = cap;
@@ -873,7 +868,6 @@ class Entity {
             actualDmg += 1;
         }
         
-        // Hologram Relic
         if (this instanceof Player && this.hasRelic('hologram') && Math.random() < 0.1) {
             actualDmg = 0;
             ParticleSys.createFloatingText(this.x, this.y - 60, "DODGE!", "#fff");
@@ -889,7 +883,6 @@ class Entity {
              ParticleSys.createFloatingText(this.x, this.y - 60, "-" + actualDmg, '#ff3333');
              AudioMgr.playSound('hit');
         } else {
-             // FIX: Suppress "BLOCKED" if requested (e.g. during QTE which shows its own text)
              if (amount > 0 && !suppressBlockText) ParticleSys.createFloatingText(this.x, this.y - 60, "BLOCKED", COLORS.SHIELD);
              AudioMgr.playSound('defend');
         }
@@ -897,9 +890,8 @@ class Entity {
         if(this instanceof Player && actualDmg > 0) {
             Game.shake(5);
             
-            // Spike Logic
             if(this.hasRelic('spike_armor')) {
-                let spikeDmg = 3;
+                let spikeDmg = 1; // Reduced base
                 const spikes = this.relics.filter(r => r.id === 'spike_armor').length;
                 spikeDmg *= spikes;
                 
@@ -1037,13 +1029,14 @@ class Entity {
 
 class Player extends Entity {
     constructor(classConfig) {
-        super(540, 1150, classConfig.name, 100); 
+        // FIX: Base HP set to 30
+        super(540, 1150, classConfig.name, 30); 
         this.classColor = classConfig.color || '#00ff99'; 
         this.traits = classConfig.traits || {};
         this.baseMana = this.traits.baseMana || 3;
         
-        // FIX: Increased HP Bonus
-        if(Game.hasMetaUpgrade('m_life')) this.maxHp += 25;
+        // FIX: Reduced Meta HP Bonus
+        if(Game.hasMetaUpgrade('m_life')) this.maxHp += 10;
         
         if(Game.hasMetaUpgrade('m_mana')) this.baseMana += 1;
         if(Game.hasMetaUpgrade('m_thorn')) this.addRelic({ id: 'spike_armor', name: "Spike Armor", desc: "Meta Upgrade", icon: "🌵" });
@@ -1064,7 +1057,6 @@ class Player extends Entity {
         this.nextAttackMult = 1;
         this.incomingDamageMult = 1;
         
-        // Spawn Timer for visual
         this.spawnTimer = 0;
         
         if (this.traits.startMinions) {
@@ -1076,6 +1068,14 @@ class Player extends Entity {
     
     addRelic(relic) {
         this.relics.push(relic);
+        
+        // FIX: Handle immediate effects of persistent relics
+        if (relic.id === 'gamblers_chip') {
+            this.maxHp = Math.max(1, this.maxHp - 5);
+            if (this.currentHp > this.maxHp) this.currentHp = this.maxHp;
+            ParticleSys.createFloatingText(this.x, this.y - 100, "-5 MAX HP", "#ff0000");
+        }
+        
         Game.renderRelics(); 
     }
     
@@ -1089,7 +1089,7 @@ class Player extends Entity {
 }
 
 class Minion extends Entity {
-    constructor(x, y, id, isPlayerSide) {
+    constructor(x, y, id, isPlayerSide, tier = 1) {
         let name = isPlayerSide ? "Wisp Lv." + id : "Bot Unit " + id;
         
         if (isPlayerSide && Game.player) {
@@ -1100,14 +1100,33 @@ class Minion extends Entity {
                  this.maxHp = 1;
                  this.currentHp = 1;
              }
+        } else {
+            // Enemy Minion Names based on Tier
+            if (tier === 2) name = "Elite Drone " + id;
+            if (tier === 3) name = "Core Guard " + id;
         }
         
-        super(x, y, name, 5);
+        // Base Stats
+        let hp = isPlayerSide ? 2 : 2;
+        
+        // Tier Scaling (Enemy Only)
+        if (!isPlayerSide) {
+            if (tier === 2) hp = 8;  // Elite Minion HP
+            if (tier === 3) hp = 15; // Boss Minion HP
+        }
+
+        super(x, y, name, hp);
         this.radius = 75; 
         this.dmg = isPlayerSide ? 1 : 2;
-        
-        // NEW: Charge system for Bomb Bots
+        this.tier = tier;
         this.charges = 1; 
+
+        // Enemy Minion Damage Scaling (DOUBLED)
+        if (!isPlayerSide) {
+            this.dmg = 4; // Base Tier 1 (was 2)
+            if (tier === 2) this.dmg = 8;  // Tier 2 (was 4)
+            if (tier === 3) this.dmg = 12; // Tier 3 (was 6)
+        }
 
         if (isPlayerSide && Game.hasMetaUpgrade('m_minion_atk')) {
             this.dmg = Math.floor(this.dmg * 1.5); 
@@ -1119,18 +1138,17 @@ class Minion extends Entity {
         
         if(isPlayerSide && Game.player && Game.player.hasRelic('wisp_hp')) {
             const stacks = Game.player.relics.filter(r => r.id === 'wisp_hp').length;
-            this.maxHp += (3 * stacks);
-            this.currentHp += (3 * stacks);
+            this.maxHp += (2 * stacks);
+            this.currentHp += (2 * stacks);
         }
     }
 
     upgrade() {
-        this.maxHp += 2;
-        this.currentHp += 2;
+        this.maxHp += 1;
+        this.currentHp += 1;
         this.dmg += 1;
         this.level++;
         
-        // NEW: Upgrading a Bomb Bot adds a charge (survives another turn)
         if (this.name.includes("Bomb")) {
             this.charges++;
             ParticleSys.createFloatingText(this.x, this.y - 100, "+1 CHARGE", COLORS.ORANGE);
@@ -1200,41 +1218,61 @@ class Enemy extends Entity {
     }
 
     generateSingleIntent() {
+        // NEW: Targeting Logic (50% Player, 50% Random Minion)
+        const getTarget = () => {
+            const minions = Game.player.minions;
+            // If no minions, must hit player
+            if (minions.length === 0) return Game.player;
+            
+            // 50/50 Coin Flip
+            if (Math.random() < 0.5) {
+                return Game.player;
+            } else {
+                // Pick random minion
+                return minions[Math.floor(Math.random() * minions.length)];
+            }
+        };
+
         // 1. Boss Specific Logic
         if (this.isBoss) {
             const moves = this.bossData.moves;
             const roll = moves[Math.floor(Math.random() * moves.length)];
             
-            if (roll === 'attack') return { type: 'attack', val: this.baseDmg };
+            // FIX: Applied getTarget() to attacks
+            if (roll === 'attack') return { type: 'attack', val: this.baseDmg, target: getTarget() };
+            
             if (roll === 'shield') return { type: 'shield', val: 30 };
             if (roll === 'buff') return { type: 'buff', val: 0, secondary: { type: 'buff', id: 'empower'} };
-            if (roll === 'debuff') return { type: 'debuff', val: 10, secondary: { type: 'debuff', id: 'frail'} };
+            
+            // Debuffs usually target the player specifically to hinder them
+            if (roll === 'debuff') return { type: 'debuff', val: 10, secondary: { type: 'debuff', id: 'frail'}, target: Game.player };
             
             if (roll === 'consume') {
-                // Only consume if player has minions
                 if (Game.player.minions.length > 0) return { type: 'consume', val: 0 };
-                return { type: 'attack', val: this.baseDmg * 1.5 }; // Heavy attack fallback
+                // Fallback if no minions: Heavy attack on player
+                return { type: 'attack', val: this.baseDmg * 1.5, target: Game.player }; 
             }
             
             if (roll === 'cataclysm') return { type: 'attack', val: this.baseDmg * 0.5, isAOE: true };
-            if (roll === 'multi_attack') return { type: 'multi_attack', val: Math.floor(this.baseDmg * 0.6), hits: 3 };
+            
+            // FIX: Applied getTarget() to multi-attack
+            if (roll === 'multi_attack') return { type: 'multi_attack', val: Math.floor(this.baseDmg * 0.6), hits: 3, target: getTarget() };
             
             if (roll === 'summon' && this.minions.length < 2) return { type: 'summon', val: 0 };
-            return { type: 'attack', val: this.baseDmg }; // Default
+            
+            // Default
+            return { type: 'attack', val: this.baseDmg, target: getTarget() }; 
         }
 
         // 2. Standard Enemy Logic
-        let target = Game.player;
-        const targets = [Game.player, ...Game.player.minions];
-        if (targets.length > 1) target = targets[Math.floor(Math.random() * targets.length)];
-
         const isLowHp = this.currentHp < this.maxHp * 0.3;
         const roll = Math.random();
 
         if (isLowHp) return { type: 'heal', val: Math.floor(this.maxHp * 0.1) };
         if (this.minions.length < 2 && roll < 0.2) return { type: 'summon', val: 0 };
         
-        return { type: 'attack', val: this.baseDmg, target: target };
+        // FIX: Use 50/50 targeting for standard attacks
+        return { type: 'attack', val: this.baseDmg, target: getTarget() };
     }
 
     updateIntentValues() {
@@ -2637,32 +2675,29 @@ startQTE(type, x, y, callback) {
     },
 
     getRelicDescription(relic, count) {
-        // Special Logic for Relentless
         if (relic.id === 'relentless') {
             if (count === 1) return "3rd Attack in a turn deals TRIPLE damage.";
             if (count === 2) return "2nd Attack in a turn deals TRIPLE damage.";
             return "1st Attack in a turn deals TRIPLE damage.";
         }
 
-        // NEW: Special Logic for Firewall (Cap reduces with stacks: 50 -> 40 -> 30)
+        // FIX: Firewall Logic
         if (relic.id === 'firewall') {
-            const cap = 50 - ((count - 1) * 10);
-            return `First unblocked damage capped at ${cap}.`;
+            if (count === 1) return "First unblocked damage capped at 20.";
+            if (count === 2) return "First unblocked damage capped at 10.";
+            if (count >= 3) return "First unblocked damage reduced to 0.";
         }
 
-	// NEW: Special Logic for Solar Battery (1, 3, 5...)
         if (relic.id === 'solar_battery') {
             const manaAmt = (count * 2) - 1;
             return `Every 3rd turn, gain +${manaAmt} Mana.`;
-	}
+        }
 
-	// NEW: Special Logic for Brutalize
         if (relic.id === 'brutalize') {
-            if (count === 1) return "Killing a minion deals (its DMG + 3) to others.";
-            return `Killing a minion deals ${count}x (its DMG + 3) to others.`;
+            if (count === 1) return "Killing a minion deals (its DMG + 2) to others.";
+            return `Killing a minion deals ${count}x (its DMG + 2) to others.`;
         }
         
-        // Standard Logic
         return relic.desc.replace(/(\d+)/g, (match) => {
             return parseInt(match) * count;
         });
@@ -3163,22 +3198,18 @@ startQTE(type, x, y, callback) {
     generateShop() {
         this.shopInventory = [];
         
-        // FIX: Calculate Discount Multiplier
         const discountMult = this.hasMetaUpgrade('m_discount') ? 0.75 : 1.0;
 
-        // 1. Generate Consumables/Relics
         let items = [
             { 
                 id: 'repair', type: 'item', name: "Nano-Repair", cost: 15, icon: "💚", 
-                desc: "Restores 25 HP.", 
-                action: () => { this.player.heal(25); } 
+                desc: "Restores 10 HP.", 
+                action: () => { this.player.heal(10); } 
             },
-            // ... (Keep existing items list) ...
-            // I will assume the list is the same as before, just ensure you apply the discount below
-             { 
+            { 
                 id: 'hp_up', type: 'item', name: "Power Cell", cost: 30, icon: "⚙️", 
-                desc: "Max HP +10.", 
-                action: () => { this.player.maxHp += 10; this.player.currentHp += 10; } 
+                desc: "Max HP +5.", 
+                action: () => { this.player.maxHp += 5; this.player.currentHp += 5; } 
             },
             { 
                 id: 'mana_up', type: 'item', name: "Mana Core", cost: 50, icon: "💠", 
@@ -3187,9 +3218,9 @@ startQTE(type, x, y, callback) {
             },
             { 
                 id: 'nano_shield', type: 'item', name: "Shield Matrix", cost: 40, icon: "🛡️", 
-                desc: "Start combat with +5 Block. (Stacks)",
+                desc: "Start combat with +3 Block. (Stacks)", 
                 action: () => { 
-                    this.player.addRelic({ id: 'nano_shield', name: "Nano-Shield", desc: "Start combat with 5 Block.", icon: "🛡️" }); 
+                    this.player.addRelic({ id: 'nano_shield', name: "Nano-Shield", desc: "Start combat with 3 Block.", icon: "🛡️" }); 
                 } 
             },
             { 
@@ -3201,9 +3232,9 @@ startQTE(type, x, y, callback) {
             },
             { 
                 id: 'spike_armor', type: 'item', name: "Thorn Plating", cost: 45, icon: "🌵", 
-                desc: "Deal 3 DMG when hit. (Stacks)",
+                desc: "Deal 1 DMG when hit. (Stacks)", 
                 action: () => { 
-                    this.player.addRelic({ id: 'spike_armor', name: "Spike Armor", desc: "Deal 3 DMG when hit.", icon: "🌵" }); 
+                    this.player.addRelic({ id: 'spike_armor', name: "Spike Armor", desc: "Deal 1 DMG when hit.", icon: "🌵" }); 
                 } 
             },
             { 
@@ -3228,6 +3259,7 @@ startQTE(type, x, y, callback) {
         const holoCount = this.player.relics.filter(r => r.id === 'hologram').length;
         if(holoCount >= 3) items = items.filter(i => i.id !== 'hologram');
 
+        // FIX: Filter Firewall if maxed
         const fireCount = this.player.relics.filter(r => r.id === 'firewall').length;
         if(fireCount >= 3) items = items.filter(i => i.id !== 'firewall');
 
@@ -3237,13 +3269,11 @@ startQTE(type, x, y, callback) {
             [items[i], items[j]] = [items[j], items[i]];
         }
         
-        // Limit to 3 items
         const selectedItems = items.slice(0, 3);
 
         selectedItems.forEach(item => {
             const currentCount = this.player.relics.filter(r => r.id === item.id).length;
             item.desc = this.getRelicDescription(item, currentCount + 1);
-            // FIX: Apply Discount
             item.cost = Math.floor(item.cost * discountMult);
         });
 
@@ -3277,7 +3307,6 @@ startQTE(type, x, y, callback) {
                 isDiscount = true;
             }
             
-            // FIX: Apply Meta Discount on top of random discount
             cost = Math.floor(cost * discountMult);
             
             this.shopInventory.push({
@@ -3736,7 +3765,6 @@ async startCombat(type) {
         let template;
         
         if (isBoss) {
-            // Use new BOSS_DATA
             template = BOSS_DATA[this.sector] || BOSS_DATA[1];
         } else {
             let pool = ENEMIES.filter(e => e.sector === this.sector);
@@ -3757,7 +3785,7 @@ async startCombat(type) {
         // Create New Enemy
         this.enemy = new Enemy(template, level, isElite);
         
-        // Apply Scaling (Bosses in BOSS_DATA are already scaled base, but we apply sector mult if looping)
+        // Apply Scaling
         if (!isBoss) {
             this.enemy.maxHp = Math.floor(this.enemy.maxHp * sectorMult);
             this.enemy.currentHp = this.enemy.maxHp;
@@ -3781,10 +3809,9 @@ async startCombat(type) {
         }
 
         if (isElite) {
-             const m1 = new Minion(0, 0, 1, false); m1.upgrade();
-             const m2 = new Minion(0, 0, 2, false); m2.upgrade();
-             m1.maxHp = Math.floor(m1.maxHp * sectorMult); m1.currentHp = m1.maxHp;
-             m2.maxHp = Math.floor(m2.maxHp * sectorMult); m2.currentHp = m2.maxHp;
+             // FIX: Spawn Tier 2 Minions
+             const m1 = new Minion(0, 0, 1, false, 2); 
+             const m2 = new Minion(0, 0, 2, false, 2);
              this.enemy.minions.push(m1, m2);
              ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "ELITE PROTOCOL", "#f00");
              
@@ -3795,13 +3822,12 @@ async startCombat(type) {
              });
         }
 
-        // Boss Minions (Specific to Sector 1 Boss usually, or generic)
         if (isBoss && this.sector === 1) {
-             const m1 = new Minion(0, 0, 1, false);
-             m1.maxHp = 30; m1.currentHp = 30; m1.dmg = 5;
-             const m2 = new Minion(0, 0, 2, false);
-             m2.maxHp = 30; m2.currentHp = 30; m2.dmg = 5;
+             // FIX: Spawn Tier 3 Minions
+             const m1 = new Minion(0, 0, 1, false, 3);
+             const m2 = new Minion(0, 0, 2, false, 3);
              this.enemy.minions.push(m1, m2);
+             ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "GUARDIANS ACTIVE", "#f00");
         }
 
         // Trigger Spawn Animations
@@ -3812,18 +3838,15 @@ async startCombat(type) {
 
         this.changeState(STATE.COMBAT);
         
-        // NEW: Boss Intro Cinematic
         if (isBoss) {
             await this.showPhaseBanner(this.enemy.name, this.enemy.bossData.subtitle, 'enemy');
         }
         
-        // Wait for spawn to finish visually
         await this.sleep(500);
 
         this.enemy.decideTurn();
         this.startTurn();
     },
-
 
 async startTurn() { 
         // Lock Input
@@ -3882,6 +3905,9 @@ async startTurn() {
         }
         
         let rerollStacks = this.player.relics.filter(r => r.id === 'reroll_chip').length;
+        // FIX: Count Gambler's Chips
+        let gamblerStacks = this.player.relics.filter(r => r.id === 'gamblers_chip').length;
+        
         if(this.hasMetaUpgrade('m_reroll')) rerollStacks++;
 
         this.player.updateEffects();
@@ -3902,7 +3928,7 @@ async startTurn() {
              this.enemy.decideTurn();
         }
 
-         this.rerolls = (this.player.traits.noRerolls) ? 0 : (2 + rerollStacks);
+         this.rerolls = (this.player.traits.noRerolls) ? 0 : (2 + rerollStacks + (gamblerStacks * 2));
         
         // Tactician/Arcanist logic
         if (this.deadMinionsThisTurn > 0) {
@@ -4274,10 +4300,9 @@ async startTurn() {
             } else if (type === 'MINION') {
                 if (target instanceof Minion && target.isPlayerSide) {
                     if (isUpgraded) {
-                        // Alpha Call Upgrade Logic
                         target.maxHp += 10; target.currentHp += 10; target.dmg += 5; target.level++;
                         
-                        // NEW: Add charge for Bomb Bot on Alpha Call
+                        // FIX: Add charge for Bomb Bot on Alpha Call
                         if (target.name.includes("Bomb")) {
                             target.charges++;
                             ParticleSys.createFloatingText(target.x, target.y - 120, "+1 CHARGE", COLORS.ORANGE);
@@ -4292,14 +4317,13 @@ async startTurn() {
                 } else {
                     if (this.player.minions.length < this.player.maxMinions) {
                         const m = new Minion(0, 0, this.player.minions.length + 1, true);
-                        
                         m.spawnTimer = 1.0; 
 
                         if(isUpgraded) {
                             m.upgrade(); 
                             m.addShield(5); 
                             m.dmg += 5;
-                            // Alpha Call on spawn also adds charge via m.upgrade() called above
+                            // Note: m.upgrade() already handles adding the charge for Bomb Bots
                             ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "ALPHA CALL", COLORS.GOLD);
                         }
                         if(this.player.traits.startShield) m.addShield(10); 
@@ -4453,8 +4477,7 @@ async startTurn() {
 
     rerollDice() {
         // TUTORIAL RIGGING
-        if (this.currentState === STATE.TUTORIAL_COMBAT && this.tutorialStep === 7) {
-            // Give 1 Minion, 1 Attack
+        if (this.currentState === STATE.TUTORIAL_COMBAT && this.tutorialStep === 10) {
             this.dicePool = [
                 { id: 0, type: 'MINION', used: false, selected: false },
                 { id: 1, type: 'ATTACK', used: false, selected: false }
@@ -4462,17 +4485,40 @@ async startTurn() {
             this.rerolls--; 
             this.renderDiceUI();
             
-            // Advance to Summon Step
-            this.tutorialStep = 8;
+            this.tutorialStep = 11;
             this.updateTutorialStep();
             return;
         }
 
         // STANDARD LOGIC
-        if(this.rerolls <= 0) return;
+        const isAnnihilator = this.player.classId === 'annihilator';
+        
+        // Allow if rerolls > 0 OR (rerolls <= 0 AND is Annihilator)
+        if (this.rerolls <= 0 && !isAnnihilator) return;
+
         let toReroll = this.dicePool.filter(d => d.selected && !d.used);
         if(toReroll.length === 0) toReroll = this.dicePool.filter(d => !d.used);
         if(toReroll.length === 0) return;
+
+        // Calculate Cost
+        let hpCost = 0;
+        if (this.rerolls <= 0 && isAnnihilator) {
+            hpCost = Math.floor(this.player.maxHp * 0.2);
+            // Prevent suicide reroll
+            if (this.player.currentHp <= hpCost) {
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 50, "HP TOO LOW", "#ff0000");
+                AudioMgr.playSound('defend'); // Error sound
+                return; 
+            }
+        }
+
+        // Apply Cost
+        if (hpCost > 0) {
+            this.player.takeDamage(hpCost);
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `BLOOD REROLL`, "#ff0000");
+        } else {
+            this.rerolls--;
+        }
 
         const diceEls = document.querySelectorAll('.die');
         diceEls.forEach((el, idx) => {
@@ -4495,7 +4541,7 @@ async startTurn() {
                 d.type = availableTypes[Math.floor(Math.random() * availableTypes.length)];
                 d.selected = false;
             });
-            this.rerolls--;
+            
             this.renderDiceUI();
         }, 300);
     },
@@ -4999,7 +5045,7 @@ drawEffects() {
     },
 
     async endTurn() {
-        // --- TUTORIAL LOGIC ---
+        // ... [KEEP TUTORIAL LOGIC] ...
         if (this.currentState === STATE.TUTORIAL_COMBAT && this.tutorialStep === 8) {
             this.tutorialStep = 9;
             this.updateTutorialStep(); 
@@ -5041,9 +5087,18 @@ drawEffects() {
                 if (this.player.traits.minionName === "Bomb Bot") {
                     ParticleSys.createExplosion(t.x, t.y, 30, "#ff8800");
                     AudioMgr.playSound('explosion');
+                    
                     if(this.enemy.takeDamage(10) && this.enemy.currentHp <= 0) { this.winCombat(); return; }
-                    this.enemy.minions.forEach(m => m.takeDamage(10));
-                    this.player.minions = this.player.minions.filter(min => min !== m); 
+                    this.enemy.minions.forEach(em => em.takeDamage(10));
+                    this.enemy.minions = this.enemy.minions.filter(em => em.currentHp > 0);
+
+                    m.charges--;
+                    if (m.charges <= 0) {
+                        this.player.minions = this.player.minions.filter(min => min !== m); 
+                    } else {
+                        ParticleSys.createFloatingText(m.x, m.y - 50, `${m.charges} CHARGES LEFT`, COLORS.GOLD);
+                    }
+
                 } else {
                     this.triggerVFX('nature_dart', m, t, (multiplier = 1.0) => {
                         const dmg = Math.floor(m.dmg * multiplier);
@@ -5068,13 +5123,11 @@ drawEffects() {
         if(!this.enemy || this.enemy.currentHp <= 0) { this.winCombat(); return; }
 
         // --- ENEMY INTENT PHASE ---
-        // Loop through all intents
         for (const intent of this.enemy.nextIntents) {
             if (this.enemy.currentHp <= 0) break;
             
             this.enemy.playAnim('lunge');
             
-            // 1. BUFFS / DEBUFFS / SHIELDS
             if (intent.type === 'buff') {
                 this.enemy.addShield(20);
                 this.enemy.minions.forEach(m => m.addShield(10));
@@ -5086,13 +5139,11 @@ drawEffects() {
                 ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "VIRUS UPLOAD", "#00ff00");
                 AudioMgr.playSound('attack');
             }
-            // FIX: Added Shield Logic
             else if (intent.type === 'shield') {
                 this.enemy.addShield(intent.val);
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "SHIELD UP", COLORS.SHIELD);
                 AudioMgr.playSound('defend');
             }
-            // 2. CONSUME
             else if (intent.type === 'consume') {
                 if (this.player.minions.length > 0) {
                     const snack = this.player.minions[0];
@@ -5109,7 +5160,6 @@ drawEffects() {
                 }
             }
             
-            // 3. ATTACKS
             if (intent.type === 'attack' || intent.type === 'multi_attack') {
                 const target = intent.target || this.player;
                 const validTarget = (target.currentHp > 0) ? target : this.player;
@@ -5151,7 +5201,9 @@ drawEffects() {
             else if (intent.type === 'summon') {
                 await this.sleep(300);
                 if(this.enemy.minions.length < 2) {
-                    const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false);
+                    // FIX: Spawn correct tier based on enemy type
+                    const tier = this.enemy.isBoss ? 3 : (this.enemy.isElite ? 2 : 1);
+                    const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false, tier);
                     m.spawnTimer = 1.0; 
                     this.enemy.minions.push(m);
                     ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "REINFORCING", "#fff");
@@ -5170,8 +5222,13 @@ drawEffects() {
             const targets = [this.player, ...this.player.minions];
             const t = targets[Math.floor(Math.random() * targets.length)];
             if(t) {
-                // FIX: Ensure micro_laser triggers correctly
                 this.triggerVFX('micro_laser', min, t, () => {
+                    // FIX: Leech Logic for Tier 2+
+                    if (min.tier >= 2 && this.enemy.currentHp > 0) {
+                        this.enemy.heal(2);
+                        ParticleSys.createFloatingText(this.enemy.x, this.enemy.y, "LEECH", "#00ff00");
+                    }
+
                     if (t.takeDamage(min.dmg, min) && t === this.player) { this.gameOver(); return; }
                     if (t !== this.player && t.currentHp <= 0) {
                          if (this.player.traits.maxMinions === 3 && Math.random() < 0.3) { 
@@ -5195,7 +5252,6 @@ drawEffects() {
         
         this.enemy.minions = this.enemy.minions.filter(m => m.currentHp > 0);
         
-        // Wait for projectiles to clear
         while (this.effects.some(e => e.type === 'micro_laser' && !e.parried)) {
             await this.sleep(100);
         }
@@ -5287,7 +5343,7 @@ drawEffects() {
         if(this.player.hasRelic('manifestor')) pool = pool.filter(i => i.id !== 'manifestor');
         if(this.player.hasRelic('voodoo_doll')) pool = pool.filter(i => i.id !== 'voodoo_doll');
         if(this.player.hasRelic('overcharge_chip')) pool = pool.filter(i => i.id !== 'overcharge_chip');
-        if(this.player.hasRelic('reckless_drive')) pool = pool.filter(i => i.id !== 'reckless_drive'); // NEW
+        if(this.player.hasRelic('reckless_drive')) pool = pool.filter(i => i.id !== 'reckless_drive'); 
         
         const coreCount = this.player.relics.filter(r => r.id === 'minion_core').length;
         if(coreCount >= 2) pool = pool.filter(i => i.id !== 'minion_core');
@@ -5298,14 +5354,13 @@ drawEffects() {
         const relentlessCount = this.player.relics.filter(r => r.id === 'relentless').length;
         if(relentlessCount >= 3) pool = pool.filter(i => i.id !== 'relentless');
 
-	// NEW: Filter Crit Lens (Max 5)
         const lensCount = this.player.relics.filter(r => r.id === 'crit_lens').length;
         if(lensCount >= 5) pool = pool.filter(i => i.id !== 'crit_lens');
 
-	const holoCount = this.player.relics.filter(r => r.id === 'hologram').length;
+        const holoCount = this.player.relics.filter(r => r.id === 'hologram').length;
         if(holoCount >= 3) pool = pool.filter(i => i.id !== 'hologram');
 
-        // NEW: Firewall Limit (Max 3)
+        // FIX: Filter Firewall if maxed
         const fireCount = this.player.relics.filter(r => r.id === 'firewall').length;
         if(fireCount >= 3) pool = pool.filter(i => i.id !== 'firewall');
 
@@ -5336,23 +5391,19 @@ drawEffects() {
                 <div class="reward-desc">${nextDesc}</div>
             `;
             
-            // --- CLICK HANDLER START ---
             card.onclick = () => { 
                 AudioMgr.playSound('click');
                 
-                // 1. Apply Reward
                 if (item.instant) {
-                    if(item.id === 'repair') this.player.heal(25);
-                    if(item.id === 'hull_plating') { this.player.maxHp += 15; this.player.currentHp += 15; }
+                    if(item.id === 'repair') this.player.heal(10); // Reduced
+                    if(item.id === 'hull_plating') { this.player.maxHp += 5; this.player.currentHp += 5; } // Reduced
                     if(item.id === 'mana_battery') this.player.baseMana += 1;
                 } else {
                     this.player.addRelic(item);
                 }
 
-                // 2. Mark Node Complete (The Fix)
                 this.completeCurrentNode();
 
-                // 3. Handle Boss/Sector Progression
                 if (this.bossDefeated) {
                     this.bossDefeated = false;
                     this.sector++;
@@ -5363,14 +5414,11 @@ drawEffects() {
                     
                     ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH/2, CONFIG.CANVAS_HEIGHT/2, `SECTOR ${this.sector} INITIATED`, COLORS.MANA);
                     
-                    // Save the new map immediately
                     this.saveGame();
                 }
 
-                // 4. Return to Map
                 this.changeState(STATE.MAP); 
             };
-            // --- CLICK HANDLER END ---
 
             container.appendChild(card);
         });
@@ -5867,8 +5915,6 @@ drawEntity(entity) {
         const baseGlow = 20 + (sectorPower * 5);
         const baseWidth = 3 + sectorPower;
 
-        // FIX: Removed Shadow Drawing Block entirely
-
         // ============================================================
         // 1. PLAYER CLASSES (Unique Avatars)
         // ============================================================
@@ -5881,43 +5927,30 @@ drawEntity(entity) {
             ctx.fillStyle = '#050505'; 
 
             if (entity.classId === 'tactician') {
-                // HEXAGON + NETWORK
                 this.drawPolygon(ctx, 0, 0, entity.radius, 6, time * 0.5);
-                
-                // Orbiting Data Cubes with connecting lines
                 for(let i=0; i<3; i++) {
                     const angle = time * 2 + (i * (Math.PI*2/3));
                     const sx = Math.cos(angle) * (entity.radius + 25);
                     const sy = Math.sin(angle) * (entity.radius + 25);
-                    
-                    // Connection line
                     ctx.beginPath();
                     ctx.moveTo(0,0);
                     ctx.lineTo(sx, sy);
                     ctx.strokeStyle = 'rgba(0, 243, 255, 0.3)';
                     ctx.lineWidth = 1;
                     ctx.stroke();
-
-                    // Cube
                     ctx.fillStyle = color;
                     ctx.fillRect(sx-6, sy-6, 12, 12);
                 }
             } 
             else if (entity.classId === 'bloodstalker') {
-                // SPIKED SPHERE (Pulsing)
                 const pulse = Math.sin(time * 5) * 5;
                 this.drawSpikedCircle(ctx, 0, 0, entity.radius - 5, 8, 15 + pulse, time);
-                
-                // Inner "Blood" Pulse
                 ctx.fillStyle = '#550000';
                 ctx.beginPath();
                 ctx.arc(0, 0, (entity.radius - 15) + Math.sin(time * 10)*2, 0, Math.PI*2);
                 ctx.fill();
             }
             else if (entity.classId === 'arcanist') {
-                // GYROSCOPE RINGS + PULSING CORE (FIXED ROTATION)
-                
-                // Inner Glow
                 const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, entity.radius);
                 grad.addColorStop(0, '#fff');
                 grad.addColorStop(0.5, COLORS.PURPLE);
@@ -5926,44 +5959,26 @@ drawEntity(entity) {
                 ctx.globalAlpha = 0.3 + Math.sin(time * 5) * 0.1;
                 this.drawPolygon(ctx, 0, 0, entity.radius * 1.2, 4, time * 0.5);
                 ctx.globalAlpha = 1.0;
-
-                // Main Diamond
                 ctx.strokeStyle = color;
                 ctx.lineWidth = 3;
                 this.drawPolygon(ctx, 0, 0, entity.radius, 4, -time * 0.5); 
-
-                // Gyroscope Rings (3 axes)
                 ctx.strokeStyle = COLORS.PURPLE;
                 ctx.lineWidth = 2;
-                
                 const ringCount = 3;
                 const majorRadius = entity.radius + 20;
-                
                 for (let i = 0; i < ringCount; i++) {
                     ctx.save();
-                    
-                    // 1. Calculate Rotation
                     const rotationSpeed = 1.0; 
                     const currentRotation = (i * (Math.PI / 3)) + (time * rotationSpeed);
-                    
                     ctx.rotate(currentRotation);
-                    
-                    // 2. Simulate 3D Tilt
                     const tilt = 0.35 + Math.sin(time * 0.5 + i) * 0.1;
-                    
                     ctx.beginPath();
-                    // Draw a flat ellipse aligned with the rotated context
                     ctx.ellipse(0, 0, majorRadius, majorRadius * tilt, 0, 0, Math.PI * 2);
                     ctx.stroke();
-                    
-                    // 3. Draw Orbiting Electron
                     const electronSpeed = 3.0;
                     const electronAngle = (time * electronSpeed) + (i * 2);
-                    
-                    // Calculate position on the un-rotated ellipse
                     const ex = majorRadius * Math.cos(electronAngle);
                     const ey = (majorRadius * tilt) * Math.sin(electronAngle);
-                    
                     ctx.fillStyle = '#fff';
                     ctx.shadowColor = COLORS.PURPLE;
                     ctx.shadowBlur = 10;
@@ -5971,67 +5986,37 @@ drawEntity(entity) {
                     ctx.arc(ex, ey, 4, 0, Math.PI*2);
                     ctx.fill();
                     ctx.shadowBlur = 0;
-                    
                     ctx.restore();
                 }
             }
             else if (entity.classId === 'sentinel') {
-                // HEAVY FORTRESS (Redesigned)
-                // Removed the solid fillRect/strokeRect box
-                
-                // Inner rotating core
+                ctx.fillStyle = '#050505';
+                ctx.fillRect(-entity.radius, -entity.radius, entity.radius*2, entity.radius*2);
+                ctx.strokeRect(-entity.radius, -entity.radius, entity.radius*2, entity.radius*2);
                 ctx.save();
-                ctx.rotate(time * 0.5);
-                ctx.strokeStyle = '#444';
-                ctx.lineWidth = 6;
-                ctx.strokeRect(-entity.radius*0.5, -entity.radius*0.5, entity.radius, entity.radius);
+                ctx.rotate(Math.sin(time) * 0.5);
+                ctx.strokeStyle = '#555';
+                ctx.strokeRect(-entity.radius*0.6, -entity.radius*0.6, entity.radius*1.2, entity.radius*1.2);
                 ctx.restore();
-
-                // Outer heavy plating (Non-rotating)
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 4;
-                ctx.beginPath();
-                // Draw 4 corner brackets
-                const r = entity.radius;
-                const len = 15;
-                // Top Left
-                ctx.moveTo(-r, -r + len); ctx.lineTo(-r, -r); ctx.lineTo(-r + len, -r);
-                // Top Right
-                ctx.moveTo(r - len, -r); ctx.lineTo(r, -r); ctx.lineTo(r, -r + len);
-                // Bottom Right
-                ctx.moveTo(r, r - len); ctx.lineTo(r, r); ctx.lineTo(r - len, r);
-                // Bottom Left
-                ctx.moveTo(-r + len, r); ctx.lineTo(-r, r); ctx.lineTo(-r, r - len);
-                ctx.stroke();
-
-                // Forcefield Bubble (Kept dynamic)
                 ctx.strokeStyle = COLORS.SHIELD;
                 ctx.globalAlpha = 0.4 + Math.sin(time*3)*0.1;
-                ctx.lineWidth = 3;
+                ctx.lineWidth = 4;
                 ctx.beginPath();
-                ctx.arc(0, 0, entity.radius + 15, 0, Math.PI*2);
+                ctx.arc(0, 0, entity.radius + 20, 0, Math.PI*2);
                 ctx.stroke();
-                
-                // Scanline on shield
                 ctx.save();
                 ctx.clip(); 
                 ctx.fillStyle = COLORS.SHIELD;
-                ctx.globalAlpha = 0.15;
-                const scanY = (time * 40) % (entity.radius * 2 + 30) - (entity.radius + 15);
-                ctx.fillRect(-(entity.radius+15), scanY, (entity.radius+15)*2, 8);
+                ctx.globalAlpha = 0.2;
+                const scanY = (time * 50) % (entity.radius * 2 + 40) - (entity.radius + 20);
+                ctx.fillRect(-(entity.radius+20), scanY, (entity.radius+20)*2, 10);
                 ctx.restore();
-                
                 ctx.globalAlpha = 1.0;
             }
             else if (entity.classId === 'annihilator') {
-                // CHAOS STAR
                 this.drawSpikedCircle(ctx, 0, 0, entity.radius - 10, 5, 25, time * 5);
-                
-                // Inner spinning triangle
                 ctx.strokeStyle = '#ff4400';
                 this.drawPolygon(ctx, 0, 0, entity.radius * 0.5, 3, -time * 8);
-                
-                // Core pulse
                 ctx.fillStyle = '#ff8800';
                 ctx.globalAlpha = 0.5 + Math.sin(time * 20) * 0.5;
                 ctx.beginPath();
@@ -6040,92 +6025,17 @@ drawEntity(entity) {
                 ctx.globalAlpha = 1.0;
             }
             else {
-                // Default (Summoner) - BIO-DIGITAL LOTUS
-                const petals = 8;
-                
-                // Layer 1: Outer Petals (Undulating & Rotating)
-                ctx.save();
-                ctx.rotate(time * 0.2); // Slow base rotation
-                
-                for(let i=0; i<petals; i++) {
-                    const angle = (Math.PI*2 / petals) * i;
-                    
-                    // Dynamic length: Creates a wave effect around the flower
-                    const wave = Math.sin(time * 3 + i) * 15; 
-                    const len = entity.radius * 1.2 + wave;
-                    
-                    ctx.save();
-                    ctx.rotate(angle);
-                    ctx.beginPath();
-                    
-                    // Organic petal shape using Bezier curves
-                    ctx.moveTo(0, 0);
-                    // Control points create a wider, leaf-like shape
-                    ctx.bezierCurveTo(25, -len/2, 5, -len, 0, -len);
-                    ctx.bezierCurveTo(-5, -len, -25, -len/2, 0, 0);
-                    
-                    // Gradient Fill
-                    const grad = ctx.createLinearGradient(0, 0, 0, -len);
-                    grad.addColorStop(0, 'rgba(0, 255, 153, 0.1)');
-                    grad.addColorStop(1, 'rgba(0, 255, 153, 0.5)');
-                    ctx.fillStyle = grad;
-                    
-                    ctx.strokeStyle = COLORS.NATURE_LIGHT;
-                    ctx.lineWidth = 2;
-                    
-                    ctx.fill();
-                    ctx.stroke();
-                    ctx.restore();
-                }
-                ctx.restore();
-
-                // Layer 2: Inner Bloom (Breathing)
-                ctx.save();
-                const breath = 1.0 + Math.sin(time * 2) * 0.15;
-                ctx.scale(breath, breath);
-                ctx.rotate(-time * 0.5); // Counter-rotate
-                
                 for(let i=0; i<5; i++) {
-                    const angle = (Math.PI*2 / 5) * i;
-                    ctx.save();
-                    ctx.rotate(angle);
+                    const angle = (Math.PI*2/5) * i + time;
+                    const wave = Math.sin(time * 3 + i) * 5; 
+                    const ox = Math.cos(angle) * (10 + wave);
+                    const oy = Math.sin(angle) * (10 + wave);
                     ctx.beginPath();
-                    // Smaller, sharper inner petals
-                    ctx.moveTo(0, 0);
-                    ctx.quadraticCurveTo(10, -30, 0, -50);
-                    ctx.quadraticCurveTo(-10, -30, 0, 0);
-                    
-                    ctx.fillStyle = COLORS.NATURE_DARK;
-                    ctx.fill();
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 1;
+                    ctx.arc(ox, oy, entity.radius * 0.8, 0, Math.PI*2);
                     ctx.stroke();
-                    ctx.restore();
                 }
-                ctx.restore();
-
-                // Layer 3: Floating "Pollen" Particles (Procedural)
-                ctx.save();
-                for(let i=0; i<12; i++) {
-                    // Orbiting math: Particles move at different speeds and radii
-                    const pAngle = time * (0.5 + (i%3)*0.3) + (i * (Math.PI*2/12));
-                    const pDist = entity.radius * (0.6 + Math.sin(time * 1.5 + i)*0.2);
-                    
-                    const px = Math.cos(pAngle) * pDist;
-                    const py = Math.sin(pAngle) * pDist;
-                    
-                    ctx.fillStyle = (i % 2 === 0) ? COLORS.GOLD : COLORS.NATURE_LIGHT;
-                    ctx.shadowBlur = 10;
-                    ctx.shadowColor = ctx.fillStyle;
-                    
-                    ctx.beginPath();
-                    ctx.arc(px, py, (i%2===0) ? 3 : 2, 0, Math.PI*2);
-                    ctx.fill();
-                }
-                ctx.restore();
             }
 
-            // Core Light
             ctx.fillStyle = '#fff';
             ctx.shadowBlur = 50;
             ctx.beginPath();
@@ -6140,7 +6050,6 @@ drawEntity(entity) {
             ctx.save(); 
             ctx.scale(1.5, 1.5); 
 
-            // Use Player Class Color for Minions
             const color = (this.player && this.player.classColor) ? this.player.classColor : COLORS.NATURE_LIGHT;
 
             ctx.strokeStyle = color;
@@ -6167,7 +6076,6 @@ drawEntity(entity) {
                 ctx.globalAlpha = 1.0;
             }
             else {
-                // WISP DESIGN: Magical Plasma Soul
                 ctx.save();
                 ctx.globalAlpha = 0.3;
                 ctx.fillStyle = color;
@@ -6211,15 +6119,70 @@ drawEntity(entity) {
             ctx.fillStyle = '#1a0505'; 
 
             if (entity.isBoss) {
-                ctx.lineWidth += 3;
-                ctx.shadowBlur += 20;
+                // NEW: BOSS VISUALS (Jagged Demon Core)
+                
+                // 1. Outer Gravity Well (Intimidating Aura)
+                ctx.lineWidth = 4;
+                ctx.shadowBlur = 30;
+                ctx.shadowColor = '#ff0000';
                 ctx.strokeStyle = '#ff0000';
+                
                 ctx.beginPath();
-                ctx.arc(0, 0, entity.radius * 1.5, 0, Math.PI*2);
-                ctx.setLineDash([5, 15]);
+                const auraRadius = entity.radius * 1.6 + Math.sin(time * 5) * 5;
+                ctx.arc(0, 0, auraRadius, 0, Math.PI*2);
+                ctx.setLineDash([10, 20]);
+                ctx.lineDashOffset = -time * 20;
                 ctx.stroke();
                 ctx.setLineDash([]);
-                this.drawSpikedCircle(ctx, 0, 0, entity.radius, 12, 10, -time);
+
+                // 2. Jagged Outer Shell
+                ctx.fillStyle = '#1a0000'; 
+                this.drawSpikedCircle(ctx, 0, 0, entity.radius, 8, 20, time * 0.5);
+                
+                // 3. Inner Glitch Layer
+                ctx.strokeStyle = '#ff4400';
+                ctx.lineWidth = 2;
+                const glitchOffset = (Math.random() - 0.5) * 5;
+                this.drawSpikedCircle(ctx, glitchOffset, 0, entity.radius * 0.7, 6, 15, -time);
+
+                // 4. Data Tendrils
+                ctx.save();
+                ctx.globalAlpha = 0.7;
+                ctx.strokeStyle = '#ff0055';
+                ctx.lineWidth = 2;
+                for(let i=0; i<8; i++) {
+                    const angle = (Math.PI*2/8) * i + (time * 0.5);
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    const midX = Math.cos(angle) * (entity.radius * 0.5) + (Math.random()-0.5)*10;
+                    const midY = Math.sin(angle) * (entity.radius * 0.5) + (Math.random()-0.5)*10;
+                    ctx.lineTo(midX, midY);
+                    ctx.lineTo(Math.cos(angle)*(entity.radius+20), Math.sin(angle)*(entity.radius+20));
+                    ctx.stroke();
+                }
+                ctx.restore();
+
+                // 5. The "Demon Core" (CPU)
+                ctx.fillStyle = '#fff';
+                ctx.shadowColor = '#ff0000';
+                ctx.shadowBlur = 50;
+                
+                ctx.save();
+                ctx.rotate(Math.sin(time * 2) * 0.2); 
+                const coreSize = 40;
+                ctx.beginPath();
+                ctx.rect(-coreSize/2, -coreSize/2, coreSize, coreSize);
+                ctx.fill();
+                
+                ctx.fillStyle = '#000';
+                ctx.fillRect(-10, -10, 20, 20);
+                
+                ctx.fillStyle = '#ff0000';
+                const pupilSize = 8 + Math.sin(time * 10) * 2; 
+                ctx.beginPath();
+                ctx.arc(0, 0, pupilSize, 0, Math.PI*2);
+                ctx.fill();
+                ctx.restore();
             }
             // ELITES (Nullifier / Jammer)
             else if (entity.isElite) {
@@ -6399,53 +6362,73 @@ drawEntity(entity) {
             ctx.setLineDash([]);
         }
 
-        // --- ENEMY INTENT ICONS (Multi-Action) ---
-        if (entity instanceof Enemy && entity.nextIntents && entity.nextIntents.length > 0) {
+        // --- ENEMY INTENT ICON ---
+        // FIX: Check for nextIntents OR nextIntent
+        if (entity instanceof Enemy && ((entity.nextIntents && entity.nextIntents.length > 0) || entity.nextIntent)) {
             ctx.restore(); 
             ctx.save();
             ctx.translate(renderX, renderY);
             
-            const count = entity.nextIntents.length;
-            const spacing = 60;
-            const startX = -((count - 1) * spacing) / 2;
+            // Handle Multiple Intents (Bosses/Standard)
+            if (entity.nextIntents && entity.nextIntents.length > 0) {
+                const count = entity.nextIntents.length;
+                const spacing = 60;
+                const startX = -((count - 1) * spacing) / 2;
 
-            for(let i=0; i<count; i++) {
-                const intent = entity.nextIntents[i];
-                const ix = startX + (i * spacing);
-                
-                // FIX: Moved higher (-90) to avoid HP bar overlap
-                const iy = -entity.radius - 90 + (Math.cos(time * 5 + i) * 5);
+                for(let i=0; i<count; i++) {
+                    const intent = entity.nextIntents[i];
+                    const ix = startX + (i * spacing);
+                    const iy = -entity.radius - 90 + (Math.cos(time * 5 + i) * 5);
 
-                // Intent Box
+                    ctx.fillStyle = COLORS.MECH_LIGHT;
+                    ctx.fillRect(ix - 25, iy, 50, 50);
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(ix - 25, iy, 50, 50);
+                    
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '30px "Segoe UI Emoji"';
+                    ctx.textAlign = 'center';
+                    ctx.shadowBlur = 0;
+                    
+                    let icon = '⚔️';
+                    if(intent.type === 'heal') icon = '💚';
+                    else if(intent.type === 'summon') icon = '🤖';
+                    else if(intent.type === 'shield') icon = '🛡️';
+                    else if(intent.type === 'buff') icon = '💪';
+                    else if(intent.type === 'debuff') icon = '🦠';
+                    else if(intent.type === 'consume') icon = '🍽️';
+                    
+                    ctx.fillText(icon, ix, iy + 35); 
+
+                    if(intent.effectiveVal > 0 || intent.val > 0) {
+                        ctx.font = 'bold 16px "Orbitron"';
+                        ctx.fillStyle = '#fff';
+                        ctx.shadowColor = '#000';
+                        ctx.shadowBlur = 4;
+                        ctx.fillText(intent.effectiveVal || intent.val, ix, iy - 5); 
+                    }
+                }
+            } else {
+                // Fallback for single intent (Tutorial/Legacy)
                 ctx.fillStyle = COLORS.MECH_LIGHT;
-                ctx.fillRect(ix - 25, iy, 50, 50);
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 1;
-                ctx.strokeRect(ix - 25, iy, 50, 50);
+                const hover = Math.cos(time * 5) * 5;
+                ctx.fillRect(-40, -entity.radius - 40 + hover, 80, 25);
                 
-                // Icon
                 ctx.fillStyle = '#fff';
-                ctx.font = '30px "Segoe UI Emoji"';
+                ctx.font = '40px "Segoe UI Emoji"';
                 ctx.textAlign = 'center';
                 ctx.shadowBlur = 0;
-                
                 let icon = '⚔️';
-                if(intent.type === 'heal') icon = '💚';
-                else if(intent.type === 'summon') icon = '🤖';
-                else if(intent.type === 'shield') icon = '🛡️';
-                else if(intent.type === 'buff') icon = '💪';
-                else if(intent.type === 'debuff') icon = '🦠';
-                else if(intent.type === 'consume') icon = '🍽️';
+                if(entity.nextIntent.type === 'heal') icon = '💚';
+                else if(entity.nextIntent.type === 'summon') icon = '🤖';
                 
-                ctx.fillText(icon, ix, iy + 35); 
+                ctx.fillText(icon, 0, -entity.radius - 50 + hover); 
 
-                // Value
-                if(intent.effectiveVal > 0 || intent.val > 0) {
-                    ctx.font = 'bold 16px "Orbitron"';
+                if(entity.nextIntent.val > 0) {
+                    ctx.font = 'bold 20px "Orbitron"';
                     ctx.fillStyle = '#fff';
-                    ctx.shadowColor = '#000';
-                    ctx.shadowBlur = 4;
-                    ctx.fillText(intent.effectiveVal || intent.val, ix, iy - 5); 
+                    ctx.fillText(entity.nextIntent.val, 0, -entity.radius - 20 + hover); 
                 }
             }
             
@@ -6475,16 +6458,16 @@ drawEntity(entity) {
         this.changeState(STATE.TUTORIAL_COMBAT);
         this.tutorialStep = 0;
         
-        // Setup Mock Player & Enemy
+        // Setup Mock Player & Enemy (HP adjusted for 30 base)
         this.player = new Player(PLAYER_CLASSES[0]); 
-        this.player.currentHp = 100; 
-        this.player.maxHp = 100;
+        this.player.currentHp = 30; // FIX: 30 HP
+        this.player.maxHp = 30;
         this.player.mana = 3;
         this.player.diceCount = 2; 
         
-        // FIX: Enemy HP set to 10 as requested
-        this.enemy = new Enemy({ name: "Training Dummy", hp: 10, dmg: 5 }, 1);
-        this.enemy.nextIntent = { type: 'attack', val: 5, target: this.player }; 
+        // Enemy HP set to 10
+        this.enemy = new Enemy({ name: "Training Dummy", hp: 10, dmg: 2 }, 1); // Reduced dmg to 2
+        this.enemy.nextIntent = { type: 'attack', val: 2, target: this.player }; 
         this.enemy.showIntent = false; 
         
         const hud = document.getElementById('hud');
