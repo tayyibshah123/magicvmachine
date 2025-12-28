@@ -838,35 +838,68 @@ h2 {
 
 /* Story Screen */
 #screen-story {
-    background: #000;
+    background-color: #000;
+    /* Loads intro.png with a dark overlay for text readability */
+    background-image: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0.9) 100%), url('intro.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
     z-index: 3000;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start; /* Align top, let transform handle position */
     overflow: hidden;
 }
 
 .story-crawl {
     font-family: 'Rajdhani', sans-serif;
-    font-weight: 700;
-    font-size: 1.5rem;
-    color: var(--neon-green);
+    font-weight: 600;
+    font-size: 1.6rem;
+    color: #e0e0e0;
     text-align: center;
-    max-width: 80%;
-    line-height: 1.6;
+    max-width: 800px;
+    width: 90%;
+    line-height: 1.8;
     opacity: 0;
-    transform: translateY(50px);
-    animation: fadeUp 10s forwards;
+    
+    /* FIX: Start completely off-screen at the bottom */
+    transform: translateY(100vh);
+    
+    /* FIX: Increased duration to 100s (was 50s) to slow it down significantly */
+    animation: crawl 100s linear forwards; 
+    
+    text-shadow: 0 2px 10px rgba(0,0,0,1);
+    margin-bottom: 50px;
+    padding-bottom: 100px; /* Extra padding to ensure end text clears */
 }
 
-@keyframes fadeUp {
-    0% { opacity: 0; transform: translateY(50px); }
-    20% { opacity: 1; }
-    90% { opacity: 1; }
-    100% { opacity: 0; transform: translateY(-50px); }
+.story-wrapper p {
+    margin-bottom: 25px;
 }
 
+@keyframes crawl {
+    /* Start: Below the screen */
+    0% { opacity: 0; transform: translateY(100vh); }
+    
+    /* Fade in quickly as it rises */
+    2% { opacity: 1; }
+    
+    /* Stay visible until the end */
+    95% { opacity: 1; }
+    
+    /* End: Scroll completely off the top */
+    100% { opacity: 0; transform: translateY(-150%); } 
+}
+
+/* Mobile adjustments for story */
+@media (max-width: 768px) {
+    .story-crawl {
+        font-size: 1.2rem;
+        /* Adjusted speed for mobile screens */
+        animation: crawl 80s linear forwards; 
+    }
+}
 /* Ensure Debriefing/Tutorial Screen is always on top of Canvas */
 #screen-tutorial {
     z-index: 5000 !important;

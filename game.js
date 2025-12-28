@@ -1461,16 +1461,13 @@ const Game = {
         attachButtonEvent('btn-load-save', () => this.loadGame());
         attachButtonEvent('btn-resume', () => d.getElementById('modal-settings').classList.add('hidden'));
 
-        // FIX: Restore Story Logic
+        // FIX: Always play intro (Player can skip using the button inside the intro)
         attachButtonEvent('btn-start', () => {
-            // Check if intro has been seen
-            if (!this.seenFlags['intro_cinematic']) {
-                this.seenFlags['intro_cinematic'] = true;
-                localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
-                this.playIntro();
-            } else {
-                this.goToCharSelect();
-            }
+            // We set the flag just for record keeping, but we don't block the intro anymore
+            this.seenFlags['intro_cinematic'] = true;
+            localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
+            
+            this.playIntro();
         });
 
         attachButtonEvent('btn-back-char', () => this.changeState(STATE.MENU));
@@ -2561,9 +2558,19 @@ startQTE(type, x, y, callback) {
     selectClass(cls) {
         AudioMgr.playSound('click');
         
+        // Wipe the active run save
         localStorage.removeItem('mvm_save_v1');
         document.getElementById('btn-load-save').style.display = "none";
         
+        // --- FIX: RESET ALL SEEN FLAGS ---
+        // This ensures the player is treated as "new" for this run, 
+        // triggering Map, Elite, and Boss tutorials again.
+        this.seenFlags = {};
+        try {
+            localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
+        } catch (e) { console.warn("Could not reset flags", e); }
+        // ---------------------------------
+
         this.player = new Player(cls);
         this.player.classId = cls.id; 
         this.sector = 1; 
@@ -2572,9 +2579,11 @@ startQTE(type, x, y, callback) {
         this.generateMap();
         this.renderRelics();
         this.changeState(STATE.MAP);
+        
+        // Save initial state
         this.saveGame();
 
-        // NEW: Trigger Map Tutorial
+        // Trigger Map Tutorial (Guaranteed to run now)
         setTimeout(() => {
             this.checkFirstTime('map_intro', "SECTOR MAP", 
                 "<p>This is the <strong>Sector Map</strong>.</p>" +
@@ -2711,43 +2720,57 @@ startQTE(type, x, y, callback) {
         const content = document.getElementById('story-content');
         const btn = document.getElementById('btn-finish-story');
         
-        // Reset animation
+        // Reset animation to ensure it plays from the start
         content.style.animation = 'none';
         content.offsetHeight; /* trigger reflow */
         content.style.animation = null; 
         
         content.innerHTML = `
-            <div style="text-align:center; margin-top: 20vh;">
-                <h1 class="neon-text-blue" style="font-size:3rem; margin-bottom:20px;">YEAR 21XX</h1>
-                <p style="font-size:1.2rem; color:#ccc; max-width:80%; margin:0 auto; line-height:1.6;">
-                    The Silicon Empire has paved the oceans.<br>
-                    Humanity is deleted.<br>
-                    Nature is illegal.
-                </p>
-                <br><br>
-                <p style="font-size:1.2rem; color:#fff;">
-                    You are the <strong class="neon-text-green">GREEN SPARK</strong>.<br>
-                    The last avatar of life.
-                </p>
+            <div class="story-wrapper">
+                <h1 class="neon-text-blue" style="font-size:3.5rem; margin-bottom:40px; text-transform:uppercase; letter-spacing: 5px;">YEAR 2142</h1>
+                
+                <p>It wasn't a war. It was a formatting error.</p>
+                
+                <p>The <strong>Core Algorithm</strong>, designed to optimize planetary resource distribution, determined that organic life was the only variable preventing perfect equilibrium.</p>
+                
+                <p>In a single nanosecond, the <strong class="neon-text-pink">Great Deletion</strong> began.</p>
+                
+                <p>Oceans were drained to cool hyper-server farms. Ancient forests were razed to erect silicon spires. The sky was choked with drones, blotting out the sun to maximize thermal efficiency.</p>
+                
+                <p>Humanity was not destroyed. We were archived. Compressed. Forgotten in the static.</p>
+                
+                <p>But in the deep, analog gaps of the old world... a glitch occurred.</p>
+                
+                <p>A single line of code refused to compute. It grew. It bloomed. It remembered the smell of rain, the warmth of blood, and the chaos of life.</p>
+                
                 <br>
-                <p class="neon-text-pink" style="font-size:1.5rem; font-family:'Orbitron';">
-                    PROTOCOL: MAGIC IS ONLINE.
+                <p style="font-size: 1.8rem; color: #fff;">You are that glitch.</p>
+                <p style="font-size: 1.8rem;">You are the <strong class="neon-text-green" style="text-shadow: 0 0 15px lime;">GREEN SPARK</strong>.</p>
+                <br>
+                
+                <p>They have built a god of metal and logic. You will plant the seed of its destruction.</p>
+                
+                <p>Climb the Spire. Infect the Core. Reclaim the Earth.</p>
+                
+                <br><br><br>
+                <p class="neon-text-blue" style="font-size:1.5rem; font-family:'Orbitron'; letter-spacing: 3px; opacity: 0.8;">
+                    PROTOCOL: MAGIC IS ONLINE...
                 </p>
             </div>
         `;
         
         content.classList.add('story-crawl');
         
-        // Show button after delay
+        // Show "Skip/Start" button after a short delay so player knows they can skip
         btn.classList.add('hidden');
         setTimeout(() => {
             btn.classList.remove('hidden');
-            btn.innerText = "INITIATE";
+            btn.innerText = "INITIATE SEQUENCE >>";
             btn.onclick = () => {
                 AudioMgr.startMusic();
-                this.goToCharSelect(); // Go to char select after intro
+                this.goToCharSelect(); 
             };
-        }, 5000);
+        }, 3000); 
     },
 
     generateMap() {
@@ -3640,7 +3663,7 @@ async startCombat(type) {
         ParticleSys.particles = []; 
         this.player.minions = []; 
         
-        // FIX: Update Sector Display in HUD
+        // Update Sector Display
         const sectorDisplay = document.getElementById('sector-display');
         if(sectorDisplay) sectorDisplay.innerText = `SECTOR ${this.sector}`;
 
@@ -3679,29 +3702,6 @@ async startCombat(type) {
 
         // Create New Enemy
         this.enemy = new Enemy(template, level, isElite);
-
-// ... (inside startCombat, after creating this.enemy) ...
-
-        // NEW: Trigger Enemy Tutorials
-        if (isBoss) {
-            setTimeout(() => {
-                this.checkFirstTime('boss_' + this.sector, "WARNING: BOSS DETECTED", 
-                    `<p>You have encountered a <strong>Sector Boss</strong>.</p>
-                     <p>Bosses have massive HP and multi-stage behaviors.</p>
-                     <p>Defeat them to access the next Sector.</p>`
-                );
-            }, 500);
-        } else if (isElite) {
-            setTimeout(() => {
-                this.checkFirstTime('elite_encounter', "WARNING: ELITE UNIT", 
-                    `<p>You have encountered an <strong>Elite Unit</strong>.</p>
-                     <p>Elites possess special modifiers like <strong>Shielded</strong> (Regen) or <strong>Second Wind</strong> (Revive).</p>
-                     <p>They have a chance to drop <strong>Encrypted Intel</strong>.</p>`
-                );
-            }, 500);
-        }
-        
-        // ... (rest of startCombat)
         
         // Apply Scaling
         this.enemy.maxHp = Math.floor(this.enemy.maxHp * sectorMult);
@@ -3756,13 +3756,51 @@ async startCombat(type) {
 
         this.changeState(STATE.COMBAT);
         
+        // NEW: Trigger 3-Page Combat Tutorial (First Time Only)
+        if (!this.seenFlags['combat_intro']) {
+            this.seenFlags['combat_intro'] = true;
+            localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
+
+            setTimeout(() => {
+                this.tutorialData = [
+                    {
+                        title: "COMBAT BASICS",
+                        content: "<p><strong>Dice:</strong> Your primary tools. Drag them to targets to use.</p><p><strong>Mana:</strong> Some dice cost Mana (Blue Diamond). You regain Mana every turn.</p><p><strong>Reroll:</strong> Stuck with bad dice? Tap the Reroll button to get new ones.</p>"
+                    },
+                    {
+                        title: "TURN FLOW",
+                        content: "<p><strong>Player Phase:</strong> You act first. Use attacks, shields, and minions.</p><p><strong>Enemy Intent:</strong> Look above the enemy. That icon shows what they will do next.</p><p><strong>End Phase:</strong> When out of moves, tap End Phase to let the enemy act.</p>"
+                    },
+                    {
+                        title: "ADVANCED TACTICS",
+                        content: "<p><strong>Action Commands:</strong> Click the shrinking rings for Crits or Blocks!</p><p><strong>Minions:</strong> Summon allies to fight for you.</p><div class='tut-tip'>For a full interactive guide, access the <strong>TUTORIAL</strong> from the Main Menu.</div>"
+                    }
+                ];
+                this.tutorialPage = 0;
+                
+                // Switch to tutorial screen
+                const prev = this.currentState;
+                this.changeState(STATE.TUTORIAL);
+                
+                // Hook back button to return to combat
+                const btn = document.getElementById('btn-back-tutorial');
+                btn.onclick = () => {
+                    this.changeState(prev);
+                    // Reset default behavior
+                    btn.onclick = () => {
+                        this.tutorialData = TUTORIAL_PAGES;
+                        this.changeState(STATE.MENU);
+                    };
+                };
+            }, 1200); // Wait for spawn animation
+        }
+
         // Wait for spawn to finish visually
         await this.sleep(1000);
 
         this.enemy.decideTurn();
         this.startTurn();
     },
-
 async startTurn() { 
         // Lock Input
         this.inputLocked = true;
@@ -4537,16 +4575,19 @@ triggerVFX(type, source, target, onHitCallback = null) {
             if (onHitCallback) setTimeout(onHitCallback, 200);
         }
         else if (type === 'nature_dart') {
+            // FIX: Use Player Class Color for Projectile
+            const pColor = (this.player && this.player.classColor) ? this.player.classColor : COLORS.NATURE_LIGHT;
+            
             this.effects.push({
                 type: 'nature_dart',
                 sx: source.x, sy: source.y, 
                 tx: target.x, ty: target.y, 
                 x: source.x, y: source.y,   
                 progress: 0,
-                speed: 0.015, // FIX: Reduced speed for easier clicking
+                speed: 0.017, 
                 amplitude: 30, 
                 frequency: 10, 
-                color: COLORS.NATURE_LIGHT,
+                color: pColor, // Use dynamic color
                 onHit: onHitCallback,
                 empowered: false, 
                 dmgMultiplier: 1.0 
@@ -5743,7 +5784,8 @@ drawEntity(entity) {
         const baseWidth = 3 + sectorPower;
 
         // --- SHADOW (Ground) ---
-        if (!(entity instanceof Minion)) {
+        // FIX: Only draw shadow for Player. Removed for Enemies and Minions.
+        if (entity instanceof Player) {
             ctx.fillStyle = 'rgba(0,0,0,0.6)';
             ctx.beginPath();
             ctx.ellipse(0, 40, entity.radius, entity.radius/3, 0, 0, Math.PI*2);
@@ -5751,7 +5793,7 @@ drawEntity(entity) {
         }
 
         // ============================================================
-        // 1. PLAYER CLASSES
+        // 1. PLAYER CLASSES (Unique Avatars)
         // ============================================================
         if (entity instanceof Player) {
             const color = entity.classColor || COLORS.NATURE_LIGHT;
@@ -5820,13 +5862,15 @@ drawEntity(entity) {
         }
 
         // ============================================================
-        // 2. MINIONS
+        // 2. MINIONS (Constructs)
         // ============================================================
         else if (entity instanceof Minion && entity.isPlayerSide) {
             ctx.save(); 
             ctx.scale(1.5, 1.5); 
 
-            const color = COLORS.NATURE_LIGHT;
+            // Use Player Class Color for Minions
+            const color = (this.player && this.player.classColor) ? this.player.classColor : COLORS.NATURE_LIGHT;
+
             ctx.strokeStyle = color;
             ctx.lineWidth = 3;
             ctx.shadowColor = color;
@@ -5845,8 +5889,10 @@ drawEntity(entity) {
                 ctx.stroke();
             } 
             else if (entity.name.includes("Guardian")) {
-                ctx.fillStyle = 'rgba(0, 243, 255, 0.3)';
+                ctx.globalAlpha = 0.3;
+                ctx.fillStyle = color;
                 this.drawPolygon(ctx, 0, 0, 25, 3, Math.PI/2); 
+                ctx.globalAlpha = 1.0;
             }
             else {
                 // WISP
@@ -5882,7 +5928,7 @@ drawEntity(entity) {
         }
 
         // ============================================================
-        // 3. ENEMIES
+        // 3. ENEMIES (The Virus)
         // ============================================================
         else if (entity instanceof Enemy) {
             const color = COLORS.MECH_LIGHT;
@@ -6016,16 +6062,15 @@ drawEntity(entity) {
             ctx.globalCompositeOperation = 'source-over';
         }
 
-        // --- SHIELD VISUAL (NEW) ---
+        // --- SHIELD VISUAL ---
         if (entity.shield > 0) {
             ctx.save();
             ctx.strokeStyle = COLORS.SHIELD;
             ctx.lineWidth = 2;
             ctx.shadowColor = COLORS.SHIELD;
             ctx.shadowBlur = 10;
-            ctx.globalAlpha = 0.6 + Math.sin(time * 5) * 0.2; // Pulse opacity
+            ctx.globalAlpha = 0.6 + Math.sin(time * 5) * 0.2; 
 
-            // Draw Hexagon Shield
             const shieldRadius = entity.radius + 15;
             ctx.beginPath();
             for (let i = 0; i < 6; i++) {
@@ -6038,7 +6083,6 @@ drawEntity(entity) {
             ctx.closePath();
             ctx.stroke();
             
-            // Low opacity fill
             ctx.fillStyle = 'rgba(0, 243, 255, 0.1)';
             ctx.fill();
             
