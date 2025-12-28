@@ -273,7 +273,8 @@ const DICE_TYPES = {
     
     EARTHQUAKE: { icon: '📉', color: '#ff8800', desc: 'Deal 2 DMG to ALL enemies.\n[QTE]: Crit for x1.3', cost: 2, isSkill: true, target: 'all_enemies' },
     METEOR:     { icon: '☄️', color: '#bc13fe', desc: 'Deal 12 DMG to target.\n[QTE]: Crit for x1.3', cost: 5, isSkill: true, target: 'enemy' },
-    CONSTRICT:  { icon: '⛓️', color: '#ff0055', desc: 'Reduce Enemy Atk and Healing by 50% for 2 turns.', cost: 3, isSkill: true, target: 'enemy' },
+    // FIX: Updated description to 3 turns
+    CONSTRICT:  { icon: '⛓️', color: '#ff0055', desc: 'Reduce Enemy Atk and Healing by 50% for 3 turns.', cost: 3, isSkill: true, target: 'enemy' },
     VOODOO:     { icon: '☠️', color: '#ff0000', desc: 'Apply Curse: Deal 30 Base DMG after 3 turns.', cost: 9, isSkill: true, locked: true, target: 'enemy' },
     OVERCHARGE: { icon: '⚡', color: '#ff4400', desc: 'Enemy: +25% Dmg Dealt, +50% Dmg Taken.', cost: 1, isSkill: true, locked: true, target: 'enemy' },
     RECKLESS_CHARGE: { icon: '🐂', color: '#ff2200', desc: 'Next Attack x2 DMG.\nTake x3 DMG until next turn.', cost: 2, isSkill: true, locked: true, target: 'self' }
@@ -286,7 +287,8 @@ const DICE_UPGRADES = {
     MINION:     { name: "Alpha Call", desc: "Summon Level 2 Wisp.\n(+3 Block, +2 DMG)", cost: 200, icon: "🌳" },
     EARTHQUAKE: { name: "Cataclysm", desc: "Deal 4 DMG to ALL. Apply WEAK (50% less dmg).\n[QTE]: Crit x1.3.", cost: 225, icon: "🌋" },
     METEOR:     { name: "Starfall", desc: "Deal 20 DMG. [QTE]: Crit x1.3.", cost: 350, icon: "🌠" },
-    CONSTRICT:  { name: "Digital Rot", desc: "Reduce Atk/Heal by 75% for 3 turns.", cost: 250, icon: "🕸️" },
+    // FIX: Updated description to 4 turns
+    CONSTRICT:  { name: "Digital Rot", desc: "Reduce Atk/Heal by 75% for 4 turns.", cost: 250, icon: "🕸️" },
     VOODOO:     { name: "Void Curse", desc: "Apply Curse: After 3 turns, 50% chance for 150 Base DMG, else 30 Base DMG.", cost: 350, icon: "🕳️" },
     OVERCHARGE: { name: "Hyper Beam", desc: "Enemy takes +100% Damage from all sources.", cost: 300, icon: "☢️" },
     RECKLESS_CHARGE: { name: "Vicious Charge", desc: "Next Attack x3 DMG.\nTake +50% DMG until next turn.", cost: 500, icon: "👹" }
@@ -315,7 +317,8 @@ const BOSS_DATA = {
         dmg: 20, 
         actionsPerTurn: 2,
         color: '#ff0000', 
-        moves: ['attack', 'shield', 'summon']
+        moves: ['attack', 'shield', 'summon'],
+        shieldVal: 15 // FIX: Reduced from hardcoded 40
     },
     2: { 
         name: "THE ARCHITECT", 
@@ -324,7 +327,8 @@ const BOSS_DATA = {
         dmg: 24, 
         actionsPerTurn: 2,
         color: '#bc13fe', 
-        moves: ['attack', 'buff', 'debuff', 'multi_attack']
+        moves: ['attack', 'buff', 'debuff', 'multi_attack'],
+        shieldVal: 25
     },
     3: { 
         name: "SYSTEM PRIME", 
@@ -333,7 +337,8 @@ const BOSS_DATA = {
         dmg: 34, 
         actionsPerTurn: 3,
         color: '#ffd700', 
-        moves: ['attack', 'consume', 'cataclysm', 'shield']
+        moves: ['attack', 'consume', 'cataclysm', 'shield'],
+        shieldVal: 35
     },
     4: { 
         name: "THE GATEKEEPER", 
@@ -341,8 +346,9 @@ const BOSS_DATA = {
         hp: 500, 
         dmg: 40, 
         actionsPerTurn: 3,
-        color: '#00ff99', // Neon Green
-        moves: ['attack', 'multi_attack', 'shield', 'debuff']
+        color: '#00ff99', 
+        moves: ['attack', 'multi_attack', 'shield', 'debuff'],
+        shieldVal: 40
     },
     5: { 
         name: "THE SOURCE", 
@@ -350,8 +356,9 @@ const BOSS_DATA = {
         hp: 600, 
         dmg: 50, 
         actionsPerTurn: 3,
-        color: '#800080', // Deep Purple
-        moves: ['attack', 'purge', 'summon_glitch', 'reality_overwrite']
+        color: '#800080', 
+        moves: ['attack', 'purge', 'summon_glitch', 'reality_overwrite'],
+        shieldVal: 50
     }
 };
 
@@ -1275,7 +1282,10 @@ class Enemy extends Entity {
 
             // --- EXISTING MOVES ---
             if (roll === 'attack') return { type: 'attack', val: this.baseDmg, target: getTarget() };
-            if (roll === 'shield') return { type: 'shield', val: 40 }; // Buffed for late game
+            
+            // FIX: Use boss-specific shield value
+            if (roll === 'shield') return { type: 'shield', val: this.bossData.shieldVal || 15 };
+            
             if (roll === 'buff') return { type: 'buff', val: 0, secondary: { type: 'buff', id: 'empower'} };
             if (roll === 'debuff') return { type: 'debuff', val: 15, secondary: { type: 'debuff', id: 'frail'}, target: Game.player };
             
@@ -4411,12 +4421,14 @@ async startTurn() {
 
             } else if (type === 'CONSTRICT') {
                  const val = isUpgraded ? 0.25 : 0.5;
-                 const dur = isUpgraded ? 3 : 2;
+                 // FIX: Duration increased to 3 (Base) and 4 (Upgraded)
+                 const dur = isUpgraded ? 4 : 3;
                  const name = isUpgraded ? "DIGITAL ROT" : "CONSTRICT";
                  const icon = isUpgraded ? DICE_UPGRADES.CONSTRICT.icon : DICE_TYPES.CONSTRICT.icon;
                  finalEnemy.addEffect('constrict', dur, val, icon, 'Atk/Heal reduced.', name);
-                 // NEW: Chains
                  this.triggerVFX('chains', this.player, finalEnemy);
+                 AudioMgr.playSound('attack');
+                
                  
             } else if (type === 'VOODOO') {
                  let val = 0;
