@@ -312,7 +312,7 @@ const BOSS_DATA = {
         name: "OMEGA CORE", 
         subtitle: "THE FIRST FIREWALL",
         hp: 150, 
-        dmg: 20, // Doubled from 10
+        dmg: 20, 
         actionsPerTurn: 2,
         color: '#ff0000', 
         moves: ['attack', 'shield', 'summon']
@@ -321,7 +321,7 @@ const BOSS_DATA = {
         name: "THE ARCHITECT", 
         subtitle: "HUMANITY'S RECKONING",
         hp: 250, 
-        dmg: 24, // Doubled from 12
+        dmg: 24, 
         actionsPerTurn: 2,
         color: '#bc13fe', 
         moves: ['attack', 'buff', 'debuff', 'multi_attack']
@@ -330,10 +330,28 @@ const BOSS_DATA = {
         name: "SYSTEM PRIME", 
         subtitle: "GOD OF SILICON",
         hp: 400, 
-        dmg: 34, // Doubled from 17
+        dmg: 34, 
         actionsPerTurn: 3,
         color: '#ffd700', 
         moves: ['attack', 'consume', 'cataclysm', 'shield']
+    },
+    4: { 
+        name: "THE GATEKEEPER", 
+        subtitle: "FINAL DEFENSE PROTOCOL",
+        hp: 500, 
+        dmg: 40, 
+        actionsPerTurn: 3,
+        color: '#00ff99', // Neon Green
+        moves: ['attack', 'multi_attack', 'shield', 'debuff']
+    },
+    5: { 
+        name: "THE SOURCE", 
+        subtitle: "ORIGIN OF ALL",
+        hp: 600, 
+        dmg: 50, 
+        actionsPerTurn: 3,
+        color: '#800080', // Deep Purple
+        moves: ['attack', 'purge', 'summon_glitch', 'reality_overwrite']
     }
 };
 
@@ -1218,60 +1236,68 @@ class Enemy extends Entity {
     }
 
     generateSingleIntent() {
-        // NEW: Targeting Logic (50% Player, 50% Random Minion)
+        // Targeting Logic (50% Player, 50% Random Minion)
         const getTarget = () => {
             const minions = Game.player.minions;
-            // If no minions, must hit player
             if (minions.length === 0) return Game.player;
-            
-            // 50/50 Coin Flip
-            if (Math.random() < 0.5) {
-                return Game.player;
-            } else {
-                // Pick random minion
-                return minions[Math.floor(Math.random() * minions.length)];
-            }
+            if (Math.random() < 0.5) return Game.player;
+            return minions[Math.floor(Math.random() * minions.length)];
         };
 
-        // 1. Boss Specific Logic
         if (this.isBoss) {
+            // --- THE SOURCE SPECIAL LOGIC ---
+            if (this.name === "THE SOURCE") {
+                // 1. Execute Purge if charged
+                if (this.chargingPurge) {
+                    this.chargingPurge = false;
+                    return { type: 'purge_attack', val: 100, target: Game.player }; // Massive Damage
+                }
+                
+                // 2. Reality Overwrite (Once per fight)
+                if (!this.realityOverwritten && Math.random() < 0.15) {
+                    return { type: 'reality_overwrite', val: 0 };
+                }
+            }
+
             const moves = this.bossData.moves;
             const roll = moves[Math.floor(Math.random() * moves.length)];
             
-            // FIX: Applied getTarget() to attacks
+            // --- NEW MOVES ---
+            if (roll === 'purge') {
+                this.chargingPurge = true;
+                return { type: 'charge', val: 0 }; // Warning turn
+            }
+            if (roll === 'summon_glitch') {
+                if (this.minions.length < 2) return { type: 'summon_glitch', val: 0 };
+                return { type: 'attack', val: this.baseDmg, target: getTarget() };
+            }
+            if (roll === 'reality_overwrite') return { type: 'reality_overwrite', val: 0 };
+
+            // --- EXISTING MOVES ---
             if (roll === 'attack') return { type: 'attack', val: this.baseDmg, target: getTarget() };
-            
-            if (roll === 'shield') return { type: 'shield', val: 30 };
+            if (roll === 'shield') return { type: 'shield', val: 40 }; // Buffed for late game
             if (roll === 'buff') return { type: 'buff', val: 0, secondary: { type: 'buff', id: 'empower'} };
-            
-            // Debuffs usually target the player specifically to hinder them
-            if (roll === 'debuff') return { type: 'debuff', val: 10, secondary: { type: 'debuff', id: 'frail'}, target: Game.player };
+            if (roll === 'debuff') return { type: 'debuff', val: 15, secondary: { type: 'debuff', id: 'frail'}, target: Game.player };
             
             if (roll === 'consume') {
                 if (Game.player.minions.length > 0) return { type: 'consume', val: 0 };
-                // Fallback if no minions: Heavy attack on player
                 return { type: 'attack', val: this.baseDmg * 1.5, target: Game.player }; 
             }
             
             if (roll === 'cataclysm') return { type: 'attack', val: this.baseDmg * 0.5, isAOE: true };
-            
-            // FIX: Applied getTarget() to multi-attack
             if (roll === 'multi_attack') return { type: 'multi_attack', val: Math.floor(this.baseDmg * 0.6), hits: 3, target: getTarget() };
-            
             if (roll === 'summon' && this.minions.length < 2) return { type: 'summon', val: 0 };
             
-            // Default
             return { type: 'attack', val: this.baseDmg, target: getTarget() }; 
         }
 
-        // 2. Standard Enemy Logic
+        // Standard Enemy Logic
         const isLowHp = this.currentHp < this.maxHp * 0.3;
         const roll = Math.random();
 
         if (isLowHp) return { type: 'heal', val: Math.floor(this.maxHp * 0.1) };
         if (this.minions.length < 2 && roll < 0.2) return { type: 'summon', val: 0 };
         
-        // FIX: Use 50/50 targeting for standard attacks
         return { type: 'attack', val: this.baseDmg, target: getTarget() };
     }
 
@@ -5075,30 +5101,25 @@ drawEffects() {
         await this.showPhaseBanner("ENEMY PHASE", "INCOMING DATA STREAM", 'enemy');
 
         // --- PLAYER MINION PHASE ---
+        // ... [KEEP EXISTING MINION LOGIC] ...
         for (const m of this.player.minions) {
             if(!this.enemy || this.enemy.currentHp <= 0) break;
-            
             m.playAnim('lunge');
-            
             const targets = [this.enemy, ...this.enemy.minions];
             const t = targets[Math.floor(Math.random() * targets.length)];
-            
             if(t && t.currentHp > 0) {
                 if (this.player.traits.minionName === "Bomb Bot") {
                     ParticleSys.createExplosion(t.x, t.y, 30, "#ff8800");
                     AudioMgr.playSound('explosion');
-                    
                     if(this.enemy.takeDamage(10) && this.enemy.currentHp <= 0) { this.winCombat(); return; }
                     this.enemy.minions.forEach(em => em.takeDamage(10));
                     this.enemy.minions = this.enemy.minions.filter(em => em.currentHp > 0);
-
                     m.charges--;
                     if (m.charges <= 0) {
                         this.player.minions = this.player.minions.filter(min => min !== m); 
                     } else {
                         ParticleSys.createFloatingText(m.x, m.y - 50, `${m.charges} CHARGES LEFT`, COLORS.GOLD);
                     }
-
                 } else {
                     this.triggerVFX('nature_dart', m, t, (multiplier = 1.0) => {
                         const dmg = Math.floor(m.dmg * multiplier);
@@ -5128,6 +5149,7 @@ drawEffects() {
             
             this.enemy.playAnim('lunge');
             
+            // 1. BUFFS / DEBUFFS / SHIELDS
             if (intent.type === 'buff') {
                 this.enemy.addShield(20);
                 this.enemy.minions.forEach(m => m.addShield(10));
@@ -5144,6 +5166,7 @@ drawEffects() {
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "SHIELD UP", COLORS.SHIELD);
                 AudioMgr.playSound('defend');
             }
+            // 2. CONSUME
             else if (intent.type === 'consume') {
                 if (this.player.minions.length > 0) {
                     const snack = this.player.minions[0];
@@ -5159,8 +5182,29 @@ drawEffects() {
                     intent.effectiveVal = this.enemy.getEffectiveDamage(intent.val);
                 }
             }
+            // 3. NEW: THE SOURCE MOVES
+            else if (intent.type === 'charge') {
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 150, "CHARGING PURGE...", "#ff0000");
+                AudioMgr.playSound('siren');
+            }
+            else if (intent.type === 'reality_overwrite') {
+                this.enemy.realityOverwritten = true;
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 150, "REALITY OVERWRITE", "#bc13fe");
+                Game.shake(20);
+                AudioMgr.playSound('grid_fracture');
+            }
+            else if (intent.type === 'summon_glitch') {
+                const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false, 3); // Tier 3
+                m.name = "Glitch";
+                m.maxHp = 15; m.currentHp = 15; m.dmg = 10;
+                m.spawnTimer = 1.0;
+                this.enemy.minions.push(m);
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "GLITCH SPAWNED", "#ff00ff");
+                AudioMgr.playSound('mana');
+            }
             
-            if (intent.type === 'attack' || intent.type === 'multi_attack') {
+            // 4. ATTACKS (Standard + Purge)
+            if (intent.type === 'attack' || intent.type === 'multi_attack' || intent.type === 'purge_attack') {
                 const target = intent.target || this.player;
                 const validTarget = (target.currentHp > 0) ? target : this.player;
                 
@@ -5169,7 +5213,10 @@ drawEffects() {
                 if (validTarget === this.player) {
                     const multiplier = await this.startQTE('DEFEND', this.player.x, this.player.y);
                     
-                    this.triggerVFX('glitch_spike', this.enemy, validTarget, () => {
+                    // Use Orbital Strike visual for Purge
+                    const vfxType = intent.type === 'purge_attack' ? 'orbital_strike' : 'glitch_spike';
+                    
+                    this.triggerVFX(vfxType, this.enemy, validTarget, () => {
                         let dmg = intent.effectiveVal || intent.val;
                         dmg = Math.floor(dmg * multiplier);
                         if (validTarget.takeDamage(dmg, this.enemy, true) && validTarget === this.player) { this.gameOver(); return; }
@@ -5201,7 +5248,6 @@ drawEffects() {
             else if (intent.type === 'summon') {
                 await this.sleep(300);
                 if(this.enemy.minions.length < 2) {
-                    // FIX: Spawn correct tier based on enemy type
                     const tier = this.enemy.isBoss ? 3 : (this.enemy.isElite ? 2 : 1);
                     const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false, tier);
                     m.spawnTimer = 1.0; 
@@ -5215,20 +5261,18 @@ drawEffects() {
         }
         
         // --- ENEMY MINION PHASE ---
+        // ... [KEEP EXISTING MINION LOGIC] ...
         for (const min of this.enemy.minions) {
             min.playAnim('lunge');
             await this.sleep(300);
-
             const targets = [this.player, ...this.player.minions];
             const t = targets[Math.floor(Math.random() * targets.length)];
             if(t) {
                 this.triggerVFX('micro_laser', min, t, () => {
-                    // FIX: Leech Logic for Tier 2+
                     if (min.tier >= 2 && this.enemy.currentHp > 0) {
                         this.enemy.heal(2);
                         ParticleSys.createFloatingText(this.enemy.x, this.enemy.y, "LEECH", "#00ff00");
                     }
-
                     if (t.takeDamage(min.dmg, min) && t === this.player) { this.gameOver(); return; }
                     if (t !== this.player && t.currentHp <= 0) {
                          if (this.player.traits.maxMinions === 3 && Math.random() < 0.3) { 
@@ -5624,7 +5668,12 @@ drawEffects() {
         const time = Date.now() / 1000;
 
         // Use Sector Config
-        const conf = SECTOR_CONFIG[this.sector] || SECTOR_CONFIG[1];
+        let conf = SECTOR_CONFIG[this.sector] || SECTOR_CONFIG[1];
+
+        // NEW: Reality Overwrite Visuals (Sector 5 Boss)
+        if (this.enemy && this.enemy.name === "THE SOURCE" && this.enemy.realityOverwritten) {
+            conf = { bgTop: '#1a001a', bgBot: '#330000', sun: ['#ff8800', '#800080'], grid: '#ff00ff' };
+        }
 
         const grad = ctx.createLinearGradient(0, 0, 0, h);
         grad.addColorStop(0, conf.bgTop);
@@ -5644,8 +5693,6 @@ drawEffects() {
             ctx.fill();
         }
         ctx.globalAlpha = 1;
-
-        // REMOVED: Sun/Moon and stripes drawing logic
 
         const cx = w/2;
         const horizon = h * 0.45;
@@ -5915,6 +5962,8 @@ drawEntity(entity) {
         const baseGlow = 20 + (sectorPower * 5);
         const baseWidth = 3 + sectorPower;
 
+        // NO SHADOWS (Removed as requested)
+
         // ============================================================
         // 1. PLAYER CLASSES (Unique Avatars)
         // ============================================================
@@ -6025,15 +6074,64 @@ drawEntity(entity) {
                 ctx.globalAlpha = 1.0;
             }
             else {
-                for(let i=0; i<5; i++) {
-                    const angle = (Math.PI*2/5) * i + time;
-                    const wave = Math.sin(time * 3 + i) * 5; 
-                    const ox = Math.cos(angle) * (10 + wave);
-                    const oy = Math.sin(angle) * (10 + wave);
+                const petals = 8;
+                ctx.save();
+                ctx.rotate(time * 0.2); 
+                for(let i=0; i<petals; i++) {
+                    const angle = (Math.PI*2 / petals) * i;
+                    const wave = Math.sin(time * 3 + i) * 15; 
+                    const len = entity.radius * 1.2 + wave;
+                    ctx.save();
+                    ctx.rotate(angle);
                     ctx.beginPath();
-                    ctx.arc(ox, oy, entity.radius * 0.8, 0, Math.PI*2);
+                    ctx.moveTo(0, 0);
+                    ctx.bezierCurveTo(25, -len/2, 5, -len, 0, -len);
+                    ctx.bezierCurveTo(-5, -len, -25, -len/2, 0, 0);
+                    const grad = ctx.createLinearGradient(0, 0, 0, -len);
+                    grad.addColorStop(0, 'rgba(0, 255, 153, 0.1)');
+                    grad.addColorStop(1, 'rgba(0, 255, 153, 0.5)');
+                    ctx.fillStyle = grad;
+                    ctx.strokeStyle = COLORS.NATURE_LIGHT;
+                    ctx.lineWidth = 2;
+                    ctx.fill();
                     ctx.stroke();
+                    ctx.restore();
                 }
+                ctx.restore();
+                ctx.save();
+                const breath = 1.0 + Math.sin(time * 2) * 0.15;
+                ctx.scale(breath, breath);
+                ctx.rotate(-time * 0.5); 
+                for(let i=0; i<5; i++) {
+                    const angle = (Math.PI*2 / 5) * i;
+                    ctx.save();
+                    ctx.rotate(angle);
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.quadraticCurveTo(10, -30, 0, -50);
+                    ctx.quadraticCurveTo(-10, -30, 0, 0);
+                    ctx.fillStyle = COLORS.NATURE_DARK;
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    ctx.restore();
+                }
+                ctx.restore();
+                ctx.save();
+                for(let i=0; i<12; i++) {
+                    const pAngle = time * (0.5 + (i%3)*0.3) + (i * (Math.PI*2/12));
+                    const pDist = entity.radius * (0.6 + Math.sin(time * 1.5 + i)*0.2);
+                    const px = Math.cos(pAngle) * pDist;
+                    const py = Math.sin(pAngle) * pDist;
+                    ctx.fillStyle = (i % 2 === 0) ? COLORS.GOLD : COLORS.NATURE_LIGHT;
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = ctx.fillStyle;
+                    ctx.beginPath();
+                    ctx.arc(px, py, (i%2===0) ? 3 : 2, 0, Math.PI*2);
+                    ctx.fill();
+                }
+                ctx.restore();
             }
 
             ctx.fillStyle = '#fff';
@@ -6051,7 +6149,6 @@ drawEntity(entity) {
             ctx.scale(1.5, 1.5); 
 
             const color = (this.player && this.player.classColor) ? this.player.classColor : COLORS.NATURE_LIGHT;
-
             ctx.strokeStyle = color;
             ctx.lineWidth = 3;
             ctx.shadowColor = color;
@@ -6085,14 +6182,12 @@ drawEntity(entity) {
                 ctx.arc(0, 0, 15, 0, Math.PI, true); 
                 ctx.fill();
                 ctx.restore();
-
                 ctx.fillStyle = '#fff';
                 ctx.shadowBlur = 20;
                 ctx.shadowColor = color;
                 ctx.beginPath();
                 ctx.arc(0, 0, 8, 0, Math.PI*2);
                 ctx.fill();
-
                 ctx.fillStyle = color;
                 for(let i=0; i<3; i++) {
                     const angle = time * 3 + (i * (Math.PI*2/3));
@@ -6119,7 +6214,7 @@ drawEntity(entity) {
             ctx.fillStyle = '#1a0505'; 
 
             if (entity.isBoss) {
-                // NEW: BOSS VISUALS (Jagged Demon Core)
+                // RESTORED: BOSS VISUALS (Jagged Demon Core)
                 
                 // 1. Outer Gravity Well (Intimidating Aura)
                 ctx.lineWidth = 4;
@@ -6135,9 +6230,9 @@ drawEntity(entity) {
                 ctx.stroke();
                 ctx.setLineDash([]);
 
-                // 2. Jagged Outer Shell
+                // 2. Jagged Outer Shell (Increased Spikes for Aggression)
                 ctx.fillStyle = '#1a0000'; 
-                this.drawSpikedCircle(ctx, 0, 0, entity.radius, 8, 20, time * 0.5);
+                this.drawSpikedCircle(ctx, 0, 0, entity.radius, 12, 25, time * 0.5); // More spikes, deeper
                 
                 // 3. Inner Glitch Layer
                 ctx.strokeStyle = '#ff4400';
@@ -6363,13 +6458,11 @@ drawEntity(entity) {
         }
 
         // --- ENEMY INTENT ICON ---
-        // FIX: Check for nextIntents OR nextIntent
         if (entity instanceof Enemy && ((entity.nextIntents && entity.nextIntents.length > 0) || entity.nextIntent)) {
             ctx.restore(); 
             ctx.save();
             ctx.translate(renderX, renderY);
             
-            // Handle Multiple Intents (Bosses/Standard)
             if (entity.nextIntents && entity.nextIntents.length > 0) {
                 const count = entity.nextIntents.length;
                 const spacing = 60;
@@ -6410,7 +6503,6 @@ drawEntity(entity) {
                     }
                 }
             } else {
-                // Fallback for single intent (Tutorial/Legacy)
                 ctx.fillStyle = COLORS.MECH_LIGHT;
                 const hover = Math.cos(time * 5) * 5;
                 ctx.fillRect(-40, -entity.radius - 40 + hover, 80, 25);
