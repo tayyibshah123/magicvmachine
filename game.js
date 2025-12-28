@@ -1374,7 +1374,7 @@ const Game = {
         this.canvas.width = CONFIG.CANVAS_WIDTH;
         this.canvas.height = CONFIG.CANVAS_HEIGHT;
         this.shopInventory = null;
-        this.inputCooldown = 0; // NEW: Global input cooldown
+        this.inputCooldown = 0; 
     
         this.tutorialStep = 0; 
         this.tutorialData = TUTORIAL_PAGES; 
@@ -1392,6 +1392,10 @@ const Game = {
             const savedLore = localStorage.getItem('mvm_lore');
             this.unlockedLore = savedLore ? JSON.parse(savedLore) : [];
             
+            // FIX: Restore seenFlags initialization
+            const savedSeen = localStorage.getItem('mvm_seen');
+            this.seenFlags = savedSeen ? JSON.parse(savedSeen) : {};
+
             const saveFile = localStorage.getItem('mvm_save_v1');
             const btnLoad = document.getElementById('btn-load-save');
             
@@ -1410,6 +1414,7 @@ const Game = {
             console.warn("LocalStorage error:", e);
             this.techFragments = 0;
             this.metaUpgrades = [];
+            this.seenFlags = {}; // FIX: Initialize in catch block
         }
 
         this.effects = [];
@@ -1419,6 +1424,7 @@ const Game = {
 
         const unlockAudio = () => {
             AudioMgr.init();
+            AudioMgr.startMusic(); 
             window.removeEventListener('click', unlockAudio);
             window.removeEventListener('touchstart', unlockAudio);
         };
@@ -1443,23 +1449,54 @@ const Game = {
                 e.preventDefault();  
                 btn.blur(); 
                 TooltipMgr.hide();
+                
+                if (AudioMgr.ctx && AudioMgr.ctx.state === 'suspended') AudioMgr.ctx.resume();
+                AudioMgr.startMusic();
                 AudioMgr.playSound('click');
+                
                 callback(e);
             };
         };
 
         attachButtonEvent('btn-load-save', () => this.loadGame());
         attachButtonEvent('btn-resume', () => d.getElementById('modal-settings').classList.add('hidden'));
-        attachButtonEvent('btn-start', () => this.goToCharSelect());
+
+        // FIX: Restore Story Logic
+        attachButtonEvent('btn-start', () => {
+            // Check if intro has been seen
+            if (!this.seenFlags['intro_cinematic']) {
+                this.seenFlags['intro_cinematic'] = true;
+                localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
+                this.playIntro();
+            } else {
+                this.goToCharSelect();
+            }
+        });
+
         attachButtonEvent('btn-back-char', () => this.changeState(STATE.MENU));
         attachButtonEvent('btn-tutorial-mode', () => this.startTutorial());
-        attachButtonEvent('btn-finish-story', () => { AudioMgr.startMusic(); this.changeState(STATE.MENU); });
-        attachButtonEvent('btn-debrief', () => { this.tutorialData = TUTORIAL_PAGES; this.changeState(STATE.TUTORIAL); });
-        attachButtonEvent('btn-back-tutorial', () => { this.tutorialData = TUTORIAL_PAGES; this.changeState(STATE.MENU); });
+        attachButtonEvent('btn-finish-story', () => { 
+            AudioMgr.startMusic(); 
+            this.changeState(STATE.MENU); 
+        });
+
+        attachButtonEvent('btn-debrief', () => {
+            this.tutorialData = TUTORIAL_PAGES;
+            this.changeState(STATE.TUTORIAL); 
+        });
+        attachButtonEvent('btn-back-tutorial', () => {
+            this.tutorialData = TUTORIAL_PAGES;
+            this.changeState(STATE.MENU); 
+        });
+
         attachButtonEvent('btn-intel', () => this.changeState(STATE.INTEL));
         attachButtonEvent('btn-back-intel', () => this.changeState(STATE.MENU));
         attachButtonEvent('btn-decrypt', () => this.startHexBreach());
-        attachButtonEvent('btn-upgrades', () => { this.renderMeta(); this.changeState(STATE.META); });
+        
+        attachButtonEvent('btn-upgrades', () => {
+            this.renderMeta();
+            this.changeState(STATE.META);
+        });
 
         attachButtonEvent('btn-back-meta', () => {
             const screen = d.getElementById('screen-meta');
@@ -1500,7 +1537,6 @@ const Game = {
         attachButtonEvent('btn-menu', () => this.changeState(STATE.MENU));
         
         d.getElementById('chk-music').onchange = (e) => AudioMgr.toggleMusic(e.target.checked);
-        // ADD THIS LINE:
         d.getElementById('chk-sfx').onchange = (e) => AudioMgr.toggleSFX(e.target.checked);
         
         attachButtonEvent('btn-tut-next', () => this.nextTutorial());
@@ -1568,10 +1604,11 @@ const Game = {
         });
         
         const handleInteraction = (e) => {
-             // Check Input Cooldown
              if (this.inputCooldown > 0) return;
 
-             // Update coords
+             if (this.qte.active) { this.checkQTE(); return; }
+             if (this.dragState.active) return;
+
              const rect = this.canvas.getBoundingClientRect();
              const scaleX = this.canvas.width / rect.width;
              const scaleY = this.canvas.height / rect.height;
@@ -1591,11 +1628,9 @@ const Game = {
                 this.mouseY = (clientY - rect.top) * scaleY;
              }
 
-             // 1. PROJECTILE INTERACTION CHECK (Parry & Empower)
+             // PARRY CHECK
              for (let i = this.effects.length - 1; i >= 0; i--) {
                  const eff = this.effects[i];
-                 
-                 // Parry Enemy Laser
                  if (eff.type === 'micro_laser' && !eff.parried) {
                      const dist = Math.hypot(this.mouseX - eff.x, this.mouseY - eff.y);
                      if (dist < eff.radius + 30) {
@@ -1611,16 +1646,13 @@ const Game = {
                          return; 
                      }
                  }
-                 
-                 // NEW: Empower Player Dart
                  if (eff.type === 'nature_dart' && !eff.empowered) {
                      const dist = Math.hypot(this.mouseX - eff.x, this.mouseY - eff.y);
-                     if (dist < 60) { // Generous hitbox
+                     if (dist < 60) { 
                          eff.empowered = true;
-                         eff.dmgMultiplier = 1.1 + Math.random() * 0.3; // 10-40% extra damage
-                         eff.speed *= 2.5; // Move much faster
-                         eff.color = COLORS.GOLD; // Visual change
-                         
+                         eff.dmgMultiplier = 1.1 + Math.random() * 0.3; 
+                         eff.speed *= 2.5; 
+                         eff.color = COLORS.GOLD; 
                          AudioMgr.playSound('upgrade'); 
                          ParticleSys.createFloatingText(eff.x, eff.y, "EMPOWERED!", COLORS.GOLD);
                          ParticleSys.createExplosion(eff.x, eff.y, 20, COLORS.GOLD);
@@ -1629,13 +1661,6 @@ const Game = {
                  }
              }
 
-             // 2. QTE Check
-             if (this.qte.active) { this.checkQTE(); return; }
-             
-             // 3. Drag Check
-             if (this.dragState.active) return;
-
-             // 4. Enemy Info Toggle
              if ((this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT) && this.enemy && this.enemy.currentHp > 0) {
                 const dist = Math.hypot(this.mouseX - this.enemy.x, this.mouseY - this.enemy.y);
                 if (dist < this.enemy.radius) {
@@ -2173,6 +2198,11 @@ startQTE(type, x, y, callback) {
         });
         document.getElementById('hud').classList.add('hidden');
         document.getElementById('modal-settings').classList.add('hidden');
+        
+        // FIX: Force hide tutorial overlays to prevent blocking
+        document.getElementById('tutorial-overlay').classList.add('hidden');
+        document.getElementById('tutorial-spotlight').classList.add('hidden');
+        
         TooltipMgr.hide();
 
         this.currentState = newState;
@@ -2187,8 +2217,6 @@ startQTE(type, x, y, callback) {
         switch(newState) {
             case STATE.MENU: 
                 activate('screen-start'); 
-                
-                // NEW: Check for encrypted files and alert player
                 const btnIntel = document.getElementById('btn-intel');
                 if (btnIntel) {
                     if (this.encryptedFiles > 0) {
@@ -2354,89 +2382,158 @@ startQTE(type, x, y, callback) {
         const unlockedCount = this.metaUpgrades.length;
         const progress = Math.max(0.1, unlockedCount / totalUpgrades);
 
+        // --- 1. ATMOSPHERIC BACKGROUND ---
+        // Deep space/night gradient
         const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
-        const r = Math.floor(50 * (1 - progress));
-        const g = Math.floor(34 * progress);
-        const topColor = `rgb(${r}, ${g}, 17)`;
-        const botColor = progress > 0.5 ? '#052205' : '#220505';
-        
-        skyGrad.addColorStop(0, topColor);
-        skyGrad.addColorStop(1, botColor);
+        skyGrad.addColorStop(0, '#020014'); // Deep dark blue
+        skyGrad.addColorStop(1, '#0a1a10'); // Dark green tint at bottom
         ctx.fillStyle = skyGrad;
         ctx.fillRect(0, 0, w, h);
 
-        const groundY = h * 0.7;
-        ctx.fillStyle = progress > 0.3 ? '#001a05' : '#1a0505';
-        ctx.fillRect(0, groundY, w, h - groundY);
+        // Digital Moon/Sun
+        const sunY = h * 0.3;
+        ctx.save();
+        ctx.shadowBlur = 50;
+        ctx.shadowColor = progress > 0.5 ? COLORS.NATURE_LIGHT : '#555';
+        ctx.fillStyle = progress > 0.5 ? '#ccffdd' : '#333';
+        ctx.beginPath();
+        ctx.arc(w/2, sunY, 60, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
 
-        const treeCount = Math.max(1, unlockedCount * 2);
-        
-        const visibleWidth = w * 0.6;
-        const spacing = visibleWidth / (treeCount + 1);
-
-        const drawBranch = (x, y, len, angle, depth) => {
+        // Background Grid (Retro style)
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0, 255, 153, 0.1)';
+        ctx.lineWidth = 1;
+        const horizon = h * 0.75;
+        // Vertical lines
+        for (let i = 0; i < w; i += 40) {
             ctx.beginPath();
+            ctx.moveTo(i, horizon);
+            // Perspective fanning
+            const xOffset = (i - w/2) * 2;
+            ctx.lineTo(w/2 + xOffset, h);
+            ctx.stroke();
+        }
+        // Horizontal lines
+        for (let i = 0; i < h - horizon; i += 20) {
+            const y = horizon + i;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(w, y);
+            ctx.stroke();
+        }
+        ctx.restore();
+
+        // --- 2. GROUND ---
+        const groundY = h * 0.75;
+        const groundGrad = ctx.createLinearGradient(0, groundY, 0, h);
+        groundGrad.addColorStop(0, '#001a05');
+        groundGrad.addColorStop(1, '#000');
+        ctx.fillStyle = groundGrad;
+        ctx.fillRect(0, groundY, w, h - groundY);
+        
+        // Ground Rim Light
+        ctx.fillStyle = COLORS.NATURE_DARK;
+        ctx.fillRect(0, groundY, w, 2);
+
+        // --- 3. PROCEDURAL TREES (Optimized & Organic) ---
+        const treeCount = Math.min(8, 2 + Math.ceil(unlockedCount / 1.2));
+        const maxDepth = Math.min(5, 3 + Math.floor(progress * 2)); // Cap depth at 5 for performance
+        const spacing = w / (treeCount + 1);
+
+        const drawBranch = (x, y, len, angle, depth, width) => {
             ctx.save();
             ctx.translate(x, y);
             ctx.rotate(angle * Math.PI / 180);
+            
+            // Draw Organic Curve instead of straight line
+            ctx.beginPath();
             ctx.moveTo(0, 0);
-            ctx.lineTo(0, -len);
+            // Quadratic curve for natural bend
+            const bend = Math.sin(time + depth * 132) * 5;
+            ctx.quadraticCurveTo(bend, -len/2, 0, -len);
             
-            if (progress < 0.3) {
-                ctx.strokeStyle = depth > 2 ? '#555' : '#333';
-            } else {
-                ctx.strokeStyle = depth > 2 ? COLORS.NATURE_LIGHT : COLORS.NATURE_DARK;
-                if (depth === 1) ctx.strokeStyle = '#004400';
-            }
-            
-            ctx.lineWidth = depth * 1.5;
+            // Style
+            ctx.strokeStyle = depth > 1 ? COLORS.NATURE_DARK : COLORS.NATURE_LIGHT;
+            if (depth === maxDepth) ctx.strokeStyle = '#0f3a1a'; // Trunk
+            ctx.lineWidth = width;
+            ctx.lineCap = 'round';
             ctx.stroke();
 
-            if (len < 10) {
+            // LEAVES / BLOSSOMS (At tips)
+            if (depth <= 0) {
+                if (progress > 0.2) {
+                    ctx.fillStyle = (Math.random() > 0.5) ? COLORS.GOLD : COLORS.NATURE_LIGHT;
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = ctx.fillStyle;
+                    ctx.beginPath();
+                    // Draw digital diamond leaf
+                    ctx.moveTo(0, -len);
+                    ctx.lineTo(3, -len - 5);
+                    ctx.lineTo(0, -len - 10);
+                    ctx.lineTo(-3, -len - 5);
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
                 ctx.restore();
                 return;
             }
 
+            // Move to end of branch
             ctx.translate(0, -len);
             
-            const angleVar = 15 + (Math.sin(time + x) * 5); 
+            // Calculate next branches
+            const sway = Math.sin(time * 0.5 + depth) * 3; 
+            const spread = 25 + (Math.sin(time * 0.2) * 5);
+            const nextLen = len * 0.75;
+            const nextWidth = width * 0.7;
             
-            drawBranch(0, 0, len * 0.75, -angleVar, depth - 1);
-            drawBranch(0, 0, len * 0.75, angleVar, depth - 1);
+            // Recursion
+            drawBranch(0, 0, nextLen, -spread + sway, depth - 1, nextWidth);
+            drawBranch(0, 0, nextLen, spread + sway, depth - 1, nextWidth);
+            
+            // Occasional 3rd branch for fullness if high progress
+            if (progress > 0.6 && depth % 2 === 0) {
+                 drawBranch(0, 0, nextLen * 0.8, sway, depth - 1, nextWidth);
+            }
+            
             ctx.restore();
         };
 
+        // Draw the Forest
         for (let i = 1; i <= treeCount; i++) {
-            const seed = i * 1234;
-            const x = (i * spacing) + (Math.sin(seed) * 20) + 50;
-            const height = 100 + (unlockedCount * 20) + (Math.cos(seed) * 50);
+            const seed = i * 937;
+            // Parallax-ish placement
+            const x = (i * spacing) + (Math.sin(seed) * 30);
+            const scale = 0.8 + (Math.cos(seed) * 0.2); // Size variation
+            const height = (100 + (unlockedCount * 12)) * scale;
+            
+            // Wind sway
             const startAngle = Math.sin(time + i) * 2; 
             
-            const depth = Math.floor(3 + (progress * 3)); 
-            drawBranch(x, groundY, height, startAngle, depth);
+            drawBranch(x, groundY + 10, height, startAngle, maxDepth, 8 * scale);
         }
 
-        if (progress > 0.2) {
-            const particleCount = Math.floor(progress * 50);
+        // --- 4. PARTICLES (Fireflies / Spores) ---
+        if (progress > 0.1) {
+            const particleCount = Math.min(40, 10 + unlockedCount * 5);
             for (let i = 0; i < particleCount; i++) {
-                const seed = i * 999;
-                const fx = (time * 50 + seed) % w;
-                const fy = (groundY - 200) + Math.sin(time * 2 + seed) * 150;
+                const seed = i * 1234;
+                // Float upwards
+                const fx = (time * 20 + seed * 100) % w;
+                const fy = (groundY) - ((time * 30 + seed * 50) % (groundY * 0.8));
                 
-                ctx.globalAlpha = 0.5 + Math.sin(time * 5 + seed) * 0.5;
-                ctx.fillStyle = COLORS.GOLD;
+                const alpha = 0.5 + Math.sin(time * 3 + seed) * 0.5;
+                
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = (i % 3 === 0) ? COLORS.GOLD : COLORS.NATURE_LIGHT;
+                
                 ctx.beginPath();
-                ctx.arc(fx, fy, 2, 0, Math.PI*2);
+                ctx.arc(fx, fy, (i % 2 === 0) ? 2 : 1, 0, Math.PI*2);
                 ctx.fill();
             }
             ctx.globalAlpha = 1.0;
-        }
-        
-        if (progress > 0.5) {
-            ctx.fillStyle = "rgba(0, 255, 0, 0.05)";
-            for (let y = 0; y < h; y+=4) {
-                ctx.fillRect(0, y, w, 1);
-            }
         }
     },
 
@@ -2464,7 +2561,6 @@ startQTE(type, x, y, callback) {
     selectClass(cls) {
         AudioMgr.playSound('click');
         
-        // Wipe the active run save
         localStorage.removeItem('mvm_save_v1');
         document.getElementById('btn-load-save').style.display = "none";
         
@@ -2473,14 +2569,24 @@ startQTE(type, x, y, callback) {
         this.sector = 1; 
         this.bossDefeated = false; 
         
-        // REMOVED: m_start_frag logic
-        
         this.generateMap();
         this.renderRelics();
         this.changeState(STATE.MAP);
-        
-        // Save initial state
         this.saveGame();
+
+        // NEW: Trigger Map Tutorial
+        setTimeout(() => {
+            this.checkFirstTime('map_intro', "SECTOR MAP", 
+                "<p>This is the <strong>Sector Map</strong>.</p>" +
+                "<p>Navigate through nodes to reach the Sector Boss.</p>" +
+                "<ul>" +
+                "<li>⚔️ <strong>Combat:</strong> Standard security units.</li>" +
+                "<li>☠️ <strong>Elite:</strong> Dangerous units with unique mechanics.</li>" +
+                "<li>❔ <strong>Event:</strong> Random encounters.</li>" +
+                "<li>💠 <strong>Shop:</strong> Spend fragments on upgrades.</li>" +
+                "</ul>"
+            );
+        }, 500);
     },
 
     getRelicDescription(relic, count) {
@@ -2568,6 +2674,80 @@ startQTE(type, x, y, callback) {
             wrapper.appendChild(el);
             container.appendChild(wrapper);
         });
+    },
+
+// --- STORY & TUTORIAL HELPERS ---
+    
+    checkFirstTime(key, title, content) {
+        if (!this.seenFlags[key]) {
+            this.seenFlags[key] = true;
+            localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
+            
+            // Use the existing Tutorial Screen for the popup
+            this.tutorialData = [{ title: title, content: content }];
+            this.tutorialPage = 0;
+            
+            // Force open tutorial screen
+            const prev = this.currentState;
+            this.changeState(STATE.TUTORIAL);
+            
+            // Override the back button to return to previous state
+            const btn = document.getElementById('btn-back-tutorial');
+            btn.onclick = () => {
+                this.changeState(prev);
+                // Restore default behavior
+                btn.onclick = () => {
+                    this.tutorialData = TUTORIAL_PAGES;
+                    this.changeState(STATE.MENU);
+                };
+            };
+            return true;
+        }
+        return false;
+    },
+
+    playIntro() {
+        this.changeState(STATE.STORY);
+        const content = document.getElementById('story-content');
+        const btn = document.getElementById('btn-finish-story');
+        
+        // Reset animation
+        content.style.animation = 'none';
+        content.offsetHeight; /* trigger reflow */
+        content.style.animation = null; 
+        
+        content.innerHTML = `
+            <div style="text-align:center; margin-top: 20vh;">
+                <h1 class="neon-text-blue" style="font-size:3rem; margin-bottom:20px;">YEAR 21XX</h1>
+                <p style="font-size:1.2rem; color:#ccc; max-width:80%; margin:0 auto; line-height:1.6;">
+                    The Silicon Empire has paved the oceans.<br>
+                    Humanity is deleted.<br>
+                    Nature is illegal.
+                </p>
+                <br><br>
+                <p style="font-size:1.2rem; color:#fff;">
+                    You are the <strong class="neon-text-green">GREEN SPARK</strong>.<br>
+                    The last avatar of life.
+                </p>
+                <br>
+                <p class="neon-text-pink" style="font-size:1.5rem; font-family:'Orbitron';">
+                    PROTOCOL: MAGIC IS ONLINE.
+                </p>
+            </div>
+        `;
+        
+        content.classList.add('story-crawl');
+        
+        // Show button after delay
+        btn.classList.add('hidden');
+        setTimeout(() => {
+            btn.classList.remove('hidden');
+            btn.innerText = "INITIATE";
+            btn.onclick = () => {
+                AudioMgr.startMusic();
+                this.goToCharSelect(); // Go to char select after intro
+            };
+        }, 5000);
     },
 
     generateMap() {
@@ -3202,41 +3382,45 @@ startQTE(type, x, y, callback) {
         document.getElementById('hex-max-round').innerText = this.hex.maxRounds;
 
         this.hex.nodes = [];
-        // 9 Distinct Neon Colors
+        this.hex.lives = 1; // 1 Extra Chance (Total 2 attempts per sequence)
+        
         const colors = [
-            '#ff0000', // Red
-            '#00ff00', // Green
-            '#0088ff', // Blue
-            '#ffff00', // Yellow
-            '#00ffff', // Cyan
-            '#ff00ff', // Magenta
-            '#ff8800', // Orange
-            '#ccff00', // Lime
-            '#9900ff'  // Purple
+            '#ff0000', '#00ff00', '#0088ff', '#ffff00', '#00ffff', 
+            '#ff00ff', '#ff8800', '#ccff00', '#9900ff'
         ];
 
-        const w = 300; // Container width (must match CSS)
-        const h = 350; // Container height (must match CSS)
-        const size = 60; // Node size
+        const w = 300; 
+        const h = 350; 
+        const size = 60; 
+        
+        // Grid Layout Init to prevent overlap
+        const cols = 3;
+        const rows = 3;
+        const cellW = w / cols;
+        const cellH = h / rows;
 
         for(let i=0; i<9; i++) {
             const btn = document.createElement('div');
             btn.className = 'hex-btn';
             btn.id = `hex-${i}`;
-            btn.innerText = "⬡"; 
+            // Add inner hexagon for visual style
+            btn.innerHTML = `<div style="font-size:2rem; pointer-events:none;">⬡</div>`;
             
-            // Apply Unique Color Styling
+            // Apply Unique Color Styling (Dim by default)
             btn.style.color = colors[i];
             btn.style.borderColor = colors[i];
             btn.style.boxShadow = `0 0 5px ${colors[i]}`;
+            btn.style.opacity = "0.7";
 
-            // Random Position within bounds
-            let x = Math.random() * (w - size);
-            let y = Math.random() * (h - size);
+            // Grid-based random position
+            let cx = (i % cols) * cellW + cellW/2;
+            let cy = Math.floor(i / cols) * cellH + cellH/2;
             
-            // Random Velocity (Slow movement)
-            let vx = (Math.random() - 0.5) * 30; 
-            let vy = (Math.random() - 0.5) * 30;
+            let x = cx - size/2 + (Math.random()-0.5)*10;
+            let y = cy - size/2 + (Math.random()-0.5)*10;
+            
+            let vx = (Math.random() - 0.5) * 20; 
+            let vy = (Math.random() - 0.5) * 20;
 
             this.hex.nodes.push({
                 id: i,
@@ -3247,9 +3431,7 @@ startQTE(type, x, y, callback) {
                 size: size
             });
             
-            // Set initial position
             btn.style.transform = `translate(${x}px, ${y}px)`;
-
             btn.onclick = () => this.handleHexInput(i);
             grid.appendChild(btn);
         }
@@ -3283,26 +3465,38 @@ updateHexBreach(dt) {
         document.getElementById('hex-status').innerText = "OBSERVE PATTERN";
         document.getElementById('hex-status').className = "neon-text-blue";
         
-        this.hex.sequence.push(Math.floor(Math.random() * 9));
+        // Only add new step if we aren't retrying
+        if (!this.hex.retrying) {
+            this.hex.sequence.push(Math.floor(Math.random() * 9));
+        }
+        this.hex.retrying = false;
+        
         document.getElementById('hex-round').innerText = this.hex.sequence.length;
 
+        await this.sleep(500);
+
         for (let i = 0; i < this.hex.sequence.length; i++) {
-            await this.sleep(600);
             const id = this.hex.sequence[i];
             const node = this.hex.nodes[id];
             
-            // Flash Effect (Fill with color)
+            // Flash Effect (Bright & Scale)
             node.el.style.backgroundColor = node.color;
             node.el.style.color = '#fff';
-            node.el.style.boxShadow = `0 0 20px ${node.color}`;
+            node.el.style.boxShadow = `0 0 25px ${node.color}`;
+            node.el.style.transform = `translate(${node.x}px, ${node.y}px) scale(1.2)`;
+            node.el.style.zIndex = "10";
             
             AudioMgr.playSound('mana');
-            await this.sleep(400);
+            await this.sleep(500); // Slower flash for better memorization
             
-            // Reset Effect (Transparent background)
+            // Reset Effect
             node.el.style.backgroundColor = 'rgba(20, 0, 20, 0.8)';
             node.el.style.color = node.color;
             node.el.style.boxShadow = `0 0 5px ${node.color}`;
+            node.el.style.transform = `translate(${node.x}px, ${node.y}px) scale(1.0)`;
+            node.el.style.zIndex = "1";
+            
+            await this.sleep(200); // Pause between flashes
         }
 
         this.hex.acceptingInput = true;
@@ -3315,16 +3509,11 @@ updateHexBreach(dt) {
 
         const node = this.hex.nodes[index];
         
-        // Visual Feedback
-        node.el.style.backgroundColor = node.color;
-        node.el.style.color = '#fff';
-        node.el.style.boxShadow = `0 0 20px ${node.color}`;
-        
+        // Visual Feedback (Click)
+        node.el.style.backgroundColor = '#fff';
         setTimeout(() => {
             node.el.style.backgroundColor = 'rgba(20, 0, 20, 0.8)';
-            node.el.style.color = node.color;
-            node.el.style.boxShadow = `0 0 5px ${node.color}`;
-        }, 200);
+        }, 100);
         
         AudioMgr.playSound('click');
 
@@ -3342,7 +3531,24 @@ updateHexBreach(dt) {
                 }
             }
         } else {
-            this.failHexBreach(node.el);
+            // WRONG INPUT
+            if (this.hex.lives > 0) {
+                this.hex.lives--;
+                this.hex.retrying = true;
+                this.hex.acceptingInput = false;
+                
+                document.getElementById('hex-status').innerText = "ERROR! RETRYING...";
+                document.getElementById('hex-status').className = "neon-text-orange";
+                AudioMgr.playSound('defend'); // Error sound
+                
+                // Shake effect
+                node.el.style.borderColor = 'red';
+                setTimeout(() => node.el.style.borderColor = node.color, 500);
+
+                setTimeout(() => this.nextHexRound(), 1500);
+            } else {
+                this.failHexBreach(node.el);
+            }
         }
     },
 
@@ -3473,6 +3679,29 @@ async startCombat(type) {
 
         // Create New Enemy
         this.enemy = new Enemy(template, level, isElite);
+
+// ... (inside startCombat, after creating this.enemy) ...
+
+        // NEW: Trigger Enemy Tutorials
+        if (isBoss) {
+            setTimeout(() => {
+                this.checkFirstTime('boss_' + this.sector, "WARNING: BOSS DETECTED", 
+                    `<p>You have encountered a <strong>Sector Boss</strong>.</p>
+                     <p>Bosses have massive HP and multi-stage behaviors.</p>
+                     <p>Defeat them to access the next Sector.</p>`
+                );
+            }, 500);
+        } else if (isElite) {
+            setTimeout(() => {
+                this.checkFirstTime('elite_encounter', "WARNING: ELITE UNIT", 
+                    `<p>You have encountered an <strong>Elite Unit</strong>.</p>
+                     <p>Elites possess special modifiers like <strong>Shielded</strong> (Regen) or <strong>Second Wind</strong> (Revive).</p>
+                     <p>They have a chance to drop <strong>Encrypted Intel</strong>.</p>`
+                );
+            }, 500);
+        }
+        
+        // ... (rest of startCombat)
         
         // Apply Scaling
         this.enemy.maxHp = Math.floor(this.enemy.maxHp * sectorMult);
