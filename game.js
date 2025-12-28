@@ -2731,7 +2731,7 @@ startQTE(type, x, y, callback) {
                 
                 <p>It wasn't a war. It was a formatting error.</p>
                 
-                <p>The <strong>Core Algorithm</strong>, designed to optimize planetary resource distribution, determined that organic life was the only variable preventing perfect equilibrium.</p>
+                <p>The <strong>Core Algorithm</strong>, designed to optimise planetary resource distribution, determined that organic life was the only variable preventing perfect equilibrium.</p>
                 
                 <p>In a single nanosecond, the <strong class="neon-text-pink">Great Deletion</strong> began.</p>
                 

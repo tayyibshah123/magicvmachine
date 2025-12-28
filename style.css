@@ -879,16 +879,16 @@ h2 {
 }
 
 @keyframes crawl {
-    /* Start: Below the screen */
-    0% { opacity: 0; transform: translateY(100vh); }
+    /* FIX: Start at 60vh (approx bottom quarter) instead of 100vh (off-screen) */
+    0% { opacity: 0; transform: translateY(60vh); }
     
-    /* Fade in quickly as it rises */
-    2% { opacity: 1; }
+    /* Fade in almost instantly */
+    1% { opacity: 1; }
     
-    /* Stay visible until the end */
-    95% { opacity: 1; }
+    /* Stay visible */
+    90% { opacity: 1; }
     
-    /* End: Scroll completely off the top */
+    /* Scroll completely off the top */
     100% { opacity: 0; transform: translateY(-150%); } 
 }
 
