@@ -1082,10 +1082,12 @@ class Minion extends Entity {
         this.radius = 75; 
         this.dmg = isPlayerSide ? 1 : 2;
         
-        // FIX: Percentage Damage Boost
+        // NEW: Charge system for Bomb Bots
+        this.charges = 1; 
+
         if (isPlayerSide && Game.hasMetaUpgrade('m_minion_atk')) {
-            this.dmg = Math.floor(this.dmg * 1.5); // +50%
-            if (this.dmg === 1) this.dmg = 2; // Ensure at least +1 for low base
+            this.dmg = Math.floor(this.dmg * 1.5); 
+            if (this.dmg === 1) this.dmg = 2; 
         }
 
         this.level = 1;
@@ -1103,6 +1105,13 @@ class Minion extends Entity {
         this.currentHp += 2;
         this.dmg += 1;
         this.level++;
+        
+        // NEW: Upgrading a Bomb Bot adds a charge (survives another turn)
+        if (this.name.includes("Bomb")) {
+            this.charges++;
+            ParticleSys.createFloatingText(this.x, this.y - 100, "+1 CHARGE", COLORS.ORANGE);
+        }
+
         ParticleSys.createFloatingText(this.x, this.y - 80, "UPGRADE!", COLORS.GOLD);
         this.playAnim('pulse');
         AudioMgr.playSound('upgrade');
@@ -1528,8 +1537,17 @@ const Game = {
             this.endTurn();
         });
 
-        attachButtonEvent('btn-settings', () => d.getElementById('modal-settings').classList.remove('hidden'));
-        attachButtonEvent('btn-settings-main', () => d.getElementById('modal-settings').classList.remove('hidden'));
+        // FIX: Disable settings during tutorial
+        const handleSettings = () => {
+            if (this.currentState === STATE.TUTORIAL_COMBAT) {
+                ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2, "COMPLETE TUTORIAL FIRST!", "#ff0000");
+                AudioMgr.playSound('defend');
+            } else {
+                d.getElementById('modal-settings').classList.remove('hidden');
+            }
+        };
+        attachButtonEvent('btn-settings', handleSettings);
+        attachButtonEvent('btn-settings-main', handleSettings);
         attachButtonEvent('btn-quit', () => this.quitRun());
         attachButtonEvent('btn-menu', () => this.changeState(STATE.MENU));
         
@@ -4268,10 +4286,17 @@ async startTurn() {
                 this.triggerVFX('overclock', null, this.player);
 
             } else if (type === 'MINION') {
-                // ... [KEEP MINION LOGIC] ...
                 if (target instanceof Minion && target.isPlayerSide) {
                     if (isUpgraded) {
+                        // Alpha Call Upgrade Logic
                         target.maxHp += 10; target.currentHp += 10; target.dmg += 5; target.level++;
+                        
+                        // NEW: Add charge for Bomb Bot on Alpha Call
+                        if (target.name.includes("Bomb")) {
+                            target.charges++;
+                            ParticleSys.createFloatingText(target.x, target.y - 120, "+1 CHARGE", COLORS.ORANGE);
+                        }
+
                         ParticleSys.createFloatingText(target.x, target.y - 80, "ALPHA BOOST!", COLORS.GOLD);
                         target.playAnim('pulse');
                         AudioMgr.playSound('upgrade');
@@ -4281,15 +4306,19 @@ async startTurn() {
                 } else {
                     if (this.player.minions.length < this.player.maxMinions) {
                         const m = new Minion(0, 0, this.player.minions.length + 1, true);
+                        
                         m.spawnTimer = 1.0; 
+
                         if(isUpgraded) {
-                            m.upgrade(); m.addShield(5); m.dmg += 5;
+                            m.upgrade(); 
+                            m.addShield(5); 
+                            m.dmg += 5;
+                            // Alpha Call on spawn also adds charge via m.upgrade() called above
                             ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "ALPHA CALL", COLORS.GOLD);
                         }
                         if(this.player.traits.startShield) m.addShield(10); 
                         if(this.player.hasRelic('neural_link')) { m.maxHp += 2; m.currentHp += 2; m.dmg += 1; }
                         this.player.minions.push(m);
-                        // NEW: Materialize
                         this.triggerVFX('materialize', null, {x: this.player.x, y: this.player.y}); 
                     } else {
                         if(this.player.minions.length > 0) {
@@ -4298,7 +4327,7 @@ async startTurn() {
                         }
                     }
                 }
-            } 
+            }
             else if (type === 'EARTHQUAKE') {
                 // NEW: Grid Fracture
                 this.triggerVFX('grid_fracture', this.player, this.enemy); 
@@ -5025,13 +5054,31 @@ drawEffects() {
             
             if(t && t.currentHp > 0) {
                 if (this.player.traits.minionName === "Bomb Bot") {
+                    // Bomb Logic
                     ParticleSys.createExplosion(t.x, t.y, 30, "#ff8800");
                     AudioMgr.playSound('explosion');
+                    
+                    // 1. Damage Boss
                     if(this.enemy.takeDamage(10) && this.enemy.currentHp <= 0) { this.winCombat(); return; }
-                    this.enemy.minions.forEach(m => m.takeDamage(10));
-                    this.player.minions = this.player.minions.filter(min => min !== m); 
+                    
+                    // 2. Damage Minions
+                    this.enemy.minions.forEach(em => em.takeDamage(10));
+                    
+                    // FIX: Immediately remove dead enemy minions
+                    this.enemy.minions = this.enemy.minions.filter(em => em.currentHp > 0);
+
+                    // FIX: Charge Logic
+                    m.charges--;
+                    if (m.charges <= 0) {
+                        // Exploded and done
+                        this.player.minions = this.player.minions.filter(min => min !== m); 
+                    } else {
+                        // Survived due to upgrade
+                        ParticleSys.createFloatingText(m.x, m.y - 50, `${m.charges} CHARGES LEFT`, COLORS.GOLD);
+                    }
+
                 } else {
-                    // NEW: Callback accepts multiplier
+                    // Standard Wisp Logic
                     this.triggerVFX('nature_dart', m, t, (multiplier = 1.0) => {
                         const dmg = Math.floor(m.dmg * multiplier);
                         
