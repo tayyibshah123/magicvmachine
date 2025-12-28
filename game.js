@@ -310,10 +310,34 @@ const ENEMIES = [
     { name: "Nullifier", hp: 90, dmg: 25, sector: 3 }
 ];
 
-const BOSSES = {
-    SECTOR1: { name: "Omega Core", hp: 300, dmg: 20 },
-    SECTOR2: { name: "The Architect", hp: 500, dmg: 25 },
-    SECTOR3: { name: "System Prime", hp: 800, dmg: 35 }
+const BOSS_DATA = {
+    1: { 
+        name: "OMEGA CORE", 
+        subtitle: "THE FIRST FIREWALL",
+        hp: 300, 
+        dmg: 15, 
+        actionsPerTurn: 2,
+        color: '#ff0000', // Red
+        moves: ['attack', 'shield', 'summon']
+    },
+    2: { 
+        name: "THE ARCHITECT", 
+        subtitle: "HUMANITY'S RECKONING",
+        hp: 500, 
+        dmg: 20, 
+        actionsPerTurn: 2,
+        color: '#bc13fe', // Purple
+        moves: ['attack', 'buff', 'debuff', 'multi_attack']
+    },
+    3: { 
+        name: "SYSTEM PRIME", 
+        subtitle: "GOD OF SILICON",
+        hp: 800, 
+        dmg: 30, 
+        actionsPerTurn: 3,
+        color: '#ffd700', // Gold
+        moves: ['attack', 'consume', 'cataclysm', 'shield']
+    }
 };
 
 const EVENTS_DB = [
@@ -1120,12 +1144,26 @@ class Minion extends Entity {
 
 class Enemy extends Entity {
     constructor(template, level, isElite = false) {
-        const scaler = 1 + (level * 0.15);
-        super(540, 550, template.name, Math.floor(template.hp * scaler));
-        this.baseDmg = Math.floor(template.dmg * scaler);
-        this.isBoss = template.name.includes("Omega") || template.name.includes("Architect") || template.name.includes("Prime");
+        // Handle Boss vs Standard scaling
+        let hp = template.hp;
+        let dmg = template.dmg;
+        
+        if (!template.actionsPerTurn) {
+            // Standard Enemy Scaling
+            const scaler = 1 + (level * 0.15);
+            hp = Math.floor(hp * scaler);
+            dmg = Math.floor(dmg * scaler);
+        }
+
+        super(540, 550, template.name, hp);
+        this.baseDmg = dmg;
+        this.isBoss = !!template.actionsPerTurn;
+        this.bossData = template; // Store full config
         this.minions = [];
-        this.nextIntent = null; 
+        
+        // NEW: Array for multiple actions
+        this.nextIntents = []; 
+        
         this.phase = 1;
         this.isElite = isElite;
         this.showIntent = false;
@@ -1140,108 +1178,90 @@ class Enemy extends Entity {
         this.secondWindTriggered = false;
     }
 
-    getEffectiveDamage() {
-        let dmg = this.baseDmg;
-        
+    // Helper to calculate damage for a specific intent
+    getEffectiveDamage(baseVal) {
+        let dmg = baseVal || this.baseDmg;
         const constrict = this.hasEffect('constrict');
-        if (constrict) {
-            dmg = Math.floor(dmg * constrict.val);
-        }
-        
+        if (constrict) dmg = Math.floor(dmg * constrict.val);
         const weak = this.hasEffect('weak');
-        if (weak) {
-            dmg = Math.floor(dmg * 0.5); 
-        }
-
+        if (weak) dmg = Math.floor(dmg * 0.5); 
         const overcharge = this.hasEffect('overcharge');
-        if (overcharge) {
-            // FIX: val 0 = Base Overcharge (1.25x Damage Dealt)
-            // FIX: val 1 = Hyper Beam (No Damage Dealt increase, only Damage Taken increase)
-            if (overcharge.val === 0) {
-                dmg = Math.floor(dmg * 1.25);
-            }
-        }
-        
+        if (overcharge && overcharge.val === 0) dmg = Math.floor(dmg * 1.25);
         return Math.max(0, dmg);
     }
 
-    takeDamage(amount) {
-        const dead = super.takeDamage(amount);
-        if (dead && this.affixes.includes('Second Wind') && !this.secondWindTriggered) {
-            this.secondWindTriggered = true;
-            this.currentHp = Math.floor(this.maxHp * 0.5);
-            ParticleSys.createFloatingText(this.x, this.y - 100, "SECOND WIND!", COLORS.GOLD);
-            AudioMgr.playSound('upgrade');
-            return false;
+    decideTurn() {
+        this.nextIntents = [];
+        const actionCount = this.isBoss ? this.bossData.actionsPerTurn : 1;
+
+        for(let i=0; i<actionCount; i++) {
+            this.nextIntents.push(this.generateSingleIntent());
         }
-        return dead;
     }
 
-    decideTurn() {
+    generateSingleIntent() {
+        // 1. Boss Specific Logic
+        if (this.isBoss) {
+            const moves = this.bossData.moves;
+            const roll = moves[Math.floor(Math.random() * moves.length)];
+            
+            if (roll === 'attack') return { type: 'attack', val: this.baseDmg };
+            if (roll === 'shield') return { type: 'shield', val: 30 };
+            if (roll === 'buff') return { type: 'buff', val: 0, secondary: { type: 'buff', id: 'empower'} };
+            if (roll === 'debuff') return { type: 'debuff', val: 10, secondary: { type: 'debuff', id: 'frail'} };
+            
+            if (roll === 'consume') {
+                // Only consume if player has minions
+                if (Game.player.minions.length > 0) return { type: 'consume', val: 0 };
+                return { type: 'attack', val: this.baseDmg * 1.5 }; // Heavy attack fallback
+            }
+            
+            if (roll === 'cataclysm') return { type: 'attack', val: this.baseDmg * 0.5, isAOE: true };
+            if (roll === 'multi_attack') return { type: 'multi_attack', val: Math.floor(this.baseDmg * 0.6), hits: 3 };
+            
+            if (roll === 'summon' && this.minions.length < 2) return { type: 'summon', val: 0 };
+            return { type: 'attack', val: this.baseDmg }; // Default
+        }
+
+        // 2. Standard Enemy Logic
         let target = Game.player;
         const targets = [Game.player, ...Game.player.minions];
-        if (targets.length > 1) {
-            target = targets[Math.floor(Math.random() * targets.length)];
-        }
+        if (targets.length > 1) target = targets[Math.floor(Math.random() * targets.length)];
 
         const isLowHp = this.currentHp < this.maxHp * 0.3;
         const roll = Math.random();
 
-        let secondary = null;
-        if (roll < 0.4) {
-             const subRoll = Math.random();
-             if (subRoll < 0.5) {
-                 secondary = { type: 'buff', id: 'empower' };
-             } else {
-                 secondary = { type: 'debuff', id: Math.random() < 0.5 ? 'weak' : 'frail' };
-             }
-        }
-
-        if (isLowHp) {
-            this.nextIntent = { type: 'heal', val: Math.floor(this.maxHp * 0.1), target: this };
-        } else if (this.minions.length < 2 && roll < 0.25) {
-            this.nextIntent = { type: 'summon', val: 0, target: null, secondary: secondary };
-        } else {
-            this.nextIntent = { type: 'attack', val: this.baseDmg, target: target, secondary: secondary };
-        }
-        this.updateIntentValues();
+        if (isLowHp) return { type: 'heal', val: Math.floor(this.maxHp * 0.1) };
+        if (this.minions.length < 2 && roll < 0.2) return { type: 'summon', val: 0 };
+        
+        return { type: 'attack', val: this.baseDmg, target: target };
     }
 
     updateIntentValues() {
-        if (!this.nextIntent) return;
-
-        if (this.nextIntent.type === 'attack') {
-            this.nextIntent.val = this.getEffectiveDamage();
-        } 
-        else if (this.nextIntent.type === 'heal') {
-            let healAmt = Math.floor(this.maxHp * 0.1);
-            
-            const constrict = this.hasEffect('constrict');
-            if (constrict) {
-                healAmt = Math.floor(healAmt * constrict.val);
+        this.nextIntents.forEach(intent => {
+            if (intent.type === 'attack' || intent.type === 'multi_attack') {
+                intent.effectiveVal = this.getEffectiveDamage(intent.val);
+            } else if (intent.type === 'heal') {
+                let heal = intent.val;
+                const constrict = this.hasEffect('constrict');
+                if (constrict) heal = Math.floor(heal * constrict.val);
+                intent.effectiveVal = heal;
+            } else {
+                intent.effectiveVal = intent.val;
             }
-            
-            this.nextIntent.val = healAmt;
-        }
+        });
     }
     
     checkPhase() {
+        // Simple phase logic for visual flair
         if (!this.isBoss) return;
-        if (this.phase === 1 && this.currentHp < this.maxHp * 0.7) {
+        if (this.phase === 1 && this.currentHp < this.maxHp * 0.5) {
             this.phase = 2;
             ParticleSys.createExplosion(this.x, this.y, 50, '#f0f');
             AudioMgr.playSound('explosion');
-            this.decideTurn();
-        } else if (this.phase === 2 && this.currentHp < this.maxHp * 0.35) {
-            this.phase = 3;
-            this.baseDmg = Math.floor(this.baseDmg * 1.3);
-            ParticleSys.createExplosion(this.x, this.y, 80, '#f00');
-            AudioMgr.playSound('explosion');
-            this.decideTurn();
         }
     }
 }
-
 const ParticleSys = {
     particles: [],
     update(dt) {
@@ -1760,43 +1780,43 @@ const Game = {
                 
                 if(ent instanceof Player) {
                     txt += `\nMana: ${ent.mana}/${ent.baseMana}`;
-
-                    // FIX: Display Active Charge/Multipliers
-                    if (ent.nextAttackMult > 1) {
-                        txt += `\n\n🔥 CHARGED: Next Atk x${ent.nextAttackMult}`;
-                    }
+                    if (ent.nextAttackMult > 1) txt += `\n\n🔥 CHARGED: Next Atk x${ent.nextAttackMult}`;
                     if (ent.incomingDamageMult > 1) {
-                        // Format nicely: 1.5 becomes "+50%", 3 becomes "x3"
                         const val = ent.incomingDamageMult === 1.5 ? "+50%" : `x${ent.incomingDamageMult}`;
                         txt += `\n⚠️ VULNERABLE: Taking ${val} Dmg`;
                     }
                 }
 
-                // Standard Effects
                 if(ent.effects.length > 0) {
                     txt += `\n\n--- EFFECTS ---`;
                     ent.effects.forEach(eff => {
-                        // CHANGED: Use eff.name instead of eff.id
                         txt += `\n${eff.icon} ${eff.name} (${eff.duration}t): ${eff.desc || ''}`;
                     });
                 }
 
                 if(ent instanceof Enemy) {
                     txt += "\n(Left Click to toggle targets)";
-                    if(ent.nextIntent) {
+                    
+                    // FIX: Handle Multiple Intents for Bosses
+                    if (ent.nextIntents && ent.nextIntents.length > 0) {
+                        txt += `\n\n--- INTENTS ---`;
+                        ent.nextIntents.forEach((intent, i) => {
+                            let type = intent.type.toUpperCase();
+                            let val = intent.effectiveVal || intent.val;
+                            txt += `\n${i+1}. ${type}`;
+                            if (val > 0) txt += ` (${val})`;
+                            if (intent.secondary) txt += ` + ${intent.secondary.type.toUpperCase()}`;
+                        });
+                    } 
+                    // Fallback for standard single intent
+                    else if(ent.nextIntent) {
                         const i = ent.nextIntent;
                         txt += `\n\nIntent: ${i.type.toUpperCase()}`;
                         if(i.val > 0) txt += ` (${i.val})`;
-                        
-                        if(i.secondary) {
-                            if(i.secondary.type === 'buff') {
-                                txt += `\n+ BUFF: ${this.enemy.isElite || this.enemy.isBoss ? 'Protocol+' : 'Protocol'}`;
-                            } else if (i.secondary.type === 'debuff') {
-                                txt += `\n+ HACK: ${i.secondary.id.toUpperCase()}`;
-                            }
-                        }
+                        if(i.secondary) txt += ` + ${i.secondary.type.toUpperCase()}`;
                     }
                 }
+                
                 if(ent instanceof Minion) {
                     txt += `\nAtk: ${ent.dmg}`;
                     if (ent.isPlayerSide && Game.player.traits.minionTrait) {
@@ -3701,7 +3721,6 @@ async startCombat(type) {
         ParticleSys.particles = []; 
         this.player.minions = []; 
         
-        // Update Sector Display
         const sectorDisplay = document.getElementById('sector-display');
         if(sectorDisplay) sectorDisplay.innerText = `SECTOR ${this.sector}`;
 
@@ -3714,15 +3733,16 @@ async startCombat(type) {
         const isElite = type === 'elite';
         
         // --- ENEMY GENERATION ---
-        let pool = ENEMIES.filter(e => e.sector === this.sector);
-        if (pool.length === 0) pool = ENEMIES.filter(e => e.sector === 3); 
-        if (pool.length === 0) pool = ENEMIES.filter(e => e.sector === 1); 
-        
-        let template = isBoss ? BOSSES.SECTOR1 : pool[Math.floor(Math.random() * pool.length)];
+        let template;
         
         if (isBoss) {
-            if (this.sector === 2) template = BOSSES.SECTOR2;
-            if (this.sector >= 3) template = BOSSES.SECTOR3; 
+            // Use new BOSS_DATA
+            template = BOSS_DATA[this.sector] || BOSS_DATA[1];
+        } else {
+            let pool = ENEMIES.filter(e => e.sector === this.sector);
+            if (pool.length === 0) pool = ENEMIES.filter(e => e.sector === 3); 
+            if (pool.length === 0) pool = ENEMIES.filter(e => e.sector === 1); 
+            template = pool[Math.floor(Math.random() * pool.length)];
         }
 
         let level = 1; 
@@ -3730,21 +3750,19 @@ async startCombat(type) {
 
         // Progressive Difficulty Scaling
         let sectorMult = 1.0;
-        if (this.sector === 2) {
-            sectorMult = 1.4; 
-        } else if (this.sector === 3) {
-            sectorMult = 2.0; 
-        } else if (this.sector > 3) {
-            sectorMult = 2.0 * Math.pow(1.3, this.sector - 3);
-        }
+        if (this.sector === 2) sectorMult = 1.4; 
+        else if (this.sector === 3) sectorMult = 2.0; 
+        else if (this.sector > 3) sectorMult = 2.0 * Math.pow(1.3, this.sector - 3);
 
         // Create New Enemy
         this.enemy = new Enemy(template, level, isElite);
         
-        // Apply Scaling
-        this.enemy.maxHp = Math.floor(this.enemy.maxHp * sectorMult);
-        this.enemy.currentHp = this.enemy.maxHp;
-        this.enemy.baseDmg = Math.floor(this.enemy.baseDmg * sectorMult);
+        // Apply Scaling (Bosses in BOSS_DATA are already scaled base, but we apply sector mult if looping)
+        if (!isBoss) {
+            this.enemy.maxHp = Math.floor(this.enemy.maxHp * sectorMult);
+            this.enemy.currentHp = this.enemy.maxHp;
+            this.enemy.baseDmg = Math.floor(this.enemy.baseDmg * sectorMult);
+        }
 
         this.player.mana = this.player.baseMana;
         
@@ -3777,13 +3795,13 @@ async startCombat(type) {
              });
         }
 
-        if (isBoss) {
+        // Boss Minions (Specific to Sector 1 Boss usually, or generic)
+        if (isBoss && this.sector === 1) {
              const m1 = new Minion(0, 0, 1, false);
-             m1.maxHp = Math.floor(10 * sectorMult); m1.currentHp = m1.maxHp; m1.dmg = Math.max(1, Math.floor(3 * (sectorMult * 0.7)));
+             m1.maxHp = 30; m1.currentHp = 30; m1.dmg = 5;
              const m2 = new Minion(0, 0, 2, false);
-             m2.maxHp = Math.floor(10 * sectorMult); m2.currentHp = m2.maxHp; m2.dmg = Math.max(1, Math.floor(3 * (sectorMult * 0.7)));
+             m2.maxHp = 30; m2.currentHp = 30; m2.dmg = 5;
              this.enemy.minions.push(m1, m2);
-             ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "GUARDIANS ACTIVE", "#f00");
         }
 
         // Trigger Spawn Animations
@@ -3794,51 +3812,19 @@ async startCombat(type) {
 
         this.changeState(STATE.COMBAT);
         
-        // NEW: Trigger 3-Page Combat Tutorial (First Time Only)
-        if (!this.seenFlags['combat_intro']) {
-            this.seenFlags['combat_intro'] = true;
-            localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
-
-            setTimeout(() => {
-                this.tutorialData = [
-                    {
-                        title: "COMBAT BASICS",
-                        content: "<p><strong>Dice:</strong> Your primary tools. Drag them to targets to use.</p><p><strong>Mana:</strong> Some dice cost Mana (Blue Diamond). You regain Mana every turn.</p><p><strong>Reroll:</strong> Stuck with bad dice? Tap the Reroll button to get new ones.</p>"
-                    },
-                    {
-                        title: "TURN FLOW",
-                        content: "<p><strong>Player Phase:</strong> You act first. Use attacks, shields, and minions.</p><p><strong>Enemy Intent:</strong> Look above the enemy. That icon shows what they will do next.</p><p><strong>End Phase:</strong> When out of moves, tap End Phase to let the enemy act.</p>"
-                    },
-                    {
-                        title: "ADVANCED TACTICS",
-                        content: "<p><strong>Action Commands:</strong> Click the shrinking rings for Crits or Blocks!</p><p><strong>Minions:</strong> Summon allies to fight for you.</p><div class='tut-tip'>For a full interactive guide, access the <strong>TUTORIAL</strong> from the Main Menu.</div>"
-                    }
-                ];
-                this.tutorialPage = 0;
-                
-                // Switch to tutorial screen
-                const prev = this.currentState;
-                this.changeState(STATE.TUTORIAL);
-                
-                // Hook back button to return to combat
-                const btn = document.getElementById('btn-back-tutorial');
-                btn.onclick = () => {
-                    this.changeState(prev);
-                    // Reset default behavior
-                    btn.onclick = () => {
-                        this.tutorialData = TUTORIAL_PAGES;
-                        this.changeState(STATE.MENU);
-                    };
-                };
-            }, 1200); // Wait for spawn animation
+        // NEW: Boss Intro Cinematic
+        if (isBoss) {
+            await this.showPhaseBanner(this.enemy.name, this.enemy.bossData.subtitle, 'enemy');
         }
-
+        
         // Wait for spawn to finish visually
-        await this.sleep(1000);
+        await this.sleep(500);
 
         this.enemy.decideTurn();
         this.startTurn();
     },
+
+
 async startTurn() { 
         // Lock Input
         this.inputLocked = true;
@@ -4662,8 +4648,7 @@ triggerVFX(type, source, target, onHitCallback = null) {
             AudioMgr.playSound('dart');
         }
         else if (type === 'micro_laser') {
-            // NEW: Projectile Logic for Parry
-            const speed = 9; // FIX: Increased speed (was 6) to make parrying harder
+            const speed = 12; // FIX: Increased speed for reliability
             const angle = Math.atan2(target.y - source.y, target.x - source.x);
             
             this.effects.push({
@@ -4672,12 +4657,12 @@ triggerVFX(type, source, target, onHitCallback = null) {
                 tx: target.x, ty: target.y,
                 vx: Math.cos(angle) * speed,
                 vy: Math.sin(angle) * speed,
-                radius: 40, // Hitbox size
-                life: 100, // Safety timeout
+                radius: 40, 
+                life: 100, 
                 maxLife: 100,
                 color: '#ff0055',
                 parried: false,
-                onHit: onHitCallback
+                onHit: onHitCallback // Ensure callback is passed
             });
             AudioMgr.playSound('laser');
         }
@@ -5014,7 +4999,7 @@ drawEffects() {
     },
 
     async endTurn() {
-        // ... [KEEP TUTORIAL LOGIC] ...
+        // --- TUTORIAL LOGIC ---
         if (this.currentState === STATE.TUTORIAL_COMBAT && this.tutorialStep === 8) {
             this.tutorialStep = 9;
             this.updateTutorialStep(); 
@@ -5054,34 +5039,14 @@ drawEffects() {
             
             if(t && t.currentHp > 0) {
                 if (this.player.traits.minionName === "Bomb Bot") {
-                    // Bomb Logic
                     ParticleSys.createExplosion(t.x, t.y, 30, "#ff8800");
                     AudioMgr.playSound('explosion');
-                    
-                    // 1. Damage Boss
                     if(this.enemy.takeDamage(10) && this.enemy.currentHp <= 0) { this.winCombat(); return; }
-                    
-                    // 2. Damage Minions
-                    this.enemy.minions.forEach(em => em.takeDamage(10));
-                    
-                    // FIX: Immediately remove dead enemy minions
-                    this.enemy.minions = this.enemy.minions.filter(em => em.currentHp > 0);
-
-                    // FIX: Charge Logic
-                    m.charges--;
-                    if (m.charges <= 0) {
-                        // Exploded and done
-                        this.player.minions = this.player.minions.filter(min => min !== m); 
-                    } else {
-                        // Survived due to upgrade
-                        ParticleSys.createFloatingText(m.x, m.y - 50, `${m.charges} CHARGES LEFT`, COLORS.GOLD);
-                    }
-
+                    this.enemy.minions.forEach(m => m.takeDamage(10));
+                    this.player.minions = this.player.minions.filter(min => min !== m); 
                 } else {
-                    // Standard Wisp Logic
                     this.triggerVFX('nature_dart', m, t, (multiplier = 1.0) => {
                         const dmg = Math.floor(m.dmg * multiplier);
-                        
                         if (t.takeDamage(dmg, m) && t === this.enemy) { this.winCombat(); return; }
                         if (t !== this.enemy && t.currentHp <= 0) {
                              if (this.player.traits.lifesteal && !t.isPlayerSide) {
@@ -5103,83 +5068,100 @@ drawEffects() {
         if(!this.enemy || this.enemy.currentHp <= 0) { this.winCombat(); return; }
 
         // --- ENEMY INTENT PHASE ---
-        const intent = this.enemy.nextIntent;
-        this.enemy.playAnim('lunge');
-        
-        if (intent.secondary) {
-            const isImproved = (this.enemy.isElite || this.enemy.isBoss);
-            if (intent.secondary.type === 'buff') {
-                const hpGain = isImproved ? 15 : 5;
-                const dmgGain = isImproved ? 5 : 2;
-                this.enemy.maxHp += hpGain;
-                this.enemy.currentHp += hpGain;
-                this.enemy.baseDmg += dmgGain;
-                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "EMPOWERED!", "#ff00ff");
+        // Loop through all intents
+        for (const intent of this.enemy.nextIntents) {
+            if (this.enemy.currentHp <= 0) break;
+            
+            this.enemy.playAnim('lunge');
+            
+            // 1. BUFFS / DEBUFFS / SHIELDS
+            if (intent.type === 'buff') {
+                this.enemy.addShield(20);
+                this.enemy.minions.forEach(m => m.addShield(10));
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "FORTIFY", "#00f3ff");
                 AudioMgr.playSound('upgrade');
-                await this.sleep(400);
-            } else if (intent.secondary.type === 'debuff') {
-                const id = intent.secondary.id;
-                const duration = isImproved ? 3 : 2;
-                let desc = "";
-                if (id === 'weak') desc = "Deals 50% less DMG.";
-                if (id === 'frail') desc = "Takes 30% more DMG.";
-                this.player.addEffect(id, duration, 0, '🦠', desc);
-                ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "SYSTEM HACKED", "#00ff00");
+            }
+            else if (intent.type === 'debuff') {
+                this.player.addEffect('weak', 2, 0, '🦠', "Deals 50% less DMG.");
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "VIRUS UPLOAD", "#00ff00");
                 AudioMgr.playSound('attack');
-                await this.sleep(400);
             }
-        }
-
-        if(intent.type === 'attack') {
-            const target = intent.target || this.player;
-            const validTarget = (target.currentHp > 0) ? target : this.player;
+            // FIX: Added Shield Logic
+            else if (intent.type === 'shield') {
+                this.enemy.addShield(intent.val);
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "SHIELD UP", COLORS.SHIELD);
+                AudioMgr.playSound('defend');
+            }
+            // 2. CONSUME
+            else if (intent.type === 'consume') {
+                if (this.player.minions.length > 0) {
+                    const snack = this.player.minions[0];
+                    this.triggerVFX('beam', this.enemy, snack);
+                    await this.sleep(300);
+                    this.player.minions.shift(); 
+                    const heal = Math.floor(this.enemy.maxHp * 0.2);
+                    this.enemy.heal(heal);
+                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y, "CONSUMED!", "#ff0000");
+                } else {
+                    intent.type = 'attack';
+                    intent.val = this.enemy.baseDmg;
+                    intent.effectiveVal = this.enemy.getEffectiveDamage(intent.val);
+                }
+            }
             
-            await this.sleep(400); 
-
-            if (validTarget === this.player) {
-                const multiplier = await this.startQTE('DEFEND', this.player.x, this.player.y);
+            // 3. ATTACKS
+            if (intent.type === 'attack' || intent.type === 'multi_attack') {
+                const target = intent.target || this.player;
+                const validTarget = (target.currentHp > 0) ? target : this.player;
                 
-                this.triggerVFX('glitch_spike', this.enemy, validTarget, () => {
-                    let dmg = intent.val;
-                    dmg = Math.floor(dmg * multiplier);
-                    if (validTarget.takeDamage(dmg, this.enemy, true) && validTarget === this.player) { this.gameOver(); return; }
-                });
-            } else {
-                this.triggerVFX('glitch_spike', this.enemy, validTarget, () => {
-                    if (validTarget.takeDamage(intent.val, this.enemy)) {
-                         if (this.player.traits.maxMinions === 3 && Math.random() < 0.3) { 
-                             validTarget.currentHp = Math.floor(validTarget.maxHp / 2);
-                             ParticleSys.createFloatingText(validTarget.x, validTarget.y, "REVIVED!", "#00ff99");
-                         } else {
-                             this.player.minions = this.player.minions.filter(m => m !== validTarget);
-                             this.deadMinionsThisTurn++; 
-                             if (this.player.traits.minionName === "Bomb Bot") {
-                                 ParticleSys.createExplosion(validTarget.x, validTarget.y, 30, "#ff8800");
-                                 if(this.enemy.takeDamage(10) && this.enemy.currentHp <= 0) { this.winCombat(); return; }
-                                 this.enemy.minions.forEach(m => m.takeDamage(10));
-                                 this.enemy.minions = this.enemy.minions.filter(m => m.currentHp > 0);
+                await this.sleep(400); 
+
+                if (validTarget === this.player) {
+                    const multiplier = await this.startQTE('DEFEND', this.player.x, this.player.y);
+                    
+                    this.triggerVFX('glitch_spike', this.enemy, validTarget, () => {
+                        let dmg = intent.effectiveVal || intent.val;
+                        dmg = Math.floor(dmg * multiplier);
+                        if (validTarget.takeDamage(dmg, this.enemy, true) && validTarget === this.player) { this.gameOver(); return; }
+                    });
+                } else {
+                    this.triggerVFX('glitch_spike', this.enemy, validTarget, () => {
+                        if (validTarget.takeDamage(intent.effectiveVal || intent.val, this.enemy)) {
+                             if (this.player.traits.maxMinions === 3 && Math.random() < 0.3) { 
+                                 validTarget.currentHp = Math.floor(validTarget.maxHp / 2);
+                                 ParticleSys.createFloatingText(validTarget.x, validTarget.y, "REVIVED!", "#00ff99");
+                             } else {
+                                 this.player.minions = this.player.minions.filter(m => m !== validTarget);
+                                 this.deadMinionsThisTurn++; 
+                                 if (this.player.traits.minionName === "Bomb Bot") {
+                                     ParticleSys.createExplosion(validTarget.x, validTarget.y, 30, "#ff8800");
+                                     if(this.enemy.takeDamage(10) && this.enemy.currentHp <= 0) { this.winCombat(); return; }
+                                     this.enemy.minions.forEach(m => m.takeDamage(10));
+                                     this.enemy.minions = this.enemy.minions.filter(m => m.currentHp > 0);
+                                 }
                              }
-                         }
-                    }
-                });
+                        }
+                    });
+                }
+            } 
+            else if (intent.type === 'heal') {
+                await this.sleep(300);
+                this.enemy.heal(intent.val);
+            } 
+            else if (intent.type === 'summon') {
+                await this.sleep(300);
+                if(this.enemy.minions.length < 2) {
+                    const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false);
+                    m.spawnTimer = 1.0; 
+                    this.enemy.minions.push(m);
+                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "REINFORCING", "#fff");
+                    AudioMgr.playSound('mana');
+                }
             }
             
-        } else if (intent.type === 'heal') {
-            await this.sleep(300);
-            this.enemy.heal(intent.val);
-        } else if (intent.type === 'summon') {
-            await this.sleep(300);
-            if(this.enemy.minions.length < 2) {
-                const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false);
-                m.spawnTimer = 1.0; 
-                this.enemy.minions.push(m);
-                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "REINFORCING", "#fff");
-                AudioMgr.playSound('mana');
-            }
+            await this.sleep(1200);
         }
         
-        await this.sleep(800); 
-
         // --- ENEMY MINION PHASE ---
         for (const min of this.enemy.minions) {
             min.playAnim('lunge');
@@ -5188,6 +5170,7 @@ drawEffects() {
             const targets = [this.player, ...this.player.minions];
             const t = targets[Math.floor(Math.random() * targets.length)];
             if(t) {
+                // FIX: Ensure micro_laser triggers correctly
                 this.triggerVFX('micro_laser', min, t, () => {
                     if (t.takeDamage(min.dmg, min) && t === this.player) { this.gameOver(); return; }
                     if (t !== this.player && t.currentHp <= 0) {
@@ -5212,7 +5195,7 @@ drawEffects() {
         
         this.enemy.minions = this.enemy.minions.filter(m => m.currentHp > 0);
         
-        // NEW: Wait for projectiles to clear before starting player turn
+        // Wait for projectiles to clear
         while (this.effects.some(e => e.type === 'micro_laser' && !e.parried)) {
             await this.sleep(100);
         }
@@ -5662,35 +5645,51 @@ drawEffects() {
     },
 
     drawIntentLine(enemy) {
-        if (!enemy.showIntent || !enemy.nextIntent || !enemy.nextIntent.target) return;
-        const target = enemy.nextIntent.target;
-        if (target.currentHp <= 0) return;
+        if (!enemy.showIntent) return;
 
         const ctx = this.ctx;
         const time = Date.now() / 1000;
         
-        ctx.save();
-        ctx.lineWidth = 3;
-        
-        const alpha = 0.6 + Math.sin(time * 5) * 0.4;
-        const color = `rgba(255, 50, 50, ${alpha})`;
-        ctx.strokeStyle = color;
-        ctx.shadowColor = "#ff0000";
-        ctx.shadowBlur = 10;
+        // Helper to draw a single line
+        const drawLine = (target) => {
+            if (!target || target.currentHp <= 0) return;
+            
+            ctx.save();
+            ctx.lineWidth = 3;
+            const alpha = 0.6 + Math.sin(time * 5) * 0.4;
+            ctx.strokeStyle = `rgba(255, 50, 50, ${alpha})`;
+            ctx.shadowColor = "#ff0000";
+            ctx.shadowBlur = 10;
 
-        ctx.beginPath();
-        ctx.moveTo(enemy.x, enemy.y);
-        
-        const midY = (enemy.y + target.y) / 2;
-        const curveOffset = (target.x < enemy.x) ? -100 : 100;
+            ctx.beginPath();
+            ctx.moveTo(enemy.x, enemy.y);
+            
+            const midY = (enemy.y + target.y) / 2;
+            const curveOffset = (target.x < enemy.x) ? -100 : 100;
 
-        ctx.bezierCurveTo(
-            enemy.x + curveOffset, midY,
-            target.x + curveOffset, midY,
-            target.x, target.y
-        );
-        ctx.stroke();
-        ctx.restore();
+            ctx.bezierCurveTo(
+                enemy.x + curveOffset, midY,
+                target.x + curveOffset, midY,
+                target.x, target.y
+            );
+            ctx.stroke();
+            ctx.restore();
+        };
+
+        // FIX: Handle Multiple Intents
+        if (enemy.nextIntents && enemy.nextIntents.length > 0) {
+            enemy.nextIntents.forEach(intent => {
+                if (intent.type === 'attack' || intent.type === 'multi_attack' || intent.type === 'debuff') {
+                    // Default to player if no specific target set (common for boss logic)
+                    const target = intent.target || this.player;
+                    drawLine(target);
+                }
+            });
+        } 
+        // Fallback for single intent
+        else if (enemy.nextIntent && enemy.nextIntent.target) {
+            drawLine(enemy.nextIntent.target);
+        }
     },
 
     loop(timestamp) {
@@ -6400,30 +6399,54 @@ drawEntity(entity) {
             ctx.setLineDash([]);
         }
 
-        // --- ENEMY INTENT ICON ---
-        if (entity instanceof Enemy && entity.nextIntent) {
+        // --- ENEMY INTENT ICONS (Multi-Action) ---
+        if (entity instanceof Enemy && entity.nextIntents && entity.nextIntents.length > 0) {
             ctx.restore(); 
             ctx.save();
             ctx.translate(renderX, renderY);
             
-            ctx.fillStyle = COLORS.MECH_LIGHT;
-            const hover = Math.cos(time * 5) * 5;
-            ctx.fillRect(-40, -entity.radius - 40 + hover, 80, 25);
-            
-            ctx.fillStyle = '#fff';
-            ctx.font = '40px "Segoe UI Emoji"';
-            ctx.textAlign = 'center';
-            ctx.shadowBlur = 0;
-            let icon = '⚔️';
-            if(entity.nextIntent.type === 'heal') icon = '💚';
-            else if(entity.nextIntent.type === 'summon') icon = '🤖';
-            
-            ctx.fillText(icon, 0, -entity.radius - 50 + hover); 
+            const count = entity.nextIntents.length;
+            const spacing = 60;
+            const startX = -((count - 1) * spacing) / 2;
 
-            if(entity.nextIntent.val > 0) {
-                ctx.font = 'bold 20px "Orbitron"';
+            for(let i=0; i<count; i++) {
+                const intent = entity.nextIntents[i];
+                const ix = startX + (i * spacing);
+                
+                // FIX: Moved higher (-90) to avoid HP bar overlap
+                const iy = -entity.radius - 90 + (Math.cos(time * 5 + i) * 5);
+
+                // Intent Box
+                ctx.fillStyle = COLORS.MECH_LIGHT;
+                ctx.fillRect(ix - 25, iy, 50, 50);
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(ix - 25, iy, 50, 50);
+                
+                // Icon
                 ctx.fillStyle = '#fff';
-                ctx.fillText(entity.nextIntent.val, 0, -entity.radius - 20 + hover); 
+                ctx.font = '30px "Segoe UI Emoji"';
+                ctx.textAlign = 'center';
+                ctx.shadowBlur = 0;
+                
+                let icon = '⚔️';
+                if(intent.type === 'heal') icon = '💚';
+                else if(intent.type === 'summon') icon = '🤖';
+                else if(intent.type === 'shield') icon = '🛡️';
+                else if(intent.type === 'buff') icon = '💪';
+                else if(intent.type === 'debuff') icon = '🦠';
+                else if(intent.type === 'consume') icon = '🍽️';
+                
+                ctx.fillText(icon, ix, iy + 35); 
+
+                // Value
+                if(intent.effectiveVal > 0 || intent.val > 0) {
+                    ctx.font = 'bold 16px "Orbitron"';
+                    ctx.fillStyle = '#fff';
+                    ctx.shadowColor = '#000';
+                    ctx.shadowBlur = 4;
+                    ctx.fillText(intent.effectiveVal || intent.val, ix, iy - 5); 
+                }
             }
             
             ctx.restore();
