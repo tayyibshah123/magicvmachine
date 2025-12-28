@@ -3486,7 +3486,7 @@ updateHexBreach(dt) {
     async nextHexRound() {
         this.hex.playerInput = [];
         this.hex.acceptingInput = false;
-        this.hex.showingSequence = true; // FIX: Flag to stop movement
+        this.hex.showingSequence = true; 
         
         document.getElementById('hex-status').innerText = "OBSERVE PATTERN";
         document.getElementById('hex-status').className = "neon-text-blue";
@@ -3504,19 +3504,21 @@ updateHexBreach(dt) {
             const id = this.hex.sequence[i];
             const node = this.hex.nodes[id];
             
-            // Flash Effect
+            // Flash Effect (Bright & Scale)
             node.el.style.backgroundColor = node.color;
+            node.el.style.borderColor = '#fff'; // Glowing Edge
             node.el.style.color = '#fff';
-            node.el.style.boxShadow = `0 0 25px ${node.color}`;
-            // Apply scale transform manually since update loop is paused
+            // Outer glow + Inner glow for intensity
+            node.el.style.boxShadow = `0 0 25px ${node.color}, inset 0 0 15px ${node.color}`;
             node.el.style.transform = `translate(${node.x}px, ${node.y}px) scale(1.2)`;
             node.el.style.zIndex = "10";
             
             AudioMgr.playSound('mana');
-            await this.sleep(600); // Increased duration slightly
+            await this.sleep(600); 
             
             // Reset Effect
             node.el.style.backgroundColor = 'rgba(20, 0, 20, 0.8)';
+            node.el.style.borderColor = node.color;
             node.el.style.color = node.color;
             node.el.style.boxShadow = `0 0 5px ${node.color}`;
             node.el.style.transform = `translate(${node.x}px, ${node.y}px) scale(1.0)`;
@@ -3525,7 +3527,7 @@ updateHexBreach(dt) {
             await this.sleep(200); 
         }
 
-        this.hex.showingSequence = false; // FIX: Resume movement
+        this.hex.showingSequence = false; 
         this.hex.acceptingInput = true;
         document.getElementById('hex-status').innerText = "REPEAT PATTERN";
         document.getElementById('hex-status').className = "neon-text-green";
@@ -3536,11 +3538,21 @@ updateHexBreach(dt) {
 
         const node = this.hex.nodes[index];
         
-        // Visual Feedback (Click)
-        node.el.style.backgroundColor = '#fff';
+        // Visual Feedback (Click) - Match the sequence look
+        node.el.style.backgroundColor = node.color;
+        node.el.style.borderColor = '#fff'; // Glowing Edge
+        node.el.style.color = '#fff';
+        node.el.style.boxShadow = `0 0 25px ${node.color}, inset 0 0 15px ${node.color}`;
+        node.el.style.transform = `translate(${node.x}px, ${node.y}px) scale(1.1)`; // Slight pop
+        
+        // Reset after 200ms (slower than before for better visibility)
         setTimeout(() => {
             node.el.style.backgroundColor = 'rgba(20, 0, 20, 0.8)';
-        }, 100);
+            node.el.style.borderColor = node.color;
+            node.el.style.color = node.color;
+            node.el.style.boxShadow = `0 0 5px ${node.color}`;
+            node.el.style.transform = `translate(${node.x}px, ${node.y}px) scale(1.0)`;
+        }, 200);
         
         AudioMgr.playSound('click');
 
@@ -3566,11 +3578,15 @@ updateHexBreach(dt) {
                 
                 document.getElementById('hex-status').innerText = "ERROR! RETRYING...";
                 document.getElementById('hex-status').className = "neon-text-orange";
-                AudioMgr.playSound('defend'); // Error sound
+                AudioMgr.playSound('defend'); 
                 
                 // Shake effect
                 node.el.style.borderColor = 'red';
-                setTimeout(() => node.el.style.borderColor = node.color, 500);
+                node.el.style.boxShadow = '0 0 20px red';
+                setTimeout(() => {
+                    node.el.style.borderColor = node.color;
+                    node.el.style.boxShadow = `0 0 5px ${node.color}`;
+                }, 500);
 
                 setTimeout(() => this.nextHexRound(), 1500);
             } else {
