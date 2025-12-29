@@ -26,10 +26,13 @@ const COLORS = {
     HP_BAR_BG: '#111'
 };
 
+// UPDATED: Added 'type' for background generation
 const SECTOR_CONFIG = {
-    1: { bgTop: '#050011', bgBot: '#100020', sun: ['#ffe600', '#ff0055'], grid: '#00f3ff33' }, 
-    2: { bgTop: '#001115', bgBot: '#002025', sun: ['#ffffff', '#00f3ff'], grid: '#ffffff33' }, 
-    3: { bgTop: '#150500', bgBot: '#250a00', sun: ['#ff8800', '#ff0000'], grid: '#ff440033' }
+    1: { type: 'city',   bgTop: '#050011', bgBot: '#100020', sun: ['#ffe600', '#ff0055'], grid: '#00f3ff33' }, 
+    2: { type: 'ice',    bgTop: '#001115', bgBot: '#002025', sun: ['#ffffff', '#00f3ff'], grid: '#ffffff33' }, 
+    3: { type: 'fire',   bgTop: '#150500', bgBot: '#250a00', sun: ['#ff8800', '#ff0000'], grid: '#ff440033' },
+    4: { type: 'tech',   bgTop: '#0d0015', bgBot: '#1a0025', sun: ['#bc13fe', '#ffffff'], grid: '#bc13fe33' }, 
+    5: { type: 'source', bgTop: '#1a0000', bgBot: '#000000', sun: ['#ff0000', '#ffffff'], grid: '#ff000033' }
 };
 
 const STATE = {
@@ -5789,25 +5792,120 @@ drawEffects() {
         }
     },
 
+    // --- NEW: Background Initialization ---
+    initBackground() {
+        this.bgState = {
+            sector: this.sector,
+            skyline: [],
+            particles: [],
+            drones: [],
+            nextDroneTime: 5 // seconds until first drone
+        };
+
+        const type = SECTOR_CONFIG[this.sector] ? SECTOR_CONFIG[this.sector].type : 'city';
+        const w = CONFIG.CANVAS_WIDTH;
+        const h = CONFIG.CANVAS_HEIGHT;
+
+        // 1. Generate Skyline (Parallax Objects)
+        // We create 2 layers: Far (slow) and Mid (medium)
+        const count = 8;
+        for(let i=0; i<count; i++) {
+            this.bgState.skyline.push({
+                x: Math.random() * w,
+                y: h * 0.45, // Horizon line
+                w: 60 + Math.random() * 100,
+                h: 100 + Math.random() * 300,
+                speed: 5 + Math.random() * 5, // Pixels per second
+                layer: 0, // Far
+                type: type
+            });
+        }
+        for(let i=0; i<5; i++) {
+            this.bgState.skyline.push({
+                x: Math.random() * w,
+                y: h * 0.45,
+                w: 80 + Math.random() * 120,
+                h: 50 + Math.random() * 150,
+                speed: 15 + Math.random() * 10,
+                layer: 1, // Mid
+                type: type
+            });
+        }
+
+        // 2. Pre-warm Particles
+        for(let i=0; i<50; i++) {
+            this.spawnBgParticle(type, true);
+        }
+    },
+
+    spawnBgParticle(type, randomY = false) {
+        const w = CONFIG.CANVAS_WIDTH;
+        const h = CONFIG.CANVAS_HEIGHT;
+        const horizon = h * 0.45;
+        
+        let p = {
+            x: Math.random() * w,
+            y: randomY ? Math.random() * h : (type === 'fire' ? h : -10),
+            vx: (Math.random() - 0.5) * 20,
+            vy: 0,
+            life: 5 + Math.random() * 5,
+            size: Math.random() * 3 + 1,
+            type: type,
+            char: Math.random() > 0.5 ? "1" : "0" // For data rain
+        };
+
+        if (type === 'city') {
+            p.vy = 20 + Math.random() * 30; // Dust falling
+            p.color = 'rgba(0, 243, 255, 0.5)';
+        } else if (type === 'ice') {
+            p.vy = 50 + Math.random() * 50; // Fast data snow
+            p.color = 'rgba(255, 255, 255, 0.8)';
+        } else if (type === 'fire') {
+            p.vy = -(30 + Math.random() * 40); // Rising ash
+            p.color = 'rgba(255, 100, 0, 0.6)';
+            p.y = randomY ? Math.random() * h : h;
+        } else if (type === 'tech') {
+            p.vy = -(10 + Math.random() * 20); // Floating bits
+            p.color = 'rgba(188, 19, 254, 0.5)';
+            p.y = randomY ? Math.random() * h : h;
+        } else if (type === 'source') {
+            p.vx = 0; p.vy = 0; // Glitch static
+            p.life = 0.2; // Flash
+            p.w = Math.random() * 50;
+            p.h = Math.random() * 5;
+            p.color = Math.random() > 0.5 ? '#f00' : '#fff';
+        }
+
+        this.bgState.particles.push(p);
+    },
+
+    // --- REPLACED: drawEnvironment ---
     drawEnvironment(dt) {
         if (this.currentState === STATE.META) {
             this.drawSanctuary(dt);
             return;
         }
-        
+
+        // Initialize BG State if missing or sector changed
+        if (!this.bgState || this.bgState.sector !== this.sector) {
+            this.initBackground();
+        }
+
         const ctx = this.ctx;
         const w = this.canvas.width;
         const h = this.canvas.height;
         const time = Date.now() / 1000;
-
-        // Use Sector Config
+        
         let conf = SECTOR_CONFIG[this.sector] || SECTOR_CONFIG[1];
+        let type = conf.type;
 
-        // NEW: Reality Overwrite Visuals (Sector 5 Boss)
+        // Special Override for Sector 5 Boss Reality Shift
         if (this.enemy && this.enemy.name === "THE SOURCE" && this.enemy.realityOverwritten) {
-            conf = { bgTop: '#1a001a', bgBot: '#330000', sun: ['#ff8800', '#800080'], grid: '#ff00ff' };
+            conf = { type: 'source', bgTop: '#1a001a', bgBot: '#330000', sun: ['#ff8800', '#800080'], grid: '#ff00ff' };
+            type = 'source';
         }
 
+        // 1. Sky Gradient
         const grad = ctx.createLinearGradient(0, 0, 0, h);
         grad.addColorStop(0, conf.bgTop);
         grad.addColorStop(0.4, conf.bgBot);
@@ -5815,20 +5913,121 @@ drawEffects() {
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, w, h);
 
+        // 2. Sun / Moon
+        const sunY = h * 0.25;
+        ctx.save();
+        const sunGrad = ctx.createRadialGradient(w/2, sunY, 10, w/2, sunY, 100);
+        sunGrad.addColorStop(0, conf.sun[0]);
+        sunGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = sunGrad;
+        ctx.globalAlpha = 0.6;
+        ctx.beginPath();
+        ctx.arc(w/2, sunY, 100, 0, Math.PI*2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+        
+        // Central star
         ctx.fillStyle = '#fff';
-        for(let i=0; i<30; i++) {
-            const sx = (i * 137) % w;
-            const sy = (i * 243) % (h * 0.4);
-            const flicker = Math.random() > 0.95 ? 0.2 : 0.6;
-            ctx.globalAlpha = flicker;
-            ctx.beginPath();
-            ctx.arc(sx, sy, 1.5, 0, Math.PI*2);
-            ctx.fill();
-        }
-        ctx.globalAlpha = 1;
+        ctx.beginPath();
+        ctx.arc(w/2, sunY, 30, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
 
-        const cx = w/2;
+        // 3. Dynamic Skyline (Parallax)
         const horizon = h * 0.45;
+        
+        this.bgState.skyline.forEach(b => {
+            // Move
+            b.x -= b.speed * dt;
+            if (b.x + b.w < 0) b.x = w + 50; // Wrap around
+
+            // Draw
+            ctx.fillStyle = b.layer === 0 ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.8)'; // Dark silhouettes
+            
+            // Shape based on sector type
+            if (type === 'city') {
+                // Skyscrapers
+                ctx.fillRect(b.x, horizon - b.h, b.w, b.h);
+                // Windows
+                if (b.layer === 1) {
+                    ctx.fillStyle = conf.grid;
+                    for(let wy = 0; wy < b.h; wy += 20) {
+                        if(Math.random()>0.8) ctx.fillRect(b.x + 5, horizon - b.h + wy, 5, 5);
+                        if(Math.random()>0.8) ctx.fillRect(b.x + b.w - 10, horizon - b.h + wy, 5, 5);
+                    }
+                }
+            } else if (type === 'ice') {
+                // Spikes / Mountains
+                ctx.beginPath();
+                ctx.moveTo(b.x, horizon);
+                ctx.lineTo(b.x + b.w/2, horizon - b.h);
+                ctx.lineTo(b.x + b.w, horizon);
+                ctx.fill();
+            } else if (type === 'fire') {
+                // Trapezoid Factories
+                ctx.beginPath();
+                ctx.moveTo(b.x - 10, horizon);
+                ctx.lineTo(b.x + 10, horizon - b.h);
+                ctx.lineTo(b.x + b.w - 10, horizon - b.h);
+                ctx.lineTo(b.x + b.w + 10, horizon);
+                ctx.fill();
+                // Smoke
+                if (b.layer === 1 && Math.random() > 0.95) {
+                    this.spawnBgParticle('fire', false); // Hack to spawn smoke at x/y? better just use particle system
+                }
+            } else if (type === 'tech') {
+                // Floating Hexagons/Monoliths
+                ctx.save();
+                ctx.translate(b.x + b.w/2, horizon - b.h/2 - Math.sin(time + b.x)*20);
+                this.drawPolygon(ctx, 0, 0, b.w/2, 6, time * 0.2);
+                ctx.restore();
+            } else if (type === 'source') {
+                // Glitchy rectangles
+                if (Math.random() > 0.1) {
+                    ctx.fillStyle = Math.random() > 0.5 ? '#000' : '#200';
+                    ctx.fillRect(b.x, horizon - b.h, b.w, b.h);
+                }
+            }
+        });
+
+        // 4. Distant Drones
+        this.bgState.nextDroneTime -= dt;
+        if (this.bgState.nextDroneTime <= 0) {
+            this.bgState.drones.push({
+                x: w + 50,
+                y: h * 0.1 + Math.random() * h * 0.3,
+                vx: -(50 + Math.random() * 100),
+                type: Math.random() > 0.5 ? 'scout' : 'cargo'
+            });
+            this.bgState.nextDroneTime = 10 + Math.random() * 20; // Reset timer
+        }
+
+        for (let i = this.bgState.drones.length - 1; i >= 0; i--) {
+            let d = this.bgState.drones[i];
+            d.x += d.vx * dt;
+            
+            // Draw Drone
+            ctx.save();
+            ctx.translate(d.x, d.y);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(-15, -5, 30, 10);
+            // Engine lights
+            ctx.fillStyle = conf.sun[1]; // Use secondary sun color for engine
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.shadowBlur = 10;
+            ctx.beginPath(); ctx.arc(15, 0, 3, 0, Math.PI*2); ctx.fill();
+            // Blink light
+            if (Math.sin(time * 10) > 0) {
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(-15, 0, 2, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.restore();
+
+            if (d.x < -100) this.bgState.drones.splice(i, 1);
+        }
+
+        // 5. Grid Floor (Original Logic, preserved)
+        const cx = w/2;
         const gridSpeed = 40;
         const offsetY = (time * gridSpeed) % 40;
 
@@ -5858,7 +6057,6 @@ drawEffects() {
         for(let y = horizon; y < h; y += 40) {
             const dist = (y - horizon) / (h - horizon);
             const perspectiveY = horizon + (Math.pow(dist, 0.7)) * (h - horizon);
-            
             const moveY = perspectiveY + (offsetY * (1-dist)); 
             if (moveY > h) continue;
 
@@ -5870,6 +6068,39 @@ drawEffects() {
         }
         ctx.globalAlpha = 1;
         ctx.restore();
+
+        // 6. Atmospheric Particles
+        if (Math.random() < 0.2) this.spawnBgParticle(type); // Spawn rate
+
+        for (let i = this.bgState.particles.length - 1; i >= 0; i--) {
+            let p = this.bgState.particles[i];
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= dt;
+
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = Math.min(1, p.life);
+            
+            if (p.type === 'ice') {
+                // Binary rain
+                ctx.font = `${p.size * 4}px monospace`;
+                ctx.fillText(p.char, p.x, p.y);
+            } else if (p.type === 'source') {
+                // Glitch rects
+                ctx.fillRect(p.x, p.y, p.w, p.h);
+            } else {
+                // Standard dots/ash
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            // Bounds check
+            if (p.life <= 0 || p.y > h + 50 || p.y < -50) {
+                this.bgState.particles.splice(i, 1);
+            }
+        }
+        ctx.globalAlpha = 1.0;
     },
 
     drawIntentLine(enemy) {
