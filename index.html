@@ -42,6 +42,27 @@
             <!-- NEW: Tutorial Spotlight Ring -->
             <div id="tutorial-spotlight" class="hidden"></div>
 
+	<!-- NEW: Ending Cinematic Screen -->
+<div id="screen-ending" class="screen hidden">
+    <div id="ending-content" class="story-crawl">
+        <!-- JS injects text here -->
+    </div>
+    <button id="btn-finish-ending" class="btn primary hidden" style="position: absolute; bottom: 50px;">PROCEED</button>
+</div>
+
+<!-- NEW: Victory Screen -->
+<div id="screen-victory" class="screen hidden">
+    <h1 class="neon-text-gold" style="font-size: 4rem; text-shadow: 0 0 30px gold;">SYSTEM RESTORED</h1>
+    <div class="spacer"></div>
+    <div style="text-align: center; max-width: 600px; line-height: 1.6; font-size: 1.2rem; color: #ddd;">
+        <p>The immediate threat has been neutralized.</p>
+        <p>Data integrity: <span class="neon-text-blue">99.9%</span></p>
+        <p>Return to the Sanctuary to view the restored world.</p>
+    </div>
+    <div class="spacer"></div>
+    <button id="btn-victory-sanctuary" class="btn primary neon-border-green">ENTER SANCTUARY</button>
+</div>
+
             <!-- Main Menu -->
             <div id="screen-start" class="screen active">
                 <div style="position: absolute; top: 20px; right: 20px; z-index: 20;">

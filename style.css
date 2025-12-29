@@ -1340,3 +1340,13 @@ h2 {
     font-weight: 900 !important;
     z-index: 100;
 }
+
+/* Add this to style.css to ensure the victory screen pops */
+#screen-victory {
+    background: radial-gradient(circle at center, #1a0500 0%, #000 100%);
+    z-index: 4000;
+}
+
+#screen-victory h1 {
+    animation: neon-pulse 3s infinite;
+}

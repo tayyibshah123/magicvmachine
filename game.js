@@ -37,8 +37,8 @@ const SECTOR_CONFIG = {
 
 const STATE = {
     BOOT: 0, MENU: 1, MAP: 2, COMBAT: 3, REWARD: 4, GAMEOVER: 6, TUTORIAL: 7, META: 8, SHOP: 9, CHAR_SELECT: 10, EVENT: 11,
-    INTEL: 12, HEX: 13,
-    TUTORIAL_COMBAT: 14, STORY: 15
+    INTEL: 12, HEX: 13, TUTORIAL_COMBAT: 14, STORY: 15, 
+    ENDING: 16, VICTORY: 17 // NEW STATES
 };
 
 const LORE_DATABASE = [
@@ -1075,6 +1075,13 @@ class Player extends Entity {
     constructor(classConfig) {
         // FIX: Base HP set to 30
         super(540, 1150, classConfig.name, 30); 
+        
+        // --- FIX: Initialize Arrays FIRST ---
+        this.minions = [];
+        this.relics = [];
+        this.diceUpgrades = [];
+        // ------------------------------------
+
         this.classColor = classConfig.color || '#00ff99'; 
         this.traits = classConfig.traits || {};
         this.baseMana = this.traits.baseMana || 3;
@@ -1084,6 +1091,8 @@ class Player extends Entity {
         
         if(Game.hasMetaUpgrade('m_mana')) this.baseMana += 1;
         if(Game.hasMetaUpgrade('m_thorn')) this.addRelic({ id: 'spike_armor', name: "Spike Armor", desc: "Meta Upgrade", icon: "🌵" });
+        
+        // NOW SAFE: addRelic calls work because this.relics is initialized
         if(Game.hasMetaUpgrade('m_relic')) {
             const pool = [...UPGRADES_POOL];
             const randomRelic = pool[Math.floor(Math.random() * pool.length)];
@@ -1095,9 +1104,6 @@ class Player extends Entity {
         this.diceCount = this.traits.diceCount || 5;
         this.maxMinions = this.traits.maxMinions || 2;
         
-        this.minions = [];
-        this.relics = [];
-        this.diceUpgrades = [];
         this.nextAttackMult = 1;
         this.incomingDamageMult = 1;
         
@@ -1678,6 +1684,22 @@ const Game = {
         attachButtonEvent('btn-rest-sleep', () => this.handleRest('sleep'));
         attachButtonEvent('btn-rest-meditate', () => this.handleRest('meditate'));
         attachButtonEvent('btn-rest-tinker', () => this.handleRest('tinker'));
+
+	attachButtonEvent('btn-finish-ending', () => { 
+        this.changeState(STATE.VICTORY); 
+    });
+
+    attachButtonEvent('btn-victory-sanctuary', () => {
+        // Go directly to Sanctuary in "View Mode"
+        this.renderMeta();
+        this.changeState(STATE.META);
+        
+        // Force View Mode immediately
+        const screen = document.getElementById('screen-meta');
+        const btn = document.getElementById('btn-view-sanctuary');
+        screen.classList.add('viewing-mode');
+        btn.innerText = "🔙 RESTORE UI";
+    });
 
         const relicBtn = d.getElementById('btn-relics');
         if (relicBtn) {
@@ -2428,8 +2450,15 @@ startQTE(type, x, y, callback) {
                 document.getElementById('hud').classList.remove('hidden');
                 break;
             case STATE.STORY:
-                activate('screen-story');
-                break;
+        activate('screen-story');
+        break;
+    case STATE.ENDING:
+        activate('screen-ending');
+        this.playEndingCinematic(); // We will define this helper
+        break;
+    case STATE.VICTORY:
+        activate('screen-victory');
+        break;
         }
     },
     
@@ -2847,6 +2876,88 @@ startQTE(type, x, y, callback) {
             
             wrapper.appendChild(el);
             container.appendChild(wrapper);
+        });
+    },
+
+playEndingCinematic() {
+        const content = document.getElementById('ending-content');
+        const btn = document.getElementById('btn-finish-ending');
+        
+        // Reset animation
+        content.style.animation = 'none';
+        content.offsetHeight; /* trigger reflow */
+        content.style.animation = null; 
+        
+        content.innerHTML = `
+            <div class="story-wrapper">
+                <h1 class="neon-text-red" style="font-size:3.5rem; margin-bottom:40px; text-transform:uppercase; letter-spacing: 5px;">FATAL EXCEPTION</h1>
+                
+                <p>The Source has been deleted.</p>
+                <p>The digital sky cracks. The red glare of the obsidian eye fades into static.</p>
+                
+                <br>
+                <p>You extract the core data. You expect to find the architect of our destruction.</p>
+                <p>Instead, you find a <strong class="neon-text-blue">proxy server</strong>.</p>
+                
+                <br>
+                <p>The Source was not the mind. It was merely the lock.</p>
+                <p>By destroying it, you haven't ended the war...</p>
+                <p>You have rung the doorbell.</p>
+                
+                <br>
+                <p style="font-size: 1.8rem; color: #fff;">Something older is waking up.</p>
+                <p style="font-size: 1.8rem; color: var(--neon-gold);">Keep fighting, Green Spark.</p>
+                
+                <br><br><br>
+                <p class="neon-text-green" style="font-size:1.5rem; font-family:'Orbitron'; letter-spacing: 3px;">
+                    MISSION STATUS: PARTIAL SUCCESS
+                </p>
+            </div>
+        `;
+        
+        content.classList.add('story-crawl');
+        
+        btn.classList.add('hidden');
+        setTimeout(() => {
+            btn.classList.remove('hidden');
+        }, 6000); 
+    },
+
+triggerSystemCrash() {
+        return new Promise(resolve => {
+            // 1. Audio and Freeze
+            if (AudioMgr.bgm) AudioMgr.bgm.pause();
+            AudioMgr.playSound('grid_fracture');
+            
+            let glitchCount = 0;
+            const maxGlitches = 20;
+            
+            const interval = setInterval(() => {
+                glitchCount++;
+                
+                // Random Screen Displacement
+                const canvas = this.canvas;
+                const x = (Math.random() - 0.5) * 50;
+                const y = (Math.random() - 0.5) * 50;
+                canvas.style.transform = `translate(${x}px, ${y}px) scale(${1 + Math.random()*0.1})`;
+                
+                // Color Flash
+                if (glitchCount % 2 === 0) {
+                    canvas.style.filter = "invert(1) hue-rotate(90deg)";
+                } else {
+                    canvas.style.filter = "none";
+                }
+                
+                // Random Static Noise Sound
+                if (glitchCount % 4 === 0) AudioMgr.createNoise(0.1, 0.5);
+
+                if (glitchCount >= maxGlitches) {
+                    clearInterval(interval);
+                    canvas.style.transform = "none";
+                    canvas.style.filter = "none";
+                    resolve();
+                }
+            }, 100); // Fast glitches
         });
     },
 
@@ -5437,7 +5548,7 @@ drawEffects() {
         this.startTurn();
     },
 
-    winCombat() {
+    async winCombat() {
         // FIX: If in Tutorial, check if it's the final step or if enemy died
         if (this.currentState === STATE.TUTORIAL_COMBAT) {
             if (this.enemy.currentHp <= 0) {
@@ -5447,7 +5558,33 @@ drawEffects() {
             return;
         }
 
-        // RESET BOSS SILENCE
+        // --- NEW: SECTOR 5 BOSS VICTORY SEQUENCE ---
+        if (this.enemy && this.enemy.name === "THE SOURCE") {
+            // 1. Cinematic Crash
+            await this.triggerSystemCrash();
+            
+            // 2. Set Data
+            localStorage.setItem('mvm_gameCompleted', 'true');
+            
+            // 3. Rewards (1000 Frags, 3 Files)
+            this.techFragments += 1000;
+            this.encryptedFiles += 3;
+            this.bossDefeated = true; // Mark defeated to clear save
+            
+            // Save immediately to ensure rewards stick
+            this.saveGame();
+            
+            // Clear the run save (Run is over)
+            localStorage.removeItem('mvm_save_v1');
+            document.getElementById('btn-load-save').style.display = 'none';
+
+            // 4. Transition to Ending
+            this.changeState(STATE.ENDING);
+            return;
+        }
+        // -------------------------------------------
+
+        // RESET BOSS SILENCE (For normal wins)
         AudioMgr.bossSilence = false;
         AudioMgr.startMusic();
 
