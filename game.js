@@ -333,54 +333,54 @@ const ENEMIES = [
 ];
 const BOSS_DATA = {
     1: { 
-        name: "OMEGA CORE", 
-        subtitle: "THE FIRST FIREWALL",
-        hp: 150, 
+        name: "THE PANOPTICON", 
+        subtitle: "THE ALL-SEEING EYE",
+        hp: 300, 
         dmg: 20, 
         actionsPerTurn: 2,
-        color: '#ff0000', 
-        moves: ['attack', 'shield', 'summon', 'dispel'], // Added dispel
-        shieldVal: 15
+        color: '#00ffff', // Electric Cyan
+        moves: ['attack', 'debuff', 'multi_attack'], 
+        shieldVal: 30
     },
     2: { 
-        name: "THE ARCHITECT", 
-        subtitle: "HUMANITY'S RECKONING",
-        hp: 250, 
-        dmg: 24, 
-        actionsPerTurn: 2,
-        color: '#bc13fe', 
-        moves: ['attack', 'buff', 'debuff', 'multi_attack', 'dispel'], // Added dispel
-        shieldVal: 25
-    },
-    3: { 
-        name: "SYSTEM PRIME", 
-        subtitle: "GOD OF SILICON",
-        hp: 400, 
-        dmg: 34, 
-        actionsPerTurn: 3,
-        color: '#ffd700', 
-        moves: ['attack', 'consume', 'cataclysm', 'shield', 'dispel'], // Added dispel
-        shieldVal: 35
-    },
-    4: { 
-        name: "THE GATEKEEPER", 
-        subtitle: "FINAL DEFENSE PROTOCOL",
+        name: "NULL_POINTER", 
+        subtitle: "THE CONSUMING VOID",
         hp: 500, 
         dmg: 40, 
         actionsPerTurn: 3,
-        color: '#00ff99', 
-        moves: ['attack', 'multi_attack', 'shield', 'debuff', 'dispel'], // Added dispel
-        shieldVal: 40
+        color: '#ff00ff', // Neon Magenta
+        moves: ['attack', 'debuff', 'consume', 'dispel'], 
+        shieldVal: 20
+    },
+    3: { 
+        name: "THE COMPILER", 
+        subtitle: "INDUSTRIAL DATA CRUSHER",
+        hp: 750, 
+        dmg: 70, 
+        actionsPerTurn: 1,
+        color: '#ff4500', // Neon Orange-Red
+        moves: ['attack', 'shield', 'buff'], 
+        shieldVal: 100
+    },
+    4: { 
+        name: "HIVE PROTOCOL", 
+        subtitle: "DISTRIBUTED LETHALITY",
+        hp: 900, 
+        dmg: 30, 
+        actionsPerTurn: 4,
+        color: '#32cd32', // Neon Lime Green
+        moves: ['attack', 'multi_attack', 'summon'], 
+        shieldVal: 15
     },
     5: { 
-        name: "THE SOURCE", 
-        subtitle: "ORIGIN OF ALL",
+        name: "TESSERACT PRIME", 
+        subtitle: "GEOMETRIC IMPOSSIBILITY",
         hp: 1000, 
         dmg: 50, 
         actionsPerTurn: 3,
-        color: '#800080', 
-        moves: ['attack', 'purge', 'summon_glitch', 'reality_overwrite', 'dispel'], // Added dispel
-        shieldVal: 50
+        color: '#ffffff', // Pure White/Gold
+        moves: ['attack', 'purge_attack', 'reality_overwrite', 'shield'], 
+        shieldVal: 60
     }
 };
 
@@ -1384,7 +1384,8 @@ class Enemy extends Entity {
 
     updateIntentValues() {
         this.nextIntents.forEach(intent => {
-            if (intent.type === 'attack' || intent.type === 'multi_attack') {
+            // UPDATED: Include 'debuff' (Virus) and 'purge_attack' in damage calculations
+            if (intent.type === 'attack' || intent.type === 'multi_attack' || intent.type === 'debuff' || intent.type === 'purge_attack') {
                 intent.effectiveVal = this.getEffectiveDamage(intent.val);
             } else if (intent.type === 'heal') {
                 let heal = intent.val;
@@ -4034,60 +4035,51 @@ async startCombat(type) {
         let level = 1; 
         if(isElite) level = 2; 
 
-        // Progressive Difficulty Scaling
         let sectorMult = 1.0;
         if (this.sector === 2) sectorMult = 1.4; 
         else if (this.sector === 3) sectorMult = 2.0; 
         else if (this.sector > 3) sectorMult = 2.0 * Math.pow(1.3, this.sector - 3);
 
-        // --- NEW: Ascension Multiplier ---
-        const ascensionMult = 1 + (this.corruptionLevel * 0.2); // +20% per level
-        // ---------------------------------
+        const ascensionMult = 1 + (this.corruptionLevel * 0.2); 
 
         // Create New Enemy
         this.enemy = new Enemy(template, level, isElite);
         
-        // Handle The Source
-        if (this.enemy.name === "THE SOURCE") {
+        // --- UPDATED: Transfer Logic to TESSERACT PRIME ---
+        if (this.enemy.name === "TESSERACT PRIME") {
             this.enemy.invincibleTurns = 3;
             setTimeout(() => {
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200, "SHIELDS ACTIVE (3 TURNS)", "#00f3ff");
             }, 1000);
+            
+            // Silence music for final boss atmosphere
             AudioMgr.bossSilence = true;
             if (AudioMgr.bgm) AudioMgr.bgm.pause();
         }
+        // -------------------------------------------------
 
         // Apply Scaling
-        // Logic: (Base * Sector * 2.0_if_not_boss) * Ascension
         let typeMult = isBoss ? 1.0 : 2.0; 
-        
         this.enemy.maxHp = Math.floor(this.enemy.maxHp * sectorMult * typeMult * ascensionMult);
         this.enemy.currentHp = this.enemy.maxHp;
-        
-        // Damage Scaling
         this.enemy.baseDmg = Math.floor(this.enemy.baseDmg * sectorMult * ascensionMult);
 
-        // --- NEW: Apply Glitch Modifiers ---
+        // Apply Glitch Modifiers
         if (this.corruptionLevel > 0 && !isBoss) {
-            // Chance for a glitch modifier (higher chance at higher levels)
             if (Math.random() < (0.3 + this.corruptionLevel * 0.1)) {
                 const mod = GLITCH_MODIFIERS[Math.floor(Math.random() * GLITCH_MODIFIERS.length)];
                 this.enemy.affixes.push(mod.id);
-                this.enemy.glitchMod = mod; // Store for easy access
-                
-                // Visual Indicator
+                this.enemy.glitchMod = mod; 
                 setTimeout(() => {
                     ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 180, `⚠️ ${mod.name}`, "#ff00ff");
                 }, 800);
             }
         }
-        // -----------------------------------
         
         this.player.mana = this.player.baseMana;
         
-        // Handle Corrupted Relic: Blood Pact (Start turn damage handled in startTurn, but check for visual here)
         if (this.player.hasRelic('c_void_shell')) {
-            this.player.addShield(30);
+            if (this.turnCount === 1) this.player.addShield(30);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "VOID SHELL", "#555");
         }
         
@@ -4108,7 +4100,6 @@ async startCombat(type) {
         if (isElite) {
              const m1 = new Minion(0, 0, 1, false, 2); 
              const m2 = new Minion(0, 0, 2, false, 2);
-             // Apply Ascension scaling to minions too
              m1.maxHp = Math.floor(m1.maxHp * sectorMult * ascensionMult); m1.currentHp = m1.maxHp;
              m2.maxHp = Math.floor(m2.maxHp * sectorMult * ascensionMult); m2.currentHp = m2.maxHp;
              m1.dmg = Math.floor(m1.dmg * ascensionMult);
@@ -4118,7 +4109,6 @@ async startCombat(type) {
              ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "ELITE PROTOCOL", "#f00");
              
              this.enemy.affixes.forEach((affix, i) => {
-                 // Skip if it's the glitchMod we already showed
                  if (this.enemy.glitchMod && affix === this.enemy.glitchMod.id) return;
                  setTimeout(() => {
                      ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 150 - (i*30), `⚠️ ${affix}`, COLORS.ORANGE);
@@ -4133,16 +4123,16 @@ async startCombat(type) {
              ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "GUARDIANS ACTIVE", "#f00");
         }
 
+        // Updated Sector 5 Minion check
         if (isBoss && this.sector === 5) {
              const m1 = new Minion(0, 0, 1, false, 3);
              m1.name = "Glitch Alpha"; m1.maxHp = 100; m1.currentHp = 100; m1.dmg = 5;
              const m2 = new Minion(0, 0, 2, false, 3);
              m2.name = "Glitch Beta"; m2.maxHp = 100; m2.currentHp = 100; m2.dmg = 5;
              this.enemy.minions.push(m1, m2);
-             ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "SOURCE CODE ACTIVE", "#bc13fe");
+             ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "REALITY FRACTURE", "#ffffff");
         }
 
-        // Animations
         this.player.spawnTimer = 1.0;
         this.player.minions.forEach(m => m.spawnTimer = 1.0);
         this.enemy.spawnTimer = 1.0;
@@ -5385,7 +5375,6 @@ drawEffects() {
     },
 
     async endTurn() {
-        // ... [KEEP TUTORIAL LOGIC] ...
         if (this.currentState === STATE.TUTORIAL_COMBAT && this.tutorialStep === 8) {
             this.tutorialStep = 9;
             this.updateTutorialStep(); 
@@ -5462,6 +5451,7 @@ drawEffects() {
             
             this.enemy.playAnim('lunge');
             
+            // 1. Secondary Effects (Buff/Debuff)
             if (intent.secondary) {
                 const isImproved = (this.enemy.isElite || this.enemy.isBoss);
                 if (intent.secondary.type === 'buff') {
@@ -5486,6 +5476,7 @@ drawEffects() {
                 }
             }
 
+            // 2. Primary Intent Execution
             if (intent.type === 'buff') {
                 this.enemy.addShield(20);
                 this.enemy.minions.forEach(m => m.addShield(10));
@@ -5493,9 +5484,12 @@ drawEffects() {
                 AudioMgr.playSound('upgrade');
             }
             else if (intent.type === 'debuff') {
-                if (intent.val > 0) {
+                // Ensure debuff damage (Virus) uses effective value (affected by Weak/Constrict)
+                const dmgVal = (intent.effectiveVal !== undefined) ? intent.effectiveVal : intent.val;
+                
+                if (dmgVal > 0) {
                     const multiplier = await this.startQTE('DEFEND', this.player.x, this.player.y);
-                    let dmg = Math.floor(intent.val * multiplier);
+                    let dmg = Math.floor(dmgVal * multiplier);
                     if (this.player.takeDamage(dmg, this.enemy, true) && this.player.currentHp <= 0) { this.gameOver(); return; }
                 }
                 this.player.addEffect('weak', 2, 0, '🦠', "Deals 50% less DMG.");
@@ -5507,9 +5501,8 @@ drawEffects() {
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "SHIELD UP", COLORS.SHIELD);
                 AudioMgr.playSound('defend');
             }
-            // FIX: Dispel Logic
             else if (intent.type === 'dispel') {
-                this.enemy.effects = []; // Clear all debuffs
+                this.enemy.effects = []; 
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "CLEANSED", "#ffffff");
                 AudioMgr.playSound('upgrade');
             }
@@ -5519,12 +5512,20 @@ drawEffects() {
                     this.triggerVFX('beam', this.enemy, snack);
                     await this.sleep(300);
                     this.player.minions.shift(); 
-                    const heal = Math.floor(this.enemy.maxHp * 0.2);
-                    this.enemy.heal(heal);
+                    
+                    // UPDATED: Restore 30% HP, bypassing modifiers (Constrict/Rot)
+                    const healAmt = Math.floor(this.enemy.maxHp * 0.3);
+                    this.enemy.currentHp = Math.min(this.enemy.maxHp, this.enemy.currentHp + healAmt);
+                    
+                    // Manually trigger visual/audio since we bypassed entity.heal()
+                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 80, "+" + healAmt, '#0f0');
                     ParticleSys.createFloatingText(this.enemy.x, this.enemy.y, "CONSUMED!", "#ff0000");
+                    AudioMgr.playSound('mana');
                 } else {
+                    // Fallback to Attack if no minions
                     intent.type = 'attack';
                     intent.val = this.enemy.baseDmg;
+                    // Recalculate effectiveVal immediately for the subsequent attack block
                     intent.effectiveVal = this.enemy.getEffectiveDamage(intent.val);
                 }
             }
@@ -5548,44 +5549,64 @@ drawEffects() {
                 AudioMgr.playSound('mana');
             }
             
+            // 3. Attack Handling (Normal, Multi, Purge)
             if (intent.type === 'attack' || intent.type === 'multi_attack' || intent.type === 'purge_attack') {
                 const target = intent.target || this.player;
                 const validTarget = (target.currentHp > 0) ? target : this.player;
                 
+                // Determine Hit Count (Multi-attack support)
+                const hits = (intent.type === 'multi_attack' && intent.hits) ? intent.hits : 1;
+                
                 await this.sleep(400); 
 
-                if (validTarget === this.player) {
-                    const multiplier = await this.startQTE('DEFEND', this.player.x, this.player.y);
-                    const vfxType = intent.type === 'purge_attack' ? 'orbital_strike' : 'glitch_spike';
-                    
-                    this.triggerVFX(vfxType, this.enemy, validTarget, () => {
-                        let dmg = intent.effectiveVal || intent.val;
-                        dmg = Math.floor(dmg * multiplier);
-                        if (validTarget.takeDamage(dmg, this.enemy, true) && validTarget === this.player) { this.gameOver(); return; }
-                    });
-                } else {
-                    this.triggerVFX('glitch_spike', this.enemy, validTarget, () => {
-                        if (validTarget.takeDamage(intent.effectiveVal || intent.val, this.enemy)) {
-                             if (this.player.traits.maxMinions === 3 && Math.random() < 0.3) { 
-                                 validTarget.currentHp = Math.floor(validTarget.maxHp / 2);
-                                 ParticleSys.createFloatingText(validTarget.x, validTarget.y, "REVIVED!", "#00ff99");
-                             } else {
-                                 this.player.minions = this.player.minions.filter(m => m !== validTarget);
-                                 this.deadMinionsThisTurn++; 
-                                 if (this.player.traits.minionName === "Bomb Bot") {
-                                     ParticleSys.createExplosion(validTarget.x, validTarget.y, 30, "#ff8800");
-                                     if(this.enemy.takeDamage(10) && this.enemy.currentHp <= 0) { this.winCombat(); return; }
-                                     this.enemy.minions.forEach(m => m.takeDamage(10));
-                                     this.enemy.minions = this.enemy.minions.filter(m => m.currentHp > 0);
-                                 }
-                             }
+                for(let h=0; h<hits; h++) {
+                    // Slight delay between multi-hits
+                    if (h > 0) await this.sleep(200);
+
+                    if (validTarget === this.player) {
+                        // Only trigger QTE on the first hit of a multi-attack to avoid spamming
+                        let multiplier = 1.0;
+                        if (h === 0) {
+                            multiplier = await this.startQTE('DEFEND', this.player.x, this.player.y);
+                        } else {
+                            multiplier = 0.8; // Reduced block on subsequent hits if they happen fast
                         }
-                    });
+
+                        const vfxType = intent.type === 'purge_attack' ? 'orbital_strike' : 'glitch_spike';
+                        
+                        this.triggerVFX(vfxType, this.enemy, validTarget, () => {
+                            // Ensure using effectiveVal (includes Weak/Constrict)
+                            let dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
+                            dmg = Math.floor(dmg * multiplier);
+                            if (validTarget.takeDamage(dmg, this.enemy, true) && validTarget === this.player) { this.gameOver(); return; }
+                        });
+                    } else {
+                        // Minion Target
+                        this.triggerVFX('glitch_spike', this.enemy, validTarget, () => {
+                            let dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
+                            if (validTarget.takeDamage(dmg, this.enemy)) {
+                                 if (this.player.traits.maxMinions === 3 && Math.random() < 0.3) { 
+                                     validTarget.currentHp = Math.floor(validTarget.maxHp / 2);
+                                     ParticleSys.createFloatingText(validTarget.x, validTarget.y, "REVIVED!", "#00ff99");
+                                 } else {
+                                     this.player.minions = this.player.minions.filter(m => m !== validTarget);
+                                     this.deadMinionsThisTurn++; 
+                                     if (this.player.traits.minionName === "Bomb Bot") {
+                                         ParticleSys.createExplosion(validTarget.x, validTarget.y, 30, "#ff8800");
+                                         if(this.enemy.takeDamage(10) && this.enemy.currentHp <= 0) { this.winCombat(); return; }
+                                         this.enemy.minions.forEach(m => m.takeDamage(10));
+                                         this.enemy.minions = this.enemy.minions.filter(m => m.currentHp > 0);
+                                     }
+                                 }
+                            }
+                        });
+                    }
                 }
             } 
             else if (intent.type === 'heal') {
                 await this.sleep(300);
-                this.enemy.heal(intent.val);
+                // Use effectiveVal (Constrict applies here)
+                this.enemy.heal(intent.effectiveVal || intent.val); 
             } 
             else if (intent.type === 'summon') {
                 await this.sleep(300);
@@ -5593,6 +5614,13 @@ drawEffects() {
                     const tier = this.enemy.isBoss ? 3 : (this.enemy.isElite ? 2 : 1);
                     const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false, tier);
                     m.spawnTimer = 1.0; 
+                    
+                    // Apply sector scaling to summons
+                    const ascensionMult = 1 + (this.corruptionLevel * 0.2);
+                    m.maxHp = Math.floor(m.maxHp * ascensionMult);
+                    m.currentHp = m.maxHp;
+                    m.dmg = Math.floor(m.dmg * ascensionMult);
+                    
                     this.enemy.minions.push(m);
                     ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "REINFORCING", "#fff");
                     AudioMgr.playSound('mana');
@@ -5602,6 +5630,7 @@ drawEffects() {
             await this.sleep(1200);
         }
         
+        // --- MINION ATTACKS ---
         for (const min of this.enemy.minions) {
             min.playAnim('lunge');
             await this.sleep(300);
@@ -5645,7 +5674,6 @@ drawEffects() {
     },
 
     async winCombat() {
-        // FIX: If in Tutorial, check if it's the final step or if enemy died
         if (this.currentState === STATE.TUTORIAL_COMBAT) {
             if (this.enemy.currentHp <= 0) {
                 setTimeout(() => this.openPostTutorial(), 500);
@@ -5654,18 +5682,17 @@ drawEffects() {
             return;
         }
 
-        // --- NEW: SECTOR 5 BOSS VICTORY SEQUENCE ---
-         if (this.enemy && this.enemy.name === "THE SOURCE") {
+        // --- UPDATED: VICTORY SEQUENCE FOR TESSERACT PRIME ---
+        if (this.enemy && this.enemy.name === "TESSERACT PRIME") {
             // 1. Cinematic Crash
             await this.triggerSystemCrash();
             
             // 2. Set Data
             localStorage.setItem('mvm_gameCompleted', 'true');
             
-            // --- NEW: Increment Corruption Level ---
+            // Increment Corruption Level
             this.corruptionLevel++;
             localStorage.setItem('mvm_corruption', this.corruptionLevel);
-            // ---------------------------------------
             
             // 3. Rewards
             this.techFragments += 1000;
@@ -5680,13 +5707,12 @@ drawEffects() {
             this.changeState(STATE.ENDING);
             return;
         }
+        // -----------------------------------------------------
 
-        // RESET BOSS SILENCE (For normal wins)
         AudioMgr.bossSilence = false;
         AudioMgr.startMusic();
 
         let frags = 0;
-        
         if (this.enemy.isBoss) {
             this.bossDefeated = true;
         }
@@ -6675,8 +6701,6 @@ drawEntity(entity) {
                     ctx.rotate(currentRotation);
                     const tilt = 0.35 + Math.sin(time * 0.5 + i) * 0.1;
                     
-                    // Note: Ellipse drawing removed here to hide rings.
-                    // Calculating Orb position based on the invisible ring path:
                     const electronSpeed = 3.0;
                     const electronAngle = (time * electronSpeed) + (i * 2);
                     const ex = majorRadius * Math.cos(electronAngle);
@@ -6684,9 +6708,9 @@ drawEntity(entity) {
                     
                     ctx.fillStyle = '#fff';
                     ctx.shadowColor = COLORS.PURPLE;
-                    ctx.shadowBlur = 15; // Increased blur for visibility
+                    ctx.shadowBlur = 15;
                     ctx.beginPath();
-                    ctx.arc(ex, ey, 5, 0, Math.PI*2); // Slightly larger orb
+                    ctx.arc(ex, ey, 5, 0, Math.PI*2);
                     ctx.fill();
                     ctx.shadowBlur = 0;
                     ctx.restore();
@@ -6869,268 +6893,40 @@ drawEntity(entity) {
         // ============================================================
         else if (entity instanceof Enemy) {
             
-            // --- THE SOURCE (SECTOR 5 BOSS) ---
-            if (entity.name === "THE SOURCE") {
-                const slowTime = time * 0.2; 
-                
-                // 0. Dark Tendrils (Behind)
-                ctx.save();
-                const tentacleCount = 12; 
-                for(let i=0; i<tentacleCount; i++) {
-                    const angle = (Math.PI * 2 / tentacleCount) * i + (slowTime * 0.5);
-                    const len = 350 + Math.sin(time * 2 + i) * 50;
-                    
-                    const cp1x = Math.cos(angle - 0.2) * 150;
-                    const cp1y = Math.sin(angle - 0.2) * 150;
-                    const cp2x = Math.cos(angle + 0.2 + Math.sin(time)*0.5) * 250;
-                    const cp2y = Math.sin(angle + 0.2 + Math.cos(time)*0.5) * 250;
-                    const endX = Math.cos(angle) * len;
-                    const endY = Math.sin(angle) * len;
+            // --- STANDARD ENEMY CONFIGURATION ---
+            let color = COLORS.MECH_LIGHT; // Default Red
+            let glowColor = color;
+            
+            // Sector 1: Cyan (Panopticon)
+            if (this.sector === 1) { color = '#00ffff'; glowColor = '#00ffff'; }
+            
+            // Sector 2: Magenta (Null Pointer)
+            if (this.sector === 2) { color = '#ff00ff'; glowColor = '#ff00ff'; }
 
-                    ctx.shadowColor = '#550000';
-                    ctx.shadowBlur = 20;
-                    
-                    const grad = ctx.createLinearGradient(0,0, endX, endY);
-                    grad.addColorStop(0, '#000');
-                    grad.addColorStop(0.5, '#220000'); 
-                    grad.addColorStop(1, 'transparent');
+            // Sector 3: Orange (Compiler)
+            if (this.sector === 3) { color = '#ff4500'; glowColor = '#ff4500'; }
 
-                    ctx.strokeStyle = grad;
-                    ctx.lineWidth = 8 - (i%2)*4; 
-                    ctx.lineCap = 'round';
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(0, 0);
-                    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, endX, endY);
-                    ctx.stroke();
-                }
-                ctx.restore();
+            // Sector 4: Lime (Hive)
+            if (this.sector === 4) { color = '#32cd32'; glowColor = '#32cd32'; }
 
-                // 1. Aura
-                const auraGrad = ctx.createRadialGradient(0, 0, entity.radius * 0.5, 0, 0, entity.radius * 2.5);
-                auraGrad.addColorStop(0, '#000000');
-                auraGrad.addColorStop(0.6, 'rgba(50, 0, 0, 0.5)');
-                auraGrad.addColorStop(1, 'transparent');
-                ctx.fillStyle = auraGrad;
-                ctx.beginPath();
-                ctx.arc(0, 0, entity.radius * 2.5, 0, Math.PI*2);
-                ctx.fill();
+            // Sector 5: White/Gold (Tesseract)
+            if (this.sector === 5) { color = '#ffffff'; glowColor = '#ffd700'; }
+            
+            ctx.strokeStyle = color;
+            ctx.lineWidth = baseWidth;
+            ctx.shadowColor = glowColor;
+            ctx.shadowBlur = baseGlow;
+            
+            const bodyGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, entity.radius);
+            bodyGrad.addColorStop(0, '#111'); 
+            bodyGrad.addColorStop(1, color);
+            ctx.fillStyle = bodyGrad;
 
-                // 2. Shield
-                if (entity.invincibleTurns > 0) {
-                    ctx.save();
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 2;
-                    ctx.setLineDash([2, 20]);
-                    ctx.beginPath();
-                    ctx.arc(0, 0, entity.radius * 3 + Math.sin(time*5)*10, 0, Math.PI*2);
-                    ctx.stroke();
-                    ctx.restore();
-                }
-
-                // 3. Behemoth Body
-                const shards = 8;
-                for(let i=0; i<shards; i++) {
-                    ctx.save();
-                    const angle = (Math.PI*2 / shards) * i + slowTime;
-                    const dist = entity.radius * 1.4 + Math.sin(time * 1.5 + i) * 15;
-                    
-                    ctx.translate(Math.cos(angle) * dist, Math.sin(angle) * dist);
-                    ctx.rotate(angle + Math.PI/2 + Math.sin(time + i)*0.1);
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(0, -70); 
-                    ctx.lineTo(35, 0);
-                    ctx.lineTo(0, 70); 
-                    ctx.lineTo(-35, 0);
-                    ctx.closePath();
-                    
-                    const shardGrad = ctx.createLinearGradient(-35, -70, 35, 70);
-                    shardGrad.addColorStop(0, '#333'); 
-                    shardGrad.addColorStop(0.5, '#000'); 
-                    shardGrad.addColorStop(1, '#220000'); 
-                    ctx.fillStyle = shardGrad;
-                    
-                    ctx.shadowColor = '#ff0000';
-                    ctx.shadowBlur = 15 + Math.sin(time * 5 + i) * 10;
-                    ctx.fill();
-                    
-                    ctx.lineWidth = 2;
-                    ctx.strokeStyle = '#550000'; 
-                    ctx.stroke();
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(0, -50);
-                    ctx.lineTo((Math.random()-0.5)*10, 0); 
-                    ctx.lineTo(0, 50);
-                    ctx.lineWidth = 1;
-                    ctx.strokeStyle = '#ffaaaa'; 
-                    ctx.shadowColor = '#fff';
-                    ctx.shadowBlur = 5;
-                    ctx.stroke();
-                    
-                    ctx.restore();
-                }
-
-                // 4. The Eye
-                const eyeScale = 1.0 + Math.sin(slowTime * 3) * 0.05; 
-                ctx.scale(eyeScale, eyeScale);
-
-                const eyeGrad = ctx.createRadialGradient(0, 0, 20, 0, 0, 100);
-                eyeGrad.addColorStop(0, '#ffffff');
-                eyeGrad.addColorStop(0.3, '#cccccc');
-                eyeGrad.addColorStop(0.8, '#220000'); 
-                eyeGrad.addColorStop(1, '#000000');
-                
-                ctx.fillStyle = eyeGrad;
-                ctx.shadowColor = '#ff0000';
-                ctx.shadowBlur = 60 + Math.sin(time * 10) * 20;
-                ctx.beginPath();
-                ctx.arc(0, 0, 100, 0, Math.PI*2);
-                ctx.fill();
-
-                let lookX = -20; 
-                let lookY = 0;
-                
-                const irisGrad = ctx.createRadialGradient(lookX, lookY, 10, lookX, lookY, 40);
-                irisGrad.addColorStop(0, '#ff4444');
-                irisGrad.addColorStop(1, '#550000');
-                ctx.fillStyle = irisGrad;
-                ctx.beginPath();
-                ctx.arc(lookX, lookY, 40, 0, Math.PI*2);
-                ctx.fill();
-
-                ctx.fillStyle = '#000';
-                ctx.shadowColor = '#fff'; 
-                ctx.shadowBlur = 5;
-                ctx.beginPath();
-                ctx.ellipse(lookX, lookY, 5 + Math.sin(time*5), 35, 0, 0, Math.PI*2);
-                ctx.fill();
-                
-                ctx.fillStyle = '#fff';
-                ctx.shadowBlur = 0;
-                ctx.beginPath();
-                ctx.arc(lookX - 10, lookY - 10, 5, 0, Math.PI*2);
-                ctx.fill();
-
-            } else {
-                // --- STANDARD ENEMY DRAWING ---
-                const color = COLORS.MECH_LIGHT;
-                ctx.strokeStyle = color;
-                ctx.lineWidth = baseWidth;
-                ctx.shadowColor = color;
-                ctx.shadowBlur = baseGlow;
-                
-                const bodyGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, entity.radius);
-                bodyGrad.addColorStop(0, '#550022'); 
-                bodyGrad.addColorStop(0.8, '#1a0000'); 
-                bodyGrad.addColorStop(1, color); 
-                ctx.fillStyle = bodyGrad;
-
-                if (entity.isBoss) {
-                    
-                    // --- UPDATED: SECTOR 1 BOSS (VISUAL OVERHAUL) ---
-                    if (this.sector === 1) { 
-                        ctx.save();
-                        ctx.rotate(time * 0.3); // Slow rotation
-
-                        // 1. Outer Dotted Ring
-                        ctx.beginPath();
-                        ctx.arc(0, 0, entity.radius * 2.2, 0, Math.PI * 2);
-                        ctx.strokeStyle = '#ff0000';
-                        ctx.lineWidth = 2;
-                        ctx.setLineDash([5, 20]);
-                        ctx.stroke();
-                        ctx.setLineDash([]);
-
-                        // 2. Jagged Star/Shell (Red Outline, Dark fill)
-                        const points = 10;
-                        ctx.beginPath();
-                        for (let i = 0; i < points * 2; i++) {
-                            const angle = (Math.PI * 2 / (points * 2)) * i;
-                            const r = (i % 2 === 0) ? entity.radius * 1.3 : entity.radius * 0.9;
-                            const x = Math.cos(angle) * r;
-                            const y = Math.sin(angle) * r;
-                            if (i === 0) ctx.moveTo(x, y);
-                            else ctx.lineTo(x, y);
-                        }
-                        ctx.closePath();
-                        
-                        const shellGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, entity.radius*1.3);
-                        shellGrad.addColorStop(0, '#300');
-                        shellGrad.addColorStop(1, '#000');
-                        ctx.fillStyle = shellGrad;
-                        ctx.fill();
-                        
-                        ctx.shadowColor = '#ff0000';
-                        ctx.shadowBlur = 20;
-                        ctx.strokeStyle = '#ff0000';
-                        ctx.lineWidth = 3;
-                        ctx.stroke();
-
-                        // 3. Dynamic Lines (Nucleus connections)
-                        ctx.shadowBlur = 10;
-                        ctx.lineWidth = 2;
-                        for (let i = 0; i < points; i++) {
-                             const angle = (Math.PI * 2 / points) * i + (Math.sin(time*2)*0.05); // Subtle wiggle
-                             ctx.beginPath();
-                             ctx.moveTo(0, 0);
-                             ctx.lineTo(Math.cos(angle) * entity.radius * 0.9, Math.sin(angle) * entity.radius * 0.9);
-                             ctx.strokeStyle = 'rgba(255, 50, 50, 0.6)';
-                             ctx.stroke();
-                        }
-
-                        // 4. Central CPU (Square)
-                        ctx.shadowBlur = 30;
-                        ctx.fillStyle = '#fff';
-                        ctx.fillRect(-15, -15, 30, 30);
-                        
-                        // Red Center Dot
-                        ctx.fillStyle = '#f00';
-                        ctx.beginPath();
-                        ctx.arc(0, 0, 6, 0, Math.PI * 2);
-                        ctx.fill();
-
-                        ctx.restore();
-                    } else {
-                        // Bosses 2, 3, 4 (Legacy Design)
-                        ctx.lineWidth += 3;
-                        ctx.shadowBlur += 20;
-                        ctx.strokeStyle = '#ff0000';
-                        
-                        ctx.beginPath();
-                        ctx.arc(0, 0, entity.radius * 1.5, 0, Math.PI*2);
-                        ctx.setLineDash([5, 15]);
-                        ctx.stroke();
-                        ctx.setLineDash([]);
-                        
-                        this.drawSpikedCircle(ctx, 0, 0, entity.radius, 12, 25, -time); 
-
-                        ctx.save();
-                        ctx.rotate(time);
-                        ctx.fillStyle = '#fff';
-                        ctx.shadowColor = '#ff0000';
-                        ctx.shadowBlur = 40;
-                        ctx.beginPath();
-                        ctx.rect(-20, -20, 40, 40); 
-                        ctx.fill();
-                        
-                        ctx.strokeStyle = '#ff0055';
-                        ctx.lineWidth = 2;
-                        for(let i=0; i<8; i++) {
-                            ctx.beginPath();
-                            ctx.moveTo(0, 0);
-                            ctx.lineTo(0, entity.radius + 10);
-                            ctx.stroke();
-                            ctx.rotate(Math.PI/4);
-                        }
-                        ctx.restore();
-                    }
-
-                } else if (entity.isElite) {
+            if (!entity.isBoss) {
+                // ... (Keep existing Standard/Elite Enemy rendering logic) ...
+                if (entity.isElite) {
                     const gx = (Math.random() - 0.5) * 5; 
                     this.drawPolygon(ctx, gx, 0, entity.radius, 5, time * 0.2); 
-
                     ctx.save();
                     ctx.lineWidth = 2;
                     for(let i=0; i<5; i++) {
@@ -7139,146 +6935,312 @@ drawEntity(entity) {
                         grad.addColorStop(0, '#fff');
                         grad.addColorStop(1, 'transparent');
                         ctx.strokeStyle = grad;
-                        
-                        ctx.beginPath();
-                        ctx.moveTo(0, 0);
+                        ctx.beginPath(); ctx.moveTo(0, 0);
                         const midX = Math.cos(angle) * (entity.radius * 0.5) + Math.sin(time*10+i)*5;
                         const midY = Math.sin(angle) * (entity.radius * 0.5) + Math.cos(time*10+i)*5;
-                        ctx.lineTo(midX, midY);
-                        ctx.lineTo(Math.cos(angle)*entity.radius, Math.sin(angle)*entity.radius);
+                        ctx.lineTo(midX, midY); ctx.lineTo(Math.cos(angle)*entity.radius, Math.sin(angle)*entity.radius);
                         ctx.stroke();
                     }
                     ctx.restore();
-
                     ctx.fillStyle = '#fff';
-                    ctx.shadowColor = '#ff0055';
+                    ctx.shadowColor = glowColor; 
                     ctx.shadowBlur = 30;
-                    ctx.beginPath();
-                    ctx.rect(-15, -15, 30, 30);
-                    ctx.fill();
-                    ctx.fillStyle = '#000';
-                    ctx.fillRect(-5, -5, 10, 10);
+                    ctx.beginPath(); ctx.rect(-15, -15, 30, 30); ctx.fill();
+                    ctx.fillStyle = '#000'; ctx.fillRect(-5, -5, 10, 10);
                 }
                 else {
+                    // Standard Units with Sector Colors
                     if (entity.name.includes("Drone")) {
                         this.drawPolygon(ctx, 0, 0, entity.radius, 3, Math.PI); 
-                        ctx.fillStyle = '#f00';
-                        ctx.shadowColor = '#f00';
-                        ctx.beginPath();
-                        ctx.arc(0, 0, 15, 0, Math.PI*2); 
-                        ctx.fill();
-                        ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
-                        ctx.beginPath();
-                        ctx.moveTo(0, 0);
-                        const scanW = 20 + Math.sin(time*10)*5;
-                        ctx.lineTo(-scanW, 60);
-                        ctx.lineTo(scanW, 60);
-                        ctx.fill();
+                        ctx.fillStyle = color; ctx.shadowColor = glowColor;
+                        ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI*2); ctx.fill();
+                        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                        ctx.beginPath(); ctx.moveTo(0, 0);
+                        const scanW = 20 + Math.sin(time*10)*5; ctx.lineTo(-scanW, 60); ctx.lineTo(scanW, 60); ctx.fill();
                     }
                     else if (entity.name.includes("Loader") || entity.name.includes("Construct")) {
-                        // --- UPDATED: HEAVY LOADER (Tank Appearance) ---
-                        // Main Chassis
-                        ctx.fillStyle = '#1a1a1a';
-                        ctx.fillRect(-40, -40, 80, 80);
-                        
-                        // Treads (Left/Right)
-                        ctx.fillStyle = '#333';
-                        ctx.fillRect(-60, -50, 20, 100);
-                        ctx.fillRect(40, -50, 20, 100);
-                        
-                        // Tread Details (scrolling lines)
-                        ctx.strokeStyle = '#555';
-                        ctx.lineWidth = 2;
+                        ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-40, -40, 80, 80);
+                        ctx.fillStyle = '#333'; ctx.fillRect(-60, -50, 20, 100); ctx.fillRect(40, -50, 20, 100);
+                        ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
                         const treadOffset = (time * 20) % 20;
                         for(let y = -50; y < 50; y+=20) {
-                            let dy = y + treadOffset;
-                            if(dy > 50) dy -= 100;
+                            let dy = y + treadOffset; if(dy > 50) dy -= 100;
                             ctx.beginPath(); ctx.moveTo(-60, dy); ctx.lineTo(-40, dy); ctx.stroke();
                             ctx.beginPath(); ctx.moveTo(40, dy); ctx.lineTo(60, dy); ctx.stroke();
                         }
-
-                        // Glowing Segments (Armor plates)
-                        ctx.fillStyle = '#222';
-                        ctx.strokeStyle = '#ff8800'; // Orange glow
-                        ctx.lineWidth = 2;
-                        ctx.shadowColor = '#ff8800';
-                        ctx.shadowBlur = 10;
-                        
-                        // Front Plate
-                        ctx.beginPath();
-                        ctx.moveTo(-30, -30); ctx.lineTo(30, -30); ctx.lineTo(35, 0); ctx.lineTo(30, 30); ctx.lineTo(-30, 30); ctx.lineTo(-35, 0);
-                        ctx.closePath();
-                        ctx.fill();
-                        ctx.stroke();
-                        
-                        // Central light
-                        ctx.fillStyle = '#ffaa00';
-                        ctx.shadowBlur = 20;
-                        ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
-
-                    }
-                    else if (entity.name.includes("Arachnid")) {
-                        // --- UPDATED: CYBER ARACHNID ---
-                        // Body
-                        ctx.fillStyle = '#111';
-                        ctx.strokeStyle = '#ff0055';
-                        ctx.lineWidth = 3;
-                        ctx.shadowColor = '#ff0055';
-                        ctx.shadowBlur = 15;
-                        ctx.beginPath();
-                        ctx.arc(0, 0, 20, 0, Math.PI*2);
-                        ctx.fill();
-                        ctx.stroke();
-
-                        // Central Glowing Orb (White)
-                        ctx.fillStyle = '#fff';
-                        ctx.shadowColor = '#fff';
-                        ctx.shadowBlur = 25;
-                        ctx.beginPath();
-                        ctx.arc(0, 0, 8, 0, Math.PI*2);
-                        ctx.fill();
-
-                        // Legs with Gradient
-                        const legCount = 8;
-                        for(let i=0; i<legCount; i++) {
-                            // Slower movement: time * 5 instead of 15
-                            const angle = (i / legCount) * Math.PI * 2;
-                            const move = Math.sin(time * 3 + i) * 5; 
-                            
-                            const startX = Math.cos(angle) * 20;
-                            const startY = Math.sin(angle) * 20;
-                            
-                            // Knee
-                            const midX = Math.cos(angle) * (45 + move);
-                            const midY = Math.sin(angle) * (45 + move);
-                            
-                            // Tip
-                            const endX = Math.cos(angle + 0.2) * (70 + move);
-                            const endY = Math.sin(angle + 0.2) * (70 + move);
-
-                            const grad = ctx.createLinearGradient(startX, startY, endX, endY);
-                            grad.addColorStop(0, '#ff0055');
-                            grad.addColorStop(1, '#000000'); // Ends in black
-
-                            ctx.strokeStyle = grad;
-                            ctx.lineWidth = 3;
-                            ctx.shadowBlur = 0; // Reduce glow on legs for cleaner look
-                            ctx.beginPath();
-                            ctx.moveTo(startX, startY);
-                            ctx.lineTo(midX, midY);
-                            ctx.lineTo(endX, endY);
-                            ctx.stroke();
-                        }
+                        ctx.fillStyle = '#222'; ctx.strokeStyle = color; ctx.lineWidth = 2;
+                        ctx.shadowColor = glowColor; ctx.shadowBlur = 10;
+                        ctx.beginPath(); ctx.moveTo(-30, -30); ctx.lineTo(30, -30); ctx.lineTo(35, 0); ctx.lineTo(30, 30); ctx.lineTo(-30, 30); ctx.lineTo(-35, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+                        ctx.fillStyle = color; ctx.shadowBlur = 20; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
                     }
                     else {
                         this.drawSpikedCircle(ctx, 0, 0, entity.radius, 6, 5, time);
-                        ctx.fillStyle = '#ff0055';
-                        ctx.globalAlpha = 0.3;
-                        ctx.beginPath();
-                        ctx.arc(0, 0, entity.radius * 0.5, 0, Math.PI*2);
-                        ctx.fill();
+                        ctx.fillStyle = color; ctx.globalAlpha = 0.3;
+                        ctx.beginPath(); ctx.arc(0, 0, entity.radius * 0.5, 0, Math.PI*2); ctx.fill();
                         ctx.globalAlpha = 1.0;
                     }
+                }
+            } 
+            else {
+                // =========================================================
+                // BOSS RENDERING LOGIC (REORDERED)
+                // =========================================================
+                
+                // --- SECTOR 1: THE PANOPTICON (Surveillance Eye) ---
+                if (this.sector === 1) {
+                    ctx.save();
+                    const cyan = '#00ffff';
+                    
+                    // 1. Spinning Geometric Rings
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = cyan;
+                    ctx.shadowColor = cyan;
+                    ctx.shadowBlur = 15;
+
+                    ctx.save();
+                    ctx.rotate(time * 0.4);
+                    ctx.setLineDash([10, 20]);
+                    ctx.beginPath(); ctx.arc(0, 0, 100, 0, Math.PI*2); ctx.stroke();
+                    ctx.restore();
+
+                    ctx.save();
+                    ctx.rotate(-time * 0.6);
+                    ctx.setLineDash([40, 10]);
+                    ctx.beginPath(); ctx.arc(0, 0, 80, 0, Math.PI*2); ctx.stroke();
+                    // Satellites
+                    for(let i=0; i<3; i++) {
+                        const angle = (Math.PI*2/3)*i;
+                        const lx = Math.cos(angle)*80;
+                        const ly = Math.sin(angle)*80;
+                        ctx.fillStyle = '#fff';
+                        ctx.beginPath(); ctx.arc(lx, ly, 5, 0, Math.PI*2); ctx.fill();
+                    }
+                    ctx.restore();
+
+                    // 2. Central Pupil
+                    const pupilSize = 30 + Math.sin(time * 2) * 10;
+                    ctx.fillStyle = '#001111';
+                    ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+                    ctx.fillStyle = cyan;
+                    ctx.shadowBlur = 30;
+                    ctx.beginPath(); ctx.arc(0, 0, pupilSize, 0, Math.PI*2); ctx.fill();
+                    
+                    // Scanning Grid
+                    ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
+                    ctx.lineWidth = 1;
+                    const scanY = Math.sin(time * 5) * 50;
+                    ctx.beginPath(); ctx.moveTo(-50, scanY); ctx.lineTo(50, scanY); ctx.stroke();
+
+                    ctx.restore();
+                }
+
+                // --- SECTOR 2: NULL_POINTER (Glitch Vortex) ---
+                else if (this.sector === 2) {
+                    ctx.save();
+                    const magenta = '#ff00ff';
+                    const purple = '#800080';
+                    
+                    const jitterX = (Math.random() - 0.5) * 10;
+                    const jitterY = (Math.random() - 0.5) * 10;
+                    ctx.translate(jitterX, jitterY);
+
+                    // 1. The Void
+                    ctx.fillStyle = '#000';
+                    ctx.shadowColor = magenta;
+                    ctx.shadowBlur = 40;
+                    ctx.beginPath();
+                    for(let i=0; i<=20; i++) {
+                        const angle = (Math.PI*2/20) * i;
+                        const r = 50 + Math.random()*10;
+                        ctx.lineTo(Math.cos(angle)*r, Math.sin(angle)*r);
+                    }
+                    ctx.fill();
+
+                    // 2. Orbiting Shards
+                    const shards = 8;
+                    for(let i=0; i<shards; i++) {
+                        ctx.save();
+                        const angle = time * 2 + (i * Math.PI/4);
+                        const dist = 70 + Math.sin(time*5 + i)*20;
+                        ctx.translate(Math.cos(angle)*dist, Math.sin(angle)*dist);
+                        ctx.rotate(angle + time);
+                        
+                        ctx.fillStyle = (i % 2 === 0) ? magenta : purple;
+                        ctx.beginPath();
+                        ctx.moveTo(0, -20); ctx.lineTo(10, 10); ctx.lineTo(-20, 0);
+                        ctx.fill();
+                        
+                        if (Math.random() > 0.5) {
+                            ctx.fillStyle = '#fff'; ctx.fillRect(10, 10, 4, 4);
+                        }
+                        ctx.restore();
+                    }
+
+                    // 3. Binary Noise
+                    ctx.font = "12px monospace";
+                    ctx.fillStyle = magenta;
+                    ctx.globalAlpha = 0.5;
+                    ctx.fillText("NULL", 40, -40);
+                    ctx.fillText("0x00", -60, 50);
+                    
+                    ctx.restore();
+                }
+
+                // --- SECTOR 3: THE COMPILER (Industrial Piston) ---
+                else if (this.sector === 3) {
+                    ctx.save();
+                    const orange = '#ff4500';
+                    ctx.shadowColor = orange;
+                    ctx.shadowBlur = 20;
+                    ctx.fillStyle = '#1a0500';
+                    ctx.strokeStyle = orange;
+                    ctx.lineWidth = 4;
+
+                    // 1. Pistons
+                    const pistonOffset = Math.sin(time * 3) * 15;
+                    ctx.fillStyle = '#331100';
+                    ctx.fillRect(-90, -60 + pistonOffset, 40, 100); 
+                    ctx.fillRect(50, -60 - pistonOffset, 40, 100);  
+                    ctx.strokeRect(-90, -60 + pistonOffset, 40, 100);
+                    ctx.strokeRect(50, -60 - pistonOffset, 40, 100);
+
+                    // 2. Steam
+                    if (Math.random() > 0.8) {
+                        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                        const steamX = -70 + (Math.random()-0.5)*20;
+                        const steamY = -70 + pistonOffset;
+                        ctx.beginPath(); ctx.arc(steamX, steamY, Math.random()*5+2, 0, Math.PI*2); ctx.fill();
+                    }
+
+                    // 3. Chassis
+                    ctx.fillStyle = '#110000';
+                    ctx.beginPath();
+                    ctx.moveTo(-60, -40); ctx.lineTo(60, -40);
+                    ctx.lineTo(50, 80); ctx.lineTo(-50, 80);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // 4. Grills
+                    ctx.lineWidth = 2;
+                    for(let i=0; i<5; i++) {
+                        const y = -20 + (i * 20);
+                        ctx.beginPath(); ctx.moveTo(-45, y); ctx.lineTo(45, y); ctx.stroke();
+                    }
+
+                    // 5. Furnace Eye
+                    const pulse = 1 + Math.sin(time * 10) * 0.1;
+                    ctx.translate(0, -10);
+                    ctx.scale(pulse, pulse);
+                    ctx.fillStyle = '#ffaa00';
+                    ctx.shadowColor = '#ffaa00';
+                    ctx.shadowBlur = 40;
+                    ctx.beginPath(); ctx.rect(-15, -5, 30, 10); ctx.fill();
+                    
+                    ctx.restore();
+                }
+
+                // --- SECTOR 4: HIVE PROTOCOL (Swarm) ---
+                else if (this.sector === 4) {
+                    ctx.save();
+                    const lime = '#32cd32';
+                    const droneCount = 12;
+                    
+                    ctx.shadowColor = lime;
+                    ctx.shadowBlur = 30;
+                    ctx.fillStyle = 'rgba(50, 205, 50, 0.1)';
+                    ctx.beginPath(); ctx.arc(0, 0, 80, 0, Math.PI*2); ctx.fill();
+
+                    for (let i = 0; i < droneCount; i++) {
+                        const tOffset = i * 100;
+                        const dx = Math.sin(time * 2 + tOffset) * 60 + Math.cos(time * 1.5 + i) * 20;
+                        const dy = Math.cos(time * 1.2 + tOffset) * 40 + Math.sin(time * 2.5 + i) * 20;
+                        
+                        ctx.save();
+                        ctx.translate(dx, dy);
+                        ctx.rotate(time * 3 + i); 
+                        
+                        ctx.strokeStyle = lime;
+                        ctx.fillStyle = '#0a2a0a';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(12, 10); ctx.lineTo(-12, 10); ctx.closePath();
+                        ctx.fill(); ctx.stroke();
+                        
+                        ctx.globalAlpha = 0.2;
+                        ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-dx, -dy); ctx.stroke();
+                        ctx.globalAlpha = 1.0;
+                        
+                        ctx.restore();
+                    }
+                    ctx.restore();
+                }
+
+                // --- SECTOR 5: TESSERACT PRIME (Hypercube) ---
+                else if (this.sector === 5) {
+                    ctx.save();
+                    const gold = '#ffd700';
+                    const white = '#ffffff';
+                    
+                    ctx.rotate(time * 0.2);
+
+                    const drawSquare = (size, color, width) => {
+                        ctx.strokeStyle = color;
+                        ctx.lineWidth = width;
+                        ctx.shadowColor = color;
+                        ctx.shadowBlur = 15;
+                        ctx.strokeRect(-size/2, -size/2, size, size);
+                    };
+
+                    // 1. Outer Cube
+                    drawSquare(140, white, 2);
+
+                    // 2. Inner Rotating Cube
+                    ctx.save();
+                    ctx.rotate(time); 
+                    const pulse = 100 + Math.sin(time * 2) * 20;
+                    drawSquare(pulse, gold, 4);
+                    
+                    // Connecting lines
+                    ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)';
+                    ctx.lineWidth = 1;
+                    const o = 70; 
+                    const i = pulse/2; 
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(-o, -o); ctx.lineTo(-i, -i);
+                    ctx.moveTo(o, -o); ctx.lineTo(i, -i);
+                    ctx.moveTo(o, o); ctx.lineTo(i, i);
+                    ctx.moveTo(-o, o); ctx.lineTo(-i, i);
+                    ctx.stroke();
+                    ctx.restore();
+
+                    // 3. Core Singularity
+                    ctx.fillStyle = white;
+                    ctx.shadowColor = white;
+                    ctx.shadowBlur = 50;
+                    ctx.beginPath(); ctx.arc(0,0, 10, 0, Math.PI*2); ctx.fill();
+
+                    // 4. Sacred Geometry Rays
+                    ctx.strokeStyle = gold;
+                    ctx.globalAlpha = 0.3;
+                    for(let k=0; k<4; k++) {
+                        ctx.rotate(Math.PI/4);
+                        ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(200, 0); ctx.stroke();
+                    }
+
+                    // 5. Invincibility Visuals (Tesseract Shield)
+                    if (entity.invincibleTurns > 0) {
+                        ctx.save();
+                        ctx.strokeStyle = '#fff';
+                        ctx.lineWidth = 3;
+                        ctx.setLineDash([5, 10]);
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 180, 0, Math.PI*2);
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+
+                    ctx.restore();
                 }
             }
         }
@@ -7288,11 +7250,43 @@ drawEntity(entity) {
         // ============================================================
         else if (entity instanceof Minion && !entity.isPlayerSide) {
             
-            // --- SECTOR 5 MINIONS (Glitch) ---
+            // --- DETERMINE SECTOR COLOR PALETTE ---
+            let mColor = '#ff0055'; // Default Red
+            let mGlow = '#ff0055';
+            let mFill = '#1a0505';  // Dark tinted background
+
+            if (this.sector === 1) { 
+                mColor = '#00ffff'; // Cyan (Panopticon)
+                mGlow = '#00ffff';
+                mFill = '#001111';
+            }
+            else if (this.sector === 2) { 
+                mColor = '#ff00ff'; // Magenta (Null Pointer)
+                mGlow = '#ff00ff';
+                mFill = '#110011';
+            }
+            else if (this.sector === 3) { 
+                mColor = '#ff4500'; // Orange (Compiler)
+                mGlow = '#ff4500';
+                mFill = '#1a0500';
+            }
+            else if (this.sector === 4) { 
+                mColor = '#32cd32'; // Lime (Hive)
+                mGlow = '#32cd32';
+                mFill = '#051a05';
+            }
+            else if (this.sector === 5) { 
+                mColor = '#ffffff'; // White/Gold (Tesseract)
+                mGlow = '#ffd700';
+                mFill = '#111111';
+            }
+
+            // --- UNIQUE BOSS MINIONS (Glitch/Source) ---
             if (entity.name.includes("Glitch") || (this.enemy && this.enemy.name === "THE SOURCE")) {
                  ctx.save();
                  ctx.scale(1.2, 1.2);
 
+                 // Glitch Effect: Draw multiple offset copies
                  const layers = 3;
                  for(let i=0; i<layers; i++) {
                      const offsetX = (Math.random() - 0.5) * 10;
@@ -7301,10 +7295,12 @@ drawEntity(entity) {
                      ctx.save();
                      ctx.translate(offsetX, offsetY);
                      
+                     // Alternating colors (Red / White / Black)
                      if (i===0) ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
                      else if (i===1) ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
                      else ctx.fillStyle = 'rgba(0, 0, 0, 1.0)';
                      
+                     // Shape: Unstable Triangle
                      ctx.beginPath();
                      ctx.moveTo(0, -25);
                      ctx.lineTo(20, 15);
@@ -7315,11 +7311,13 @@ drawEntity(entity) {
                      ctx.restore();
                  }
                  
+                 // Static Particles
                  ctx.fillStyle = '#fff';
                  for(let k=0; k<5; k++) {
                      ctx.fillRect((Math.random()-0.5)*50, (Math.random()-0.5)*50, 2, 2);
                  }
                  
+                 // Scanline
                  ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
                  const scanY = (time * 50) % 60 - 30;
                  ctx.fillRect(-25, scanY, 50, 5);
@@ -7327,18 +7325,19 @@ drawEntity(entity) {
                  ctx.restore();
             } 
             else {
-                // --- STANDARD MINION ---
-                 ctx.save(); ctx.scale(1.5, 1.5); 
+                // --- STANDARD MINION (Adaptive Color) ---
+                 ctx.save(); 
+                 ctx.scale(1.5, 1.5); 
                  
                  if (entity.tier === 3) {
-                    const color = '#ff0000';
-                    ctx.strokeStyle = color;
+                    // Tier 3 (Heavier, Spiked)
+                    ctx.strokeStyle = mColor;
                     ctx.lineWidth = 2;
-                    ctx.shadowColor = color;
+                    ctx.shadowColor = mGlow;
                     ctx.shadowBlur = 15;
                     ctx.save();
                     ctx.rotate(time * 2);
-                    ctx.fillStyle = '#0a0000';
+                    ctx.fillStyle = mFill;
                     ctx.beginPath();
                     ctx.moveTo(0, -20);
                     ctx.lineTo(15, 0);
@@ -7349,20 +7348,24 @@ drawEntity(entity) {
                     ctx.stroke();
                     ctx.restore();
                  } else {
-                    const color = '#ff0055'; 
+                    // Tier 1 & 2 (Drone Shape)
                     const hover = Math.cos(time * 5) * 5;
                     ctx.beginPath();
                     ctx.moveTo(0, hover - 20); 
                     ctx.lineTo(20, hover + 15); 
                     ctx.lineTo(-20, hover + 15); 
                     ctx.closePath();
-                    ctx.fillStyle = '#1a0505';
+                    
+                    ctx.fillStyle = mFill;
                     ctx.fill();
+                    
                     ctx.lineWidth = 2;
-                    ctx.strokeStyle = color;
-                    ctx.shadowColor = color;
+                    ctx.strokeStyle = mColor;
+                    ctx.shadowColor = mGlow;
                     ctx.shadowBlur = 10;
                     ctx.stroke();
+                    
+                    // Central Eye/Light
                     ctx.fillStyle = '#fff';
                     ctx.beginPath();
                     ctx.arc(0, hover + 5, 6, 0, Math.PI*2);
@@ -7384,13 +7387,12 @@ drawEntity(entity) {
         if (entity.shield > 0) {
             ctx.save();
             const r = entity.radius + 20;
-            const shieldColor = COLORS.SHIELD; // Cyan #00f3ff
+            const shieldColor = COLORS.SHIELD; 
             
             // 1. Hexagon Energy Field
             ctx.beginPath();
             const segments = 6;
             for (let i = 0; i < segments; i++) {
-                // Rotate slowly
                 const angle = (Math.PI * 2 / segments) * i + (time * 0.5);
                 const sx = Math.cos(angle) * r;
                 const sy = Math.sin(angle) * r;
@@ -7399,13 +7401,11 @@ drawEntity(entity) {
             }
             ctx.closePath();
 
-            // Dynamic Gradient Fill
             const shieldGrad = ctx.createRadialGradient(0, 0, r * 0.5, 0, 0, r);
             shieldGrad.addColorStop(0, 'rgba(0, 243, 255, 0.0)');
             shieldGrad.addColorStop(1, 'rgba(0, 243, 255, 0.15)');
             ctx.fillStyle = shieldGrad;
             
-            // Pulsing Outer Glow
             ctx.shadowColor = shieldColor;
             ctx.shadowBlur = 20 + Math.sin(time * 8) * 10;
             ctx.strokeStyle = shieldColor;
@@ -7419,8 +7419,8 @@ drawEntity(entity) {
             ctx.arc(0, 0, r * 0.85, 0, Math.PI * 2);
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
             ctx.lineWidth = 2;
-            ctx.setLineDash([20, 15]); // Tech dash pattern
-            ctx.lineDashOffset = time * 30; // Spin animation
+            ctx.setLineDash([20, 15]); 
+            ctx.lineDashOffset = time * 30; 
             ctx.stroke();
             
             ctx.restore();
