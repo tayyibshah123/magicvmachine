@@ -345,7 +345,7 @@ const BOSS_DATA = {
     2: { 
         name: "NULL_POINTER", 
         subtitle: "THE CONSUMING VOID",
-        hp: 500, 
+        hp: 500, // Fixed: 500 HP
         dmg: 40, 
         actionsPerTurn: 3,
         color: '#ff00ff', // Neon Magenta
@@ -1288,15 +1288,25 @@ class Enemy extends Entity {
         this.secondWindTriggered = false;
     }
 
-    // Helper to calculate damage for a specific intent
     getEffectiveDamage(baseVal) {
         let dmg = baseVal || this.baseDmg;
+        
+        // 1. Constrict / Digital Rot (Multiplicative reduction)
         const constrict = this.hasEffect('constrict');
-        if (constrict) dmg = Math.floor(dmg * constrict.val);
+        if (constrict) {
+            dmg = Math.floor(dmg * constrict.val);
+        }
+        
+        // 2. Weak (50% reduction)
         const weak = this.hasEffect('weak');
-        if (weak) dmg = Math.floor(dmg * 0.5); 
-        const overcharge = this.hasEffect('overcharge');
-        if (overcharge && overcharge.val === 0) dmg = Math.floor(dmg * 1.25);
+        if (weak) {
+            dmg = Math.floor(dmg * 0.5); 
+        }
+        
+        // 3. Overcharge (Incoming damage mod, but sometimes affects output if specified)
+        // (Standard Overcharge affects incoming damage on target, not outgoing from caster usually, 
+        // but if you have a specific mechanic where it buffs dmg, add here. Leaving as is for now.)
+        
         return Math.max(0, dmg);
     }
 
@@ -1384,7 +1394,6 @@ class Enemy extends Entity {
 
     updateIntentValues() {
         this.nextIntents.forEach(intent => {
-            // UPDATED: Include 'debuff' (Virus) and 'purge_attack' in damage calculations
             if (intent.type === 'attack' || intent.type === 'multi_attack' || intent.type === 'debuff' || intent.type === 'purge_attack') {
                 intent.effectiveVal = this.getEffectiveDamage(intent.val);
             } else if (intent.type === 'heal') {
@@ -1393,6 +1402,7 @@ class Enemy extends Entity {
                 if (constrict) heal = Math.floor(heal * constrict.val);
                 intent.effectiveVal = heal;
             } else {
+                // For non-value intents (like shield), effective is just val
                 intent.effectiveVal = intent.val;
             }
         });
@@ -4035,34 +4045,42 @@ async startCombat(type) {
         let level = 1; 
         if(isElite) level = 2; 
 
-        let sectorMult = 1.0;
-        if (this.sector === 2) sectorMult = 1.4; 
-        else if (this.sector === 3) sectorMult = 2.0; 
-        else if (this.sector > 3) sectorMult = 2.0 * Math.pow(1.3, this.sector - 3);
+        // UPDATED: Linear Scaling (+20% per sector)
+        // Sector 1: 1.0, Sector 2: 1.2, Sector 3: 1.4...
+        let sectorMult = 1.0 + ((this.sector - 1) * 0.2);
 
+        // Ascension Scaling (NG+)
         const ascensionMult = 1 + (this.corruptionLevel * 0.2); 
 
         // Create New Enemy
         this.enemy = new Enemy(template, level, isElite);
         
-        // --- UPDATED: Transfer Logic to TESSERACT PRIME ---
+        // Tesseract Prime Logic
         if (this.enemy.name === "TESSERACT PRIME") {
             this.enemy.invincibleTurns = 3;
             setTimeout(() => {
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200, "SHIELDS ACTIVE (3 TURNS)", "#00f3ff");
             }, 1000);
             
-            // Silence music for final boss atmosphere
             AudioMgr.bossSilence = true;
             if (AudioMgr.bgm) AudioMgr.bgm.pause();
         }
-        // -------------------------------------------------
 
-        // Apply Scaling
-        let typeMult = isBoss ? 1.0 : 2.0; 
-        this.enemy.maxHp = Math.floor(this.enemy.maxHp * sectorMult * typeMult * ascensionMult);
+        // --- UPDATED SCALING LOGIC ---
+        if (isBoss) {
+            // Option A: Bosses ignore Sector Multipliers
+            // Only scaled by Ascension (NG+)
+            this.enemy.maxHp = Math.floor(this.enemy.maxHp * ascensionMult);
+            this.enemy.baseDmg = Math.floor(this.enemy.baseDmg * ascensionMult);
+        } else {
+            // Regular/Elite: Apply Sector Scaling + Ascension
+            // Keeps the 2.0x HP multiplier from previous request
+            this.enemy.maxHp = Math.floor(this.enemy.maxHp * 2.0 * sectorMult * ascensionMult);
+            this.enemy.baseDmg = Math.floor(this.enemy.baseDmg * sectorMult * ascensionMult);
+        }
+        
         this.enemy.currentHp = this.enemy.maxHp;
-        this.enemy.baseDmg = Math.floor(this.enemy.baseDmg * sectorMult * ascensionMult);
+        // -----------------------------
 
         // Apply Glitch Modifiers
         if (this.corruptionLevel > 0 && !isBoss) {
@@ -4100,10 +4118,14 @@ async startCombat(type) {
         if (isElite) {
              const m1 = new Minion(0, 0, 1, false, 2); 
              const m2 = new Minion(0, 0, 2, false, 2);
-             m1.maxHp = Math.floor(m1.maxHp * sectorMult * ascensionMult); m1.currentHp = m1.maxHp;
-             m2.maxHp = Math.floor(m2.maxHp * sectorMult * ascensionMult); m2.currentHp = m2.maxHp;
-             m1.dmg = Math.floor(m1.dmg * ascensionMult);
-             m2.dmg = Math.floor(m2.dmg * ascensionMult);
+             
+             // Apply same scaling to elite minions
+             const minionScale = sectorMult * ascensionMult;
+             
+             m1.maxHp = Math.floor(m1.maxHp * minionScale); m1.currentHp = m1.maxHp;
+             m2.maxHp = Math.floor(m2.maxHp * minionScale); m2.currentHp = m2.maxHp;
+             m1.dmg = Math.floor(m1.dmg * minionScale);
+             m2.dmg = Math.floor(m2.dmg * minionScale);
              
              this.enemy.minions.push(m1, m2);
              ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "ELITE PROTOCOL", "#f00");
@@ -4123,7 +4145,6 @@ async startCombat(type) {
              ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "GUARDIANS ACTIVE", "#f00");
         }
 
-        // Updated Sector 5 Minion check
         if (isBoss && this.sector === 5) {
              const m1 = new Minion(0, 0, 1, false, 3);
              m1.name = "Glitch Alpha"; m1.maxHp = 100; m1.currentHp = 100; m1.dmg = 5;
@@ -6187,25 +6208,7 @@ drawEffects() {
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, w, h);
 
-        // 2. Sun / Moon
-        const sunY = h * 0.25;
-        ctx.save();
-        const sunGrad = ctx.createRadialGradient(w/2, sunY, 10, w/2, sunY, 100);
-        sunGrad.addColorStop(0, conf.sun[0]);
-        sunGrad.addColorStop(1, 'transparent');
-        ctx.fillStyle = sunGrad;
-        ctx.globalAlpha = 0.6;
-        ctx.beginPath();
-        ctx.arc(w/2, sunY, 100, 0, Math.PI*2);
-        ctx.fill();
-        ctx.globalAlpha = 1.0;
-        
-        // Central star
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(w/2, sunY, 30, 0, Math.PI*2);
-        ctx.fill();
-        ctx.restore();
+        // [REMOVED] 2. Sun / Moon Block
 
         // 3. Dynamic Skyline (Parallax)
         const horizon = h * 0.45;
@@ -6247,7 +6250,7 @@ drawEffects() {
                 ctx.fill();
                 // Smoke
                 if (b.layer === 1 && Math.random() > 0.95) {
-                    this.spawnBgParticle('fire', false); // Hack to spawn smoke at x/y? better just use particle system
+                    this.spawnBgParticle('fire', false); 
                 }
             } else if (type === 'tech') {
                 // Floating Hexagons/Monoliths
@@ -6300,7 +6303,7 @@ drawEffects() {
             if (d.x < -100) this.bgState.drones.splice(i, 1);
         }
 
-        // 5. Grid Floor (Original Logic, preserved)
+        // 5. Grid Floor
         const cx = w/2;
         const gridSpeed = 40;
         const offsetY = (time * gridSpeed) % 40;
@@ -6635,7 +6638,8 @@ drawEntity(entity) {
         const baseWidth = 3 + sectorPower;
 
         // --- SHADOW (Ground) ---
-        if (!(entity instanceof Minion)) {
+        // UPDATED: Only draw shadow for the Player. Enemies and Minions float.
+        if (entity instanceof Player) {
             ctx.fillStyle = 'rgba(0,0,0,0.6)';
             ctx.beginPath();
             ctx.ellipse(0, 40, entity.radius, entity.radius/3, 0, 0, Math.PI*2);
@@ -6983,7 +6987,7 @@ drawEntity(entity) {
             } 
             else {
                 // =========================================================
-                // BOSS RENDERING LOGIC (REORDERED)
+                // BOSS RENDERING LOGIC (CORRECTED ORDER)
                 // =========================================================
                 
                 // --- SECTOR 1: THE PANOPTICON (Surveillance Eye) ---
@@ -6991,7 +6995,6 @@ drawEntity(entity) {
                     ctx.save();
                     const cyan = '#00ffff';
                     
-                    // 1. Spinning Geometric Rings
                     ctx.lineWidth = 2;
                     ctx.strokeStyle = cyan;
                     ctx.shadowColor = cyan;
@@ -7007,7 +7010,7 @@ drawEntity(entity) {
                     ctx.rotate(-time * 0.6);
                     ctx.setLineDash([40, 10]);
                     ctx.beginPath(); ctx.arc(0, 0, 80, 0, Math.PI*2); ctx.stroke();
-                    // Satellites
+                    
                     for(let i=0; i<3; i++) {
                         const angle = (Math.PI*2/3)*i;
                         const lx = Math.cos(angle)*80;
@@ -7017,7 +7020,6 @@ drawEntity(entity) {
                     }
                     ctx.restore();
 
-                    // 2. Central Pupil
                     const pupilSize = 30 + Math.sin(time * 2) * 10;
                     ctx.fillStyle = '#001111';
                     ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.fill(); ctx.stroke();
@@ -7025,7 +7027,6 @@ drawEntity(entity) {
                     ctx.shadowBlur = 30;
                     ctx.beginPath(); ctx.arc(0, 0, pupilSize, 0, Math.PI*2); ctx.fill();
                     
-                    // Scanning Grid
                     ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
                     ctx.lineWidth = 1;
                     const scanY = Math.sin(time * 5) * 50;
@@ -7034,54 +7035,121 @@ drawEntity(entity) {
                     ctx.restore();
                 }
 
-                // --- SECTOR 2: NULL_POINTER (Glitch Vortex) ---
+                // --- SECTOR 2: NULL_POINTER (Glitch Vortex - 2x SCALED) ---
                 else if (this.sector === 2) {
                     ctx.save();
                     const magenta = '#ff00ff';
+                    const brightMagenta = '#ff88ff';
                     const purple = '#800080';
                     
-                    const jitterX = (Math.random() - 0.5) * 10;
-                    const jitterY = (Math.random() - 0.5) * 10;
+                    const jitterX = (Math.random() - 0.5) * 8; 
+                    const jitterY = (Math.random() - 0.5) * 8;
                     ctx.translate(jitterX, jitterY);
 
-                    // 1. The Void
+                    // 1. The Void (Central Black Hole) - Radius doubled (~180)
                     ctx.fillStyle = '#000';
                     ctx.shadowColor = magenta;
-                    ctx.shadowBlur = 40;
+                    ctx.shadowBlur = 100; // Stronger glow for larger mass
                     ctx.beginPath();
-                    for(let i=0; i<=20; i++) {
-                        const angle = (Math.PI*2/20) * i;
-                        const r = 50 + Math.random()*10;
+                    for(let i=0; i<=40; i++) { 
+                        const angle = (Math.PI*2/40) * i;
+                        // Radius increased from ~90 to ~180
+                        const r = 180 + Math.sin(time * 10 + i * 5) * 10 + Math.random()*10; 
                         ctx.lineTo(Math.cos(angle)*r, Math.sin(angle)*r);
                     }
                     ctx.fill();
 
-                    // 2. Orbiting Shards
-                    const shards = 8;
+                    // 2. Spiral Overlay
+                    ctx.lineWidth = 4; // Thicker lines
+                    ctx.globalAlpha = 0.6;
+                    const spiralArms = 6;
+                    for (let j = 0; j < spiralArms; j++) {
+                        ctx.beginPath();
+                        ctx.strokeStyle = (j % 2 === 0) ? magenta : purple;
+                        for (let k = 0; k < 60; k++) {
+                            const theta = (time * -3) + (j * (Math.PI * 2) / spiralArms) + (k * 0.1); 
+                            // Spiral radius doubled (k * 4.0 instead of 2.0)
+                            const r = k * 4.0; 
+                            if (r > 190) break; // Clip limit doubled
+                            const x = Math.cos(theta) * r;
+                            const y = Math.sin(theta) * r;
+                            if (k===0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                        }
+                        ctx.stroke();
+                    }
+                    ctx.globalAlpha = 1.0;
+
+                    // 3. Orbiting Splinter Shards
+                    const shards = 12; 
                     for(let i=0; i<shards; i++) {
                         ctx.save();
-                        const angle = time * 2 + (i * Math.PI/4);
-                        const dist = 70 + Math.sin(time*5 + i)*20;
+                        
+                        // Orbit Logic - Distance doubled (140 -> 280)
+                        const angle = time * 1.5 + (i * Math.PI*2 / shards);
+                        const dist = 280 + Math.sin(time * 2 + i * 43) * 50; 
+                        
                         ctx.translate(Math.cos(angle)*dist, Math.sin(angle)*dist);
-                        ctx.rotate(angle + time);
                         
-                        ctx.fillStyle = (i % 2 === 0) ? magenta : purple;
+                        // Self Rotation
+                        ctx.rotate(angle + (time * 4) + (i % 2 === 0 ? time : -time)); 
+                        
+                        // Fade In/Out
+                        const fade = 0.4 + 0.6 * Math.sin(time * 3 + i * 100);
+                        ctx.globalAlpha = fade;
+
+                        // Visual Style
+                        ctx.fillStyle = '#050005'; 
+                        ctx.strokeStyle = brightMagenta; 
+                        ctx.lineWidth = 3; // Thicker lines
+                        ctx.shadowColor = magenta;
+                        ctx.shadowBlur = 15;
+
+                        // Procedural Reshaping (Splintering) - Amplitude doubled
+                        const warp = (offset) => Math.sin(time * 15 + i * 10 + offset) * 16;
+
                         ctx.beginPath();
-                        ctx.moveTo(0, -20); ctx.lineTo(10, 10); ctx.lineTo(-20, 0);
-                        ctx.fill();
+                        // Coordinates doubled for 2x size
+                        ctx.moveTo(0 + warp(1), -60 + warp(2)); // Top
+                        ctx.lineTo(30 + warp(3), 20 + warp(4)); // Right
+                        ctx.lineTo(0 + warp(5), 10 + warp(6));   // Inner fracture
+                        ctx.lineTo(-30 + warp(7), 20 + warp(8)); // Left
+                        ctx.closePath();
                         
-                        if (Math.random() > 0.5) {
-                            ctx.fillStyle = '#fff'; ctx.fillRect(10, 10, 4, 4);
+                        ctx.fill();
+                        ctx.stroke();
+                        
+                        // Extra floating splinter debris
+                        if (i % 2 === 0) {
+                            ctx.beginPath();
+                            ctx.moveTo(0, -80 + warp(0));
+                            ctx.lineTo(10, -100 + warp(1));
+                            ctx.lineTo(-10, -100 + warp(2));
+                            ctx.fill();
+                            ctx.stroke();
+                        }
+                        
+                        // Glitch particles - Spread and size increased
+                        if (Math.random() > 0.8) {
+                            ctx.fillStyle = '#fff'; 
+                            ctx.shadowBlur = 0;
+                            const px = (Math.random()-0.5)*120;
+                            const py = (Math.random()-0.5)*120;
+                            ctx.fillRect(px, py, Math.random()*4+2, Math.random()*40+2); 
                         }
                         ctx.restore();
                     }
 
-                    // 3. Binary Noise
-                    ctx.font = "12px monospace";
-                    ctx.fillStyle = magenta;
-                    ctx.globalAlpha = 0.5;
-                    ctx.fillText("NULL", 40, -40);
-                    ctx.fillText("0x00", -60, 50);
+                    // 4. Floating Glitch Text - Larger Font & Orbit
+                    ctx.font = "bold 32px 'Orbitron', monospace"; // 16px -> 32px
+                    ctx.fillStyle = brightMagenta;
+                    ctx.shadowBlur = 10;
+                    ctx.globalAlpha = 0.8;
+                    
+                    const txtX = Math.sin(time * 1.2) * 140; // 70 -> 140
+                    const txtY = Math.cos(time * 0.9) * 140;
+                    
+                    ctx.fillText("NULL", txtX - 40, txtY);
+                    ctx.fillText("VOID", -txtX - 40, -txtY);
                     
                     ctx.restore();
                 }
@@ -7096,7 +7164,7 @@ drawEntity(entity) {
                     ctx.strokeStyle = orange;
                     ctx.lineWidth = 4;
 
-                    // 1. Pistons
+                    // Pistons
                     const pistonOffset = Math.sin(time * 3) * 15;
                     ctx.fillStyle = '#331100';
                     ctx.fillRect(-90, -60 + pistonOffset, 40, 100); 
@@ -7104,7 +7172,6 @@ drawEntity(entity) {
                     ctx.strokeRect(-90, -60 + pistonOffset, 40, 100);
                     ctx.strokeRect(50, -60 - pistonOffset, 40, 100);
 
-                    // 2. Steam
                     if (Math.random() > 0.8) {
                         ctx.fillStyle = 'rgba(255,255,255,0.5)';
                         const steamX = -70 + (Math.random()-0.5)*20;
@@ -7112,7 +7179,6 @@ drawEntity(entity) {
                         ctx.beginPath(); ctx.arc(steamX, steamY, Math.random()*5+2, 0, Math.PI*2); ctx.fill();
                     }
 
-                    // 3. Chassis
                     ctx.fillStyle = '#110000';
                     ctx.beginPath();
                     ctx.moveTo(-60, -40); ctx.lineTo(60, -40);
@@ -7121,14 +7187,12 @@ drawEntity(entity) {
                     ctx.fill();
                     ctx.stroke();
 
-                    // 4. Grills
                     ctx.lineWidth = 2;
                     for(let i=0; i<5; i++) {
                         const y = -20 + (i * 20);
                         ctx.beginPath(); ctx.moveTo(-45, y); ctx.lineTo(45, y); ctx.stroke();
                     }
 
-                    // 5. Furnace Eye
                     const pulse = 1 + Math.sin(time * 10) * 0.1;
                     ctx.translate(0, -10);
                     ctx.scale(pulse, pulse);
@@ -7243,7 +7307,7 @@ drawEntity(entity) {
                     ctx.restore();
                 }
             }
-        }
+	}
         
         // ============================================================
         // 4. ENEMY MINIONS (Glitch/Standard)
@@ -7463,7 +7527,7 @@ drawEntity(entity) {
         }
 
         // --- ENEMY INTENT ICON ---
-        if (entity instanceof Enemy && ((entity.nextIntents && entity.nextIntents.length > 0) || entity.nextIntent)) {
+         if (entity instanceof Enemy && ((entity.nextIntents && entity.nextIntents.length > 0) || entity.nextIntent)) {
             ctx.restore(); 
             ctx.save();
             ctx.translate(renderX, renderY);
@@ -7502,15 +7566,24 @@ drawEntity(entity) {
                     
                     ctx.fillText(icon, ix, iy + 35); 
 
-                    if(intent.effectiveVal > 0 || intent.val > 0) {
+                    // FIX: Strict check for effectiveVal existence
+                    const displayVal = (intent.effectiveVal !== undefined) ? intent.effectiveVal : intent.val;
+                    
+                    if(displayVal !== undefined && displayVal > 0) {
                         ctx.font = 'bold 16px "Orbitron"';
-                        ctx.fillStyle = '#fff';
+                        // Color code damage numbers: Red if high/normal, Green if Heal, Grey if 0
+                        ctx.fillStyle = (intent.type === 'heal') ? '#0f0' : '#fff';
+                        
+                        // Yellow warning if reduced (optional visual cue, staying white for now to match style)
+                        if (intent.effectiveVal < intent.val) ctx.fillStyle = '#ffff00'; // Yellow if reduced
+
                         ctx.shadowColor = '#000';
                         ctx.shadowBlur = 4;
-                        ctx.fillText(intent.effectiveVal || intent.val, ix, iy - 5); 
+                        ctx.fillText(displayVal, ix, iy - 5); 
                     }
                 }
             } else {
+                // Fallback for Single Intent (Legacy)
                 ctx.fillStyle = COLORS.MECH_LIGHT;
                 const hover = Math.cos(time * 5) * 5;
                 ctx.fillRect(-40, -entity.radius - 40 + hover, 80, 25);
@@ -7525,10 +7598,11 @@ drawEntity(entity) {
                 
                 ctx.fillText(icon, 0, -entity.radius - 50 + hover); 
 
-                if(entity.nextIntent.val > 0) {
+                const val = (entity.nextIntent.effectiveVal !== undefined) ? entity.nextIntent.effectiveVal : entity.nextIntent.val;
+                if(val > 0) {
                     ctx.font = 'bold 20px "Orbitron"';
                     ctx.fillStyle = '#fff';
-                    ctx.fillText(entity.nextIntent.val, 0, -entity.radius - 20 + hover); 
+                    ctx.fillText(val, 0, -entity.radius - 20 + hover); 
                 }
             }
             
