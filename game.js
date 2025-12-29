@@ -267,6 +267,21 @@ const UPGRADES_POOL = [
     { id: 'data_miner', name: "Data Miner", desc: "Gain 5 Fragments if you end combat with full HP.", icon: "⛏️" }
 ];
 
+const CORRUPTED_RELICS = [
+    { id: 'c_blood_pact', name: "Blood Pact", desc: "Deal +50% DMG, but take 2 DMG at start of turn.", icon: "🩸", rarity: 'corrupted' },
+    { id: 'c_unstable_core', name: "Unstable Core", desc: "+2 Base Mana, but 25% chance to lose turn when casting skills.", icon: "☢️", rarity: 'corrupted' },
+    { id: 'c_void_shell', name: "Void Shell", desc: "Start with 30 Shield, but cannot gain Shield from cards.", icon: "⬛", rarity: 'corrupted' },
+    { id: 'c_glitch_blade', name: "Glitch Blade", desc: "Attacks deal random DMG (1 to 3x Base).", icon: "👾", rarity: 'corrupted' },
+    { id: 'c_entropy', name: "Entropy", desc: "Enemies start with -20% HP, but deal +50% DMG.", icon: "📉", rarity: 'corrupted' }
+];
+
+const GLITCH_MODIFIERS = [
+    { id: 'volatile', name: 'Volatile', icon: '💣', desc: 'Explodes for 15 DMG on death.' },
+    { id: 'evasive', name: 'Evasive', icon: '💨', desc: '20% chance to dodge attacks.' },
+    { id: 'regen', name: 'Regenerator', icon: '❤️', desc: 'Heals 5% HP each turn.' },
+    { id: 'thorns', name: 'Sharp', icon: '🌵', desc: 'Reflects 2 DMG on hit.' }
+];
+
 const DICE_TYPES = {
     ATTACK: { icon: '🗡️', color: '#ff0055', desc: 'Deal 5 damage.\n[QTE]: Crit for x1.3', cost: 0, target: 'enemy' }, // RESTORED: 5
     DEFEND: { icon: '🛡️', color: '#00f3ff', desc: 'Gain 5 Shield.', cost: 0, target: 'self' }, // RESTORED: 5
@@ -860,30 +875,45 @@ class Entity {
     }
 
     takeDamage(amount, source = null, suppressBlockText = false) {
-        // FIX: Invincibility Check
+        // Invincibility Check
         if (this instanceof Enemy && this.invincibleTurns > 0) {
             ParticleSys.createFloatingText(this.x, this.y - 60, "INVINCIBLE", "#888");
             AudioMgr.playSound('defend');
             return false;
         }
 
+        // --- NEW: Enemy Evasive Glitch ---
+        if (this instanceof Enemy && this.glitchMod && this.glitchMod.id === 'evasive') {
+            if (Math.random() < 0.2) {
+                ParticleSys.createFloatingText(this.x, this.y - 60, "GLITCH DODGE", "#ff00ff");
+                AudioMgr.playSound('defend');
+                return false;
+            }
+        }
+        // ---------------------------------
+
         let actualDmg = amount;
 
+        // ... [Keep existing Player Damage Calc logic] ...
         if (this instanceof Player && this.incomingDamageMult > 1) {
             actualDmg = Math.floor(actualDmg * this.incomingDamageMult);
         }
-
         const overcharge = this.hasEffect('overcharge');
         if (overcharge) {
             const modifier = overcharge.val > 0 ? 2.0 : 1.5;
             actualDmg = Math.floor(actualDmg * modifier);
         }
-        
         if (this.hasEffect('frail')) {
             actualDmg = Math.floor(actualDmg * 1.3);
         }
 
-        // 1. Apply Shields
+        // --- NEW: Corrupted Entropy Relic Logic (Player Deals +50%) ---
+        if (source instanceof Player && source.hasRelic('c_entropy')) {
+            actualDmg = Math.floor(actualDmg * 1.5);
+        }
+        // -------------------------------------------------------------
+
+        // Apply Shields
         if (this.shield > 0) {
             if (this.shield >= actualDmg) {
                 this.shield -= actualDmg;
@@ -894,13 +924,12 @@ class Entity {
             }
         }
 
-        // 2. Firewall Relic (FIXED LOGIC)
+        // Firewall Relic
         if (this instanceof Player && this.hasRelic('firewall') && !this.firewallTriggered && actualDmg > 0) {
             const stacks = this.relics.filter(r => r.id === 'firewall').length;
-            let cap = 20; // Default x1
+            let cap = 20; 
             if (stacks === 2) cap = 10;
             if (stacks >= 3) cap = 0;
-            
             if (actualDmg > cap) {
                 actualDmg = cap;
                 ParticleSys.createFloatingText(this.x, this.y - 140, "FIREWALL (" + cap + ")", COLORS.SHIELD);
@@ -926,6 +955,13 @@ class Entity {
              this.flashTimer = 0.2; 
              ParticleSys.createFloatingText(this.x, this.y - 60, "-" + actualDmg, '#ff3333');
              AudioMgr.playSound('hit');
+             
+             // --- NEW: Enemy Thorns Glitch ---
+             if (this instanceof Enemy && this.glitchMod && this.glitchMod.id === 'thorns' && source instanceof Player) {
+                 source.takeDamage(2);
+                 ParticleSys.createFloatingText(source.x, source.y - 80, "GLITCH REFLECT", "#ff00ff");
+             }
+             // --------------------------------
         } else {
              if (amount > 0 && !suppressBlockText) ParticleSys.createFloatingText(this.x, this.y - 60, "BLOCKED", COLORS.SHIELD);
              AudioMgr.playSound('defend');
@@ -935,15 +971,12 @@ class Entity {
             Game.shake(5);
             
              if(this.hasRelic('spike_armor')) {
-                let spikeDmg = 3; // RESTORED: 3 DMG
+                let spikeDmg = 3; 
                 const spikes = this.relics.filter(r => r.id === 'spike_armor').length;
                 spikeDmg *= spikes;
-                
                 const target = source || Game.enemy;
-                
                 if (target && target.currentHp > 0) {
                     ParticleSys.createFloatingText(this.x, this.y - 120, "SPIKES!", COLORS.GOLD);
-                    
                     if(target.takeDamage(spikeDmg)) {
                         if (target === Game.enemy) {
                             Game.winCombat();
@@ -964,6 +997,15 @@ class Entity {
                 ParticleSys.createFloatingText(this.x, this.y - 140, "EMERGENCY KIT", COLORS.NATURE_LIGHT);
             }
         }
+        
+        // --- NEW: Enemy Volatile Glitch (On Death) ---
+        if (this.currentHp <= 0 && this instanceof Enemy && this.glitchMod && this.glitchMod.id === 'volatile') {
+            Game.player.takeDamage(15);
+            ParticleSys.createExplosion(this.x, this.y, 50, "#ff0000");
+            ParticleSys.createFloatingText(this.x, this.y, "GLITCH EXPLOSION", "#ff00ff");
+            Game.shake(15);
+        }
+        // ---------------------------------------------
         
         return this.currentHp <= 0;
     }
@@ -1226,7 +1268,7 @@ class Enemy extends Entity {
         super(540, 550, template.name, hp);
         this.baseDmg = dmg;
         this.isBoss = !!template.actionsPerTurn;
-        this.bossData = template; // Store full config
+        this.bossData = template; 
         this.minions = [];
         
         // NEW: Array for multiple actions
@@ -1234,7 +1276,7 @@ class Enemy extends Entity {
         
         this.phase = 1;
         this.isElite = isElite;
-        this.showIntent = false;
+        this.showIntent = true; // UPDATED: Default to TRUE
         
         this.affixes = [];
         if (this.isElite) {
@@ -1524,9 +1566,13 @@ const Game = {
             const savedLore = localStorage.getItem('mvm_lore');
             this.unlockedLore = savedLore ? JSON.parse(savedLore) : [];
             
-            // FIX: Restore seenFlags initialization
             const savedSeen = localStorage.getItem('mvm_seen');
             this.seenFlags = savedSeen ? JSON.parse(savedSeen) : {};
+
+            // --- NEW: Load Corruption Level ---
+            const savedCorruption = localStorage.getItem('mvm_corruption');
+            this.corruptionLevel = savedCorruption ? parseInt(savedCorruption) : 0;
+            // ----------------------------------
 
             const saveFile = localStorage.getItem('mvm_save_v1');
             const btnLoad = document.getElementById('btn-load-save');
@@ -1536,7 +1582,7 @@ const Game = {
                     btnLoad.classList.remove('hidden');
                     btnLoad.style.display = "inline-block"; 
                     const data = JSON.parse(saveFile);
-                    btnLoad.innerText = "RESUME SECTOR " + (data.sector || 1);
+                    btnLoad.innerText = "RESUME RUN";
                 }
             } else {
                 if (btnLoad) btnLoad.style.display = "none";
@@ -1546,7 +1592,15 @@ const Game = {
             console.warn("LocalStorage error:", e);
             this.techFragments = 0;
             this.metaUpgrades = [];
-            this.seenFlags = {}; // FIX: Initialize in catch block
+            this.seenFlags = {}; 
+            this.corruptionLevel = 0;
+        }
+
+        // Update Main Menu Title with Corruption Level
+        if (this.corruptionLevel > 0) {
+            const sub = document.querySelector('.subtitle');
+            if(sub) sub.innerText = `ASCENSION LEVEL ${this.corruptionLevel}`;
+            sub.style.color = '#ff0055';
         }
 
         this.effects = [];
@@ -1554,6 +1608,7 @@ const Game = {
         document.getElementById('run-fragments').innerText = this.techFragments;
         document.getElementById('fragment-count').innerText = `Fragments: ${this.techFragments}`;
 
+        // ... (Keep existing Audio unlock listeners) ...
         const unlockAudio = () => {
             AudioMgr.init();
             AudioMgr.startMusic(); 
@@ -3985,30 +4040,56 @@ async startCombat(type) {
         else if (this.sector === 3) sectorMult = 2.0; 
         else if (this.sector > 3) sectorMult = 2.0 * Math.pow(1.3, this.sector - 3);
 
+        // --- NEW: Ascension Multiplier ---
+        const ascensionMult = 1 + (this.corruptionLevel * 0.2); // +20% per level
+        // ---------------------------------
+
         // Create New Enemy
         this.enemy = new Enemy(template, level, isElite);
         
-        // FIX: Initialize Invincibility for The Source AND Stop Music
+        // Handle The Source
         if (this.enemy.name === "THE SOURCE") {
             this.enemy.invincibleTurns = 3;
             setTimeout(() => {
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200, "SHIELDS ACTIVE (3 TURNS)", "#00f3ff");
             }, 1000);
-            
-            // Stop Music for dramatic effect & Suppress auto-restart
             AudioMgr.bossSilence = true;
             if (AudioMgr.bgm) AudioMgr.bgm.pause();
         }
 
         // Apply Scaling
-        if (!isBoss) {
-            // UPDATED: 2x HP Multiplier for Regular/Elite units
-            this.enemy.maxHp = Math.floor(this.enemy.maxHp * sectorMult * 2.0);
-            this.enemy.currentHp = this.enemy.maxHp;
-            this.enemy.baseDmg = Math.floor(this.enemy.baseDmg * sectorMult);
+        // Logic: (Base * Sector * 2.0_if_not_boss) * Ascension
+        let typeMult = isBoss ? 1.0 : 2.0; 
+        
+        this.enemy.maxHp = Math.floor(this.enemy.maxHp * sectorMult * typeMult * ascensionMult);
+        this.enemy.currentHp = this.enemy.maxHp;
+        
+        // Damage Scaling
+        this.enemy.baseDmg = Math.floor(this.enemy.baseDmg * sectorMult * ascensionMult);
+
+        // --- NEW: Apply Glitch Modifiers ---
+        if (this.corruptionLevel > 0 && !isBoss) {
+            // Chance for a glitch modifier (higher chance at higher levels)
+            if (Math.random() < (0.3 + this.corruptionLevel * 0.1)) {
+                const mod = GLITCH_MODIFIERS[Math.floor(Math.random() * GLITCH_MODIFIERS.length)];
+                this.enemy.affixes.push(mod.id);
+                this.enemy.glitchMod = mod; // Store for easy access
+                
+                // Visual Indicator
+                setTimeout(() => {
+                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 180, `⚠️ ${mod.name}`, "#ff00ff");
+                }, 800);
+            }
         }
+        // -----------------------------------
         
         this.player.mana = this.player.baseMana;
+        
+        // Handle Corrupted Relic: Blood Pact (Start turn damage handled in startTurn, but check for visual here)
+        if (this.player.hasRelic('c_void_shell')) {
+            this.player.addShield(30);
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "VOID SHELL", "#555");
+        }
         
         if(this.player.traits.startMinions) {
             for(let i=0; i<this.player.traits.startMinions; i++) {
@@ -4023,15 +4104,22 @@ async startCombat(type) {
             this.player.minions.push(new Minion(0, 0, this.player.minions.length + 1, true));
         }
 
+        // Setup Minions
         if (isElite) {
              const m1 = new Minion(0, 0, 1, false, 2); 
              const m2 = new Minion(0, 0, 2, false, 2);
-             m1.maxHp = Math.floor(m1.maxHp * sectorMult); m1.currentHp = m1.maxHp;
-             m2.maxHp = Math.floor(m2.maxHp * sectorMult); m2.currentHp = m2.maxHp;
+             // Apply Ascension scaling to minions too
+             m1.maxHp = Math.floor(m1.maxHp * sectorMult * ascensionMult); m1.currentHp = m1.maxHp;
+             m2.maxHp = Math.floor(m2.maxHp * sectorMult * ascensionMult); m2.currentHp = m2.maxHp;
+             m1.dmg = Math.floor(m1.dmg * ascensionMult);
+             m2.dmg = Math.floor(m2.dmg * ascensionMult);
+             
              this.enemy.minions.push(m1, m2);
              ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "ELITE PROTOCOL", "#f00");
              
              this.enemy.affixes.forEach((affix, i) => {
+                 // Skip if it's the glitchMod we already showed
+                 if (this.enemy.glitchMod && affix === this.enemy.glitchMod.id) return;
                  setTimeout(() => {
                      ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 150 - (i*30), `⚠️ ${affix}`, COLORS.ORANGE);
                  }, i * 500);
@@ -4048,14 +4136,13 @@ async startCombat(type) {
         if (isBoss && this.sector === 5) {
              const m1 = new Minion(0, 0, 1, false, 3);
              m1.name = "Glitch Alpha"; m1.maxHp = 100; m1.currentHp = 100; m1.dmg = 5;
-             
              const m2 = new Minion(0, 0, 2, false, 3);
              m2.name = "Glitch Beta"; m2.maxHp = 100; m2.currentHp = 100; m2.dmg = 5;
-             
              this.enemy.minions.push(m1, m2);
              ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "SOURCE CODE ACTIVE", "#bc13fe");
         }
 
+        // Animations
         this.player.spawnTimer = 1.0;
         this.player.minions.forEach(m => m.spawnTimer = 1.0);
         this.enemy.spawnTimer = 1.0;
@@ -4077,24 +4164,21 @@ async startTurn() {
         // Lock Input
         this.inputLocked = true;
 
-        // Show Banner
         await this.showPhaseBanner("PLAYER PHASE", "COMMAND LINK ESTABLISHED", 'player');
 
         this.turnCount++;
         
-        // --- NEW: Decrement Boss Invincibility ---
         if (this.enemy && this.enemy.invincibleTurns > 0) {
             this.enemy.invincibleTurns--;
             if (this.enemy.invincibleTurns <= 0) {
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 220, "SHIELDS OFFLINE", "#ffffff");
-                AudioMgr.playSound('grid_fracture'); // Heavy sound for shield break
+                AudioMgr.playSound('grid_fracture'); 
                 Game.shake(10);
             } else {
                  ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 220, `INVINCIBLE (${this.enemy.invincibleTurns})`, "#ff0000");
                  AudioMgr.playSound('hex_barrier');
             }
         }
-        // -----------------------------------------
 
         this.attacksThisTurn = 0; 
         this.player.shield = 0; 
@@ -4103,9 +4187,24 @@ async startTurn() {
         
         if(this.player.traits.startShield) this.player.addShield(this.player.traits.startShield);
         
-        // Meta Upgrade Shields
         if(this.hasMetaUpgrade('m_shield') && this.turnCount === 1) this.player.addShield(20);
         
+        // --- NEW: Corrupted Relic Logic ---
+        if (this.player.hasRelic('c_void_shell')) {
+            // Cannot gain shield from cards, but keeps initial shield? 
+            // Actually standard logic clears shield every turn. Void Shell trait says "Start with 30".
+            // Since we cleared shield above, we rely on the Relic to give it ONLY at start of combat?
+            // "Start with 30" implies only Turn 1.
+            if (this.turnCount === 1) this.player.addShield(30);
+        }
+        
+        if (this.player.hasRelic('c_blood_pact')) {
+            this.player.takeDamage(2);
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "BLOOD PACT", "#ff0000");
+        }
+        // ----------------------------------
+
+        // Standard Relics
         const shieldStacks = this.player.relics.filter(r => r.id === 'nano_shield').length;
         if(shieldStacks > 0 && this.turnCount === 1) this.player.addShield(5 * shieldStacks);
         
@@ -4115,26 +4214,21 @@ async startTurn() {
         const manaStacks = this.player.relics.filter(r => r.id === 'mana_syphon').length;
         if(manaStacks > 0) this.player.mana += manaStacks;
 
-        // Static Field Relic
+        // Static Field
         if (this.player.hasRelic('static_field') && this.enemy) {
              const targets = [this.enemy, ...this.enemy.minions];
              const t = targets[Math.floor(Math.random() * targets.length)];
              if (t) {
                  const isDead = t.takeDamage(5);
                  ParticleSys.createFloatingText(t.x, t.y - 80, "STATIC", "#00f3ff");
-                 
                  if (isDead) {
-                     if (t === this.enemy) {
-                         this.winCombat();
-                         return; 
-                     } else {
-                         this.enemy.minions = this.enemy.minions.filter(m => m !== t);
-                     }
+                     if (t === this.enemy) { this.winCombat(); return; } 
+                     else { this.enemy.minions = this.enemy.minions.filter(m => m !== t); }
                  }
              }
         }
 
-        // Solar Battery Relic
+        // Solar Battery
         if (this.player.hasRelic('solar_battery') && this.turnCount % 3 === 0) {
              const stacks = this.player.relics.filter(r => r.id === 'solar_battery').length;
              const manaGain = (stacks * 2) - 1;
@@ -4142,6 +4236,14 @@ async startTurn() {
              ParticleSys.createFloatingText(this.player.x, this.player.y - 80, `SOLAR (+${manaGain})`, COLORS.GOLD);
         }
         
+        // --- NEW: Enemy Glitch Regen ---
+        if (this.enemy && this.enemy.glitchMod && this.enemy.glitchMod.id === 'regen') {
+            const healAmt = Math.floor(this.enemy.maxHp * 0.05);
+            this.enemy.heal(healAmt);
+            ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 150, "GLITCH REGEN", "#00ff00");
+        }
+        // -------------------------------
+
         let rerollStacks = this.player.relics.filter(r => r.id === 'reroll_chip').length;
         let gamblerStacks = this.player.relics.filter(r => r.id === 'gamblers_chip').length;
         
@@ -4152,7 +4254,6 @@ async startTurn() {
         if(this.enemy) {
              this.enemy.updateEffects();
              
-             // Shielded Affix Logic
              if (this.enemy.affixes && this.enemy.affixes.includes('Shielded')) {
                  if (this.enemy.shield <= 0) {
                      const ratio = (this.sector === 1) ? 0.1 : 0.2;
@@ -4167,7 +4268,6 @@ async startTurn() {
 
          this.rerolls = (this.player.traits.noRerolls) ? 0 : (2 + rerollStacks + (gamblerStacks * 2));
         
-        // Tactician/Arcanist logic
         if (this.deadMinionsThisTurn > 0) {
             if (this.player.traits.diceCount === 6) { 
                  this.rerolls += this.deadMinionsThisTurn;
@@ -4180,16 +4280,13 @@ async startTurn() {
         }
         this.deadMinionsThisTurn = 0; 
 
-        // Jammer Affix Logic
         let diceToRoll = this.player.diceCount;
         if (this.enemy && this.enemy.affixes && this.enemy.affixes.includes('Jammer')) {
             diceToRoll = Math.max(3, diceToRoll - 1);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 150, "JAMMED!", "#ff0000");
         }
 
-        // Unlock Input
         this.inputLocked = false;
-
         this.rollDice(diceToRoll); 
         
         const btnEnd = document.getElementById('btn-end-turn');
@@ -4201,7 +4298,6 @@ async startTurn() {
 
         this.updateHUD();
     },
-
     calculateCardDamage(baseDmg, type = null, target = null) {
         let dmg = baseDmg;
         
@@ -5559,30 +5655,31 @@ drawEffects() {
         }
 
         // --- NEW: SECTOR 5 BOSS VICTORY SEQUENCE ---
-        if (this.enemy && this.enemy.name === "THE SOURCE") {
+         if (this.enemy && this.enemy.name === "THE SOURCE") {
             // 1. Cinematic Crash
             await this.triggerSystemCrash();
             
             // 2. Set Data
             localStorage.setItem('mvm_gameCompleted', 'true');
             
-            // 3. Rewards (1000 Frags, 3 Files)
+            // --- NEW: Increment Corruption Level ---
+            this.corruptionLevel++;
+            localStorage.setItem('mvm_corruption', this.corruptionLevel);
+            // ---------------------------------------
+            
+            // 3. Rewards
             this.techFragments += 1000;
             this.encryptedFiles += 3;
-            this.bossDefeated = true; // Mark defeated to clear save
+            this.bossDefeated = true; 
             
-            // Save immediately to ensure rewards stick
             this.saveGame();
             
-            // Clear the run save (Run is over)
             localStorage.removeItem('mvm_save_v1');
             document.getElementById('btn-load-save').style.display = 'none';
 
-            // 4. Transition to Ending
             this.changeState(STATE.ENDING);
             return;
         }
-        // -------------------------------------------
 
         // RESET BOSS SILENCE (For normal wins)
         AudioMgr.bossSilence = false;
@@ -5652,6 +5749,11 @@ drawEffects() {
         
         let pool = [...UPGRADES_POOL];
         
+        // --- NEW: Add Corrupted Relics if Ascended ---
+        if (this.corruptionLevel > 0) {
+            pool.push(...CORRUPTED_RELICS);
+        }
+        
         // Filter Unique/One-time items
         if(this.player.hasRelic('second_life')) pool = pool.filter(i => i.id !== 'second_life');
         if(this.player.hasRelic('manifestor')) pool = pool.filter(i => i.id !== 'manifestor');
@@ -5689,10 +5791,19 @@ drawEffects() {
             const card = document.createElement('div');
             const isGold = item.rarity === 'gold';
             const isRed = item.rarity === 'red';
+            const isCorrupted = item.rarity === 'corrupted'; // NEW
             
             let borderClass = '';
             if (isGold) borderClass = 'gold-border';
             if (isRed) borderClass = 'red-border';
+            if (isCorrupted) borderClass = 'corrupted-border'; // New class needed in CSS or inline logic
+
+            // Add style for corrupted
+            if (isCorrupted) {
+                card.style.borderColor = "#ff00ff";
+                card.style.boxShadow = "0 0 15px #ff00ff";
+                card.style.background = "linear-gradient(135deg, rgba(50,0,50,0.8), rgba(20,0,20,0.9))";
+            }
 
             card.className = `reward-card ${borderClass}`;
             
@@ -6246,36 +6357,72 @@ drawEffects() {
         const ctx = this.ctx;
         const time = Date.now() / 1000;
         
-        // Helper to draw a single line
         const drawLine = (target) => {
             if (!target || target.currentHp <= 0) return;
             
             ctx.save();
-            ctx.lineWidth = 3;
-            const alpha = 0.6 + Math.sin(time * 5) * 0.4;
-            ctx.strokeStyle = `rgba(255, 50, 50, ${alpha})`;
+            // Improved Visuals: Thicker, glowing, animated
+            ctx.lineWidth = 4; 
+            ctx.lineCap = 'round';
             ctx.shadowColor = "#ff0000";
-            ctx.shadowBlur = 10;
+            ctx.shadowBlur = 15;
+            
+            // Gradient Stroke (Fade from Enemy to Target)
+            const grad = ctx.createLinearGradient(enemy.x, enemy.y, target.x, target.y);
+            grad.addColorStop(0, 'rgba(255, 0, 0, 0.3)');
+            grad.addColorStop(1, '#ff0000');
+            ctx.strokeStyle = grad;
+
+            // Flow animation (Moving Dashes)
+            ctx.setLineDash([20, 20]);
+            ctx.lineDashOffset = -time * 80; // Fast flow towards target
 
             ctx.beginPath();
-            ctx.moveTo(enemy.x, enemy.y);
             
-            const midY = (enemy.y + target.y) / 2;
-            const curveOffset = (target.x < enemy.x) ? -100 : 100;
+            // Calculate Offset Start/End points to avoid center overlap
+            const angle = Math.atan2(target.y - enemy.y, target.x - enemy.x);
+            
+            // Start from edge of Enemy
+            const startX = enemy.x + Math.cos(angle) * (enemy.radius * 0.6);
+            const startY = enemy.y + Math.sin(angle) * (enemy.radius * 0.6);
+            
+            // End at edge of Target
+            const endX = target.x - Math.cos(angle) * (target.radius * 0.9);
+            const endY = target.y - Math.sin(angle) * (target.radius * 0.9);
 
-            ctx.bezierCurveTo(
-                enemy.x + curveOffset, midY,
-                target.x + curveOffset, midY,
-                target.x, target.y
-            );
+            ctx.moveTo(startX, startY);
+            
+            // Bezier Curve for "Arcing" attack (Visual flair)
+            // Midpoint moved 'up' slightly to create an arc
+            const cpX = (startX + endX) / 2;
+            const cpY = (startY + endY) / 2 - 40; 
+            
+            ctx.quadraticCurveTo(cpX, cpY, endX, endY);
             ctx.stroke();
+            
+            // Impact Point Marker (Target Lock)
+            ctx.setLineDash([]);
+            ctx.fillStyle = "#ff0000";
+            ctx.shadowColor = "#fff";
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.arc(endX, endY, 6, 0, Math.PI*2);
+            ctx.fill();
+            
+            // Pulsing Ring at target
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(endX, endY, 6 + Math.sin(time * 10) * 4, 0, Math.PI*2);
+            ctx.stroke();
+            
             ctx.restore();
         };
 
-        // FIX: Handle Multiple Intents
+        // Handle Multiple Intents
         if (enemy.nextIntents && enemy.nextIntents.length > 0) {
             enemy.nextIntents.forEach(intent => {
-                if (intent.type === 'attack' || intent.type === 'multi_attack' || intent.type === 'debuff') {
+                if (intent.type === 'attack' || intent.type === 'multi_attack' || intent.type === 'debuff' || intent.type === 'purge_attack') {
                     // Default to player if no specific target set (common for boss logic)
                     const target = intent.target || this.player;
                     drawLine(target);
@@ -6516,28 +6663,30 @@ drawEntity(entity) {
                 ctx.strokeStyle = color;
                 ctx.lineWidth = 3;
                 this.drawPolygon(ctx, 0, 0, entity.radius, 4, -time * 0.5); 
-                ctx.strokeStyle = COLORS.PURPLE;
-                ctx.lineWidth = 2;
+                
+                // Rings removed, keeping Orbs logic
                 const ringCount = 3;
                 const majorRadius = entity.radius + 20;
+                
                 for (let i = 0; i < ringCount; i++) {
                     ctx.save();
                     const rotationSpeed = 1.0; 
                     const currentRotation = (i * (Math.PI / 3)) + (time * rotationSpeed);
                     ctx.rotate(currentRotation);
                     const tilt = 0.35 + Math.sin(time * 0.5 + i) * 0.1;
-                    ctx.beginPath();
-                    ctx.ellipse(0, 0, majorRadius, majorRadius * tilt, 0, 0, Math.PI * 2);
-                    ctx.stroke();
+                    
+                    // Note: Ellipse drawing removed here to hide rings.
+                    // Calculating Orb position based on the invisible ring path:
                     const electronSpeed = 3.0;
                     const electronAngle = (time * electronSpeed) + (i * 2);
                     const ex = majorRadius * Math.cos(electronAngle);
                     const ey = (majorRadius * tilt) * Math.sin(electronAngle);
+                    
                     ctx.fillStyle = '#fff';
                     ctx.shadowColor = COLORS.PURPLE;
-                    ctx.shadowBlur = 10;
+                    ctx.shadowBlur = 15; // Increased blur for visibility
                     ctx.beginPath();
-                    ctx.arc(ex, ey, 4, 0, Math.PI*2);
+                    ctx.arc(ex, ey, 5, 0, Math.PI*2); // Slightly larger orb
                     ctx.fill();
                     ctx.shadowBlur = 0;
                     ctx.restore();
@@ -7231,16 +7380,49 @@ drawEntity(entity) {
             ctx.globalCompositeOperation = 'source-over';
         }
 
-        // --- SHIELD VISUAL ---
+        // --- SHIELD VISUAL (UPDATED) ---
         if (entity.shield > 0) {
             ctx.save();
-            ctx.strokeStyle = COLORS.SHIELD;
+            const r = entity.radius + 20;
+            const shieldColor = COLORS.SHIELD; // Cyan #00f3ff
+            
+            // 1. Hexagon Energy Field
+            ctx.beginPath();
+            const segments = 6;
+            for (let i = 0; i < segments; i++) {
+                // Rotate slowly
+                const angle = (Math.PI * 2 / segments) * i + (time * 0.5);
+                const sx = Math.cos(angle) * r;
+                const sy = Math.sin(angle) * r;
+                if (i === 0) ctx.moveTo(sx, sy);
+                else ctx.lineTo(sx, sy);
+            }
+            ctx.closePath();
+
+            // Dynamic Gradient Fill
+            const shieldGrad = ctx.createRadialGradient(0, 0, r * 0.5, 0, 0, r);
+            shieldGrad.addColorStop(0, 'rgba(0, 243, 255, 0.0)');
+            shieldGrad.addColorStop(1, 'rgba(0, 243, 255, 0.15)');
+            ctx.fillStyle = shieldGrad;
+            
+            // Pulsing Outer Glow
+            ctx.shadowColor = shieldColor;
+            ctx.shadowBlur = 20 + Math.sin(time * 8) * 10;
+            ctx.strokeStyle = shieldColor;
+            ctx.lineWidth = 3;
+            
+            ctx.stroke();
+            ctx.fill();
+
+            // 2. Inner Spinning Data Ring
+            ctx.beginPath();
+            ctx.arc(0, 0, r * 0.85, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
             ctx.lineWidth = 2;
-            ctx.shadowColor = COLORS.SHIELD;
-            ctx.shadowBlur = 10;
-            ctx.globalAlpha = 0.6 + Math.sin(time * 5) * 0.2; 
-            const shieldRadius = entity.radius + 15;
-            ctx.beginPath(); ctx.arc(0,0,shieldRadius, 0, Math.PI*2); ctx.stroke();
+            ctx.setLineDash([20, 15]); // Tech dash pattern
+            ctx.lineDashOffset = time * 30; // Spin animation
+            ctx.stroke();
+            
             ctx.restore();
         }
 
