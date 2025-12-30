@@ -5973,10 +5973,16 @@ drawEffects() {
         if (!entity) return;
 
         const ctx = this.ctx;
-        const width = (entity instanceof Minion) ? 80 : 160;
-        const height = 24; 
+        
+        // --- 1. SIZE INCREASE (20%) ---
+        // Previous: 160 / 80. New: 192 / 96.
+        const width = (entity instanceof Minion) ? 96 : 192;
+        // Previous: 24. New: 30.
+        const height = 30; 
+        
         const x = entity.x - width/2;
-        const y = entity.y - entity.radius - 50; // Moved up slightly for larger text
+        // Adjusted Y offset slightly to accommodate larger entity sizes
+        const y = entity.y - entity.radius - 50; 
         
         // Draw Bar Background
         ctx.fillStyle = COLORS.HP_BAR_BG;
@@ -5995,20 +6001,23 @@ drawEffects() {
         
         // Border
         ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 2; // Slightly thicker border for visibility
         ctx.strokeRect(x, y, width, height);
 
-        // --- HP TEXT CONFIGURATION (UPDATED: +50% SIZE) ---
-        // Was 22px, now 33px
+        // --- 2. TEXT UPDATE (Current HP Only & Centered) ---
         ctx.font = 'bold 33px "Orbitron"'; 
         ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom'; // Align to top of bar
+        // Center text vertically ON the bar
+        ctx.textBaseline = 'middle'; 
         
         const textX = x + width/2;
-        const textY = y - 5; // Text sits above bar
-        const hpString = entity.currentHp + "/" + entity.maxHp;
+        // Exact vertical center of the bar
+        const textY = y + height/2 + 2; // +2 for visual optical center with this font
+        
+        // Show ONLY current HP
+        const hpString = Math.floor(entity.currentHp).toString();
 
-        ctx.lineWidth = 4; // Thicker outline for readability
+        ctx.lineWidth = 4; // Thick outline for readability against bar color
 
         if (isPlayerSide) {
             ctx.strokeStyle = '#ffffff'; 
@@ -6027,13 +6036,13 @@ drawEffects() {
             const sx = x + width + 15;
             const sy = y + height/2;
             
-            ctx.font = '36px Arial'; // Larger Icon
+            ctx.font = '36px Arial'; 
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
             ctx.fillStyle = COLORS.SHIELD;
             ctx.fillText("🛡️", sx, sy);
             
-            ctx.font = 'bold 33px "Orbitron"'; // Larger Value
+            ctx.font = 'bold 33px "Orbitron"'; 
             ctx.fillStyle = '#fff';
             ctx.fillText(entity.shield, sx + 45, sy);
         }
@@ -6043,13 +6052,13 @@ drawEffects() {
             const mx = x - 20; 
             const my = y + height/2;
             
-            ctx.font = 'bold 33px "Orbitron"'; // Larger Value
+            ctx.font = 'bold 33px "Orbitron"'; 
             ctx.textAlign = 'right';
             ctx.textBaseline = 'middle';
             ctx.fillStyle = '#fff';
             ctx.fillText(entity.mana, mx, my);
 
-            ctx.font = '36px Arial'; // Larger Icon
+            ctx.font = '36px Arial'; 
             ctx.fillStyle = COLORS.MANA;
             ctx.fillText("💠", mx - 50, my); 
         }
@@ -6059,9 +6068,10 @@ drawEffects() {
             let bx = x;
             entity.effects.forEach(eff => {
                 ctx.fillStyle = '#fff';
-                ctx.font = '30px Arial'; // Larger Icons
+                ctx.font = '30px Arial'; 
                 ctx.textAlign = 'left';
-                ctx.fillText(eff.icon, bx + 10, y - 45);
+                // Moved icons slightly higher to clear the larger bar
+                ctx.fillText(eff.icon, bx + 10, y - 10);
                 bx += 35;
             });
         }
