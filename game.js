@@ -7202,7 +7202,6 @@ drawEntity(entity) {
                     
                     ctx.restore();
                 }
-                }
 
                 // --- SECTOR 2: NULL_POINTER (Glitch Vortex) ---
                 else if (this.sector === 2) {
