@@ -7102,37 +7102,111 @@ drawEntity(entity) {
                 ctx.restore();
             }
 
-            // --- SECTOR 4: HIVE PROTOCOL ---
-            else if (this.sector === 4) {
-                ctx.save();
-                const lime = '#32cd32';
-                const droneCount = 12;
-                
-                ctx.shadowColor = lime; ctx.shadowBlur = 30;
-                ctx.fillStyle = 'rgba(50, 205, 50, 0.1)';
-                ctx.beginPath(); ctx.arc(0, 0, 80, 0, Math.PI*2); ctx.fill();
-
-                for (let i = 0; i < droneCount; i++) {
-                    const tOffset = i * 100;
-                    const dx = Math.sin(time * 2 + tOffset) * 60 + Math.cos(time * 1.5 + i) * 20;
-                    const dy = Math.cos(time * 1.2 + tOffset) * 40 + Math.sin(time * 2.5 + i) * 20;
-                    
+            // --- SECTOR 4: HIVE PROTOCOL (Massive Distributed Swarm) ---
+                else if (this.sector === 4) {
                     ctx.save();
-                    ctx.translate(dx, dy);
-                    ctx.rotate(time * 3 + i); 
+                    const lime = '#32cd32';
+                    const darkLime = '#0a2a0a';
                     
-                    ctx.strokeStyle = lime; ctx.fillStyle = '#0a2a0a'; ctx.lineWidth = 2;
-                    ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(12, 10); ctx.lineTo(-12, 10); ctx.closePath();
-                    ctx.fill(); ctx.stroke();
+                    // 1. Central "Core" Glow (The collective intelligence)
+                    // Expanded width to cover the horizontal area
+                    const pulse = 1 + 0.1 * Math.sin(time * 3);
+                    const coreGrad = ctx.createRadialGradient(0, 0, 20, 0, 0, 250);
+                    coreGrad.addColorStop(0, 'rgba(50, 205, 50, 0.2)');
+                    coreGrad.addColorStop(0.5, 'rgba(50, 205, 50, 0.05)');
+                    coreGrad.addColorStop(1, 'transparent');
                     
-                    ctx.globalAlpha = 0.2;
-                    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-dx, -dy); ctx.stroke();
-                    ctx.globalAlpha = 1.0;
+                    ctx.scale(2.0, 1.0); // Stretch horizontally
+                    ctx.fillStyle = coreGrad;
+                    ctx.beginPath(); 
+                    ctx.arc(0, 0, 140 * pulse, 0, Math.PI*2); 
+                    ctx.fill();
+                    ctx.scale(0.5, 1.0); // Reset scale
                     
+                    // 2. The Swarm (40+ Vector Units)
+                    // We distribute them across a wide sine-wave pattern
+                    const droneCount = 40;
+                    
+                    // Draw connection lines first (Background layer)
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = 'rgba(50, 205, 50, 0.15)';
+                    ctx.beginPath();
+                    
+                    // Pre-calculate positions for lines
+                    const positions = [];
+                    for (let i = 0; i < droneCount; i++) {
+                        const tOffset = i * 0.5;
+                        // Wide horizontal spread (-250 to 250)
+                        const spreadX = (i / droneCount - 0.5) * 500; 
+                        
+                        // Vertical sine wave motion
+                        const waveY = Math.sin(time * 1.5 + (i * 0.2)) * 60;
+                        const noiseY = Math.cos(time * 2.3 + (i * 0.7)) * 30;
+                        
+                        positions.push({ x: spreadX, y: waveY + noiseY });
+                    }
+
+                    // Draw connections between neighbors
+                    for (let i = 0; i < droneCount - 1; i++) {
+                        // Connect to immediate neighbor
+                        ctx.moveTo(positions[i].x, positions[i].y);
+                        ctx.lineTo(positions[i+1].x, positions[i+1].y);
+                        
+                        // Connect to neighbor + 5 (cross-linking)
+                        if (i + 5 < droneCount) {
+                            ctx.moveTo(positions[i].x, positions[i].y);
+                            ctx.lineTo(positions[i+5].x, positions[i+5].y);
+                        }
+                    }
+                    ctx.stroke();
+
+                    // 3. Draw Individual Drones
+                    for (let i = 0; i < droneCount; i++) {
+                        const pos = positions[i];
+                        
+                        ctx.save();
+                        ctx.translate(pos.x, pos.y);
+                        
+                        // Individual rotation based on position in swarm
+                        ctx.rotate(time * 2 + i); 
+                        
+                        // Depth scaling (Fake 3D)
+                        const depthScale = 0.8 + 0.4 * Math.sin(time + i); 
+                        ctx.scale(depthScale, depthScale);
+
+                        // Draw Tetrahedron
+                        ctx.fillStyle = darkLime; 
+                        ctx.strokeStyle = lime; 
+                        ctx.lineWidth = 2;
+                        
+                        ctx.beginPath(); 
+                        ctx.moveTo(0, -15); 
+                        ctx.lineTo(12, 10); 
+                        ctx.lineTo(-12, 10); 
+                        ctx.closePath();
+                        
+                        ctx.fill(); 
+                        ctx.stroke(); 
+                        
+                        // Center light
+                        ctx.fillStyle = '#fff';
+                        ctx.globalAlpha = 0.8;
+                        ctx.fillRect(-2, -2, 4, 4);
+                        
+                        ctx.restore();
+                    }
+                    
+                    // 4. Floating Data Particles (Ambient)
+                    ctx.fillStyle = lime;
+                    ctx.globalAlpha = 0.6;
+                    for(let k=0; k<15; k++) {
+                        const px = (Math.sin(time * 0.5 + k) * 300);
+                        const py = (Math.cos(time * 0.7 + k) * 100);
+                        ctx.fillRect(px, py, 2, 2);
+                    }
+
                     ctx.restore();
                 }
-                ctx.restore();
-            }
 
             // --- SECTOR 5: TESSERACT PRIME ---
             else if (this.sector === 5) {
