@@ -4604,8 +4604,11 @@ async startTurn() {
             } else if (type === 'DEFEND') {
                 let shieldAmt = isUpgraded ? 10 : 5;
                 finalSelf.addShield(shieldAmt);
+                
+                // Trigger Visual
                 this.triggerVFX('hex_barrier', null, finalSelf);
                 
+                // Shield Minions if Upgraded
                 if(isUpgraded) {
                     this.player.minions.forEach(m => {
                         m.addShield(5); 
@@ -4613,6 +4616,9 @@ async startTurn() {
                     });
                     ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "AEGIS FIELD", COLORS.SHIELD);
                 }
+                
+                // Safe Audio
+                try { AudioMgr.playSound('defend'); } catch(e) {}
 
             } else if (type === 'MANA') {
                 this.gainMana(isUpgraded ? 2 : 1);
@@ -5133,15 +5139,13 @@ drawEffects() {
                 e.life--;
                 if(e.life <= 0) { this.effects.splice(i, 1); continue; }
                 e.radius += (e.maxRadius - e.radius) * 0.2; 
+                
                 ctx.save();
                 ctx.strokeStyle = e.color;
-                ctx.lineWidth = 3;
-                
-                // OPTIMIZATION: Removed shadowBlur
-                // ctx.shadowColor = e.color;
-                // ctx.shadowBlur = 10;
-                
+                ctx.lineWidth = 4; // Slightly thicker to be visible without glow
                 ctx.globalAlpha = e.life / e.maxLife;
+                
+                // Simple Hexagon Expansion
                 ctx.beginPath();
                 for (let k = 0; k < 6; k++) {
                     const angle = (Math.PI / 3) * k;
@@ -5151,6 +5155,7 @@ drawEffects() {
                 }
                 ctx.closePath();
                 ctx.stroke();
+                
                 ctx.restore();
                 continue;
             }
@@ -7679,13 +7684,16 @@ drawEntity(entity) {
             ctx.globalCompositeOperation = 'source-over';
         }
 
-        // --- SHIELD VISUAL (OPTIMIZED FOR MOBILE) ---
+        // --- SHIELD VISUAL (MOBILE SAFE MODE) ---
         if (entity.shield > 0) {
             ctx.save();
-            const r = entity.radius + 20;
-            const shieldColor = COLORS.SHIELD; 
+            const r = entity.radius + 15;
             
-            // 1. Hexagon Energy Field
+            // Pulse opacity instead of shadow blur
+            const pulse = 0.6 + 0.4 * Math.sin(time * 5); 
+            ctx.globalAlpha = pulse;
+
+            // 1. Simple Hexagon Outline (No Gradients)
             ctx.beginPath();
             const segments = 6;
             for (let i = 0; i < segments; i++) {
@@ -7697,28 +7705,20 @@ drawEntity(entity) {
             }
             ctx.closePath();
 
-            // OPTIMIZATION: Removed Radial Gradient & ShadowBlur
-            // Use simple semi-transparent fill
-            ctx.fillStyle = 'rgba(0, 243, 255, 0.1)'; 
+            // Solid semi-transparent fill
+            ctx.fillStyle = 'rgba(0, 243, 255, 0.15)'; 
             ctx.fill();
             
-            // Solid stroke instead of glowing shadow
-            ctx.strokeStyle = shieldColor;
+            // Solid Stroke
+            ctx.strokeStyle = '#00f3ff';
             ctx.lineWidth = 3;
             ctx.stroke();
-            
-            // Optional: Draw a second lighter stroke to simulate "glow" cheaply
+
+            // 2. Inner Ring (Solid, No Dashes)
+            ctx.beginPath();
+            ctx.arc(0, 0, r * 0.8, 0, Math.PI * 2);
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.lineWidth = 1;
-            ctx.stroke();
-
-            // 2. Inner Spinning Data Ring
-            ctx.beginPath();
-            ctx.arc(0, 0, r * 0.85, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([20, 15]); 
-            ctx.lineDashOffset = time * 30; 
             ctx.stroke();
             
             ctx.restore();
