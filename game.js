@@ -7124,24 +7124,25 @@ drawEntity(entity) {
                 // BOSS RENDERING LOGIC (OPTIMIZED SECTOR 1)
                 // =========================================================
                 
-                // --- SECTOR 1: THE PANOPTICON (Test Block 1: Shadows Removed) ---
+                // --- SECTOR 1: THE PANOPTICON (Test Block 2: Gradients/Dashes Removed) ---
                 if (this.sector === 1) {
                     ctx.save();
                     const cyan = '#00ffff';
                     const darkCyan = '#002222';
                     
-                    // 1. Scanning Light Beams (No Shadows)
+                    // 1. Scanning Light Beams (Solid Fill - No Gradients)
                     ctx.save();
                     const beamWidth = 120 + Math.sin(time * 2) * 20; 
-                    const beamGrad = ctx.createLinearGradient(0, 0, 0, 350);
-                    beamGrad.addColorStop(0, 'rgba(0, 255, 255, 0.5)'); 
-                    beamGrad.addColorStop(1, 'transparent'); 
                     
-                    ctx.fillStyle = beamGrad;
+                    // OPTIMIZATION: Simple flat fill
+                    ctx.fillStyle = 'rgba(0, 255, 255, 0.15)'; 
                     ctx.beginPath();
-                    ctx.moveTo(-20, 20); ctx.lineTo(-beamWidth, 400); ctx.lineTo(beamWidth, 400); ctx.lineTo(20, 20);
+                    ctx.moveTo(-20, 20); ctx.lineTo(-beamWidth, 400); 
+                    ctx.lineTo(beamWidth, 400);  
+                    ctx.lineTo(20, 20);  
                     ctx.fill();
                     
+                    // Scanlines (Simple Lines)
                     ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
                     ctx.lineWidth = 2;
                     const scanOffset = (time * 150) % 50;
@@ -7156,7 +7157,7 @@ drawEntity(entity) {
                     ctx.stroke();
                     ctx.restore();
 
-                    // 2. The Eye Frame (No Shadow)
+                    // 2. The Eye Frame (Solid Stroke)
                     ctx.strokeStyle = cyan;
                     ctx.lineWidth = 5;
                     ctx.fillStyle = '#000505'; 
@@ -7165,28 +7166,31 @@ drawEntity(entity) {
                     ctx.quadraticCurveTo(0, 80, -100, 0);
                     ctx.fill(); ctx.stroke();
 
-                    // 3. Rotating HUD Rings (No Shadow)
+                    // 3. Rotating HUD Rings (Solid Lines)
                     ctx.lineWidth = 2;
 
+                    // Ring 1: Outer
                     ctx.save();
                     ctx.rotate(time * 0.15);
-                    ctx.setLineDash([30, 30]); 
+                    // OPTIMIZATION: Removed setLineDash
                     ctx.beginPath(); ctx.arc(0, 0, 160, 0, Math.PI*2); ctx.stroke();
                     ctx.restore();
 
+                    // Ring 2: Side Brackets
                     ctx.save();
                     ctx.rotate(Math.sin(time * 0.5) * 0.2); 
                     ctx.beginPath(); ctx.arc(0, 0, 130, -Math.PI/4, Math.PI/4); ctx.stroke();
                     ctx.beginPath(); ctx.arc(0, 0, 130, Math.PI - Math.PI/4, Math.PI + Math.PI/4); ctx.stroke();
                     ctx.restore();
 
+                    // Ring 3: Fast Inner
                     ctx.save();
                     ctx.rotate(-time * 0.8);
-                    ctx.setLineDash([10, 15]);
+                    // OPTIMIZATION: Removed setLineDash
                     ctx.beginPath(); ctx.arc(0, 0, 110, 0, Math.PI*2); ctx.stroke();
                     ctx.restore();
 
-                    // 4. The Lens (No Glow)
+                    // 4. The Lens
                     ctx.fillStyle = darkCyan;
                     ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.fill();
                     
@@ -7195,10 +7199,8 @@ drawEntity(entity) {
                     ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI*2); ctx.stroke();
                     
                     const pupilSize = 18 + Math.sin(time * 4) * 5;
-                    ctx.fillStyle = '#fff';
+                    ctx.fillStyle = '#fff'; 
                     ctx.beginPath(); ctx.arc(0, 0, pupilSize, 0, Math.PI*2); ctx.fill();
-                    
-                    // No Specular Highlight
                     
                     ctx.restore();
                 }
