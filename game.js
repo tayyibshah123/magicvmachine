@@ -6826,21 +6826,25 @@ drawEntity(entity) {
             else if (this.sector === 4) { mColor = '#32cd32'; mGlow = '#32cd32'; mFill = '#051a05'; }
             else if (this.sector === 5) { mColor = '#ffffff'; mGlow = '#ffd700'; mFill = '#111111'; }
 
-            // --- BOSS MINIONS (SIMPLIFIED TO FIX CRASH) ---
-            // If it's a Minion and NOT player side, it's an enemy minion
+            // --- ENEMY MINIONS (Restored High-Fidelity) ---
             if (entity instanceof Minion) {
-                // Tier 3 or Named Minions get the Elite Visual
+                ctx.save(); 
+                ctx.scale(1.8, 1.8); 
+                
+                // Tier 3 or Named Minions (The specific fix applied here: NO setLineDash)
                 if (entity.tier === 3 || entity.name.includes("Glitch") || entity.name.includes("Guardian")) {
-                    ctx.save(); 
-                    ctx.scale(1.8, 1.8);
+                    const pulse = 1 + 0.05 * Math.sin(time * 4);
+                    ctx.scale(pulse, pulse);
+
+                    // 1. Rotating Star Body
+                    ctx.save();
+                    ctx.rotate(time * 0.8); 
                     
-                    // Simple Rotating Star (No dashes, no nested saves if possible)
-                    ctx.rotate(time * 0.8);
-                    
-                    ctx.fillStyle = mFill;
                     ctx.strokeStyle = mColor;
                     ctx.lineWidth = 2;
-                    ctx.shadowBlur = 0; // Removed blur for safety
+                    ctx.shadowColor = mGlow;
+                    ctx.shadowBlur = 15;
+                    ctx.fillStyle = mFill;
                     
                     ctx.beginPath();
                     const spikes = 4;
@@ -6852,39 +6856,87 @@ drawEntity(entity) {
                     ctx.closePath();
                     ctx.fill();
                     ctx.stroke();
+                    ctx.restore();
                     
-                    // Core
+                    // 2. Inner Core (Counter-Rotation)
+                    ctx.save();
+                    ctx.rotate(-time * 1.5);
                     ctx.fillStyle = '#fff';
-                    ctx.beginPath(); ctx.rect(-4, -4, 8, 8); ctx.fill();
-                    
-                    // Orbit Ring (Solid)
+                    ctx.shadowColor = '#fff';
+                    ctx.shadowBlur = 10;
+                    ctx.beginPath(); 
+                    ctx.rect(-4, -4, 8, 8); 
+                    ctx.fill(); 
+                    ctx.restore();
+
+                    // 3. Orbital Energy Ring (SOLID - Mobile Safe)
                     ctx.beginPath();
                     ctx.arc(0, 0, 30, 0, Math.PI*2);
-                    ctx.strokeStyle = mColor;
-                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = mColor; 
+                    ctx.lineWidth = 1.5; 
                     ctx.stroke();
 
+                    // 4. Satellite Nodes
+                    ctx.save();
+                    ctx.rotate(time * 0.5);
+                    for(let k=0; k<4; k++) {
+                        ctx.rotate(Math.PI/2);
+                        ctx.fillStyle = mColor;
+                        ctx.shadowBlur = 5;
+                        ctx.fillRect(0, -30, 3, 3);
+                    }
                     ctx.restore();
+                    
                 } 
-                // Standard Drone
+                // Standard Drone (Restored High-Fidelity "Prism" Design)
                 else {
-                    ctx.save(); 
-                    ctx.scale(1.5, 1.5);
                     const hover = Math.sin(time * 3) * 3;
+                    ctx.save();
                     ctx.translate(0, hover);
                     
                     ctx.fillStyle = mFill;
                     ctx.strokeStyle = mColor;
                     ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.moveTo(0, -15); ctx.lineTo(10, 0); ctx.lineTo(0, 25); ctx.lineTo(-10, 0); ctx.closePath();
-                    ctx.fill(); ctx.stroke();
+                    ctx.shadowColor = mGlow;
+                    ctx.shadowBlur = 10;
                     
-                    ctx.fillStyle = '#fff';
-                    ctx.beginPath(); ctx.arc(0, -5, 3, 0, Math.PI*2); ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(0, -15); 
+                    ctx.lineTo(10, 0);  
+                    ctx.lineTo(0, 25);  
+                    ctx.lineTo(-10, 0); 
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    // Inner Core
+                    const corePulse = 0.5 + 0.5 * Math.sin(time * 8);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + corePulse * 0.5})`;
+                    ctx.shadowColor = '#fff';
+                    ctx.beginPath();
+                    ctx.moveTo(0, -5); ctx.lineTo(3, 0); ctx.lineTo(0, 10); ctx.lineTo(-3, 0);
+                    ctx.fill();
                     
                     ctx.restore();
+                    
+                    // Floating Brackets
+                    ctx.save();
+                    ctx.rotate(Math.sin(time) * 0.2); 
+                    ctx.strokeStyle = mColor;
+                    ctx.lineWidth = 2;
+                    ctx.globalAlpha = 0.8;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(-18, -10 + hover); ctx.lineTo(-22, 0 + hover); ctx.lineTo(-18, 15 + hover);
+                    ctx.stroke();
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(18, -10 + hover); ctx.lineTo(22, 0 + hover); ctx.lineTo(18, 15 + hover);
+                    ctx.stroke();
+                    ctx.restore();
                 }
+                
+                ctx.restore();
             } 
             
             // --- BOSSES & STANDARD ENEMIES ---
@@ -6906,41 +6958,90 @@ drawEntity(entity) {
                     const cyan = '#00ffff';
                     const darkCyan = '#002222';
                     
-                    // 1. Beam
+                    // 1. Scanning Light Beams
+                    ctx.save();
                     const beamWidth = 120 + Math.sin(time * 2) * 20; 
                     const beamGrad = ctx.createLinearGradient(0, 0, 0, 350);
                     beamGrad.addColorStop(0, 'rgba(0, 255, 255, 0.5)'); 
                     beamGrad.addColorStop(1, 'transparent'); 
+                    
                     ctx.fillStyle = beamGrad;
                     ctx.beginPath();
-                    ctx.moveTo(-20, 20); ctx.lineTo(-beamWidth, 400); 
-                    ctx.lineTo(beamWidth, 400); ctx.lineTo(20, 20); ctx.fill();
+                    ctx.moveTo(-20, 20); 
+                    ctx.lineTo(-beamWidth, 400); 
+                    ctx.lineTo(beamWidth, 400);  
+                    ctx.lineTo(20, 20);  
+                    ctx.fill();
+                    
+                    // Digital Scanlines (Restored)
+                    ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
+                    ctx.lineWidth = 2;
+                    const scanOffset = (time * 150) % 50;
+                    for(let i=0; i<8; i++) {
+                        const y = 50 + i * 50 + scanOffset;
+                        if (y < 400) {
+                            const w = (y / 400) * beamWidth;
+                            ctx.beginPath();
+                            ctx.moveTo(-w, y);
+                            ctx.lineTo(w, y);
+                            ctx.stroke();
+                        }
+                    }
+                    ctx.restore();
 
-                    // 2. Eye Frame
+                    // 2. The Eye Frame
                     ctx.strokeStyle = cyan;
                     ctx.lineWidth = 5;
+                    ctx.shadowColor = cyan;
+                    ctx.shadowBlur = 25;
                     ctx.fillStyle = '#000505'; 
+                    
                     ctx.beginPath();
-                    ctx.moveTo(-100, 0); ctx.quadraticCurveTo(0, -80, 100, 0);
-                    ctx.quadraticCurveTo(0, 80, -100, 0); ctx.fill(); ctx.stroke();
+                    ctx.moveTo(-100, 0);
+                    ctx.quadraticCurveTo(0, -80, 100, 0);
+                    ctx.quadraticCurveTo(0, 80, -100, 0);
+                    ctx.fill();
+                    ctx.stroke();
 
-                    // 3. Solid Rings (Fixed Mobile Crash by removing setLineDash)
+                    // 3. Rotating Rings (Solid Lines - Mobile Safe)
                     ctx.lineWidth = 2;
-                    ctx.save(); ctx.rotate(time * 0.15);
+                    ctx.shadowBlur = 10;
+
+                    ctx.save();
+                    ctx.rotate(time * 0.15);
                     ctx.beginPath(); ctx.arc(0, 0, 160, 0, Math.PI*2); ctx.stroke();
                     ctx.restore();
 
-                    ctx.save(); ctx.rotate(-time * 0.8);
+                    ctx.save();
+                    ctx.rotate(Math.sin(time * 0.5) * 0.2); 
+                    ctx.beginPath(); ctx.arc(0, 0, 130, -Math.PI/4, Math.PI/4); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(0, 0, 130, Math.PI - Math.PI/4, Math.PI + Math.PI/4); ctx.stroke();
+                    ctx.restore();
+
+                    ctx.save();
+                    ctx.rotate(-time * 0.8);
                     ctx.beginPath(); ctx.arc(0, 0, 110, 0, Math.PI*2); ctx.stroke();
                     ctx.restore();
 
-                    // 4. Lens
-                    ctx.fillStyle = darkCyan; ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.fill();
-                    ctx.strokeStyle = cyan; ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI*2); ctx.stroke();
+                    // 4. The Lens
+                    ctx.fillStyle = darkCyan;
+                    ctx.shadowBlur = 0;
+                    ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.fill();
+                    
+                    ctx.strokeStyle = cyan;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI*2); ctx.stroke();
                     
                     const pupilSize = 18 + Math.sin(time * 4) * 5;
-                    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, pupilSize, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#fff'; 
+                    ctx.shadowColor = '#fff';
+                    ctx.shadowBlur = 40; 
+                    ctx.beginPath(); ctx.arc(0, 0, pupilSize, 0, Math.PI*2); ctx.fill();
                     
+                    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+                    ctx.shadowBlur = 0;
+                    ctx.beginPath(); ctx.arc(-15, -15, 8, 0, Math.PI*2); ctx.fill();
+
                     ctx.restore();
                 }
                 
@@ -6954,7 +7055,6 @@ drawEntity(entity) {
                         ctx.translate(jitterX, jitterY);
                         ctx.fillStyle = '#000'; ctx.shadowBlur = 60; ctx.beginPath(); ctx.arc(0,0,90,0,Math.PI*2); ctx.fill();
                         ctx.lineWidth = 2; ctx.globalAlpha = 0.6;
-                        // Spiral
                         const spiralArms = 6;
                         for (let j = 0; j < spiralArms; j++) {
                             ctx.beginPath(); ctx.strokeStyle = (j%2===0)?'#ff00ff':'#800080';
@@ -7005,48 +7105,75 @@ drawEntity(entity) {
                      }
                 }
                 
-                // --- STANDARD ENEMIES ---
+                // --- STANDARD ENEMIES (RESTORED HIGH FIDELITY) ---
                 else {
                     if (entity.name.includes("Drone")) {
-                        // Sentry Drone (Standard)
+                        // SENTRY DRONE (Restored High Fidelity)
                         const hover = Math.sin(time * 2.5) * 10; 
                         ctx.translate(0, hover); 
                         
-                        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-                        ctx.beginPath(); ctx.moveTo(0, 10); ctx.lineTo(-30, 130); ctx.arc(0, 130, 30, Math.PI, 0, true); ctx.lineTo(30, 130); ctx.fill();
-                        
+                        ctx.save();
+                        const scanSweep = Math.sin(time * 1.5) * 0.15; 
+                        ctx.rotate(scanSweep);
+                        const scanLen = 220; const scanWidth = 80;
+                        const grad = ctx.createLinearGradient(0, 0, 0, scanLen);
+                        grad.addColorStop(0, mColor); grad.addColorStop(1, 'transparent'); 
+                        ctx.fillStyle = grad; ctx.globalAlpha = 0.15;
+                        ctx.beginPath(); ctx.moveTo(0, 10); ctx.lineTo(-scanWidth, scanLen); ctx.arc(0, scanLen, scanWidth, Math.PI, 0, true); ctx.lineTo(scanWidth, scanLen); ctx.lineTo(0, 10); ctx.fill();
+                        ctx.strokeStyle = mColor; ctx.lineWidth = 2; ctx.globalAlpha = 0.4;
+                        const gridSpeed = (time * 80) % 40;
+                        ctx.beginPath();
+                        for(let i=0; i<6; i++) {
+                            const y = 30 + (i * 35) + gridSpeed;
+                            if (y < scanLen) { const w = (y / scanLen) * scanWidth; ctx.moveTo(-w, y); ctx.lineTo(w, y); }
+                        }
+                        ctx.stroke(); ctx.restore();
+
                         ctx.fillStyle = '#050505'; ctx.beginPath(); ctx.moveTo(-35, -40); ctx.lineTo(35, -40); ctx.lineTo(45, -10); ctx.lineTo(0, 55); ctx.lineTo(-45, -10); ctx.closePath(); ctx.fill();
-                        ctx.strokeStyle = mColor; ctx.lineWidth = 3; ctx.stroke();
+                        ctx.strokeStyle = mColor; ctx.lineWidth = 3; ctx.shadowColor = mGlow; ctx.shadowBlur = 20; ctx.stroke();
                         
-                        ctx.save(); ctx.lineWidth = 2;
+                        ctx.save(); ctx.lineWidth = 2; ctx.shadowBlur = 10;
                         ctx.beginPath(); ctx.ellipse(0, 0, 60, 20, time * 0.5, 0, Math.PI*2); ctx.stroke();
+                        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
                         ctx.beginPath(); ctx.ellipse(0, 0, 45, 12, -time * 1.2, 0, Math.PI*2); ctx.stroke();
                         ctx.restore();
 
                         ctx.save(); ctx.translate(0, -10); 
                         ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI*2); ctx.fill();
-                        ctx.fillStyle = mColor; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
-                        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
+                        ctx.fillStyle = mColor; ctx.shadowColor = mColor; ctx.shadowBlur = 30; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
+                        ctx.fillStyle = '#fff'; ctx.shadowBlur = 5; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
                         ctx.restore();
                     }
                     else if (entity.name.includes("Loader")) {
+                        // HEAVY LOADER (Restored Tank Design)
                         ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-40, -40, 80, 80);
                         ctx.fillStyle = '#333'; ctx.fillRect(-60, -50, 20, 100); ctx.fillRect(40, -50, 20, 100);
                         ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
-                        ctx.beginPath(); ctx.moveTo(-60, 0); ctx.lineTo(-40, 0); ctx.stroke();
-                        ctx.beginPath(); ctx.moveTo(40, 0); ctx.lineTo(60, 0); ctx.stroke();
-                        ctx.fillStyle = '#222'; ctx.strokeStyle = mColor; ctx.lineWidth = 2;
+                        const treadOffset = (time * 20) % 20;
+                        for(let y = -50; y < 50; y+=20) {
+                            let dy = y + treadOffset; if(dy > 50) dy -= 100;
+                            ctx.beginPath(); ctx.moveTo(-60, dy); ctx.lineTo(-40, dy); ctx.stroke();
+                            ctx.beginPath(); ctx.moveTo(40, dy); ctx.lineTo(60, dy); ctx.stroke();
+                        }
+                        ctx.fillStyle = '#222'; ctx.strokeStyle = mColor; ctx.lineWidth = 2; ctx.shadowColor = mGlow; ctx.shadowBlur = 10;
                         ctx.beginPath(); ctx.moveTo(-30, -30); ctx.lineTo(30, -30); ctx.lineTo(35, 0); ctx.lineTo(30, 30); ctx.lineTo(-30, 30); ctx.lineTo(-35, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
-                        ctx.fillStyle = (this.sector===2)?'#fff':'#ffaa00'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
+                        ctx.fillStyle = (this.sector===2)?'#fff':'#ffaa00'; ctx.shadowBlur = 20; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
                     }
                     else if (entity.name.includes("Arachnid")) {
-                        ctx.fillStyle = '#111'; ctx.strokeStyle = mColor; ctx.lineWidth = 3;
+                        // CYBER ARACHNID (Restored High Fidelity)
+                        ctx.fillStyle = '#111'; ctx.strokeStyle = mColor; ctx.lineWidth = 3; ctx.shadowColor = mGlow; ctx.shadowBlur = 15;
                         ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-                        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI*2); ctx.fill();
+                        ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 25;
+                        ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI*2); ctx.fill();
                         for(let i=0; i<8; i++) {
-                            const angle = (i/8)*Math.PI*2;
-                            ctx.beginPath(); ctx.moveTo(Math.cos(angle)*20, Math.sin(angle)*20);
-                            ctx.lineTo(Math.cos(angle)*60, Math.sin(angle)*60); ctx.stroke();
+                            const angle = (i/8)*Math.PI*2; const move = Math.sin(time*3+i)*5;
+                            const startX = Math.cos(angle)*20; const startY = Math.sin(angle)*20;
+                            const midX = Math.cos(angle)*(45+move); const midY = Math.sin(angle)*(45+move);
+                            const endX = Math.cos(angle+0.2)*(70+move); const endY = Math.sin(angle+0.2)*(70+move);
+                            const grad = ctx.createLinearGradient(startX, startY, endX, endY);
+                            grad.addColorStop(0, mColor); grad.addColorStop(1, '#000');
+                            ctx.strokeStyle = grad; ctx.lineWidth = 3; ctx.shadowBlur = 0;
+                            ctx.beginPath(); ctx.moveTo(startX, startY); ctx.lineTo(midX, midY); ctx.lineTo(endX, endY); ctx.stroke();
                         }
                     }
                     else {
@@ -7060,6 +7187,14 @@ drawEntity(entity) {
             }
         }
 
+        // --- FLASH EFFECT (On Hit) ---
+        if (entity.flashTimer > 0) {
+            ctx.globalCompositeOperation = 'source-atop';
+            ctx.fillStyle = `rgba(255, 255, 255, ${entity.flashTimer * 3})`; 
+            ctx.fillRect(-100, -100, 200, 200); 
+            ctx.globalCompositeOperation = 'source-over';
+        }
+
         // --- SHIELD VISUAL (MOBILE SAFE) ---
         if (entity.shield > 0) {
             ctx.save();
@@ -7070,7 +7205,129 @@ drawEntity(entity) {
             ctx.restore();
         }
 
-        ctx.restore();
+        // --- DEBUFF VISUALS ---
+        if (entity.hasEffect('weak')) {
+            ctx.strokeStyle = 'rgba(0, 0, 50, 0.5)';
+            ctx.lineWidth = 2;
+            const offset = (time * 20) % 20;
+            ctx.beginPath();
+            for(let y = -entity.radius; y < entity.radius; y+=10) {
+                ctx.moveTo(-entity.radius, y + offset);
+                ctx.lineTo(entity.radius, y + offset);
+            }
+            ctx.stroke();
+        }
+
+        if (entity.hasEffect('frail')) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            const seed = entity.name.length; 
+            for(let k=0; k<3; k++) {
+                ctx.moveTo(Math.sin(seed+k)*20, Math.cos(seed+k)*20);
+                ctx.lineTo(Math.sin(seed+k+1)*40, Math.cos(seed+k+1)*40);
+            }
+            ctx.stroke();
+        }
+
+        if ((entity instanceof Player && entity.traits.vulnerable) || entity.hasEffect('vulnerable')) {
+            ctx.rotate(time); 
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([10, 10]);
+            ctx.beginPath();
+            ctx.arc(0, 0, entity.radius + 15, 0, Math.PI*2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // --- ENEMY INTENT ICON ---
+         if (entity instanceof Enemy && ((entity.nextIntents && entity.nextIntents.length > 0) || entity.nextIntent)) {
+            ctx.restore(); 
+            ctx.save();
+            ctx.translate(renderX, renderY);
+            
+            if (entity.nextIntents && entity.nextIntents.length > 0) {
+                const count = entity.nextIntents.length;
+                const spacing = 60;
+                const startX = -((count - 1) * spacing) / 2;
+
+                for(let i=0; i<count; i++) {
+                    const intent = entity.nextIntents[i];
+                    const ix = startX + (i * spacing);
+                    const iy = -entity.radius - 90 + (Math.cos(time * 5 + i) * 5);
+
+                    ctx.fillStyle = COLORS.MECH_LIGHT;
+                    ctx.fillRect(ix - 25, iy, 50, 50);
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(ix - 25, iy, 50, 50);
+                    
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '30px "Segoe UI Emoji"';
+                    ctx.textAlign = 'center';
+                    ctx.shadowBlur = 0;
+                    
+                    let icon = '⚔️';
+                    if(intent.type === 'heal') icon = '💚';
+                    else if(intent.type === 'summon' || intent.type === 'summon_glitch') icon = '🤖';
+                    else if(intent.type === 'shield') icon = '🛡️';
+                    else if(intent.type === 'buff') icon = '💪';
+                    else if(intent.type === 'debuff') icon = '🦠';
+                    else if(intent.type === 'consume') icon = '🍽️';
+                    else if(intent.type === 'charge' || intent.type === 'purge_attack') icon = '⚠️';
+                    else if(intent.type === 'reality_overwrite') icon = '🌌';
+                    else if(intent.type === 'dispel') icon = '✨';
+                    
+                    ctx.fillText(icon, ix, iy + 35); 
+
+                    // FIX: Strict check for effectiveVal existence
+                    const displayVal = (intent.effectiveVal !== undefined) ? intent.effectiveVal : intent.val;
+                    
+                    if(displayVal !== undefined && displayVal > 0) {
+                        ctx.font = 'bold 16px "Orbitron"';
+                        ctx.fillStyle = (intent.type === 'heal') ? '#0f0' : '#fff';
+                        ctx.shadowColor = '#000';
+                        ctx.shadowBlur = 4;
+                        ctx.fillText(displayVal, ix, iy - 5); 
+                    }
+                }
+            } else {
+                ctx.fillStyle = COLORS.MECH_LIGHT;
+                const hover = Math.cos(time * 5) * 5;
+                ctx.fillRect(-40, -entity.radius - 40 + hover, 80, 25);
+                ctx.fillStyle = '#fff';
+                ctx.font = '40px "Segoe UI Emoji"';
+                ctx.textAlign = 'center';
+                ctx.shadowBlur = 0;
+                let icon = '⚔️';
+                if(entity.nextIntent.type === 'heal') icon = '💚';
+                else if(entity.nextIntent.type === 'summon') icon = '🤖';
+                ctx.fillText(icon, 0, -entity.radius - 50 + hover); 
+                const val = (entity.nextIntent.effectiveVal !== undefined) ? entity.nextIntent.effectiveVal : entity.nextIntent.val;
+                if(val > 0) {
+                    ctx.font = 'bold 20px "Orbitron"';
+                    ctx.fillStyle = '#fff';
+                    ctx.fillText(val, 0, -entity.radius - 20 + hover); 
+                }
+            }
+            ctx.restore();
+            return; 
+        }
+
+        ctx.restore(); 
+
+        // --- SPAWN SCANLINE (NO CLIP) ---
+        if (isSpawning) {
+            const scanY = entity.y + entity.radius - (entity.radius * 2 * (1.0 - Math.max(0, entity.spawnTimer)));
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(entity.x - entity.radius, scanY);
+            ctx.lineTo(entity.x + entity.radius, scanY);
+            ctx.stroke();
+            ctx.restore(); 
+        }
     },
 
 // --- TUTORIAL SYSTEM ---
