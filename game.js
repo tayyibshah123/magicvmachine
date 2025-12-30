@@ -6978,13 +6978,135 @@ drawEntity(entity) {
                     ctx.restore();
                 }
 
-                // --- SECTOR 5: TESSERACT PRIME ---
+                // --- SECTOR 5: TESSERACT PRIME (Sacred Geometry Overhaul) ---
                 else if (this.sector === 5) {
-                    ctx.save(); ctx.rotate(time*0.2); const gold='#ffd700'; const white='#ffffff'; ctx.strokeStyle=white; ctx.lineWidth=2; ctx.strokeRect(-70,-70,140,140);
-                    ctx.save(); ctx.rotate(time); const p=100+Math.sin(time*2)*20; ctx.strokeStyle=gold; ctx.lineWidth=4; ctx.strokeRect(-p/2,-p/2,p,p); ctx.restore();
-                    ctx.strokeStyle='rgba(255,215,0,0.3)'; ctx.lineWidth=1; const o=70; const i=p/2; ctx.beginPath(); ctx.moveTo(-o,-o); ctx.lineTo(-i,-i); ctx.moveTo(o,-o); ctx.lineTo(i,-i); ctx.moveTo(o,o); ctx.lineTo(i,i); ctx.moveTo(-o,o); ctx.lineTo(-i,i); ctx.stroke();
-                    ctx.fillStyle=white; ctx.shadowColor=white; ctx.shadowBlur=50; ctx.beginPath(); ctx.arc(0,0, 10, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle=gold; ctx.globalAlpha=0.3; for(let k=0; k<4; k++) { ctx.rotate(Math.PI/4); ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(200, 0); ctx.stroke(); }
-                    if (entity.invincibleTurns > 0) { ctx.save(); ctx.strokeStyle='#fff'; ctx.lineWidth=3; ctx.setLineDash([5, 10]); ctx.beginPath(); ctx.arc(0, 0, 180, 0, Math.PI*2); ctx.stroke(); ctx.restore(); } ctx.restore();
+                    ctx.save();
+                    const gold = '#ffd700';
+                    const white = '#ffffff';
+                    const paleGold = '#fffacd';
+                    
+                    // 1. Orbital Rings (Background Layer)
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)';
+                    const rings = 3;
+                    for(let i=0; i<rings; i++) {
+                        ctx.save();
+                        // Wobble rotation
+                        ctx.rotate(time * (0.1 + i*0.05) + i);
+                        ctx.scale(1, 0.6); // Perspective tilt
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 180 + i*40, 0, Math.PI*2);
+                        ctx.stroke();
+                        
+                        // Ring Particles
+                        const pCount = 3;
+                        for(let k=0; k<pCount; k++) {
+                            const angle = time * 2 + k * (Math.PI*2/pCount);
+                            const px = Math.cos(angle) * (180 + i*40);
+                            const py = Math.sin(angle) * (180 + i*40);
+                            ctx.fillStyle = gold;
+                            ctx.fillRect(px-2, py-2, 4, 4);
+                        }
+                        ctx.restore();
+                    }
+
+                    // 2. Outer Geometric Star (Hexagram)
+                    ctx.save();
+                    ctx.rotate(time * 0.2);
+                    ctx.strokeStyle = white;
+                    ctx.lineWidth = 3;
+                    ctx.shadowColor = gold;
+                    ctx.shadowBlur = 20;
+                    
+                    const drawStar = (rad) => {
+                        ctx.beginPath();
+                        for(let i=0; i<7; i++) { // 6 points + close
+                            const angle = i * Math.PI / 3;
+                            const x = Math.cos(angle) * rad;
+                            const y = Math.sin(angle) * rad;
+                            if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+                        }
+                        ctx.closePath();
+                        ctx.stroke();
+                    };
+                    
+                    // Outer bright star
+                    drawStar(140);
+                    // Inner rotated star
+                    ctx.rotate(Math.PI/6); 
+                    ctx.strokeStyle = gold;
+                    ctx.lineWidth = 2;
+                    drawStar(140);
+                    ctx.restore();
+
+                    // 3. The Hypercube Core (Nested Polygons)
+                    ctx.save();
+                    // Counter-rotate core
+                    ctx.rotate(-time * 0.5);
+                    
+                    // Layer 1: White Hexagon
+                    ctx.strokeStyle = white;
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    for(let i=0; i<6; i++) {
+                         const angle = i * Math.PI / 3;
+                         ctx.lineTo(Math.cos(angle)*90, Math.sin(angle)*90);
+                    }
+                    ctx.closePath();
+                    ctx.stroke();
+                    
+                    // Layer 2: Gold Hexagon (Offset)
+                    ctx.scale(0.7, 0.7);
+                    ctx.rotate(Math.sin(time)*0.5);
+                    ctx.fillStyle = 'rgba(255, 215, 0, 0.1)';
+                    ctx.strokeStyle = gold;
+                    ctx.lineWidth = 6;
+                    ctx.beginPath();
+                    for(let i=0; i<6; i++) {
+                         const angle = i * Math.PI / 3;
+                         ctx.lineTo(Math.cos(angle)*90, Math.sin(angle)*90);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    // Layer 3: Central Solid Diamond
+                    ctx.scale(0.5, 0.5);
+                    ctx.rotate(time * 2);
+                    ctx.fillStyle = white;
+                    ctx.shadowColor = white;
+                    ctx.shadowBlur = 50;
+                    ctx.beginPath();
+                    ctx.rect(-40, -40, 80, 80);
+                    ctx.fill();
+                    
+                    ctx.restore();
+
+                    // 4. God Rays (Radiating Lines)
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                    ctx.lineWidth = 2;
+                    const rays = 8;
+                    for(let i=0; i<rays; i++) {
+                        const angle = (Math.PI*2/rays) * i + (time * 0.1);
+                        ctx.beginPath();
+                        ctx.moveTo(Math.cos(angle)*50, Math.sin(angle)*50);
+                        ctx.lineTo(Math.cos(angle)*300, Math.sin(angle)*300);
+                        ctx.stroke();
+                    }
+
+                    // 5. Invincibility Visuals (Tesseract Shield)
+                    if (entity.invincibleTurns > 0) {
+                        ctx.save();
+                        ctx.strokeStyle = '#fff';
+                        ctx.lineWidth = 3;
+                        ctx.setLineDash([5, 10]);
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 220, 0, Math.PI*2);
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+
+                    ctx.restore();
                 }
             }
             
