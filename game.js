@@ -7052,111 +7052,152 @@ drawEntity(entity) {
                 else if (this.sector === 3) {
                     ctx.save();
                     const orange = '#ff4500';
-                    const darkRust = '#2a0a00';
+                    const darkMetal = '#1a0500';
+                    const rust = '#4a1a00';
+                    const heat = '#ffcc00';
                     
-                    // Hover Float
-                    const hover = Math.sin(time * 1.5) * 10;
+                    // Heavy Industrial Hover
+                    const hover = Math.sin(time * 1.5) * 8;
                     ctx.translate(0, hover);
 
-                    // 1. Thruster Exhausts (Bottom)
+                    // 1. Thruster Exhausts (Massive Heat Output)
                     ctx.save();
-                    const thrustLen = 80 + Math.random() * 20;
+                    const thrustLen = 90 + Math.sin(time * 20) * 10; // Flicker
                     const thrustGrad = ctx.createLinearGradient(0, 80, 0, 80 + thrustLen);
-                    thrustGrad.addColorStop(0, '#fff'); // Hot core
-                    thrustGrad.addColorStop(0.3, '#ffaa00');
+                    thrustGrad.addColorStop(0, '#fff'); // White hot
+                    thrustGrad.addColorStop(0.2, heat);
                     thrustGrad.addColorStop(1, 'transparent');
                     
                     ctx.fillStyle = thrustGrad;
-                    // Left Thruster
+                    // Left Main Thruster
                     ctx.beginPath();
-                    ctx.moveTo(-60, 80); ctx.lineTo(-40, 80 + thrustLen); ctx.lineTo(-20, 80);
+                    ctx.moveTo(-50, 80); ctx.lineTo(-30, 80 + thrustLen); ctx.lineTo(-10, 80);
                     ctx.fill();
-                    // Right Thruster
+                    // Right Main Thruster
                     ctx.beginPath();
-                    ctx.moveTo(20, 80); ctx.lineTo(40, 80 + thrustLen); ctx.lineTo(60, 80);
+                    ctx.moveTo(10, 80); ctx.lineTo(30, 80 + thrustLen); ctx.lineTo(50, 80);
                     ctx.fill();
                     ctx.restore();
 
-                    // 2. Heavy Mech Body (Torso)
-                    ctx.fillStyle = darkRust;
-                    ctx.strokeStyle = orange;
+                    // 2. Rear Exhaust Pipes (Behind body)
+                    ctx.fillStyle = '#111';
+                    ctx.strokeStyle = '#333';
                     ctx.lineWidth = 4;
-                    
-                    // Main Chest Block
-                    ctx.beginPath();
-                    ctx.moveTo(-70, -60);
-                    ctx.lineTo(70, -60);  // Top width
-                    ctx.lineTo(50, 40);   // Taper down
-                    ctx.lineTo(0, 60);    // Crotch point
-                    ctx.lineTo(-50, 40);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
+                    // Left Pipe
+                    ctx.fillRect(-90, -110, 20, 60);
+                    ctx.strokeRect(-90, -110, 20, 60);
+                    // Right Pipe
+                    ctx.fillRect(70, -110, 20, 60);
+                    ctx.strokeRect(70, -110, 20, 60);
 
-                    // 3. Massive Shoulders (Pistons)
-                    const shoulderY = Math.sin(time * 3) * 5; // Idle heave
-                    
-                    // Left Shoulder
-                    ctx.fillStyle = '#1a0500';
-                    ctx.fillRect(-110, -90 + shoulderY, 50, 60);
-                    ctx.strokeRect(-110, -90 + shoulderY, 50, 60);
-                    // Right Shoulder
-                    ctx.fillRect(60, -90 + shoulderY, 50, 60);
-                    ctx.strokeRect(60, -90 + shoulderY, 50, 60);
+                    // 3. Smoke Simulation (Procedural Stream)
+                    // Generates a continuous rising column from the pipes
+                    ctx.fillStyle = 'rgba(150, 150, 150, 0.4)';
+                    for(let i=0; i<6; i++) {
+                        const puffY = (time * 100 + i * 40) % 200; // Rising loop
+                        const alpha = 1.0 - (puffY / 200);
+                        const size = 10 + (puffY / 5);
+                        const drift = Math.sin(time * 2 + i) * 15 * (puffY/200); // Wind drift
+                        
+                        if (alpha > 0) {
+                            ctx.globalAlpha = alpha * 0.5;
+                            // Left Smoke
+                            ctx.beginPath(); 
+                            ctx.arc(-80 + drift, -110 - puffY, size, 0, Math.PI*2); 
+                            ctx.fill();
+                            // Right Smoke
+                            ctx.beginPath(); 
+                            ctx.arc(80 - drift, -110 - puffY, size, 0, Math.PI*2); 
+                            ctx.fill();
+                        }
+                    }
+                    ctx.globalAlpha = 1.0;
 
-                    // 4. Arms / Cannons
+                    // 4. Main Chassis (Torso)
+                    ctx.fillStyle = darkMetal;
+                    ctx.strokeStyle = orange;
                     ctx.lineWidth = 3;
-                    // Left Arm
-                    ctx.beginPath();
-                    ctx.moveTo(-110, -50 + shoulderY);
-                    ctx.lineTo(-130, 20);
-                    ctx.lineTo(-100, 60); // Claw/Hand area
-                    ctx.lineTo(-90, 20);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
-
-                    // Right Arm
-                    ctx.beginPath();
-                    ctx.moveTo(110, -50 + shoulderY);
-                    ctx.lineTo(130, 20);
-                    ctx.lineTo(100, 60);
-                    ctx.lineTo(90, 20);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
-
-                    // 5. Central Furnace Core (Head/Chest)
-                    const corePulse = 1 + 0.1 * Math.sin(time * 10);
-                    ctx.fillStyle = '#ffaa00';
+                    ctx.shadowColor = orange;
+                    ctx.shadowBlur = 10;
                     
-                    // Chest Vent
                     ctx.beginPath();
-                    ctx.rect(-20, -20, 40, 20);
+                    // Bulkier Shape
+                    ctx.moveTo(-70, -70); // Top Left
+                    ctx.lineTo(70, -70);  // Top Right
+                    ctx.lineTo(80, -20);  // Shoulder flare
+                    ctx.lineTo(50, 80);   // Waist taper
+                    ctx.lineTo(0, 90);    // Crotch guard
+                    ctx.lineTo(-50, 80);  // Waist taper
+                    ctx.lineTo(-80, -20); // Shoulder flare
+                    ctx.closePath();
                     ctx.fill();
-                    // Grill lines
+                    ctx.stroke();
+
+                    // 5. Hydraulic Shoulders (Animated)
+                    const shoulderOffset = Math.sin(time * 2) * 5;
+                    ctx.fillStyle = rust;
+                    // Left Pauldron
+                    ctx.beginPath();
+                    ctx.moveTo(-80, -70 + shoulderOffset);
+                    ctx.lineTo(-120, -50 + shoulderOffset);
+                    ctx.lineTo(-110, 20 + shoulderOffset);
+                    ctx.lineTo(-70, 0 + shoulderOffset);
+                    ctx.fill();
+                    ctx.stroke();
+                    // Right Pauldron
+                    ctx.beginPath();
+                    ctx.moveTo(80, -70 + shoulderOffset);
+                    ctx.lineTo(120, -50 + shoulderOffset);
+                    ctx.lineTo(110, 20 + shoulderOffset);
+                    ctx.lineTo(70, 0 + shoulderOffset);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // 6. Heavy Arms
+                    ctx.fillStyle = '#220a00';
+                    // Left Arm
+                    ctx.fillRect(-120, 20 + shoulderOffset, 30, 60);
+                    ctx.strokeRect(-120, 20 + shoulderOffset, 30, 60);
+                    // Right Arm
+                    ctx.fillRect(90, 20 + shoulderOffset, 30, 60);
+                    ctx.strokeRect(90, 20 + shoulderOffset, 30, 60);
+
+                    // 7. Furnace Core (Chest)
+                    const pulse = 1 + 0.1 * Math.sin(time * 8);
+                    ctx.save();
+                    ctx.translate(0, -10);
+                    ctx.scale(pulse, pulse);
+                    
+                    ctx.shadowColor = '#ffaa00';
+                    ctx.shadowBlur = 30;
+                    ctx.fillStyle = '#ffcc00';
+                    
+                    // Hexagon Core
+                    ctx.beginPath();
+                    const r = 25;
+                    for(let i=0; i<6; i++) {
+                        const a = (Math.PI/3)*i;
+                        ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    // Grill overlay
                     ctx.strokeStyle = '#000';
                     ctx.lineWidth = 2;
                     ctx.beginPath();
-                    ctx.moveTo(-20, -10); ctx.lineTo(20, -10);
+                    ctx.moveTo(-15, 0); ctx.lineTo(15, 0);
+                    ctx.moveTo(-15, -10); ctx.lineTo(15, -10);
+                    ctx.moveTo(-15, 10); ctx.lineTo(15, 10);
                     ctx.stroke();
+                    
+                    ctx.restore();
 
-                    // Head Visor (Small, menacing)
+                    // 8. Head Visor
                     ctx.fillStyle = '#fff';
-                    ctx.beginPath();
-                    ctx.rect(-10, -70 + shoulderY, 20, 10);
-                    ctx.fill();
-
-                    // 6. Smoke Stacks (Simple Particles)
-                    if (Math.random() > 0.7) {
-                        ctx.fillStyle = 'rgba(100, 100, 100, 0.5)';
-                        const smokeX = (Math.random() > 0.5 ? -90 : 90);
-                        const smokeY = -100 + shoulderY - Math.random() * 20;
-                        const size = Math.random() * 8 + 4;
-                        ctx.beginPath();
-                        ctx.arc(smokeX, smokeY, size, 0, Math.PI*2);
-                        ctx.fill();
-                    }
+                    ctx.shadowColor = '#fff';
+                    ctx.shadowBlur = 15;
+                    ctx.fillRect(-15, -80 + shoulderOffset*0.5, 30, 8);
 
                     ctx.restore();
                 }
