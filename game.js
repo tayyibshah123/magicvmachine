@@ -6662,6 +6662,7 @@ drawEntity(entity) {
         const baseWidth = 3 + sectorPower;
 
         // --- SHADOW (Ground) ---
+        // Only draw shadow for Player to save performance on mobile
         if (entity instanceof Player) {
             ctx.fillStyle = 'rgba(0,0,0,0.6)';
             ctx.beginPath();
@@ -6839,437 +6840,6 @@ drawEntity(entity) {
         // ============================================================
         else if (entity instanceof Enemy) {
             
-            // --- SECTOR 1: THE PANOPTICON (Wireframe/Bare Metal Mode) ---
-            if (this.sector === 1) {
-                ctx.save();
-                const cyan = '#00ffff';
-                
-                // 1. Scanning Beams (Wireframe Only - No Fills/Gradients)
-                ctx.save();
-                const beamWidth = 120 + Math.sin(time * 2) * 20; 
-                
-                ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
-                ctx.lineWidth = 2;
-                const scanOffset = (time * 150) % 50;
-                
-                ctx.beginPath();
-                ctx.moveTo(-20, 20); ctx.lineTo(-beamWidth, 400); 
-                ctx.moveTo(20, 20); ctx.lineTo(beamWidth, 400);
-                
-                for(let i=0; i<8; i++) {
-                    const y = 50 + i * 50 + scanOffset;
-                    if (y < 400) {
-                        const w = (y / 400) * beamWidth;
-                        ctx.moveTo(-w, y); ctx.lineTo(w, y);
-                    }
-                }
-                ctx.stroke();
-                ctx.restore();
-
-                // 2. The Eye Frame (Solid Stroke)
-                ctx.strokeStyle = cyan;
-                ctx.lineWidth = 4;
-                ctx.beginPath();
-                ctx.moveTo(-100, 0); ctx.quadraticCurveTo(0, -80, 100, 0);
-                ctx.moveTo(-100, 0); ctx.quadraticCurveTo(0, 80, 100, 0);
-                ctx.stroke();
-
-                // 3. Rotating Rings (Solid Lines - No Dashes)
-                ctx.lineWidth = 2;
-
-                ctx.beginPath();
-                ctx.arc(0, 0, 160, 0, Math.PI*2);
-                ctx.stroke();
-                
-                const r1X = Math.cos(time * 0.15) * 160;
-                const r1Y = Math.sin(time * 0.15) * 160;
-                ctx.fillStyle = cyan;
-                ctx.beginPath(); ctx.arc(r1X, r1Y, 5, 0, Math.PI*2); ctx.fill();
-
-                ctx.save();
-                ctx.rotate(Math.sin(time * 0.5) * 0.2); 
-                ctx.beginPath();
-                ctx.arc(0, 0, 130, -Math.PI/4, Math.PI/4); 
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.arc(0, 0, 130, Math.PI - Math.PI/4, Math.PI + Math.PI/4); 
-                ctx.stroke();
-                ctx.restore();
-
-                ctx.beginPath(); 
-                ctx.arc(0, 0, 110, 0, Math.PI*2); 
-                ctx.stroke();
-                
-                const r3X = Math.cos(-time * 0.8) * 110;
-                const r3Y = Math.sin(-time * 0.8) * 110;
-                ctx.beginPath(); ctx.arc(r3X, r3Y, 4, 0, Math.PI*2); ctx.fill();
-
-                // 4. The Lens
-                ctx.strokeStyle = cyan;
-                ctx.lineWidth = 3;
-                ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.stroke();
-                
-                const pupilSize = 18 + Math.sin(time * 4) * 5;
-                ctx.fillStyle = '#fff'; 
-                ctx.beginPath(); ctx.arc(0, 0, pupilSize, 0, Math.PI*2); ctx.fill();
-
-                ctx.restore();
-            }
-
-            // --- SECTOR 2: NULL_POINTER ---
-            else if (this.sector === 2) {
-                ctx.save();
-                const magenta = '#ff00ff';
-                const brightMagenta = '#ff88ff';
-                const purple = '#800080';
-                
-                const jitterX = (Math.random() - 0.5) * 8; 
-                const jitterY = (Math.random() - 0.5) * 8;
-                ctx.translate(jitterX, jitterY);
-
-                ctx.fillStyle = '#000';
-                ctx.shadowColor = magenta;
-                ctx.shadowBlur = 60; 
-                ctx.beginPath();
-                for(let i=0; i<=40; i++) { 
-                    const angle = (Math.PI*2/40) * i;
-                    const r = 180 + Math.sin(time * 10 + i * 5) * 10 + Math.random()*10; 
-                    ctx.lineTo(Math.cos(angle)*r, Math.sin(angle)*r);
-                }
-                ctx.fill();
-
-                ctx.lineWidth = 4;
-                ctx.globalAlpha = 0.6;
-                const spiralArms = 6;
-                for (let j = 0; j < spiralArms; j++) {
-                    ctx.beginPath();
-                    ctx.strokeStyle = (j % 2 === 0) ? magenta : purple;
-                    for (let k = 0; k < 60; k++) {
-                        const theta = (time * -3) + (j * (Math.PI * 2) / spiralArms) + (k * 0.1); 
-                        const r = k * 4.0; 
-                        if (r > 190) break; 
-                        const x = Math.cos(theta) * r;
-                        const y = Math.sin(theta) * r;
-                        if (k===0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-                    }
-                    ctx.stroke();
-                }
-                ctx.globalAlpha = 1.0;
-
-                const shards = 12; 
-                for(let i=0; i<shards; i++) {
-                    ctx.save();
-                    const angle = time * 1.5 + (i * Math.PI*2 / shards);
-                    const dist = 280 + Math.sin(time * 2 + i * 43) * 50; 
-                    
-                    ctx.translate(Math.cos(angle)*dist, Math.sin(angle)*dist);
-                    ctx.rotate(angle + (time * 4) + (i % 2 === 0 ? time : -time)); 
-                    
-                    const fade = 0.4 + 0.6 * Math.sin(time * 3 + i * 100);
-                    ctx.globalAlpha = fade;
-
-                    ctx.fillStyle = '#050005'; 
-                    ctx.strokeStyle = brightMagenta; 
-                    ctx.lineWidth = 3; 
-                    ctx.shadowColor = magenta;
-                    ctx.shadowBlur = 15;
-
-                    const warp = (offset) => Math.sin(time * 15 + i * 10 + offset) * 16;
-
-                    ctx.beginPath();
-                    ctx.moveTo(0 + warp(1), -60 + warp(2)); 
-                    ctx.lineTo(30 + warp(3), 20 + warp(4)); 
-                    ctx.lineTo(0 + warp(5), 10 + warp(6));   
-                    ctx.lineTo(-30 + warp(7), 20 + warp(8)); 
-                    ctx.closePath();
-                    
-                    ctx.fill(); ctx.stroke();
-                    
-                    if (i % 2 === 0) {
-                        ctx.beginPath();
-                        ctx.moveTo(0, -80 + warp(0));
-                        ctx.lineTo(10, -100 + warp(1));
-                        ctx.lineTo(-10, -100 + warp(2));
-                        ctx.fill(); ctx.stroke();
-                    }
-                    
-                    if (Math.random() > 0.8) {
-                        ctx.fillStyle = '#fff'; ctx.shadowBlur = 0;
-                        const px = (Math.random()-0.5)*120;
-                        const py = (Math.random()-0.5)*120;
-                        ctx.fillRect(px, py, Math.random()*4+2, Math.random()*40+2); 
-                    }
-                    ctx.restore();
-                }
-
-                ctx.font = "bold 32px 'Orbitron', monospace";
-                ctx.fillStyle = brightMagenta;
-                ctx.shadowBlur = 10;
-                ctx.globalAlpha = 0.8;
-                const txtX = Math.sin(time * 1.2) * 140;
-                const txtY = Math.cos(time * 0.9) * 140;
-                ctx.fillText("NULL", txtX - 40, txtY);
-                ctx.fillText("VOID", -txtX - 40, -txtY);
-                ctx.restore();
-            }
-
-            // --- SECTOR 3: THE COMPILER ---
-            else if (this.sector === 3) {
-                ctx.save();
-                ctx.scale(1.6, 1.6); 
-                const orange = '#ff4500';
-                const darkMetal = '#1a0500';
-                const rust = '#4a1a00';
-                const heat = '#ffcc00';
-                
-                const hover = Math.sin(time * 1.5) * 8;
-                ctx.translate(0, hover);
-
-                ctx.save();
-                const thrustLen = 90 + Math.sin(time * 20) * 10;
-                const thrustGrad = ctx.createLinearGradient(0, 80, 0, 80 + thrustLen);
-                thrustGrad.addColorStop(0, '#fff');
-                thrustGrad.addColorStop(0.2, heat);
-                thrustGrad.addColorStop(1, 'transparent');
-                
-                ctx.fillStyle = thrustGrad;
-                ctx.beginPath(); ctx.moveTo(-50, 80); ctx.lineTo(-30, 80 + thrustLen); ctx.lineTo(-10, 80); ctx.fill();
-                ctx.beginPath(); ctx.moveTo(10, 80); ctx.lineTo(30, 80 + thrustLen); ctx.lineTo(50, 80); ctx.fill();
-                ctx.restore();
-
-                ctx.fillStyle = '#111'; ctx.strokeStyle = '#333'; ctx.lineWidth = 4;
-                ctx.fillRect(-90, -110, 20, 60); ctx.strokeRect(-90, -110, 20, 60);
-                ctx.fillRect(70, -110, 20, 60); ctx.strokeRect(70, -110, 20, 60);
-
-                ctx.fillStyle = 'rgba(150, 150, 150, 0.4)';
-                for(let i=0; i<6; i++) {
-                    const puffY = (time * 100 + i * 40) % 200;
-                    const alpha = 1.0 - (puffY / 200);
-                    const size = 10 + (puffY / 5);
-                    const drift = Math.sin(time * 2 + i) * 15 * (puffY/200);
-                    
-                    if (alpha > 0) {
-                        ctx.globalAlpha = alpha * 0.5;
-                        ctx.beginPath(); ctx.arc(-80 + drift, -110 - puffY, size, 0, Math.PI*2); ctx.fill();
-                        ctx.beginPath(); ctx.arc(80 - drift, -110 - puffY, size, 0, Math.PI*2); ctx.fill();
-                    }
-                }
-                ctx.globalAlpha = 1.0;
-
-                ctx.fillStyle = darkMetal; ctx.strokeStyle = orange; ctx.lineWidth = 3; ctx.shadowColor = orange; ctx.shadowBlur = 10;
-                ctx.beginPath(); ctx.moveTo(-70, -70); ctx.lineTo(70, -70); ctx.lineTo(80, -20); ctx.lineTo(50, 80); ctx.lineTo(0, 90); ctx.lineTo(-50, 80); ctx.lineTo(-80, -20); ctx.closePath(); ctx.fill(); ctx.stroke();
-
-                const shoulderOffset = Math.sin(time * 2) * 5;
-                ctx.fillStyle = rust;
-                ctx.beginPath(); ctx.moveTo(-80, -70 + shoulderOffset); ctx.lineTo(-120, -50 + shoulderOffset); ctx.lineTo(-110, 20 + shoulderOffset); ctx.lineTo(-70, 0 + shoulderOffset); ctx.fill(); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(80, -70 + shoulderOffset); ctx.lineTo(120, -50 + shoulderOffset); ctx.lineTo(110, 20 + shoulderOffset); ctx.lineTo(70, 0 + shoulderOffset); ctx.fill(); ctx.stroke();
-
-                ctx.fillStyle = '#220a00';
-                ctx.fillRect(-120, 20 + shoulderOffset, 30, 60); ctx.strokeRect(-120, 20 + shoulderOffset, 30, 60);
-                ctx.fillRect(90, 20 + shoulderOffset, 30, 60); ctx.strokeRect(90, 20 + shoulderOffset, 30, 60);
-
-                const pulse = 1 + 0.1 * Math.sin(time * 8);
-                ctx.save(); ctx.translate(0, -10); ctx.scale(pulse, pulse);
-                ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 30; ctx.fillStyle = '#ffcc00';
-                ctx.beginPath(); const r = 25; for(let i=0; i<6; i++) { const a = (Math.PI/3)*i; ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r); } ctx.closePath(); ctx.fill();
-                ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(15, 0); ctx.moveTo(-15, -10); ctx.lineTo(15, -10); ctx.moveTo(-15, 10); ctx.lineTo(15, 10); ctx.stroke();
-                ctx.restore();
-
-                if (entity.armorPlating > 0) {
-                    ctx.save();
-                    ctx.strokeStyle = '#ffaa00';
-                    ctx.lineWidth = 3;
-                    ctx.globalAlpha = 0.5 + Math.sin(time * 10) * 0.3; 
-                    ctx.beginPath();
-                    const ar = 130;
-                    for(let i=0; i<6; i++) {
-                        const a = (Math.PI/3) * i;
-                        ctx.lineTo(Math.cos(a)*ar, Math.sin(a)*ar);
-                    }
-                    ctx.closePath();
-                    ctx.stroke();
-                    
-                    ctx.fillStyle = '#ffaa00';
-                    ctx.font = "bold 20px 'Orbitron'";
-                    ctx.textAlign = "center";
-                    ctx.fillText(`ARMOR: ${entity.armorPlating}`, 0, -140);
-                    ctx.restore();
-                }
-
-                ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 15;
-                ctx.fillRect(-15, -80 + shoulderOffset*0.5, 30, 8);
-
-                ctx.restore();
-            }
-
-            // --- SECTOR 4: HIVE PROTOCOL (Massive Distributed Swarm) ---
-                else if (this.sector === 4) {
-                    ctx.save();
-                    const lime = '#32cd32';
-                    const darkLime = '#0a2a0a';
-                    
-                    // 1. Central "Core" Glow (The collective intelligence)
-                    // Expanded width to cover the horizontal area
-                    const pulse = 1 + 0.1 * Math.sin(time * 3);
-                    const coreGrad = ctx.createRadialGradient(0, 0, 20, 0, 0, 250);
-                    coreGrad.addColorStop(0, 'rgba(50, 205, 50, 0.2)');
-                    coreGrad.addColorStop(0.5, 'rgba(50, 205, 50, 0.05)');
-                    coreGrad.addColorStop(1, 'transparent');
-                    
-                    ctx.scale(2.0, 1.0); // Stretch horizontally
-                    ctx.fillStyle = coreGrad;
-                    ctx.beginPath(); 
-                    ctx.arc(0, 0, 140 * pulse, 0, Math.PI*2); 
-                    ctx.fill();
-                    ctx.scale(0.5, 1.0); // Reset scale
-                    
-                    // 2. The Swarm (40+ Vector Units)
-                    // We distribute them across a wide sine-wave pattern
-                    const droneCount = 40;
-                    
-                    // Draw connection lines first (Background layer)
-                    ctx.lineWidth = 1;
-                    ctx.strokeStyle = 'rgba(50, 205, 50, 0.15)';
-                    ctx.beginPath();
-                    
-                    // Pre-calculate positions for lines
-                    const positions = [];
-                    for (let i = 0; i < droneCount; i++) {
-                        const tOffset = i * 0.5;
-                        // Wide horizontal spread (-250 to 250)
-                        const spreadX = (i / droneCount - 0.5) * 500; 
-                        
-                        // Vertical sine wave motion
-                        const waveY = Math.sin(time * 1.5 + (i * 0.2)) * 60;
-                        const noiseY = Math.cos(time * 2.3 + (i * 0.7)) * 30;
-                        
-                        positions.push({ x: spreadX, y: waveY + noiseY });
-                    }
-
-                    // Draw connections between neighbors
-                    for (let i = 0; i < droneCount - 1; i++) {
-                        // Connect to immediate neighbor
-                        ctx.moveTo(positions[i].x, positions[i].y);
-                        ctx.lineTo(positions[i+1].x, positions[i+1].y);
-                        
-                        // Connect to neighbor + 5 (cross-linking)
-                        if (i + 5 < droneCount) {
-                            ctx.moveTo(positions[i].x, positions[i].y);
-                            ctx.lineTo(positions[i+5].x, positions[i+5].y);
-                        }
-                    }
-                    ctx.stroke();
-
-                    // 3. Draw Individual Drones
-                    for (let i = 0; i < droneCount; i++) {
-                        const pos = positions[i];
-                        
-                        ctx.save();
-                        ctx.translate(pos.x, pos.y);
-                        
-                        // Individual rotation based on position in swarm
-                        ctx.rotate(time * 2 + i); 
-                        
-                        // Depth scaling (Fake 3D)
-                        const depthScale = 0.8 + 0.4 * Math.sin(time + i); 
-                        ctx.scale(depthScale, depthScale);
-
-                        // Draw Tetrahedron
-                        ctx.fillStyle = darkLime; 
-                        ctx.strokeStyle = lime; 
-                        ctx.lineWidth = 2;
-                        
-                        ctx.beginPath(); 
-                        ctx.moveTo(0, -15); 
-                        ctx.lineTo(12, 10); 
-                        ctx.lineTo(-12, 10); 
-                        ctx.closePath();
-                        
-                        ctx.fill(); 
-                        ctx.stroke(); 
-                        
-                        // Center light
-                        ctx.fillStyle = '#fff';
-                        ctx.globalAlpha = 0.8;
-                        ctx.fillRect(-2, -2, 4, 4);
-                        
-                        ctx.restore();
-                    }
-                    
-                    // 4. Floating Data Particles (Ambient)
-                    ctx.fillStyle = lime;
-                    ctx.globalAlpha = 0.6;
-                    for(let k=0; k<15; k++) {
-                        const px = (Math.sin(time * 0.5 + k) * 300);
-                        const py = (Math.cos(time * 0.7 + k) * 100);
-                        ctx.fillRect(px, py, 2, 2);
-                    }
-
-                    ctx.restore();
-                }
-
-            // --- SECTOR 5: TESSERACT PRIME ---
-            else if (this.sector === 5) {
-                ctx.save();
-                const gold = '#ffd700';
-                const white = '#ffffff';
-                
-                ctx.rotate(time * 0.2);
-
-                const drawSquare = (size, color, width) => {
-                    ctx.strokeStyle = color;
-                    ctx.lineWidth = width;
-                    ctx.shadowColor = color;
-                    ctx.shadowBlur = 15;
-                    ctx.strokeRect(-size/2, -size/2, size, size);
-                };
-
-                drawSquare(140, white, 2);
-
-                ctx.save();
-                ctx.rotate(time); 
-                const pulse = 100 + Math.sin(time * 2) * 20;
-                drawSquare(pulse, gold, 4);
-                
-                ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)';
-                ctx.lineWidth = 1;
-                const o = 70; const i = pulse/2; 
-                ctx.beginPath();
-                ctx.moveTo(-o, -o); ctx.lineTo(-i, -i);
-                ctx.moveTo(o, -o); ctx.lineTo(i, -i);
-                ctx.moveTo(o, o); ctx.lineTo(i, i);
-                ctx.moveTo(-o, o); ctx.lineTo(-i, i);
-                ctx.stroke();
-                ctx.restore();
-
-                ctx.fillStyle = white; ctx.shadowColor = white; ctx.shadowBlur = 50;
-                ctx.beginPath(); ctx.arc(0,0, 10, 0, Math.PI*2); ctx.fill();
-
-                ctx.strokeStyle = gold; ctx.globalAlpha = 0.3;
-                for(let k=0; k<4; k++) {
-                    ctx.rotate(Math.PI/4);
-                    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(200, 0); ctx.stroke();
-                }
-
-                if (entity.invincibleTurns > 0) {
-                    ctx.save();
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 3;
-                    ctx.setLineDash([5, 10]);
-                    ctx.beginPath();
-                    ctx.arc(0, 0, 180, 0, Math.PI*2);
-                    ctx.stroke();
-                    ctx.restore();
-                }
-                ctx.restore();
-            }
-        }
-
-        // ============================================================
-        // 4. ENEMY MINIONS (Unified Elite Design + Mobile Fix)
-        // ============================================================
-        else if (entity instanceof Minion && !entity.isPlayerSide) {
-            
             // --- DETERMINE SECTOR COLOR PALETTE ---
             let mColor = '#ff0055'; 
             let mGlow = '#ff0055';
@@ -7281,130 +6851,7 @@ drawEntity(entity) {
             else if (this.sector === 4) { mColor = '#32cd32'; mGlow = '#32cd32'; mFill = '#051a05'; }
             else if (this.sector === 5) { mColor = '#ffffff'; mGlow = '#ffd700'; mFill = '#111111'; }
 
-            ctx.save(); 
-            ctx.scale(1.8, 1.8); 
-            
-            // Tier 3 or Named Minions (Boss Minions)
-            if (entity.tier === 3 || entity.name.includes("Glitch") || entity.name.includes("Guardian")) {
-                const pulse = 1 + 0.05 * Math.sin(time * 4);
-                ctx.scale(pulse, pulse);
-
-                // 1. Rotating Star Body
-                ctx.save();
-                ctx.rotate(time * 0.8); 
-                ctx.strokeStyle = mColor;
-                ctx.lineWidth = 2;
-                ctx.shadowColor = mGlow;
-                ctx.shadowBlur = 15;
-                ctx.fillStyle = mFill;
-                
-                ctx.beginPath();
-                const spikes = 4;
-                for(let i=0; i<spikes*2; i++) {
-                    const r = (i%2 === 0) ? 22 : 10;
-                    const a = (Math.PI / spikes) * i;
-                    ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
-                }
-                ctx.closePath();
-                ctx.fill();
-                ctx.stroke();
-                ctx.restore();
-                
-                // 2. Inner Core (Counter-Rotation)
-                ctx.save();
-                ctx.rotate(-time * 1.5);
-                ctx.fillStyle = '#fff';
-                ctx.shadowColor = '#fff';
-                ctx.shadowBlur = 10;
-                ctx.beginPath(); 
-                ctx.rect(-4, -4, 8, 8); 
-                ctx.fill(); 
-                ctx.restore();
-
-                // 3. Orbital Energy Ring (SOLID - NO DASHES)
-                ctx.beginPath();
-                ctx.arc(0, 0, 30, 0, Math.PI*2);
-                ctx.strokeStyle = mColor; 
-                ctx.lineWidth = 1.5; 
-                ctx.stroke();
-
-                // 4. Satellite Nodes
-                ctx.save();
-                ctx.rotate(time * 0.5);
-                for(let k=0; k<4; k++) {
-                    ctx.rotate(Math.PI/2);
-                    ctx.fillStyle = mColor;
-                    ctx.shadowBlur = 5;
-                    ctx.fillRect(0, -30, 3, 3);
-                }
-                ctx.restore();
-                
-            } 
-            // Standard Drone (Restored High-Fidelity "Prism" Design)
-            else {
-                const hover = Math.sin(time * 3) * 3;
-                ctx.save();
-                ctx.translate(0, hover);
-                
-                ctx.fillStyle = mFill;
-                ctx.strokeStyle = mColor;
-                ctx.lineWidth = 2;
-                ctx.shadowColor = mGlow;
-                ctx.shadowBlur = 10;
-                
-                ctx.beginPath();
-                ctx.moveTo(0, -15); 
-                ctx.lineTo(10, 0);  
-                ctx.lineTo(0, 25);  
-                ctx.lineTo(-10, 0); 
-                ctx.closePath();
-                ctx.fill();
-                ctx.stroke();
-                
-                // Inner Core
-                const corePulse = 0.5 + 0.5 * Math.sin(time * 8);
-                ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + corePulse * 0.5})`;
-                ctx.shadowColor = '#fff';
-                ctx.beginPath();
-                ctx.moveTo(0, -5); ctx.lineTo(3, 0); ctx.lineTo(0, 10); ctx.lineTo(-3, 0);
-                ctx.fill();
-                
-                ctx.restore();
-                
-                // Floating Brackets
-                ctx.save();
-                ctx.rotate(Math.sin(time) * 0.2); 
-                ctx.strokeStyle = mColor;
-                ctx.lineWidth = 2;
-                ctx.globalAlpha = 0.8;
-                
-                ctx.beginPath();
-                ctx.moveTo(-18, -10 + hover); ctx.lineTo(-22, 0 + hover); ctx.lineTo(-18, 15 + hover);
-                ctx.stroke();
-                
-                ctx.beginPath();
-                ctx.moveTo(18, -10 + hover); ctx.lineTo(22, 0 + hover); ctx.lineTo(18, 15 + hover);
-                ctx.stroke();
-                ctx.restore();
-            }
-            
-            ctx.restore();
-        } 
-        
-        // --- STANDARD ENEMIES (RESTORED HIGH FIDELITY) ---
-        else if (entity instanceof Enemy) {
-            
-            // --- DETERMINE SECTOR COLOR PALETTE ---
-            let mColor = '#ff0055'; 
-            let mGlow = '#ff0055';
-            
-            if (this.sector === 1) { mColor = '#00ffff'; mGlow = '#00ffff'; }
-            else if (this.sector === 2) { mColor = '#ff00ff'; mGlow = '#ff00ff'; }
-            else if (this.sector === 3) { mColor = '#ff4500'; mGlow = '#ff4500'; }
-            else if (this.sector === 4) { mColor = '#32cd32'; mGlow = '#32cd32'; }
-            else if (this.sector === 5) { mColor = '#ffffff'; mGlow = '#ffd700'; }
-
-            // Apply Standard Enemy Styling
+            // Apply Palette to Context
             ctx.strokeStyle = mColor;
             ctx.lineWidth = baseWidth;
             ctx.shadowColor = mGlow;
@@ -7415,82 +6862,278 @@ drawEntity(entity) {
             bodyGrad.addColorStop(1, mColor);
             ctx.fillStyle = bodyGrad;
 
-            if (entity.name.includes("Drone")) {
-                // SENTRY DRONE (Restored High Fidelity)
-                const hover = Math.sin(time * 2.5) * 10; 
-                ctx.translate(0, hover); 
-                
-                ctx.save();
-                const scanSweep = Math.sin(time * 1.5) * 0.15; 
-                ctx.rotate(scanSweep);
-                const scanLen = 220; const scanWidth = 80;
-                const grad = ctx.createLinearGradient(0, 0, 0, scanLen);
-                grad.addColorStop(0, mColor); grad.addColorStop(1, 'transparent'); 
-                ctx.fillStyle = grad; ctx.globalAlpha = 0.15;
-                ctx.beginPath(); ctx.moveTo(0, 10); ctx.lineTo(-scanWidth, scanLen); ctx.arc(0, scanLen, scanWidth, Math.PI, 0, true); ctx.lineTo(scanWidth, scanLen); ctx.lineTo(0, 10); ctx.fill();
-                ctx.strokeStyle = mColor; ctx.lineWidth = 2; ctx.globalAlpha = 0.4;
-                const gridSpeed = (time * 80) % 40;
-                ctx.beginPath();
-                for(let i=0; i<6; i++) {
-                    const y = 30 + (i * 35) + gridSpeed;
-                    if (y < scanLen) { const w = (y / scanLen) * scanWidth; ctx.moveTo(-w, y); ctx.lineTo(w, y); }
-                }
-                ctx.stroke(); ctx.restore();
+            // =========================================================
+            // BOSS RENDERING
+            // =========================================================
+            if (entity.isBoss) {
+                // --- SECTOR 1: THE PANOPTICON (Wireframe/Bare Metal Mode) ---
+                if (this.sector === 1) {
+                    ctx.save();
+                    const cyan = '#00ffff';
+                    
+                    // Scanning Beams
+                    ctx.save();
+                    const beamWidth = 120 + Math.sin(time * 2) * 20; 
+                    ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
+                    ctx.lineWidth = 2;
+                    const scanOffset = (time * 150) % 50;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(-20, 20); ctx.lineTo(-beamWidth, 400); 
+                    ctx.moveTo(20, 20); ctx.lineTo(beamWidth, 400);
+                    for(let i=0; i<8; i++) {
+                        const y = 50 + i * 50 + scanOffset;
+                        if (y < 400) { const w = (y / 400) * beamWidth; ctx.moveTo(-w, y); ctx.lineTo(w, y); }
+                    }
+                    ctx.stroke();
+                    ctx.restore();
 
-                ctx.fillStyle = '#050505'; ctx.beginPath(); ctx.moveTo(-35, -40); ctx.lineTo(35, -40); ctx.lineTo(45, -10); ctx.lineTo(0, 55); ctx.lineTo(-45, -10); ctx.closePath(); ctx.fill();
-                ctx.strokeStyle = mColor; ctx.lineWidth = 3; ctx.shadowColor = mGlow; ctx.shadowBlur = 20; ctx.stroke();
-                
-                ctx.save(); ctx.lineWidth = 2; ctx.shadowBlur = 10;
-                ctx.beginPath(); ctx.ellipse(0, 0, 60, 20, time * 0.5, 0, Math.PI*2); ctx.stroke();
-                ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-                ctx.beginPath(); ctx.ellipse(0, 0, 45, 12, -time * 1.2, 0, Math.PI*2); ctx.stroke();
-                ctx.restore();
+                    // Eye Frame
+                    ctx.strokeStyle = cyan; ctx.lineWidth = 4;
+                    ctx.beginPath(); ctx.moveTo(-100, 0); ctx.quadraticCurveTo(0, -80, 100, 0); ctx.moveTo(-100, 0); ctx.quadraticCurveTo(0, 80, 100, 0); ctx.stroke();
 
-                ctx.save(); ctx.translate(0, -10); 
-                ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = mColor; ctx.shadowColor = mColor; ctx.shadowBlur = 30; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = '#fff'; ctx.shadowBlur = 5; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
-                ctx.restore();
-            }
-            else if (entity.name.includes("Loader")) {
-                // HEAVY LOADER (Restored Tank Design)
-                ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-40, -40, 80, 80);
-                ctx.fillStyle = '#333'; ctx.fillRect(-60, -50, 20, 100); ctx.fillRect(40, -50, 20, 100);
-                ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
-                const treadOffset = (time * 20) % 20;
-                for(let y = -50; y < 50; y+=20) {
-                    let dy = y + treadOffset; if(dy > 50) dy -= 100;
-                    ctx.beginPath(); ctx.moveTo(-60, dy); ctx.lineTo(-40, dy); ctx.stroke();
-                    ctx.beginPath(); ctx.moveTo(40, dy); ctx.lineTo(60, dy); ctx.stroke();
+                    // Rings (Solid)
+                    ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.arc(0, 0, 160, 0, Math.PI*2); ctx.stroke();
+                    const r1X = Math.cos(time * 0.15) * 160; const r1Y = Math.sin(time * 0.15) * 160;
+                    ctx.fillStyle = cyan; ctx.beginPath(); ctx.arc(r1X, r1Y, 5, 0, Math.PI*2); ctx.fill();
+
+                    ctx.save(); ctx.rotate(Math.sin(time * 0.5) * 0.2); 
+                    ctx.beginPath(); ctx.arc(0, 0, 130, -Math.PI/4, Math.PI/4); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(0, 0, 130, Math.PI - Math.PI/4, Math.PI + Math.PI/4); ctx.stroke();
+                    ctx.restore();
+
+                    ctx.beginPath(); ctx.arc(0, 0, 110, 0, Math.PI*2); ctx.stroke();
+                    const r3X = Math.cos(-time * 0.8) * 110; const r3Y = Math.sin(-time * 0.8) * 110;
+                    ctx.beginPath(); ctx.arc(r3X, r3Y, 4, 0, Math.PI*2); ctx.fill();
+
+                    // Lens
+                    ctx.strokeStyle = cyan; ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.stroke();
+                    const pupilSize = 18 + Math.sin(time * 4) * 5;
+                    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, pupilSize, 0, Math.PI*2); ctx.fill();
+
+                    ctx.restore();
                 }
-                ctx.fillStyle = '#222'; ctx.strokeStyle = mColor; ctx.lineWidth = 2; ctx.shadowColor = mGlow; ctx.shadowBlur = 10;
-                ctx.beginPath(); ctx.moveTo(-30, -30); ctx.lineTo(30, -30); ctx.lineTo(35, 0); ctx.lineTo(30, 30); ctx.lineTo(-30, 30); ctx.lineTo(-35, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
-                ctx.fillStyle = (this.sector===2)?'#fff':'#ffaa00'; ctx.shadowBlur = 20; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
-            }
-            else if (entity.name.includes("Arachnid")) {
-                // CYBER ARACHNID (Restored High Fidelity)
-                ctx.fillStyle = '#111'; ctx.strokeStyle = mColor; ctx.lineWidth = 3; ctx.shadowColor = mGlow; ctx.shadowBlur = 15;
-                ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-                ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 25;
-                ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI*2); ctx.fill();
-                for(let i=0; i<8; i++) {
-                    const angle = (i/8)*Math.PI*2; const move = Math.sin(time*3+i)*5;
-                    const startX = Math.cos(angle)*20; const startY = Math.sin(angle)*20;
-                    const midX = Math.cos(angle)*(45+move); const midY = Math.sin(angle)*(45+move);
-                    const endX = Math.cos(angle+0.2)*(70+move); const endY = Math.sin(angle+0.2)*(70+move);
-                    const grad = ctx.createLinearGradient(startX, startY, endX, endY);
-                    grad.addColorStop(0, mColor); grad.addColorStop(1, '#000');
-                    ctx.strokeStyle = grad; ctx.lineWidth = 3; ctx.shadowBlur = 0;
-                    ctx.beginPath(); ctx.moveTo(startX, startY); ctx.lineTo(midX, midY); ctx.lineTo(endX, endY); ctx.stroke();
+
+                // --- SECTOR 2: NULL_POINTER ---
+                else if (this.sector === 2) {
+                    ctx.save(); const magenta = '#ff00ff'; const brightMagenta = '#ff88ff'; const purple = '#800080';
+                    const jitterX = (Math.random() - 0.5) * 8; const jitterY = (Math.random() - 0.5) * 8; ctx.translate(jitterX, jitterY);
+                    ctx.fillStyle = '#000'; ctx.shadowColor = magenta; ctx.shadowBlur = 60; ctx.beginPath();
+                    for(let i=0; i<=40; i++) { const angle = (Math.PI*2/40) * i; const r = 180 + Math.sin(time * 10 + i * 5) * 10 + Math.random()*10; ctx.lineTo(Math.cos(angle)*r, Math.sin(angle)*r); } ctx.fill();
+                    ctx.lineWidth = 4; ctx.globalAlpha = 0.6; const spiralArms = 6;
+                    for (let j = 0; j < spiralArms; j++) { ctx.beginPath(); ctx.strokeStyle = (j % 2 === 0) ? magenta : purple; for (let k = 0; k < 60; k++) { const theta = (time * -3) + (j * (Math.PI * 2) / spiralArms) + (k * 0.1); const r = k * 4.0; if (r > 190) break; const x = Math.cos(theta) * r; const y = Math.sin(theta) * r; if (k===0) ctx.moveTo(x, y); else ctx.lineTo(x, y); } ctx.stroke(); } ctx.globalAlpha = 1.0;
+                    const shards = 12; for(let i=0; i<shards; i++) { ctx.save(); const angle = time * 1.5 + (i * Math.PI*2 / shards); const dist = 280 + Math.sin(time * 2 + i * 43) * 50; ctx.translate(Math.cos(angle)*dist, Math.sin(angle)*dist); ctx.rotate(angle + (time * 4) + (i % 2 === 0 ? time : -time)); const fade = 0.4 + 0.6 * Math.sin(time * 3 + i * 100); ctx.globalAlpha = fade; ctx.fillStyle = '#050005'; ctx.strokeStyle = brightMagenta; ctx.lineWidth = 3; ctx.shadowColor = magenta; ctx.shadowBlur = 15; const warp = (offset) => Math.sin(time * 15 + i * 10 + offset) * 16; ctx.beginPath(); ctx.moveTo(0 + warp(1), -60 + warp(2)); ctx.lineTo(30 + warp(3), 20 + warp(4)); ctx.lineTo(0 + warp(5), 10 + warp(6)); ctx.lineTo(-30 + warp(7), 20 + warp(8)); ctx.closePath(); ctx.fill(); ctx.stroke(); if (i % 2 === 0) { ctx.beginPath(); ctx.moveTo(0, -80 + warp(0)); ctx.lineTo(10, -100 + warp(1)); ctx.lineTo(-10, -100 + warp(2)); ctx.fill(); ctx.stroke(); } if (Math.random() > 0.8) { ctx.fillStyle = '#fff'; ctx.shadowBlur = 0; const px = (Math.random()-0.5)*120; const py = (Math.random()-0.5)*120; ctx.fillRect(px, py, Math.random()*4+2, Math.random()*40+2); } ctx.restore(); }
+                    ctx.font = "bold 32px 'Orbitron', monospace"; ctx.fillStyle = brightMagenta; ctx.shadowBlur = 10; ctx.globalAlpha = 0.8; const txtX = Math.sin(time * 1.2) * 140; const txtY = Math.cos(time * 0.9) * 140; ctx.fillText("NULL", txtX - 40, txtY); ctx.fillText("VOID", -txtX - 40, -txtY); ctx.restore();
+                }
+
+                // --- SECTOR 3: THE COMPILER ---
+                else if (this.sector === 3) {
+                    ctx.save(); ctx.scale(1.6, 1.6); 
+                    const orange = '#ff4500'; const darkMetal = '#1a0500'; const rust = '#4a1a00'; const heat = '#ffcc00';
+                    const hover = Math.sin(time * 1.5) * 8; ctx.translate(0, hover);
+                    ctx.save(); const thrustLen = 90 + Math.sin(time * 20) * 10; const thrustGrad = ctx.createLinearGradient(0, 80, 0, 80 + thrustLen); thrustGrad.addColorStop(0, '#fff'); thrustGrad.addColorStop(0.2, heat); thrustGrad.addColorStop(1, 'transparent'); ctx.fillStyle = thrustGrad; ctx.beginPath(); ctx.moveTo(-50, 80); ctx.lineTo(-30, 80 + thrustLen); ctx.lineTo(-10, 80); ctx.fill(); ctx.beginPath(); ctx.moveTo(10, 80); ctx.lineTo(30, 80 + thrustLen); ctx.lineTo(50, 80); ctx.fill(); ctx.restore();
+                    ctx.fillStyle = '#111'; ctx.strokeStyle = '#333'; ctx.lineWidth = 4; ctx.fillRect(-90, -110, 20, 60); ctx.strokeRect(-90, -110, 20, 60); ctx.fillRect(70, -110, 20, 60); ctx.strokeRect(70, -110, 20, 60);
+                    ctx.fillStyle = 'rgba(150, 150, 150, 0.4)'; for(let i=0; i<6; i++) { const puffY = (time * 100 + i * 40) % 200; const alpha = 1.0 - (puffY / 200); const size = 10 + (puffY / 5); const drift = Math.sin(time * 2 + i) * 15 * (puffY/200); if (alpha > 0) { ctx.globalAlpha = alpha * 0.5; ctx.beginPath(); ctx.arc(-80 + drift, -110 - puffY, size, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(80 - drift, -110 - puffY, size, 0, Math.PI*2); ctx.fill(); } } ctx.globalAlpha = 1.0;
+                    ctx.fillStyle = darkMetal; ctx.strokeStyle = orange; ctx.lineWidth = 3; ctx.shadowColor = orange; ctx.shadowBlur = 10; ctx.beginPath(); ctx.moveTo(-70, -70); ctx.lineTo(70, -70); ctx.lineTo(80, -20); ctx.lineTo(50, 80); ctx.lineTo(0, 90); ctx.lineTo(-50, 80); ctx.lineTo(-80, -20); ctx.closePath(); ctx.fill(); ctx.stroke();
+                    const shoulderOffset = Math.sin(time * 2) * 5; ctx.fillStyle = rust; ctx.beginPath(); ctx.moveTo(-80, -70 + shoulderOffset); ctx.lineTo(-120, -50 + shoulderOffset); ctx.lineTo(-110, 20 + shoulderOffset); ctx.lineTo(-70, 0 + shoulderOffset); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(80, -70 + shoulderOffset); ctx.lineTo(120, -50 + shoulderOffset); ctx.lineTo(110, 20 + shoulderOffset); ctx.lineTo(70, 0 + shoulderOffset); ctx.fill(); ctx.stroke();
+                    ctx.fillStyle = '#220a00'; ctx.fillRect(-120, 20 + shoulderOffset, 30, 60); ctx.strokeRect(-120, 20 + shoulderOffset, 30, 60); ctx.fillRect(90, 20 + shoulderOffset, 30, 60); ctx.strokeRect(90, 20 + shoulderOffset, 30, 60);
+                    const pulse = 1 + 0.1 * Math.sin(time * 8); ctx.save(); ctx.translate(0, -10); ctx.scale(pulse, pulse); ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 30; ctx.fillStyle = '#ffcc00'; ctx.beginPath(); const r = 25; for(let i=0; i<6; i++) { const a = (Math.PI/3)*i; ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r); } ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(15, 0); ctx.moveTo(-15, -10); ctx.lineTo(15, -10); ctx.moveTo(-15, 10); ctx.lineTo(15, 10); ctx.stroke(); ctx.restore();
+                    if (entity.armorPlating > 0) { ctx.save(); ctx.strokeStyle = '#ffaa00'; ctx.lineWidth = 3; ctx.globalAlpha = 0.5 + Math.sin(time * 10) * 0.3; ctx.beginPath(); const ar = 130; for(let i=0; i<6; i++) { const a = (Math.PI/3) * i; ctx.lineTo(Math.cos(a)*ar, Math.sin(a)*ar); } ctx.closePath(); ctx.stroke(); ctx.fillStyle = '#ffaa00'; ctx.font = "bold 20px 'Orbitron'"; ctx.textAlign = "center"; ctx.fillText(`ARMOR: ${entity.armorPlating}`, 0, -140); ctx.restore(); }
+                    ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 15; ctx.fillRect(-15, -80 + shoulderOffset*0.5, 30, 8);
+                    ctx.restore();
+                }
+
+                // --- SECTOR 4: HIVE PROTOCOL ---
+                else if (this.sector === 4) {
+                    ctx.save();
+                    const lime = '#32cd32';
+                    const darkLime = '#0a2a0a';
+                    const pulse = 1 + 0.1 * Math.sin(time * 3);
+                    const coreGrad = ctx.createRadialGradient(0, 0, 20, 0, 0, 250);
+                    coreGrad.addColorStop(0, 'rgba(50, 205, 50, 0.2)'); coreGrad.addColorStop(0.5, 'rgba(50, 205, 50, 0.05)'); coreGrad.addColorStop(1, 'transparent');
+                    ctx.scale(2.0, 1.0); ctx.fillStyle = coreGrad; ctx.beginPath(); ctx.arc(0, 0, 140 * pulse, 0, Math.PI*2); ctx.fill(); ctx.scale(0.5, 1.0);
+                    const droneCount = 40; ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(50, 205, 50, 0.15)'; ctx.beginPath();
+                    const positions = [];
+                    for (let i = 0; i < droneCount; i++) {
+                        const spreadX = (i / droneCount - 0.5) * 500; 
+                        const waveY = Math.sin(time * 1.5 + (i * 0.2)) * 60; const noiseY = Math.cos(time * 2.3 + (i * 0.7)) * 30;
+                        positions.push({ x: spreadX, y: waveY + noiseY });
+                    }
+                    for (let i = 0; i < droneCount - 1; i++) {
+                        ctx.moveTo(positions[i].x, positions[i].y); ctx.lineTo(positions[i+1].x, positions[i+1].y);
+                        if (i + 5 < droneCount) { ctx.moveTo(positions[i].x, positions[i].y); ctx.lineTo(positions[i+5].x, positions[i+5].y); }
+                    } ctx.stroke();
+                    for (let i = 0; i < droneCount; i++) {
+                        const pos = positions[i];
+                        ctx.save(); ctx.translate(pos.x, pos.y); ctx.rotate(time * 2 + i); const depthScale = 0.8 + 0.4 * Math.sin(time + i); ctx.scale(depthScale, depthScale);
+                        ctx.fillStyle = darkLime; ctx.strokeStyle = lime; ctx.lineWidth = 2;
+                        ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(12, 10); ctx.lineTo(-12, 10); ctx.closePath(); ctx.fill(); ctx.stroke(); 
+                        ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.8; ctx.fillRect(-2, -2, 4, 4);
+                        ctx.restore();
+                    }
+                    ctx.fillStyle = lime; ctx.globalAlpha = 0.6;
+                    for(let k=0; k<15; k++) { const px = (Math.sin(time * 0.5 + k) * 300); const py = (Math.cos(time * 0.7 + k) * 100); ctx.fillRect(px, py, 2, 2); }
+                    ctx.restore();
+                }
+
+                // --- SECTOR 5: TESSERACT PRIME ---
+                else if (this.sector === 5) {
+                    ctx.save(); ctx.rotate(time*0.2); const gold='#ffd700'; const white='#ffffff'; ctx.strokeStyle=white; ctx.lineWidth=2; ctx.strokeRect(-70,-70,140,140);
+                    ctx.save(); ctx.rotate(time); const p=100+Math.sin(time*2)*20; ctx.strokeStyle=gold; ctx.lineWidth=4; ctx.strokeRect(-p/2,-p/2,p,p); ctx.restore();
+                    ctx.strokeStyle='rgba(255,215,0,0.3)'; ctx.lineWidth=1; const o=70; const i=p/2; ctx.beginPath(); ctx.moveTo(-o,-o); ctx.lineTo(-i,-i); ctx.moveTo(o,-o); ctx.lineTo(i,-i); ctx.moveTo(o,o); ctx.lineTo(i,i); ctx.moveTo(-o,o); ctx.lineTo(-i,i); ctx.stroke();
+                    ctx.fillStyle=white; ctx.shadowColor=white; ctx.shadowBlur=50; ctx.beginPath(); ctx.arc(0,0, 10, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle=gold; ctx.globalAlpha=0.3; for(let k=0; k<4; k++) { ctx.rotate(Math.PI/4); ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(200, 0); ctx.stroke(); }
+                    if (entity.invincibleTurns > 0) { ctx.save(); ctx.strokeStyle='#fff'; ctx.lineWidth=3; ctx.setLineDash([5, 10]); ctx.beginPath(); ctx.arc(0, 0, 180, 0, Math.PI*2); ctx.stroke(); ctx.restore(); } ctx.restore();
                 }
             }
+            
+            // =========================================================
+            // STANDARD & ELITE ENEMIES (NOT BOSSES)
+            // =========================================================
             else {
-                // Generic
-                this.drawSpikedCircle(ctx, 0, 0, entity.radius, 6, 5, time);
-                ctx.fillStyle = mColor; ctx.globalAlpha = 0.3;
-                ctx.beginPath(); ctx.arc(0, 0, entity.radius * 0.5, 0, Math.PI*2); ctx.fill();
-                ctx.globalAlpha = 1.0;
+                if (entity.name.includes("Drone")) {
+                    // SENTRY DRONE (Restored High Fidelity)
+                    const hover = Math.sin(time * 2.5) * 10; 
+                    ctx.translate(0, hover); 
+                    
+                    ctx.save();
+                    const scanSweep = Math.sin(time * 1.5) * 0.15; 
+                    ctx.rotate(scanSweep);
+                    const scanLen = 220; const scanWidth = 80;
+                    const grad = ctx.createLinearGradient(0, 0, 0, scanLen);
+                    grad.addColorStop(0, mColor); grad.addColorStop(1, 'transparent'); 
+                    ctx.fillStyle = grad; ctx.globalAlpha = 0.15;
+                    ctx.beginPath(); ctx.moveTo(0, 10); ctx.lineTo(-scanWidth, scanLen); ctx.arc(0, scanLen, scanWidth, Math.PI, 0, true); ctx.lineTo(scanWidth, scanLen); ctx.lineTo(0, 10); ctx.fill();
+                    ctx.strokeStyle = mColor; ctx.lineWidth = 2; ctx.globalAlpha = 0.4;
+                    const gridSpeed = (time * 80) % 40;
+                    ctx.beginPath();
+                    for(let i=0; i<6; i++) {
+                        const y = 30 + (i * 35) + gridSpeed;
+                        if (y < scanLen) { const w = (y / scanLen) * scanWidth; ctx.moveTo(-w, y); ctx.lineTo(w, y); }
+                    }
+                    ctx.stroke(); ctx.restore();
+
+                    ctx.fillStyle = '#050505'; ctx.beginPath(); ctx.moveTo(-35, -40); ctx.lineTo(35, -40); ctx.lineTo(45, -10); ctx.lineTo(0, 55); ctx.lineTo(-45, -10); ctx.closePath(); ctx.fill();
+                    ctx.strokeStyle = mColor; ctx.lineWidth = 3; ctx.shadowColor = mGlow; ctx.shadowBlur = 20; ctx.stroke();
+                    
+                    ctx.save(); ctx.lineWidth = 2; ctx.shadowBlur = 10;
+                    ctx.beginPath(); ctx.ellipse(0, 0, 60, 20, time * 0.5, 0, Math.PI*2); ctx.stroke();
+                    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                    ctx.beginPath(); ctx.ellipse(0, 0, 45, 12, -time * 1.2, 0, Math.PI*2); ctx.stroke();
+                    ctx.restore();
+
+                    ctx.save(); ctx.translate(0, -10); 
+                    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = mColor; ctx.shadowColor = mColor; ctx.shadowBlur = 30; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#fff'; ctx.shadowBlur = 5; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
+                    ctx.restore();
+                }
+                else if (entity.name.includes("Loader")) {
+                    // HEAVY LOADER (Restored Tank Design)
+                    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-40, -40, 80, 80);
+                    ctx.fillStyle = '#333'; ctx.fillRect(-60, -50, 20, 100); ctx.fillRect(40, -50, 20, 100);
+                    ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
+                    const treadOffset = (time * 20) % 20;
+                    for(let y = -50; y < 50; y+=20) {
+                        let dy = y + treadOffset; if(dy > 50) dy -= 100;
+                        ctx.beginPath(); ctx.moveTo(-60, dy); ctx.lineTo(-40, dy); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(40, dy); ctx.lineTo(60, dy); ctx.stroke();
+                    }
+                    ctx.fillStyle = '#222'; ctx.strokeStyle = mColor; ctx.lineWidth = 2; ctx.shadowColor = mGlow; ctx.shadowBlur = 10;
+                    ctx.beginPath(); ctx.moveTo(-30, -30); ctx.lineTo(30, -30); ctx.lineTo(35, 0); ctx.lineTo(30, 30); ctx.lineTo(-30, 30); ctx.lineTo(-35, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+                    ctx.fillStyle = (this.sector===2)?'#fff':'#ffaa00'; ctx.shadowBlur = 20; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
+                }
+                else if (entity.name.includes("Arachnid")) {
+                    // CYBER ARACHNID (Restored High Fidelity)
+                    ctx.fillStyle = '#111'; ctx.strokeStyle = mColor; ctx.lineWidth = 3; ctx.shadowColor = mGlow; ctx.shadowBlur = 15;
+                    ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+                    ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 25;
+                    ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI*2); ctx.fill();
+                    for(let i=0; i<8; i++) {
+                        const angle = (i/8)*Math.PI*2; const move = Math.sin(time*3+i)*5;
+                        const startX = Math.cos(angle)*20; const startY = Math.sin(angle)*20;
+                        const midX = Math.cos(angle)*(45+move); const midY = Math.sin(angle)*(45+move);
+                        const endX = Math.cos(angle+0.2)*(70+move); const endY = Math.sin(angle+0.2)*(70+move);
+                        const grad = ctx.createLinearGradient(startX, startY, endX, endY);
+                        grad.addColorStop(0, mColor); grad.addColorStop(1, '#000');
+                        ctx.strokeStyle = grad; ctx.lineWidth = 3; ctx.shadowBlur = 0;
+                        ctx.beginPath(); ctx.moveTo(startX, startY); ctx.lineTo(midX, midY); ctx.lineTo(endX, endY); ctx.stroke();
+                    }
+                }
+                else {
+                    // Generic Fallback
+                    this.drawSpikedCircle(ctx, 0, 0, entity.radius, 6, 5, time);
+                    ctx.fillStyle = mColor; ctx.globalAlpha = 0.3;
+                    ctx.beginPath(); ctx.arc(0, 0, entity.radius * 0.5, 0, Math.PI*2); ctx.fill();
+                    ctx.globalAlpha = 1.0;
+                }
             }
+        }
+
+        // ============================================================
+        // 4. ENEMY MINIONS (Unified Elite Design + Mobile Fix)
+        // ============================================================
+        else if (entity instanceof Minion && !entity.isPlayerSide) {
+            
+            let mColor = '#ff0055'; let mGlow = '#ff0055'; let mFill = '#1a0505';
+            if (this.sector === 1) { mColor = '#00ffff'; mGlow = '#00ffff'; mFill = '#001111'; }
+            else if (this.sector === 2) { mColor = '#ff00ff'; mGlow = '#ff00ff'; mFill = '#110011'; }
+            else if (this.sector === 3) { mColor = '#ff4500'; mGlow = '#ff4500'; mFill = '#1a0500'; }
+            else if (this.sector === 4) { mColor = '#32cd32'; mGlow = '#32cd32'; mFill = '#051a05'; }
+            else if (this.sector === 5) { mColor = '#ffffff'; mGlow = '#ffd700'; mFill = '#111111'; }
+
+            ctx.save(); 
+            ctx.scale(1.8, 1.8); 
+            
+            // Tier 3 or Named Minions (Boss Minions) use the Safe "Elite" Design
+            if (entity.tier === 3 || entity.name.includes("Glitch") || entity.name.includes("Guardian")) {
+                const pulse = 1 + 0.05 * Math.sin(time * 4);
+                ctx.scale(pulse, pulse);
+                ctx.save(); ctx.rotate(time * 0.8); 
+                ctx.strokeStyle = mColor; ctx.lineWidth = 2; ctx.shadowColor = mGlow; ctx.shadowBlur = 15; ctx.fillStyle = mFill;
+                ctx.beginPath();
+                const spikes = 4;
+                for(let i=0; i<spikes*2; i++) {
+                    const r = (i%2 === 0) ? 22 : 10;
+                    const a = (Math.PI / spikes) * i;
+                    ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+                }
+                ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+                
+                ctx.save(); ctx.rotate(-time * 1.5); ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 10;
+                ctx.beginPath(); ctx.rect(-4, -4, 8, 8); ctx.fill(); ctx.restore();
+
+                // Solid Ring (Safe)
+                ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI*2);
+                ctx.strokeStyle = mColor; ctx.lineWidth = 1.5; ctx.stroke();
+
+                ctx.save(); ctx.rotate(time * 0.5);
+                for(let k=0; k<4; k++) {
+                    ctx.rotate(Math.PI/2); ctx.fillStyle = mColor; ctx.shadowBlur = 5; ctx.fillRect(0, -30, 3, 3);
+                }
+                ctx.restore();
+                
+            } 
+            else {
+                // Standard Minion (Prism)
+                const hover = Math.sin(time * 3) * 3;
+                ctx.save(); ctx.translate(0, hover);
+                ctx.fillStyle = mFill; ctx.strokeStyle = mColor; ctx.lineWidth = 2; ctx.shadowColor = mGlow; ctx.shadowBlur = 10;
+                ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(10, 0); ctx.lineTo(0, 25); ctx.lineTo(-10, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+                
+                const corePulse = 0.5 + 0.5 * Math.sin(time * 8);
+                ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + corePulse * 0.5})`; ctx.shadowColor = '#fff';
+                ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(3, 0); ctx.lineTo(0, 10); ctx.lineTo(-3, 0); ctx.fill();
+                ctx.restore();
+                
+                ctx.save(); ctx.rotate(Math.sin(time) * 0.2); 
+                ctx.strokeStyle = mColor; ctx.lineWidth = 2; ctx.globalAlpha = 0.8;
+                ctx.beginPath(); ctx.moveTo(-18, -10 + hover); ctx.lineTo(-22, 0 + hover); ctx.lineTo(-18, 15 + hover); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(18, -10 + hover); ctx.lineTo(22, 0 + hover); ctx.lineTo(18, 15 + hover); ctx.stroke();
+                ctx.restore();
+            }
+            ctx.restore();
         }
 
         // --- FLASH EFFECT (On Hit) ---
@@ -7530,7 +7173,6 @@ drawEntity(entity) {
                 for(let i=0; i<count; i++) {
                     const intent = entity.nextIntents[i];
                     const ix = startX + (i * spacing);
-                    // Updated Y position (-130) to clear larger HP bars
                     const iy = -entity.radius - 130 + (Math.cos(time * 5 + i) * 5);
 
                     ctx.fillStyle = COLORS.MECH_LIGHT; ctx.fillRect(ix - 25, iy, 50, 50);
@@ -7543,17 +7185,14 @@ drawEntity(entity) {
 
                     const displayVal = (intent.effectiveVal !== undefined) ? intent.effectiveVal : intent.val;
                     if(displayVal !== undefined && displayVal > 0) {
-                        ctx.font = 'bold 24px "Orbitron"'; 
+                        ctx.font = 'bold 24px "Orbitron"';
                         ctx.fillStyle = (intent.type === 'heal') ? '#0f0' : '#fff';
                         ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
                         ctx.fillText(displayVal, ix, iy - 5); 
                     }
                 }
             } else {
-                // Fallback for Single Intent
-                ctx.fillStyle = COLORS.MECH_LIGHT; const hover = Math.cos(time * 5) * 5; 
-                // Adjusted Y position (-80)
-                ctx.fillRect(-40, -entity.radius - 80 + hover, 80, 25);
+                ctx.fillStyle = COLORS.MECH_LIGHT; const hover = Math.cos(time * 5) * 5; ctx.fillRect(-40, -entity.radius - 80 + hover, 80, 25);
                 ctx.fillStyle = '#fff'; ctx.font = '40px "Segoe UI Emoji"'; ctx.textAlign = 'center'; ctx.shadowBlur = 0;
                 let icon = '⚔️'; if(entity.nextIntent.type === 'heal') icon = '💚'; else if(entity.nextIntent.type === 'summon') icon = '🤖';
                 ctx.fillText(icon, 0, -entity.radius - 90 + hover); 
