@@ -3744,7 +3744,7 @@ triggerSystemCrash() {
         document.getElementById('hex-max-round').innerText = this.hex.maxRounds;
 
         this.hex.nodes = [];
-        this.hex.lives = 1; // 1 Extra Chance (Total 2 attempts per sequence)
+        this.hex.lives = 1; 
         
         const colors = [
             '#ff0000', '#00ff00', '#0088ff', '#ffff00', '#00ffff', 
@@ -3755,20 +3755,20 @@ triggerSystemCrash() {
         const h = 350; 
         const size = 60; 
         
-        // Grid Layout Init to prevent overlap
         const cols = 3;
-        const rows = 3;
         const cellW = w / cols;
-        const cellH = h / rows;
+        const cellH = h / cols; // 3x3
 
         for(let i=0; i<9; i++) {
             const btn = document.createElement('div');
             btn.className = 'hex-btn';
             btn.id = `hex-${i}`;
-            // Add inner hexagon for visual style
             btn.innerHTML = `<div style="font-size:2rem; pointer-events:none;">⬡</div>`;
             
-            // Apply Unique Color Styling (Dim by default)
+            // --- NEW: Set CSS Variable for colors ---
+            btn.style.setProperty('--node-color', colors[i]);
+            
+            // Initial styling
             btn.style.color = colors[i];
             btn.style.borderColor = colors[i];
             btn.style.boxShadow = `0 0 5px ${colors[i]}`;
@@ -3778,11 +3778,12 @@ triggerSystemCrash() {
             let cx = (i % cols) * cellW + cellW/2;
             let cy = Math.floor(i / cols) * cellH + cellH/2;
             
-            let x = cx - size/2 + (Math.random()-0.5)*10;
-            let y = cy - size/2 + (Math.random()-0.5)*10;
+            let x = cx - size/2 + (Math.random()-0.5)*15;
+            let y = cy - size/2 + (Math.random()-0.5)*15;
             
-            let vx = (Math.random() - 0.5) * 20; 
-            let vy = (Math.random() - 0.5) * 20;
+            // Slower velocity to prevent chaos
+            let vx = (Math.random() - 0.5) * 15; 
+            let vy = (Math.random() - 0.5) * 15;
 
             this.hex.nodes.push({
                 id: i,
@@ -3800,24 +3801,60 @@ triggerSystemCrash() {
     },
 
 updateHexBreach(dt) {
-        // FIX: Stop movement while sequence is playing to prevent visual conflicts
         if (this.currentState !== STATE.HEX || !this.hex.nodes || this.hex.showingSequence) return;
         
         const w = 300;
         const h = 350;
+        const padding = 65; // Slightly larger than size (60) to keep gap
         
+        // 1. Movement & Wall Bounce
         this.hex.nodes.forEach(node => {
-            // Update Position
             node.x += node.vx * dt;
             node.y += node.vy * dt;
 
-            // Bounce off walls
             if (node.x <= 0) { node.x = 0; node.vx *= -1; }
             if (node.x >= w - node.size) { node.x = w - node.size; node.vx *= -1; }
             if (node.y <= 0) { node.y = 0; node.vy *= -1; }
             if (node.y >= h - node.size) { node.y = h - node.size; node.vy *= -1; }
+        });
 
-            // Apply Transform
+        // 2. Collision Resolution (Prevent Overlap)
+        for (let i = 0; i < this.hex.nodes.length; i++) {
+            for (let j = i + 1; j < this.hex.nodes.length; j++) {
+                let n1 = this.hex.nodes[i];
+                let n2 = this.hex.nodes[j];
+
+                let dx = n2.x - n1.x;
+                let dy = n2.y - n1.y;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+
+                if (dist < padding) {
+                    // Normalize vector
+                    let angle = Math.atan2(dy, dx);
+                    let tx = Math.cos(angle);
+                    let ty = Math.sin(angle);
+
+                    // Push apart
+                    let overlap = (padding - dist) * 0.5; // Half overlap each
+                    
+                    n1.x -= tx * overlap;
+                    n1.y -= ty * overlap;
+                    n2.x += tx * overlap;
+                    n2.y += ty * overlap;
+
+                    // Bounce velocities (swap roughly)
+                    let tempVx = n1.vx;
+                    let tempVy = n1.vy;
+                    n1.vx = n2.vx;
+                    n1.vy = n2.vy;
+                    n2.vx = tempVx;
+                    n2.vy = tempVy;
+                }
+            }
+        }
+
+        // 3. Apply Transform
+        this.hex.nodes.forEach(node => {
             node.el.style.transform = `translate(${node.x}px, ${node.y}px)`;
         });
     },
@@ -3843,25 +3880,14 @@ updateHexBreach(dt) {
             const id = this.hex.sequence[i];
             const node = this.hex.nodes[id];
             
-            // Flash Effect (Bright & Scale)
-            node.el.style.backgroundColor = node.color;
-            node.el.style.borderColor = '#fff'; // Glowing Edge
-            node.el.style.color = '#fff';
-            // Outer glow + Inner glow for intensity
-            node.el.style.boxShadow = `0 0 25px ${node.color}, inset 0 0 15px ${node.color}`;
-            node.el.style.transform = `translate(${node.x}px, ${node.y}px) scale(1.2)`;
-            node.el.style.zIndex = "10";
+            // Activate Class (Triggers CSS Glow Animation)
+            node.el.classList.add('active');
             
             AudioMgr.playSound('mana');
             await this.sleep(600); 
             
-            // Reset Effect
-            node.el.style.backgroundColor = 'rgba(20, 0, 20, 0.8)';
-            node.el.style.borderColor = node.color;
-            node.el.style.color = node.color;
-            node.el.style.boxShadow = `0 0 5px ${node.color}`;
-            node.el.style.transform = `translate(${node.x}px, ${node.y}px) scale(1.0)`;
-            node.el.style.zIndex = "1";
+            // Deactivate
+            node.el.classList.remove('active');
             
             await this.sleep(200); 
         }
@@ -3877,20 +3903,11 @@ updateHexBreach(dt) {
 
         const node = this.hex.nodes[index];
         
-        // Visual Feedback (Click) - Match the sequence look
-        node.el.style.backgroundColor = node.color;
-        node.el.style.borderColor = '#fff'; // Glowing Edge
-        node.el.style.color = '#fff';
-        node.el.style.boxShadow = `0 0 25px ${node.color}, inset 0 0 15px ${node.color}`;
-        node.el.style.transform = `translate(${node.x}px, ${node.y}px) scale(1.1)`; // Slight pop
-        
-        // Reset after 200ms (slower than before for better visibility)
+        // Visual Feedback
+        node.el.classList.add('active');
+        // Remove class quickly for tap feedback
         setTimeout(() => {
-            node.el.style.backgroundColor = 'rgba(20, 0, 20, 0.8)';
-            node.el.style.borderColor = node.color;
-            node.el.style.color = node.color;
-            node.el.style.boxShadow = `0 0 5px ${node.color}`;
-            node.el.style.transform = `translate(${node.x}px, ${node.y}px) scale(1.0)`;
+            node.el.classList.remove('active');
         }, 200);
         
         AudioMgr.playSound('click');
