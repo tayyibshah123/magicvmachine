@@ -92,6 +92,11 @@ canvas {
     position: absolute; 
     top: 0;
     left: 0;
+    
+    /* NEW: Mobile Optimization Properties */
+    transform: translateZ(0); /* Force Hardware Acceleration */
+    will-change: transform;
+    image-rendering: -webkit-optimize-contrast; /* Sharpen downscaled canvas */
 }
 
 /* Neon Text Utilities */
