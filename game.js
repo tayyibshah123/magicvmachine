@@ -7112,33 +7112,28 @@ drawEntity(entity) {
                 // BOSS RENDERING LOGIC (CORRECTED ORDER)
                 // =========================================================
                 
-                // --- SECTOR 1: THE PANOPTICON (Mobile Optimized) ---
+                // --- SECTOR 1: THE PANOPTICON (Ultra Performance Mode) ---
                 if (this.sector === 1) {
                     ctx.save();
                     const cyan = '#00ffff';
                     const darkCyan = '#002222';
                     
-                    // 1. Scanning Light Beams (Projecting downwards)
+                    // 1. Scanning Light Beams (Lines Only - No Gradient Fill)
+                    // Removing the fill prevents GPU fill-rate bottlenecks
                     ctx.save();
                     const beamWidth = 120 + Math.sin(time * 2) * 20; 
-                    // Gradient is okay, but we ensure it's simple
-                    const beamGrad = ctx.createLinearGradient(0, 0, 0, 350);
-                    beamGrad.addColorStop(0, 'rgba(0, 255, 255, 0.4)'); 
-                    beamGrad.addColorStop(1, 'transparent'); 
                     
-                    ctx.fillStyle = beamGrad;
-                    ctx.beginPath();
-                    ctx.moveTo(-20, 20); 
-                    ctx.lineTo(-beamWidth, 400); 
-                    ctx.lineTo(beamWidth, 400);  
-                    ctx.lineTo(20, 20);  
-                    ctx.fill();
-                    
-                    // Scanlines (Simple Lines, no blur)
                     ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
                     ctx.lineWidth = 2;
                     const scanOffset = (time * 150) % 50;
+                    
+                    // Only draw the horizontal scanlines, not the full beam body
                     ctx.beginPath();
+                    // Draw outer boundary lines
+                    ctx.moveTo(-20, 20); ctx.lineTo(-beamWidth, 400);
+                    ctx.moveTo(20, 20); ctx.lineTo(beamWidth, 400);
+                    
+                    // Draw horizontal scanlines
                     for(let i=0; i<8; i++) {
                         const y = 50 + i * 50 + scanOffset;
                         if (y < 400) {
@@ -7150,70 +7145,55 @@ drawEntity(entity) {
                     ctx.stroke();
                     ctx.restore();
 
-                    // 2. The Eye Frame (Almond Shape)
-                    // Simulated Glow (Layered Strokes) instead of shadowBlur
-                    ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
-                    ctx.lineWidth = 15; // Wide faint stroke
+                    // 2. The Eye Frame (Solid Stroke - No Fake Glow)
+                    ctx.strokeStyle = cyan;
+                    ctx.lineWidth = 4;
+                    ctx.fillStyle = '#000505'; 
+                    
                     ctx.beginPath();
                     ctx.moveTo(-100, 0);
                     ctx.quadraticCurveTo(0, -80, 100, 0);
                     ctx.quadraticCurveTo(0, 80, -100, 0);
-                    ctx.stroke();
-
-                    // Main Stroke
-                    ctx.strokeStyle = cyan;
-                    ctx.lineWidth = 5;
-                    ctx.fillStyle = '#000505'; 
                     ctx.fill();
                     ctx.stroke();
 
-                    // 3. Massive Rotating HUD Rings (Manual Segments - NO setLineDash)
-                    ctx.lineWidth = 3;
+                    // 3. Rotating Rings (Solid Lines - No Dashed Calculations)
+                    // Drawing full circles is much faster than calculating dash segments
+                    ctx.lineWidth = 2;
 
-                    // Ring 1: Outer segmented (Slow rotate)
-                    ctx.save();
-                    ctx.rotate(time * 0.15);
-                    ctx.strokeStyle = cyan;
-                    
-                    const r1 = 160;
-                    const seg1 = 12; // Number of dash segments
+                    // Ring 1: Outer
                     ctx.beginPath();
-                    for(let i=0; i<seg1; i++) {
-                        // Draw 50% of the arc, skip 50%
-                        const start = (Math.PI * 2 / seg1) * i;
-                        const end = start + (Math.PI / seg1) * 0.6; 
-                        ctx.moveTo(Math.cos(start)*r1, Math.sin(start)*r1);
-                        ctx.arc(0, 0, r1, start, end);
-                    }
+                    // Simple rotation via transform is cheap
+                    const r1X = Math.cos(time * 0.15) * 160;
+                    const r1Y = Math.sin(time * 0.15) * 160;
+                    // Draw a solid circle
+                    ctx.arc(0, 0, 160, 0, Math.PI*2);
                     ctx.stroke();
-                    ctx.restore();
+                    // Add a single "blip" to show rotation without complex dashing
+                    ctx.fillStyle = cyan;
+                    ctx.beginPath(); ctx.arc(r1X, r1Y, 4, 0, Math.PI*2); ctx.fill();
 
-                    // Ring 2: Side Brackets (Oscillating)
+                    // Ring 2: Side Brackets (Simple Arcs)
                     ctx.save();
                     ctx.rotate(Math.sin(time * 0.5) * 0.2); 
                     ctx.beginPath();
-                    ctx.arc(0, 0, 130, -Math.PI/4, Math.PI/4); 
-                    ctx.moveTo(Math.cos(Math.PI - Math.PI/4)*130, Math.sin(Math.PI - Math.PI/4)*130);
-                    ctx.arc(0, 0, 130, Math.PI - Math.PI/4, Math.PI + Math.PI/4); 
+                    ctx.arc(0, 0, 130, -Math.PI/4, Math.PI/4); // Right
                     ctx.stroke();
-                    ctx.restore();
-
-                    // Ring 3: Fast Inner Spinner (Manual Segments)
-                    ctx.save();
-                    ctx.rotate(-time * 0.8);
-                    const r3 = 110;
-                    const seg3 = 8;
                     ctx.beginPath();
-                    for(let i=0; i<seg3; i++) {
-                        const start = (Math.PI * 2 / seg3) * i;
-                        const end = start + (Math.PI / seg3) * 0.8; 
-                        ctx.moveTo(Math.cos(start)*r3, Math.sin(start)*r3);
-                        ctx.arc(0, 0, r3, start, end);
-                    }
+                    ctx.arc(0, 0, 130, Math.PI - Math.PI/4, Math.PI + Math.PI/4); // Left
                     ctx.stroke();
                     ctx.restore();
 
-                    // 4. The Lens (Pupil/Iris)
+                    // Ring 3: Inner Spinner (Solid)
+                    ctx.beginPath(); 
+                    ctx.arc(0, 0, 110, 0, Math.PI*2); 
+                    ctx.stroke();
+                    // Inner Blip
+                    const r3X = Math.cos(-time * 0.8) * 110;
+                    const r3Y = Math.sin(-time * 0.8) * 110;
+                    ctx.beginPath(); ctx.arc(r3X, r3Y, 4, 0, Math.PI*2); ctx.fill();
+
+                    // 4. The Lens (Simple Geometry)
                     ctx.fillStyle = darkCyan;
                     ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.fill();
                     
@@ -7222,18 +7202,12 @@ drawEntity(entity) {
                     ctx.lineWidth = 2;
                     ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI*2); ctx.stroke();
                     
-                    // Pupil (Dilating)
+                    // Pupil
                     const pupilSize = 18 + Math.sin(time * 4) * 5;
-                    
-                    // Glow for pupil (Simple transparent circle)
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-                    ctx.beginPath(); ctx.arc(0, 0, pupilSize + 10, 0, Math.PI*2); ctx.fill();
-
-                    // Solid Pupil
                     ctx.fillStyle = '#fff'; 
                     ctx.beginPath(); ctx.arc(0, 0, pupilSize, 0, Math.PI*2); ctx.fill();
                     
-                    // Specular Highlight
+                    // Highlight
                     ctx.fillStyle = 'rgba(255,255,255,0.8)';
                     ctx.beginPath(); ctx.arc(-15, -15, 8, 0, Math.PI*2); ctx.fill();
 
