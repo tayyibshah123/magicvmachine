@@ -1055,11 +1055,13 @@ class Entity {
                 // Trigger Visual
                 Game.triggerVFX('voodoo_hit', null, this);
                 
-                // Delay damage to sync with "Heart Attack" snap (approx 20 frames / 300ms)
+                // Delay damage to sync with visual
                 setTimeout(() => {
                     let dmg = e.val;
                     if (dmg === 0) { 
-                        let base = 100;
+                        // FIX: Updated Base to 150
+                        let base = 150; 
+                        // Logic: 50% chance for 500 (Critical Curse)
                         if (Math.random() < 0.5) {
                             base = 500;
                             ParticleSys.createFloatingText(this.x, this.y - 50, "VOID CRUSH!", "#f00");
@@ -1067,20 +1069,16 @@ class Entity {
                         dmg = Game.calculateCardDamage(base);
                     }
                     
-                    // FIX: Capture death result and trigger appropriate game logic
                     const isDead = this.takeDamage(dmg);
                     ParticleSys.createFloatingText(this.x, this.y, "CURSE TRIGGERED!", "#f00");
 
                     if (isDead) {
-                        // Check if it's the main boss/enemy
                         if (this === Game.enemy) {
                             Game.winCombat();
                         } 
-                        // Check if it's an enemy minion
                         else if (Game.enemy && Game.enemy.minions.includes(this)) {
                             Game.enemy.minions = Game.enemy.minions.filter(m => m !== this);
                         } 
-                        // Check if it's a player minion
                         else if (Game.player && Game.player.minions.includes(this)) {
                             Game.player.minions = Game.player.minions.filter(m => m !== this);
                         }
@@ -4043,7 +4041,6 @@ async startCombat(type) {
         if(isElite) level = 2; 
 
         // UPDATED: Linear Scaling (+20% per sector)
-        // Sector 1: 1.0, Sector 2: 1.2, Sector 3: 1.4...
         let sectorMult = 1.0 + ((this.sector - 1) * 0.2);
 
         // Ascension Scaling (NG+)
@@ -4052,7 +4049,7 @@ async startCombat(type) {
         // Create New Enemy
         this.enemy = new Enemy(template, level, isElite);
         
-        // Tesseract Prime Logic
+        // Tesseract Prime Logic (Transferred from Source)
         if (this.enemy.name === "TESSERACT PRIME") {
             this.enemy.invincibleTurns = 3;
             setTimeout(() => {
@@ -4065,19 +4062,16 @@ async startCombat(type) {
 
         // --- UPDATED SCALING LOGIC ---
         if (isBoss) {
-            // Option A: Bosses ignore Sector Multipliers
-            // Only scaled by Ascension (NG+)
+            // Bosses only scale with Ascension
             this.enemy.maxHp = Math.floor(this.enemy.maxHp * ascensionMult);
             this.enemy.baseDmg = Math.floor(this.enemy.baseDmg * ascensionMult);
         } else {
-            // Regular/Elite: Apply Sector Scaling + Ascension
-            // Keeps the 2.0x HP multiplier from previous request
+            // Regular/Elite: Base * 2.0 (Buff) * Sector * Ascension
             this.enemy.maxHp = Math.floor(this.enemy.maxHp * 2.0 * sectorMult * ascensionMult);
             this.enemy.baseDmg = Math.floor(this.enemy.baseDmg * sectorMult * ascensionMult);
         }
         
         this.enemy.currentHp = this.enemy.maxHp;
-        // -----------------------------
 
         // Apply Glitch Modifiers
         if (this.corruptionLevel > 0 && !isBoss) {
@@ -4108,7 +4102,9 @@ async startCombat(type) {
 
         const coreStacks = this.player.relics.filter(r => r.id === 'minion_core').length;
         for(let i=0; i<coreStacks; i++) {
-            this.player.minions.push(new Minion(0, 0, this.player.minions.length + 1, true));
+            const m = new Minion(0, 0, this.player.minions.length + 1, true);
+            m.addShield(5);
+            this.player.minions.push(m);
         }
 
         // Setup Minions
@@ -6920,12 +6916,140 @@ drawEntity(entity) {
                 else {
                     // Standard Units with Sector Colors
                     if (entity.name.includes("Drone")) {
-                        this.drawPolygon(ctx, 0, 0, entity.radius, 3, Math.PI); 
-                        ctx.fillStyle = color; ctx.shadowColor = glowColor;
-                        ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI*2); ctx.fill();
-                        ctx.fillStyle = 'rgba(255,255,255,0.2)';
-                        ctx.beginPath(); ctx.moveTo(0, 0);
-                        const scanW = 20 + Math.sin(time*10)*5; ctx.lineTo(-scanW, 60); ctx.lineTo(scanW, 60); ctx.fill();
+                        // --- UPDATED SENTRY DRONE VISUALS (High Fidelity) ---
+                        
+                        // Dynamic Hover
+                        const hover = Math.sin(time * 2.5) * 10; 
+                        ctx.translate(0, hover); 
+
+                        // 1. Holographic Scanner (Base Layer)
+                        ctx.save();
+                        // Pivot scanner slightly left/right
+                        const scanSweep = Math.sin(time * 1.5) * 0.15; 
+                        ctx.rotate(scanSweep);
+                        
+                        // Cone Gradient
+                        const scanLen = 220; // Significantly longer beam
+                        const scanWidth = 80; // Wider spread
+                        const grad = ctx.createLinearGradient(0, 0, 0, scanLen);
+                        grad.addColorStop(0, color); 
+                        grad.addColorStop(1, 'transparent'); 
+                        
+                        ctx.fillStyle = grad;
+                        ctx.globalAlpha = 0.15;
+                        ctx.beginPath();
+                        ctx.moveTo(0, 10); // Start from bottom of chassis
+                        ctx.lineTo(-scanWidth, scanLen);
+                        ctx.arc(0, scanLen, scanWidth, Math.PI, 0, true); // Curved end
+                        ctx.lineTo(scanWidth, scanLen);
+                        ctx.lineTo(0, 10);
+                        ctx.fill();
+                        
+                        // Moving Grid/Scanlines
+                        ctx.strokeStyle = color;
+                        ctx.lineWidth = 2;
+                        ctx.globalAlpha = 0.4;
+                        ctx.shadowBlur = 5;
+                        ctx.shadowColor = color;
+                        
+                        const gridSpeed = (time * 80) % 40;
+                        ctx.beginPath();
+                        for(let i=0; i<6; i++) {
+                            const y = 30 + (i * 35) + gridSpeed;
+                            if (y < scanLen) {
+                                const w = (y / scanLen) * scanWidth; 
+                                ctx.moveTo(-w, y);
+                                ctx.lineTo(w, y);
+                            }
+                        }
+                        ctx.stroke();
+                        ctx.restore();
+
+                        // 2. Heavy Chassis (Main Body)
+                        // Scale increased ~2.5x from original
+                        ctx.fillStyle = '#050505'; // Obsidian black
+                        ctx.beginPath();
+                        // Complex geometry: Hexagonal top, pointed bottom
+                        ctx.moveTo(-35, -40); 
+                        ctx.lineTo(35, -40);
+                        ctx.lineTo(45, -10);
+                        ctx.lineTo(0, 55); // Sharp tip
+                        ctx.lineTo(-45, -10);
+                        ctx.closePath();
+                        ctx.fill();
+                        
+                        // Neon Rim Light
+                        ctx.strokeStyle = color;
+                        ctx.lineWidth = 3;
+                        ctx.shadowColor = glowColor;
+                        ctx.shadowBlur = 20;
+                        ctx.stroke();
+                        
+                        // Inner Tech Detailing
+                        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                        ctx.beginPath();
+                        ctx.moveTo(-15, -40); ctx.lineTo(15, -40); ctx.lineTo(0, -10);
+                        ctx.fill();
+
+                        // 3. Gyroscopic Stabilizers (Rotating Rings)
+                        ctx.save();
+                        ctx.lineWidth = 2;
+                        ctx.shadowBlur = 10;
+                        
+                        // Outer Ring (Vertical-ish tilt)
+                        ctx.strokeStyle = color;
+                        ctx.beginPath();
+                        ctx.ellipse(0, 0, 60, 20, time * 0.5, 0, Math.PI*2);
+                        ctx.stroke();
+                        
+                        // Inner Ring (Horizontal-ish tilt)
+                        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                        ctx.beginPath();
+                        ctx.ellipse(0, 0, 45, 12, -time * 1.2, 0, Math.PI*2);
+                        ctx.stroke();
+                        ctx.restore();
+
+                        // 4. The Eye (Lens)
+                        const blink = Math.sin(time * 3) > 0.96 ? 0.1 : 1; 
+                        
+                        ctx.save();
+                        ctx.translate(0, -10); // Eye position
+                        ctx.scale(1, blink);
+                        
+                        // Sclera
+                        ctx.fillStyle = '#111';
+                        ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI*2); ctx.fill();
+                        ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.stroke();
+                        
+                        // Iris (Glowing)
+                        ctx.fillStyle = color;
+                        ctx.shadowColor = color;
+                        ctx.shadowBlur = 30;
+                        ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
+                        
+                        // Pupil (White hot center)
+                        ctx.fillStyle = '#fff';
+                        ctx.shadowBlur = 5;
+                        ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
+                        
+                        ctx.restore();
+
+                        // 5. Thruster Plume
+                        ctx.globalCompositeOperation = 'screen';
+                        const thrust = 15 + Math.random() * 10;
+                        
+                        const thrustGrad = ctx.createLinearGradient(0, 55, 0, 55 + thrust);
+                        thrustGrad.addColorStop(0, '#fff');
+                        thrustGrad.addColorStop(0.5, color);
+                        thrustGrad.addColorStop(1, 'transparent');
+                        
+                        ctx.fillStyle = thrustGrad;
+                        ctx.beginPath();
+                        ctx.moveTo(-5, 55);
+                        ctx.lineTo(5, 55);
+                        ctx.lineTo(0, 55 + thrust);
+                        ctx.fill();
+                        ctx.globalCompositeOperation = 'source-over';
                     }
                     else if (entity.name.includes("Loader") || entity.name.includes("Construct")) {
                         ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-40, -40, 80, 80);
@@ -6955,47 +7079,122 @@ drawEntity(entity) {
                 // BOSS RENDERING LOGIC (CORRECTED ORDER)
                 // =========================================================
                 
-                // --- SECTOR 1: THE PANOPTICON (Surveillance Eye) ---
+                // --- SECTOR 1: THE PANOPTICON (Surveillance Eye - Concept Art Style) ---
                 if (this.sector === 1) {
                     ctx.save();
                     const cyan = '#00ffff';
+                    const darkCyan = '#002222';
                     
+                    // 1. Scanning Light Beams (Projecting downwards)
+                    ctx.save();
+                    const beamWidth = 120 + Math.sin(time * 2) * 20; // Pulsing width
+                    const beamGrad = ctx.createLinearGradient(0, 0, 0, 350);
+                    beamGrad.addColorStop(0, 'rgba(0, 255, 255, 0.5)'); // Bright at source
+                    beamGrad.addColorStop(1, 'transparent'); // Fade out
+                    
+                    ctx.fillStyle = beamGrad;
+                    ctx.beginPath();
+                    ctx.moveTo(-20, 20); // Top Left origin
+                    ctx.lineTo(-beamWidth, 400); // Bottom Left spread
+                    ctx.lineTo(beamWidth, 400);  // Bottom Right spread
+                    ctx.lineTo(20, 20);  // Top Right origin
+                    ctx.fill();
+                    
+                    // Digital Scanlines inside beam
+                    ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
                     ctx.lineWidth = 2;
-                    ctx.strokeStyle = cyan;
-                    ctx.shadowColor = cyan;
-                    ctx.shadowBlur = 15;
-
-                    ctx.save();
-                    ctx.rotate(time * 0.4);
-                    ctx.setLineDash([10, 20]);
-                    ctx.beginPath(); ctx.arc(0, 0, 100, 0, Math.PI*2); ctx.stroke();
-                    ctx.restore();
-
-                    ctx.save();
-                    ctx.rotate(-time * 0.6);
-                    ctx.setLineDash([40, 10]);
-                    ctx.beginPath(); ctx.arc(0, 0, 80, 0, Math.PI*2); ctx.stroke();
-                    
-                    for(let i=0; i<3; i++) {
-                        const angle = (Math.PI*2/3)*i;
-                        const lx = Math.cos(angle)*80;
-                        const ly = Math.sin(angle)*80;
-                        ctx.fillStyle = '#fff';
-                        ctx.beginPath(); ctx.arc(lx, ly, 5, 0, Math.PI*2); ctx.fill();
+                    const scanOffset = (time * 150) % 50;
+                    for(let i=0; i<8; i++) {
+                        const y = 50 + i * 50 + scanOffset;
+                        if (y < 400) {
+                            const w = (y / 400) * beamWidth;
+                            ctx.beginPath();
+                            ctx.moveTo(-w, y);
+                            ctx.lineTo(w, y);
+                            ctx.stroke();
+                        }
                     }
                     ctx.restore();
 
-                    const pupilSize = 30 + Math.sin(time * 2) * 10;
-                    ctx.fillStyle = '#001111';
-                    ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-                    ctx.fillStyle = cyan;
-                    ctx.shadowBlur = 30;
-                    ctx.beginPath(); ctx.arc(0, 0, pupilSize, 0, Math.PI*2); ctx.fill();
+                    // 2. The Eye Frame (Almond Shape)
+                    ctx.strokeStyle = cyan;
+                    ctx.lineWidth = 5;
+                    ctx.shadowColor = cyan;
+                    ctx.shadowBlur = 25;
+                    ctx.fillStyle = '#000505'; // Obsidian center
                     
-                    ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
-                    ctx.lineWidth = 1;
-                    const scanY = Math.sin(time * 5) * 50;
-                    ctx.beginPath(); ctx.moveTo(-50, scanY); ctx.lineTo(50, scanY); ctx.stroke();
+                    ctx.beginPath();
+                    // Top eyelid curve
+                    ctx.moveTo(-100, 0);
+                    ctx.quadraticCurveTo(0, -80, 100, 0);
+                    // Bottom eyelid curve
+                    ctx.quadraticCurveTo(0, 80, -100, 0);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // 3. Massive Rotating HUD Rings
+                    ctx.lineWidth = 2;
+                    ctx.shadowBlur = 10;
+
+                    // Ring 1: Outer segmented (Slow rotate)
+                    ctx.save();
+                    ctx.rotate(time * 0.15);
+                    ctx.setLineDash([30, 30]); // Dashed look
+                    ctx.beginPath(); 
+                    ctx.arc(0, 0, 160, 0, Math.PI*2); 
+                    ctx.stroke();
+                    ctx.restore();
+
+                    // Ring 2: Side Brackets (Oscillating)
+                    ctx.save();
+                    ctx.rotate(Math.sin(time * 0.5) * 0.2); // Rocking motion
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 130, -Math.PI/4, Math.PI/4); // Right arc
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 130, Math.PI - Math.PI/4, Math.PI + Math.PI/4); // Left arc
+                    ctx.stroke();
+                    ctx.restore();
+
+                    // Ring 3: Fast Inner Spinner
+                    ctx.save();
+                    ctx.rotate(-time * 0.8);
+                    ctx.setLineDash([10, 15]);
+                    ctx.beginPath(); 
+                    ctx.arc(0, 0, 110, 0, Math.PI*2); 
+                    ctx.stroke();
+                    ctx.restore();
+
+                    // 4. The Lens (Pupil/Iris)
+                    // Sclera Background
+                    ctx.fillStyle = darkCyan;
+                    ctx.shadowBlur = 0;
+                    ctx.beginPath(); 
+                    ctx.arc(0, 0, 50, 0, Math.PI*2); 
+                    ctx.fill();
+                    
+                    // Iris Ring
+                    ctx.strokeStyle = cyan;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath(); 
+                    ctx.arc(0, 0, 35, 0, Math.PI*2); 
+                    ctx.stroke();
+                    
+                    // Pupil (Dilating)
+                    const pupilSize = 18 + Math.sin(time * 4) * 5;
+                    ctx.fillStyle = '#fff'; // Bright white center
+                    ctx.shadowColor = '#fff';
+                    ctx.shadowBlur = 40; // Intense glow
+                    ctx.beginPath(); 
+                    ctx.arc(0, 0, pupilSize, 0, Math.PI*2); 
+                    ctx.fill();
+                    
+                    // Specular Highlight (Reflection)
+                    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+                    ctx.shadowBlur = 0;
+                    ctx.beginPath(); 
+                    ctx.arc(-15, -15, 8, 0, Math.PI*2); 
+                    ctx.fill();
 
                     ctx.restore();
                 }
@@ -7275,7 +7474,7 @@ drawEntity(entity) {
 	}
         
         // ============================================================
-        // 4. ENEMY MINIONS (Glitch/Standard)
+        // 4. ENEMY MINIONS (Sector Adapted & Animated)
         // ============================================================
         else if (entity instanceof Minion && !entity.isPlayerSide) {
             
@@ -7285,35 +7484,25 @@ drawEntity(entity) {
             let mFill = '#1a0505';  // Dark tinted background
 
             if (this.sector === 1) { 
-                mColor = '#00ffff'; // Cyan (Panopticon)
-                mGlow = '#00ffff';
-                mFill = '#001111';
+                mColor = '#00ffff'; mGlow = '#00ffff'; mFill = '#001111';
             }
             else if (this.sector === 2) { 
-                mColor = '#ff00ff'; // Magenta (Null Pointer)
-                mGlow = '#ff00ff';
-                mFill = '#110011';
+                mColor = '#ff00ff'; mGlow = '#ff00ff'; mFill = '#110011';
             }
             else if (this.sector === 3) { 
-                mColor = '#ff4500'; // Orange (Compiler)
-                mGlow = '#ff4500';
-                mFill = '#1a0500';
+                mColor = '#ff4500'; mGlow = '#ff4500'; mFill = '#1a0500';
             }
             else if (this.sector === 4) { 
-                mColor = '#32cd32'; // Lime (Hive)
-                mGlow = '#32cd32';
-                mFill = '#051a05';
+                mColor = '#32cd32'; mGlow = '#32cd32'; mFill = '#051a05';
             }
             else if (this.sector === 5) { 
-                mColor = '#ffffff'; // White/Gold (Tesseract)
-                mGlow = '#ffd700';
-                mFill = '#111111';
+                mColor = '#ffffff'; mGlow = '#ffd700'; mFill = '#111111';
             }
 
             // --- UNIQUE BOSS MINIONS (Glitch/Source) ---
             if (entity.name.includes("Glitch") || (this.enemy && this.enemy.name === "THE SOURCE")) {
                  ctx.save();
-                 ctx.scale(1.2, 1.2);
+                 ctx.scale(1.5, 1.5);
 
                  // Glitch Effect: Draw multiple offset copies
                  const layers = 3;
@@ -7324,29 +7513,27 @@ drawEntity(entity) {
                      ctx.save();
                      ctx.translate(offsetX, offsetY);
                      
-                     // Alternating colors (Red / White / Black)
                      if (i===0) ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
                      else if (i===1) ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
                      else ctx.fillStyle = 'rgba(0, 0, 0, 1.0)';
                      
-                     // Shape: Unstable Triangle
                      ctx.beginPath();
                      ctx.moveTo(0, -25);
-                     ctx.lineTo(20, 15);
-                     ctx.lineTo(-20, 15);
+                     ctx.lineTo(20, 5);
+                     ctx.lineTo(10, 25);
+                     ctx.lineTo(-15, 15);
+                     ctx.lineTo(-25, 0);
                      ctx.closePath();
                      ctx.fill();
                      
                      ctx.restore();
                  }
                  
-                 // Static Particles
                  ctx.fillStyle = '#fff';
                  for(let k=0; k<5; k++) {
                      ctx.fillRect((Math.random()-0.5)*50, (Math.random()-0.5)*50, 2, 2);
                  }
                  
-                 // Scanline
                  ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
                  const scanY = (time * 50) % 60 - 30;
                  ctx.fillRect(-25, scanY, 50, 5);
@@ -7354,52 +7541,121 @@ drawEntity(entity) {
                  ctx.restore();
             } 
             else {
-                // --- STANDARD MINION (Adaptive Color) ---
+                // --- STANDARD & ELITE MINIONS ---
                  ctx.save(); 
-                 ctx.scale(1.5, 1.5); 
+                 ctx.scale(1.8, 1.8); 
                  
+                 // --- TIER 3: BOSS/ELITE MINION (Animated) ---
                  if (entity.tier === 3) {
-                    // Tier 3 (Heavier, Spiked)
+                    // Pulse Effect
+                    const pulse = 1 + 0.05 * Math.sin(time * 4);
+                    ctx.scale(pulse, pulse);
+
+                    // 1. Rotating Star Body (Slow Rotation)
+                    ctx.save();
+                    ctx.rotate(time * 0.8); 
+                    
                     ctx.strokeStyle = mColor;
                     ctx.lineWidth = 2;
                     ctx.shadowColor = mGlow;
-                    ctx.shadowBlur = 15;
-                    ctx.save();
-                    ctx.rotate(time * 2);
+                    ctx.shadowBlur = 15 + 5 * Math.sin(time * 5); // Pulsing Glow
                     ctx.fillStyle = mFill;
+                    
                     ctx.beginPath();
-                    ctx.moveTo(0, -20);
-                    ctx.lineTo(15, 0);
-                    ctx.lineTo(0, 20);
-                    ctx.lineTo(-15, 0);
+                    const spikes = 4;
+                    for(let i=0; i<spikes*2; i++) {
+                        const r = (i%2 === 0) ? 22 : 10;
+                        const a = (Math.PI / spikes) * i;
+                        ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+                    }
                     ctx.closePath();
                     ctx.fill();
                     ctx.stroke();
                     ctx.restore();
-                 } else {
-                    // Tier 1 & 2 (Drone Shape)
-                    const hover = Math.cos(time * 5) * 5;
+                    
+                    // 2. Inner Core (Counter-Rotation)
+                    ctx.save();
+                    ctx.rotate(-time * 1.5);
+                    ctx.fillStyle = '#fff';
+                    ctx.shadowColor = '#fff';
+                    ctx.shadowBlur = 10;
+                    ctx.beginPath(); 
+                    ctx.rect(-4, -4, 8, 8); // Diamond core
+                    ctx.fill();
+                    ctx.restore();
+
+                    // 3. Orbital Energy Ring (Animated Dash)
                     ctx.beginPath();
-                    ctx.moveTo(0, hover - 20); 
-                    ctx.lineTo(20, hover + 15); 
-                    ctx.lineTo(-20, hover + 15); 
-                    ctx.closePath();
+                    ctx.arc(0, 0, 30, 0, Math.PI*2);
+                    ctx.strokeStyle = mColor;
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([5, 15]); // Tech pattern
+                    ctx.lineDashOffset = time * 20; // Flow animation
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    // 4. Satellite Nodes
+                    ctx.save();
+                    ctx.rotate(time * 0.5);
+                    for(let k=0; k<4; k++) {
+                        ctx.rotate(Math.PI/2);
+                        ctx.fillStyle = mColor;
+                        ctx.shadowBlur = 5;
+                        ctx.fillRect(0, -30, 3, 3);
+                    }
+                    ctx.restore();
+                    
+                 } 
+                 // --- TIER 1 & 2: STANDARD DRONE ---
+                 else {
+                    const hover = Math.sin(time * 3) * 3;
+                    
+                    // 1. Prism Body
+                    ctx.save();
+                    ctx.translate(0, hover);
                     
                     ctx.fillStyle = mFill;
-                    ctx.fill();
-                    
-                    ctx.lineWidth = 2;
                     ctx.strokeStyle = mColor;
+                    ctx.lineWidth = 2;
                     ctx.shadowColor = mGlow;
                     ctx.shadowBlur = 10;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(0, -15); 
+                    ctx.lineTo(10, 0);  
+                    ctx.lineTo(0, 25);  
+                    ctx.lineTo(-10, 0); 
+                    ctx.closePath();
+                    ctx.fill();
                     ctx.stroke();
                     
-                    // Central Eye/Light
-                    ctx.fillStyle = '#fff';
+                    // Inner Core
+                    const corePulse = 0.5 + 0.5 * Math.sin(time * 8);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + corePulse * 0.5})`;
+                    ctx.shadowColor = '#fff';
                     ctx.beginPath();
-                    ctx.arc(0, hover + 5, 6, 0, Math.PI*2);
+                    ctx.moveTo(0, -5); ctx.lineTo(3, 0); ctx.lineTo(0, 10); ctx.lineTo(-3, 0);
                     ctx.fill();
+                    
+                    ctx.restore();
+                    
+                    // 2. Floating Brackets
+                    ctx.save();
+                    ctx.rotate(Math.sin(time) * 0.2); // Rocking
+                    ctx.strokeStyle = mColor;
+                    ctx.lineWidth = 2;
+                    ctx.globalAlpha = 0.8;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(-18, -10 + hover); ctx.lineTo(-22, 0 + hover); ctx.lineTo(-18, 15 + hover);
+                    ctx.stroke();
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(18, -10 + hover); ctx.lineTo(22, 0 + hover); ctx.lineTo(18, 15 + hover);
+                    ctx.stroke();
+                    ctx.restore();
                  }
+                 
                  ctx.restore();
             }
         }
