@@ -6007,14 +6007,11 @@ drawEffects() {
 
         const ctx = this.ctx;
         
-        // --- 1. SIZE INCREASE (20%) ---
-        // Previous: 160 / 80. New: 192 / 96.
+        // --- 1. BAR DIMENSIONS ---
         const width = (entity instanceof Minion) ? 96 : 192;
-        // Previous: 24. New: 30.
         const height = 30; 
         
         const x = entity.x - width/2;
-        // Adjusted Y offset slightly to accommodate larger entity sizes
         const y = entity.y - entity.radius - 50; 
         
         // Draw Bar Background
@@ -6034,23 +6031,20 @@ drawEffects() {
         
         // Border
         ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2; // Slightly thicker border for visibility
+        ctx.lineWidth = 2; 
         ctx.strokeRect(x, y, width, height);
 
-        // --- 2. TEXT UPDATE (Current HP Only & Centered) ---
+        // --- 2. HP TEXT ---
         ctx.font = 'bold 33px "Orbitron"'; 
         ctx.textAlign = 'center';
-        // Center text vertically ON the bar
         ctx.textBaseline = 'middle'; 
         
         const textX = x + width/2;
-        // Exact vertical center of the bar
-        const textY = y + height/2 + 2; // +2 for visual optical center with this font
+        const textY = y + height/2 + 2; 
         
-        // Show ONLY current HP
         const hpString = Math.floor(entity.currentHp).toString();
 
-        ctx.lineWidth = 4; // Thick outline for readability against bar color
+        ctx.lineWidth = 4; 
 
         if (isPlayerSide) {
             ctx.strokeStyle = '#ffffff'; 
@@ -6064,7 +6058,7 @@ drawEffects() {
             ctx.fillText(hpString, textX, textY);
         }
 
-        // --- SHIELD DISPLAY (Right Side) ---
+        // --- SHIELD DISPLAY ---
         if (entity.shield > 0) {
             const sx = x + width + 15;
             const sy = y + height/2;
@@ -6080,7 +6074,7 @@ drawEffects() {
             ctx.fillText(entity.shield, sx + 45, sy);
         }
 
-        // --- MANA DISPLAY (Left Side - Player Only) ---
+        // --- MANA DISPLAY ---
          if (entity instanceof Player) {
             const mx = x - 20; 
             const my = y + height/2;
@@ -6096,16 +6090,36 @@ drawEffects() {
             ctx.fillText("💠", mx - 50, my); 
         }
 
-        // --- EFFECTS ICONS ---
+        // --- EFFECTS BAR (UPDATED) ---
         if (entity.effects.length > 0) {
-            let bx = x;
-            entity.effects.forEach(eff => {
-                ctx.fillStyle = '#fff';
-                ctx.font = '30px Arial'; 
-                ctx.textAlign = 'left';
-                // Moved icons slightly higher to clear the larger bar
-                ctx.fillText(eff.icon, bx + 10, y - 10);
-                bx += 35;
+            // Configuration for the bar
+            const iconWidth = 30; // Width allocated per icon
+            const barHeight = 28; // Height of the black bar
+            const padding = 0;    // Extra padding on sides if desired
+            
+            // Calculate total width dynamically
+            const totalBarWidth = (entity.effects.length * iconWidth) + (padding * 2);
+            
+            // Position: Centered horizontally relative to entity, placed BELOW the HP bar
+            const barX = entity.x - (totalBarWidth / 2);
+            const barY = y + height + 6; // 6px gap below HP bar
+
+            // Draw Translucent Black Background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(barX, barY, totalBarWidth, barHeight);
+            
+            // Draw Icons
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = '20px Arial';
+            ctx.fillStyle = '#fff';
+
+            entity.effects.forEach((eff, i) => {
+                // Center icon within its allocated slot
+                const ix = barX + padding + (iconWidth / 2) + (i * iconWidth);
+                const iy = barY + (barHeight / 2);
+                
+                ctx.fillText(eff.icon, ix, iy + 2); // +2 for visual optical centering
             });
         }
     },
