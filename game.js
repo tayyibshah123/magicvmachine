@@ -6601,11 +6601,10 @@ drawEntity(entity) {
         
         const isSpawning = entity.spawnTimer > 0;
 
-        // --- OPTIMIZATION: REMOVED CLIPPING MASK ---
-        // The previous ctx.clip() here was likely causing the mobile crash at combat start.
+        // --- SPAWN ANIMATION (NO CLIP) ---
         if (isSpawning) {
             entity.spawnTimer -= 0.02; 
-            // We just let it draw normally, the scanline effect at the bottom handles the visual style.
+            // Clipping removed to prevent mobile crash
         }
 
         // --- ANIMATION HANDLING ---
@@ -6639,7 +6638,7 @@ drawEntity(entity) {
         const baseWidth = 3 + sectorPower;
 
         // --- SHADOW (Ground) ---
-        // Only for Player to save performance
+        // Only draw shadow for Player to save performance on mobile
         if (entity instanceof Player) {
             ctx.fillStyle = 'rgba(0,0,0,0.6)';
             ctx.beginPath();
@@ -6817,73 +6816,85 @@ drawEntity(entity) {
         // ============================================================
         else if (entity instanceof Enemy) {
             
-            // --- SECTOR 1: THE PANOPTICON (COMPLETE REWRITE - SAFE MODE) ---
+            // --- SECTOR 1: THE PANOPTICON (Wireframe/Bare Metal Mode) ---
             if (this.sector === 1) {
                 ctx.save();
-                // NO CLIPPING, NO GRADIENTS, NO SHADOWBLUR, NO DASHES.
-                // Just solid strokes and simple geometry.
-                
                 const cyan = '#00ffff';
                 
-                // 1. The Beam (Straight Lines)
-                ctx.strokeStyle = 'rgba(0, 255, 255, 0.4)';
+                // 1. Scanning Beams (Wireframe Only - No Fills/Gradients)
+                ctx.save();
+                const beamWidth = 120 + Math.sin(time * 2) * 20; 
+                
+                ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
                 ctx.lineWidth = 2;
+                const scanOffset = (time * 150) % 50;
                 
-                // Static outer beams
                 ctx.beginPath();
-                ctx.moveTo(-20, 20); ctx.lineTo(-120, 400);
-                ctx.moveTo(20, 20);  ctx.lineTo(120, 400);
-                ctx.stroke();
+                ctx.moveTo(-20, 20); ctx.lineTo(-beamWidth, 400); 
+                ctx.moveTo(20, 20); ctx.lineTo(beamWidth, 400);
                 
-                // Moving scan bar (Single horizontal line)
-                const scanY = 50 + (time * 100) % 300;
-                ctx.beginPath();
-                ctx.moveTo(-50, scanY);
-                ctx.lineTo(50, scanY);
+                for(let i=0; i<8; i++) {
+                    const y = 50 + i * 50 + scanOffset;
+                    if (y < 400) {
+                        const w = (y / 400) * beamWidth;
+                        ctx.moveTo(-w, y); ctx.lineTo(w, y);
+                    }
+                }
                 ctx.stroke();
+                ctx.restore();
 
-                // 2. The Prism Eye (Triangle)
+                // 2. The Eye Frame (Solid Stroke)
                 ctx.strokeStyle = cyan;
                 ctx.lineWidth = 4;
-                ctx.fillStyle = '#000000'; // Opaque black to hide background
-                
                 ctx.beginPath();
-                // Draw a large Triangle
-                ctx.moveTo(0, -100);
-                ctx.lineTo(80, 60);
-                ctx.lineTo(-80, 60);
-                ctx.closePath();
-                ctx.fill();
+                ctx.moveTo(-100, 0); ctx.quadraticCurveTo(0, -80, 100, 0);
+                ctx.moveTo(-100, 0); ctx.quadraticCurveTo(0, 80, 100, 0);
                 ctx.stroke();
 
-                // 3. The Pupil (Solid Circle)
-                ctx.fillStyle = '#ffffff';
-                ctx.beginPath();
-                ctx.arc(0, -10, 20, 0, Math.PI*2);
-                ctx.fill();
-
-                // 4. Rotating Ring (Solid Circle)
+                // 3. Rotating Rings (Solid Lines - No Dashes)
                 ctx.lineWidth = 2;
-                ctx.strokeStyle = cyan;
-                
+
                 ctx.beginPath();
-                ctx.arc(0, -10, 50, 0, Math.PI*2);
+                ctx.arc(0, 0, 160, 0, Math.PI*2);
                 ctx.stroke();
                 
-                // Rotating Marker on Ring
-                const markerX = Math.cos(time) * 50;
-                const markerY = -10 + Math.sin(time) * 50;
+                const r1X = Math.cos(time * 0.15) * 160;
+                const r1Y = Math.sin(time * 0.15) * 160;
                 ctx.fillStyle = cyan;
+                ctx.beginPath(); ctx.arc(r1X, r1Y, 5, 0, Math.PI*2); ctx.fill();
+
+                ctx.save();
+                ctx.rotate(Math.sin(time * 0.5) * 0.2); 
                 ctx.beginPath();
-                ctx.arc(markerX, markerY, 5, 0, Math.PI*2);
-                ctx.fill();
+                ctx.arc(0, 0, 130, -Math.PI/4, Math.PI/4); 
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(0, 0, 130, Math.PI - Math.PI/4, Math.PI + Math.PI/4); 
+                ctx.stroke();
+                ctx.restore();
+
+                ctx.beginPath(); 
+                ctx.arc(0, 0, 110, 0, Math.PI*2); 
+                ctx.stroke();
+                
+                const r3X = Math.cos(-time * 0.8) * 110;
+                const r3Y = Math.sin(-time * 0.8) * 110;
+                ctx.beginPath(); ctx.arc(r3X, r3Y, 4, 0, Math.PI*2); ctx.fill();
+
+                // 4. The Lens
+                ctx.strokeStyle = cyan;
+                ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.stroke();
+                
+                const pupilSize = 18 + Math.sin(time * 4) * 5;
+                ctx.fillStyle = '#fff'; 
+                ctx.beginPath(); ctx.arc(0, 0, pupilSize, 0, Math.PI*2); ctx.fill();
 
                 ctx.restore();
             }
 
             // --- SECTOR 2: NULL_POINTER ---
             else if (this.sector === 2) {
-                // ... (Keep existing Null Pointer Logic - Safe) ...
                 ctx.save();
                 const magenta = '#ff00ff';
                 const brightMagenta = '#ff88ff';
@@ -7098,86 +7109,129 @@ drawEntity(entity) {
         }
 
         // ============================================================
-        // 4. ENEMY MINIONS (Redesigned & Upscaled)
+        // 4. ENEMY MINIONS (Unified Elite Design + Mobile Fix)
         // ============================================================
         else if (entity instanceof Minion && !entity.isPlayerSide) {
-            let mColor = '#ff0055'; let mGlow = '#ff0055'; let mFill = '#1a0505';
+            
+            // --- DETERMINE SECTOR COLOR PALETTE ---
+            let mColor = '#ff0055'; 
+            let mGlow = '#ff0055';
+            let mFill = '#1a0505';
+
             if (this.sector === 1) { mColor = '#00ffff'; mGlow = '#00ffff'; mFill = '#001111'; }
             else if (this.sector === 2) { mColor = '#ff00ff'; mGlow = '#ff00ff'; mFill = '#110011'; }
             else if (this.sector === 3) { mColor = '#ff4500'; mGlow = '#ff4500'; mFill = '#1a0500'; }
             else if (this.sector === 4) { mColor = '#32cd32'; mGlow = '#32cd32'; mFill = '#051a05'; }
             else if (this.sector === 5) { mColor = '#ffffff'; mGlow = '#ffd700'; mFill = '#111111'; }
 
-            if (entity.name.includes("Glitch") || (this.enemy && this.enemy.name === "THE SOURCE")) {
-                 ctx.save(); ctx.scale(1.5, 1.5);
-                 const layers = 3;
-                 for(let i=0; i<layers; i++) {
-                     const offsetX = (Math.random() - 0.5) * 10;
-                     const offsetY = (Math.random() - 0.5) * 5;
-                     ctx.save(); ctx.translate(offsetX, offsetY);
-                     if (i===0) ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
-                     else if (i===1) ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-                     else ctx.fillStyle = 'rgba(0, 0, 0, 1.0)';
-                     ctx.beginPath(); ctx.moveTo(0, -25); ctx.lineTo(20, 5); ctx.lineTo(10, 25); ctx.lineTo(-15, 15); ctx.lineTo(-25, 0); ctx.closePath(); ctx.fill();
-                     ctx.restore();
-                 }
-                 ctx.fillStyle = '#fff';
-                 for(let k=0; k<5; k++) { ctx.fillRect((Math.random()-0.5)*50, (Math.random()-0.5)*50, 2, 2); }
-                 ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
-                 const scanY = (time * 50) % 60 - 30; ctx.fillRect(-25, scanY, 50, 5);
-                 ctx.restore();
-            } 
-            else {
-                 ctx.save(); ctx.scale(1.8, 1.8); 
-                 
-                 if (entity.tier === 3) {
-                    const pulse = 1 + 0.05 * Math.sin(time * 4);
-                    ctx.scale(pulse, pulse);
-                    ctx.save(); ctx.rotate(time * 0.8); 
-                    ctx.strokeStyle = mColor; ctx.lineWidth = 2; ctx.shadowColor = mGlow; ctx.shadowBlur = 15 + 5 * Math.sin(time * 5);
-                    ctx.fillStyle = mFill;
-                    ctx.beginPath();
-                    const spikes = 4;
-                    for(let i=0; i<spikes*2; i++) {
-                        const r = (i%2 === 0) ? 22 : 10;
-                        const a = (Math.PI / spikes) * i;
-                        ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
-                    }
-                    ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
-                    
-                    ctx.save(); ctx.rotate(-time * 1.5);
-                    ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 10;
-                    ctx.beginPath(); ctx.rect(-4, -4, 8, 8); ctx.fill(); ctx.restore();
+            ctx.save(); 
+            ctx.scale(1.8, 1.8); 
+            
+            // UNIFIED: All Boss/Elite/Glitch minions use the safe "Elite" renderer
+            const isEliteOrBoss = entity.tier === 3 || entity.name.includes("Glitch");
 
-                    ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI*2);
-                    ctx.strokeStyle = mColor; ctx.lineWidth = 1.5; ctx.setLineDash([5, 15]); ctx.lineDashOffset = time * 20;
-                    ctx.stroke(); ctx.setLineDash([]);
+            if (isEliteOrBoss) {
+                // --- ELITE/BOSS MINION VISUALS (SAFE) ---
+                const pulse = 1 + 0.05 * Math.sin(time * 4);
+                ctx.scale(pulse, pulse);
 
-                    ctx.save(); ctx.rotate(time * 0.5);
-                    for(let k=0; k<4; k++) {
-                        ctx.rotate(Math.PI/2); ctx.fillStyle = mColor; ctx.shadowBlur = 5; ctx.fillRect(0, -30, 3, 3);
-                    }
-                    ctx.restore();
-                 } 
-                 else {
-                    const hover = Math.sin(time * 3) * 3;
-                    ctx.save(); ctx.translate(0, hover);
-                    ctx.fillStyle = mFill; ctx.strokeStyle = mColor; ctx.lineWidth = 2; ctx.shadowColor = mGlow; ctx.shadowBlur = 10;
-                    ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(10, 0); ctx.lineTo(0, 25); ctx.lineTo(-10, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
-                    
-                    const corePulse = 0.5 + 0.5 * Math.sin(time * 8);
-                    ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + corePulse * 0.5})`; ctx.shadowColor = '#fff';
-                    ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(3, 0); ctx.lineTo(0, 10); ctx.lineTo(-3, 0); ctx.fill();
-                    ctx.restore();
-                    
-                    ctx.save(); ctx.rotate(Math.sin(time) * 0.2); 
-                    ctx.strokeStyle = mColor; ctx.lineWidth = 2; ctx.globalAlpha = 0.8;
-                    ctx.beginPath(); ctx.moveTo(-18, -10 + hover); ctx.lineTo(-22, 0 + hover); ctx.lineTo(-18, 15 + hover); ctx.stroke();
-                    ctx.beginPath(); ctx.moveTo(18, -10 + hover); ctx.lineTo(22, 0 + hover); ctx.lineTo(18, 15 + hover); ctx.stroke();
-                    ctx.restore();
-                 }
-                 ctx.restore();
+                // 1. Rotating Star Body
+                ctx.save();
+                ctx.rotate(time * 0.8); 
+                
+                ctx.strokeStyle = mColor;
+                ctx.lineWidth = 2;
+                // Simplified Glow (No blur)
+                ctx.shadowColor = 'transparent'; 
+                ctx.shadowBlur = 0; 
+                ctx.fillStyle = mFill;
+                
+                ctx.beginPath();
+                const spikes = 4;
+                for(let i=0; i<spikes*2; i++) {
+                    const r = (i%2 === 0) ? 22 : 10;
+                    const a = (Math.PI / spikes) * i;
+                    ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+                
+                // 2. Inner Core (Counter-Rotation)
+                ctx.save();
+                ctx.rotate(-time * 1.5);
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); 
+                ctx.rect(-4, -4, 8, 8); 
+                ctx.fill(); 
+                ctx.restore();
+
+                // 3. Orbital Energy Ring (SOLID - NO DASHES)
+                ctx.beginPath();
+                ctx.arc(0, 0, 30, 0, Math.PI*2);
+                ctx.strokeStyle = mColor; 
+                ctx.lineWidth = 1.5; 
+                ctx.stroke();
+
+                // 4. Satellite Nodes
+                ctx.save();
+                ctx.rotate(time * 0.5);
+                for(let k=0; k<4; k++) {
+                    ctx.rotate(Math.PI/2);
+                    ctx.fillStyle = mColor;
+                    ctx.fillRect(0, -30, 3, 3);
+                }
+                ctx.restore();
+                
+            } else {
+                // --- STANDARD DRONE (Tier 1 & 2) ---
+                const hover = Math.sin(time * 3) * 3;
+                
+                // 1. Prism Body
+                ctx.save();
+                ctx.translate(0, hover);
+                
+                ctx.fillStyle = mFill;
+                ctx.strokeStyle = mColor;
+                ctx.lineWidth = 2;
+                
+                ctx.beginPath();
+                ctx.moveTo(0, -15); 
+                ctx.lineTo(10, 0);  
+                ctx.lineTo(0, 25);  
+                ctx.lineTo(-10, 0); 
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                
+                // Inner Core
+                const corePulse = 0.5 + 0.5 * Math.sin(time * 8);
+                ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + corePulse * 0.5})`;
+                ctx.beginPath();
+                ctx.moveTo(0, -5); ctx.lineTo(3, 0); ctx.lineTo(0, 10); ctx.lineTo(-3, 0);
+                ctx.fill();
+                
+                ctx.restore();
+                
+                // 2. Floating Brackets
+                ctx.save();
+                ctx.rotate(Math.sin(time) * 0.2); // Rocking
+                ctx.strokeStyle = mColor;
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.8;
+                
+                ctx.beginPath();
+                ctx.moveTo(-18, -10 + hover); ctx.lineTo(-22, 0 + hover); ctx.lineTo(-18, 15 + hover);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(18, -10 + hover); ctx.lineTo(22, 0 + hover); ctx.lineTo(18, 15 + hover);
+                ctx.stroke();
+                ctx.restore();
             }
+            
+            ctx.restore();
         }
 
         // --- FLASH EFFECT (On Hit) ---
@@ -7320,7 +7374,6 @@ drawEntity(entity) {
             ctx.restore(); 
         }
     },
-
 // --- TUTORIAL SYSTEM ---
 
     startTutorial() {
