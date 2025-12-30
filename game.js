@@ -1549,17 +1549,33 @@ const Game = {
 
     init() {
         this.canvas = document.getElementById('gameCanvas');
-        // Optimize: Disable alpha channel for performance (we draw a full opaque background)
-        this.ctx = this.canvas.getContext('2d', { alpha: false });
         
-        // --- FIX: Restore Full Resolution (Fixes Split-Screen Glitch) ---
-        this.canvas.width = CONFIG.CANVAS_WIDTH;
-        this.canvas.height = CONFIG.CANVAS_HEIGHT;
-        // -------------------------------------------------------------
+        // --- MOBILE OPTIMIZATION: RESOLUTION CAP ---
+        const isMobile = window.innerWidth <= 768;
+        
+        // 1. Set Physical Resolution (The number of pixels in memory)
+        if (isMobile) {
+            // Cap at 540p for mobile to save GPU Fill-Rate
+            this.canvas.width = 540; 
+            this.canvas.height = 960;
+        } else {
+            // Full resolution for Desktop
+            this.canvas.width = CONFIG.CANVAS_WIDTH; 
+            this.canvas.height = CONFIG.CANVAS_HEIGHT;
+        }
+
+        // 2. Get Context (alpha: false boosts performance)
+        this.ctx = this.canvas.getContext('2d', { alpha: false });
+
+        // 3. Set Logical Scale
+        // This tells the canvas "When I draw at 1080, shrink it to fit the physical size"
+        const scaleFactorX = this.canvas.width / CONFIG.CANVAS_WIDTH;
+        const scaleFactorY = this.canvas.height / CONFIG.CANVAS_HEIGHT;
+        this.ctx.scale(scaleFactorX, scaleFactorY);
+        // -------------------------------------------
 
         this.shopInventory = null;
         this.inputCooldown = 0; 
-    
         this.tutorialStep = 0; 
         this.tutorialData = TUTORIAL_PAGES; 
 
@@ -1641,6 +1657,7 @@ const Game = {
         const attachButtonEvent = (id, callback) => {
             const btn = d.getElementById(id);
             if (!btn) return;
+            // Prevent double-firing on mobile
             btn.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: false });
             btn.onclick = (e) => {
                 e.stopPropagation(); 
@@ -1656,43 +1673,31 @@ const Game = {
             };
         };
 
+        // --- BUTTON BINDINGS (Keep your existing bindings here) ---
         attachButtonEvent('btn-load-save', () => this.loadGame());
         attachButtonEvent('btn-resume', () => d.getElementById('modal-settings').classList.add('hidden'));
-
-        // FIX: Always play intro (Player can skip using the button inside the intro)
         attachButtonEvent('btn-start', () => {
-            // We set the flag just for record keeping, but we don't block the intro anymore
             this.seenFlags['intro_cinematic'] = true;
             localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
-            
             this.playIntro();
         });
-
         attachButtonEvent('btn-back-char', () => this.changeState(STATE.MENU));
         attachButtonEvent('btn-tutorial-mode', () => this.startTutorial());
         attachButtonEvent('btn-finish-story', () => { 
             AudioMgr.startMusic(); 
             this.changeState(STATE.MENU); 
         });
-
-        attachButtonEvent('btn-debrief', () => {
-            this.tutorialData = TUTORIAL_PAGES;
-            this.changeState(STATE.TUTORIAL); 
-        });
         attachButtonEvent('btn-back-tutorial', () => {
             this.tutorialData = TUTORIAL_PAGES;
             this.changeState(STATE.MENU); 
         });
-
         attachButtonEvent('btn-intel', () => this.changeState(STATE.INTEL));
         attachButtonEvent('btn-back-intel', () => this.changeState(STATE.MENU));
         attachButtonEvent('btn-decrypt', () => this.startHexBreach());
-        
         attachButtonEvent('btn-upgrades', () => {
             this.renderMeta();
             this.changeState(STATE.META);
         });
-
         attachButtonEvent('btn-back-meta', () => {
             const screen = d.getElementById('screen-meta');
             const btn = d.getElementById('btn-view-sanctuary');
@@ -1704,7 +1709,6 @@ const Game = {
             if(h2) h2.style.opacity = "";
             this.changeState(STATE.MENU);
         });
-
         attachButtonEvent('btn-view-sanctuary', () => {
             const screen = d.getElementById('screen-meta');
             const btn = d.getElementById('btn-view-sanctuary');
@@ -1717,16 +1721,12 @@ const Game = {
             }
             AudioMgr.playSound('click');
         });
-
         attachButtonEvent('btn-reroll', () => this.rerollDice());
-        
         attachButtonEvent('btn-end-turn', () => {
             this.dicePool.forEach(d => d.selected = false);
             this.renderDiceUI();
             this.endTurn();
         });
-
-        // FIX: Disable settings during tutorial
         const handleSettings = () => {
             if (this.currentState === STATE.TUTORIAL_COMBAT) {
                 ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2, "COMPLETE TUTORIAL FIRST!", "#ff0000");
@@ -1739,33 +1739,23 @@ const Game = {
         attachButtonEvent('btn-settings-main', handleSettings);
         attachButtonEvent('btn-quit', () => this.quitRun());
         attachButtonEvent('btn-menu', () => this.changeState(STATE.MENU));
-        
         d.getElementById('chk-music').onchange = (e) => AudioMgr.toggleMusic(e.target.checked);
         d.getElementById('chk-sfx').onchange = (e) => AudioMgr.toggleSFX(e.target.checked);
-        
         attachButtonEvent('btn-tut-next', () => this.nextTutorial());
         attachButtonEvent('btn-tut-prev', () => this.prevTutorial());
         attachButtonEvent('btn-leave-shop', () => this.leaveShop());
-
         attachButtonEvent('btn-rest-sleep', () => this.handleRest('sleep'));
         attachButtonEvent('btn-rest-meditate', () => this.handleRest('meditate'));
         attachButtonEvent('btn-rest-tinker', () => this.handleRest('tinker'));
-
-	attachButtonEvent('btn-finish-ending', () => { 
-        this.changeState(STATE.VICTORY); 
-    });
-
-    attachButtonEvent('btn-victory-sanctuary', () => {
-        // Go directly to Sanctuary in "View Mode"
-        this.renderMeta();
-        this.changeState(STATE.META);
-        
-        // Force View Mode immediately
-        const screen = document.getElementById('screen-meta');
-        const btn = document.getElementById('btn-view-sanctuary');
-        screen.classList.add('viewing-mode');
-        btn.innerText = "🔙 RESTORE UI";
-    });
+        attachButtonEvent('btn-finish-ending', () => { this.changeState(STATE.VICTORY); });
+        attachButtonEvent('btn-victory-sanctuary', () => {
+            this.renderMeta();
+            this.changeState(STATE.META);
+            const screen = document.getElementById('screen-meta');
+            const btn = document.getElementById('btn-view-sanctuary');
+            screen.classList.add('viewing-mode');
+            btn.innerText = "🔙 RESTORE UI";
+        });
 
         const relicBtn = d.getElementById('btn-relics');
         if (relicBtn) {
@@ -1814,15 +1804,34 @@ const Game = {
             }, { passive: false });
         }
 
-        this.canvas.addEventListener('mousemove', (e) => {
+        // --- UNIFIED INPUT HANDLER (Logic Coordinates) ---
+        const getLogicCoords = (e) => {
             const rect = this.canvas.getBoundingClientRect();
-            // FIX: Use CONFIG constants to ensure mouse mapping aligns with game logic 
-            // regardless of internal canvas resolution
+            // Map visual size to logical size (1080x1920)
             const scaleX = CONFIG.CANVAS_WIDTH / rect.width;
             const scaleY = CONFIG.CANVAS_HEIGHT / rect.height;
             
-            this.mouseX = (e.clientX - rect.left) * scaleX;
-            this.mouseY = (e.clientY - rect.top) * scaleY;
+            let clientX = e.clientX;
+            let clientY = e.clientY;
+            
+            if ((isNaN(clientX) || clientX === undefined) && e.changedTouches && e.changedTouches.length > 0) {
+                clientX = e.changedTouches[0].clientX;
+                clientY = e.changedTouches[0].clientY;
+            } else if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            }
+
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        };
+
+        this.canvas.addEventListener('mousemove', (e) => {
+            const coords = getLogicCoords(e);
+            this.mouseX = coords.x;
+            this.mouseY = coords.y;
             this.handleCanvasHover(e.clientX, e.clientY);
         });
         
@@ -1832,28 +1841,9 @@ const Game = {
              if (this.qte.active) { this.checkQTE(); return; }
              if (this.dragState.active) return;
 
-             const rect = this.canvas.getBoundingClientRect();
-             
-             // --- FIX: Correct Input Scaling for Mobile Resolution ---
-             // We use CONFIG width (1080) instead of canvas.width because canvas might be 540
-             const scaleX = CONFIG.CANVAS_WIDTH / rect.width;
-             const scaleY = CONFIG.CANVAS_HEIGHT / rect.height;
-             // -------------------------------------------------------
-             
-             let clientX = e.clientX;
-             let clientY = e.clientY;
-             if(e.touches && e.touches.length > 0) {
-                clientX = e.touches[0].clientX;
-                clientY = e.touches[0].clientY;
-             } else if (e.changedTouches && e.changedTouches.length > 0) {
-                clientX = e.changedTouches[0].clientX;
-                clientY = e.changedTouches[0].clientY;
-             }
-
-             if (clientX) {
-                this.mouseX = (clientX - rect.left) * scaleX;
-                this.mouseY = (clientY - rect.top) * scaleY;
-             }
+             const coords = getLogicCoords(e);
+             this.mouseX = coords.x;
+             this.mouseY = coords.y;
 
              // PARRY CHECK
              for (let i = this.effects.length - 1; i >= 0; i--) {
@@ -1873,7 +1863,19 @@ const Game = {
                          return; 
                      }
                  }
-                 // ... rest of parry logic (nature_dart)
+                 if (eff.type === 'nature_dart' && !eff.empowered) {
+                     const dist = Math.hypot(this.mouseX - eff.x, this.mouseY - eff.y);
+                     if (dist < 60) { 
+                         eff.empowered = true;
+                         eff.dmgMultiplier = 1.1 + Math.random() * 0.3; 
+                         eff.speed *= 2.5; 
+                         eff.color = COLORS.GOLD; 
+                         AudioMgr.playSound('upgrade'); 
+                         ParticleSys.createFloatingText(eff.x, eff.y, "EMPOWERED!", COLORS.GOLD);
+                         ParticleSys.createExplosion(eff.x, eff.y, 20, COLORS.GOLD);
+                         return;
+                     }
+                 }
              }
 
              if ((this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT) && this.enemy && this.enemy.currentHp > 0) {
@@ -1894,13 +1896,10 @@ const Game = {
 
         this.canvas.addEventListener('mousedown', handleInteraction);
         this.canvas.addEventListener('touchstart', (e) => {
-            const rect = this.canvas.getBoundingClientRect();
-            if(e.touches[0]) {
-                const scaleX = this.canvas.width / rect.width;
-                const scaleY = this.canvas.height / rect.height;
-                this.mouseX = (e.touches[0].clientX - rect.left) * scaleX;
-                this.mouseY = (e.touches[0].clientY - rect.top) * scaleY;
-            }
+            // Update mouse coordinates immediately on touch start for accurate detection
+            const coords = getLogicCoords(e);
+            this.mouseX = coords.x;
+            this.mouseY = coords.y;
             handleInteraction(e);
         }, {passive: false});
 
@@ -1923,6 +1922,11 @@ const Game = {
 
         window.addEventListener('pointerup', (e) => {
             if (this.dragState.active) {
+                // Update internal mouse coords to release point
+                const coords = getLogicCoords(e);
+                this.mouseX = coords.x;
+                this.mouseY = coords.y;
+                
                 this.handleDragEnd(e);
                 if(dragRaf) { cancelAnimationFrame(dragRaf); dragRaf = null; }
             }
@@ -1930,6 +1934,10 @@ const Game = {
         
         window.addEventListener('pointercancel', (e) => {
             if (this.dragState.active) {
+                const coords = getLogicCoords(e);
+                this.mouseX = coords.x;
+                this.mouseY = coords.y;
+                
                 this.handleDragEnd(e);
                 if(dragRaf) { cancelAnimationFrame(dragRaf); dragRaf = null; }
             }
