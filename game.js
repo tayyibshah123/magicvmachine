@@ -2114,7 +2114,12 @@ startDrag(e, die, el) {
 
         if (!this.dragState.active) return;
         
-        // Calculate drop coordinates (Mouse or Touch)
+        // Safety: Ensure we don't process if die is null (already used)
+        if (!this.dragState.die) {
+            this.dragState.active = false;
+            return;
+        }
+        
         const rect = this.canvas.getBoundingClientRect();
         const scaleX = this.canvas.width / rect.width;
         const scaleY = this.canvas.height / rect.height;
@@ -2126,13 +2131,11 @@ startDrag(e, die, el) {
             clientY = e.changedTouches[0].clientY;
         }
 
-        // Update internal game mouse position to where the drop happened
         this.mouseX = (clientX - rect.left) * scaleX;
         this.mouseY = (clientY - rect.top) * scaleY;
 
         const dist = Math.hypot(clientX - this.dragState.startX, clientY - this.dragState.startY);
         
-        // Cleanup Ghost
         if (this.dragState.ghostElement) {
             this.dragState.ghostElement.remove();
             this.dragState.ghostElement = null;
@@ -2142,7 +2145,6 @@ startDrag(e, die, el) {
         }
 
         if (dist < 10) {
-            // Click/Tap: Select for Reroll
             const die = this.dragState.die;
             if(die && !this.player.traits.noRerolls) {
                 die.selected = !die.selected;
@@ -2150,13 +2152,19 @@ startDrag(e, die, el) {
                 AudioMgr.playSound('click');
             }
         } else {
-            // Drag Drop: Use Ability
             const target = this.getDropTarget();
+            // Pass the die explicitly and clear drag state immediately to prevent re-entry
+            const dieToUse = this.dragState.die;
+            const elToUse = this.dragState.dieElement;
             
-            // FIX: Allow useDie if we have a valid target OR if it's a MINION die (which targets the ground)
-            if (target || this.dragState.die.type === 'MINION') {
-                this.useDie(this.dragState.die, this.dragState.dieElement, target);
+            this.dragState.active = false;
+            this.dragState.die = null;
+            this.dragState.dieElement = null;
+
+            if (target || dieToUse.type === 'MINION') {
+                this.useDie(dieToUse, elToUse, target);
             }
+            return; // Exit function after handling
         }
 
         this.dragState.active = false;
@@ -5128,8 +5136,11 @@ drawEffects() {
                 ctx.save();
                 ctx.strokeStyle = e.color;
                 ctx.lineWidth = 3;
-                ctx.shadowColor = e.color;
-                ctx.shadowBlur = 10;
+                
+                // OPTIMIZATION: Removed shadowBlur
+                // ctx.shadowColor = e.color;
+                // ctx.shadowBlur = 10;
+                
                 ctx.globalAlpha = e.life / e.maxLife;
                 ctx.beginPath();
                 for (let k = 0; k < 6; k++) {
@@ -7668,7 +7679,7 @@ drawEntity(entity) {
             ctx.globalCompositeOperation = 'source-over';
         }
 
-        // --- SHIELD VISUAL (UPDATED) ---
+        // --- SHIELD VISUAL (OPTIMIZED FOR MOBILE) ---
         if (entity.shield > 0) {
             ctx.save();
             const r = entity.radius + 20;
@@ -7686,18 +7697,20 @@ drawEntity(entity) {
             }
             ctx.closePath();
 
-            const shieldGrad = ctx.createRadialGradient(0, 0, r * 0.5, 0, 0, r);
-            shieldGrad.addColorStop(0, 'rgba(0, 243, 255, 0.0)');
-            shieldGrad.addColorStop(1, 'rgba(0, 243, 255, 0.15)');
-            ctx.fillStyle = shieldGrad;
+            // OPTIMIZATION: Removed Radial Gradient & ShadowBlur
+            // Use simple semi-transparent fill
+            ctx.fillStyle = 'rgba(0, 243, 255, 0.1)'; 
+            ctx.fill();
             
-            ctx.shadowColor = shieldColor;
-            ctx.shadowBlur = 20 + Math.sin(time * 8) * 10;
+            // Solid stroke instead of glowing shadow
             ctx.strokeStyle = shieldColor;
             ctx.lineWidth = 3;
-            
             ctx.stroke();
-            ctx.fill();
+            
+            // Optional: Draw a second lighter stroke to simulate "glow" cheaply
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
 
             // 2. Inner Spinning Data Ring
             ctx.beginPath();
