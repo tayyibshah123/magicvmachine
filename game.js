@@ -7112,7 +7112,7 @@ drawEntity(entity) {
                 // BOSS RENDERING LOGIC (CORRECTED ORDER)
                 // =========================================================
                 
-                // --- SECTOR 1: THE PANOPTICON (Surveillance Eye - Concept Art Style) ---
+                // --- SECTOR 1: THE PANOPTICON (Mobile Optimized) ---
                 if (this.sector === 1) {
                     ctx.save();
                     const cyan = '#00ffff';
@@ -7120,114 +7120,122 @@ drawEntity(entity) {
                     
                     // 1. Scanning Light Beams (Projecting downwards)
                     ctx.save();
-                    const beamWidth = 120 + Math.sin(time * 2) * 20; // Pulsing width
+                    const beamWidth = 120 + Math.sin(time * 2) * 20; 
+                    // Gradient is okay, but we ensure it's simple
                     const beamGrad = ctx.createLinearGradient(0, 0, 0, 350);
-                    beamGrad.addColorStop(0, 'rgba(0, 255, 255, 0.5)'); // Bright at source
-                    beamGrad.addColorStop(1, 'transparent'); // Fade out
+                    beamGrad.addColorStop(0, 'rgba(0, 255, 255, 0.4)'); 
+                    beamGrad.addColorStop(1, 'transparent'); 
                     
                     ctx.fillStyle = beamGrad;
                     ctx.beginPath();
-                    ctx.moveTo(-20, 20); // Top Left origin
-                    ctx.lineTo(-beamWidth, 400); // Bottom Left spread
-                    ctx.lineTo(beamWidth, 400);  // Bottom Right spread
-                    ctx.lineTo(20, 20);  // Top Right origin
+                    ctx.moveTo(-20, 20); 
+                    ctx.lineTo(-beamWidth, 400); 
+                    ctx.lineTo(beamWidth, 400);  
+                    ctx.lineTo(20, 20);  
                     ctx.fill();
                     
-                    // Digital Scanlines inside beam
+                    // Scanlines (Simple Lines, no blur)
                     ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
                     ctx.lineWidth = 2;
                     const scanOffset = (time * 150) % 50;
+                    ctx.beginPath();
                     for(let i=0; i<8; i++) {
                         const y = 50 + i * 50 + scanOffset;
                         if (y < 400) {
                             const w = (y / 400) * beamWidth;
-                            ctx.beginPath();
                             ctx.moveTo(-w, y);
                             ctx.lineTo(w, y);
-                            ctx.stroke();
                         }
                     }
+                    ctx.stroke();
                     ctx.restore();
 
                     // 2. The Eye Frame (Almond Shape)
-                    ctx.strokeStyle = cyan;
-                    ctx.lineWidth = 5;
-                    ctx.shadowColor = cyan;
-                    ctx.shadowBlur = 25;
-                    ctx.fillStyle = '#000505'; // Obsidian center
-                    
+                    // Simulated Glow (Layered Strokes) instead of shadowBlur
+                    ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
+                    ctx.lineWidth = 15; // Wide faint stroke
                     ctx.beginPath();
-                    // Top eyelid curve
                     ctx.moveTo(-100, 0);
                     ctx.quadraticCurveTo(0, -80, 100, 0);
-                    // Bottom eyelid curve
                     ctx.quadraticCurveTo(0, 80, -100, 0);
+                    ctx.stroke();
+
+                    // Main Stroke
+                    ctx.strokeStyle = cyan;
+                    ctx.lineWidth = 5;
+                    ctx.fillStyle = '#000505'; 
                     ctx.fill();
                     ctx.stroke();
 
-                    // 3. Massive Rotating HUD Rings
-                    ctx.lineWidth = 2;
-                    ctx.shadowBlur = 10;
+                    // 3. Massive Rotating HUD Rings (Manual Segments - NO setLineDash)
+                    ctx.lineWidth = 3;
 
                     // Ring 1: Outer segmented (Slow rotate)
                     ctx.save();
                     ctx.rotate(time * 0.15);
-                    ctx.setLineDash([30, 30]); // Dashed look
-                    ctx.beginPath(); 
-                    ctx.arc(0, 0, 160, 0, Math.PI*2); 
+                    ctx.strokeStyle = cyan;
+                    
+                    const r1 = 160;
+                    const seg1 = 12; // Number of dash segments
+                    ctx.beginPath();
+                    for(let i=0; i<seg1; i++) {
+                        // Draw 50% of the arc, skip 50%
+                        const start = (Math.PI * 2 / seg1) * i;
+                        const end = start + (Math.PI / seg1) * 0.6; 
+                        ctx.moveTo(Math.cos(start)*r1, Math.sin(start)*r1);
+                        ctx.arc(0, 0, r1, start, end);
+                    }
                     ctx.stroke();
                     ctx.restore();
 
                     // Ring 2: Side Brackets (Oscillating)
                     ctx.save();
-                    ctx.rotate(Math.sin(time * 0.5) * 0.2); // Rocking motion
+                    ctx.rotate(Math.sin(time * 0.5) * 0.2); 
                     ctx.beginPath();
-                    ctx.arc(0, 0, 130, -Math.PI/4, Math.PI/4); // Right arc
-                    ctx.stroke();
-                    ctx.beginPath();
-                    ctx.arc(0, 0, 130, Math.PI - Math.PI/4, Math.PI + Math.PI/4); // Left arc
+                    ctx.arc(0, 0, 130, -Math.PI/4, Math.PI/4); 
+                    ctx.moveTo(Math.cos(Math.PI - Math.PI/4)*130, Math.sin(Math.PI - Math.PI/4)*130);
+                    ctx.arc(0, 0, 130, Math.PI - Math.PI/4, Math.PI + Math.PI/4); 
                     ctx.stroke();
                     ctx.restore();
 
-                    // Ring 3: Fast Inner Spinner
+                    // Ring 3: Fast Inner Spinner (Manual Segments)
                     ctx.save();
                     ctx.rotate(-time * 0.8);
-                    ctx.setLineDash([10, 15]);
-                    ctx.beginPath(); 
-                    ctx.arc(0, 0, 110, 0, Math.PI*2); 
+                    const r3 = 110;
+                    const seg3 = 8;
+                    ctx.beginPath();
+                    for(let i=0; i<seg3; i++) {
+                        const start = (Math.PI * 2 / seg3) * i;
+                        const end = start + (Math.PI / seg3) * 0.8; 
+                        ctx.moveTo(Math.cos(start)*r3, Math.sin(start)*r3);
+                        ctx.arc(0, 0, r3, start, end);
+                    }
                     ctx.stroke();
                     ctx.restore();
 
                     // 4. The Lens (Pupil/Iris)
-                    // Sclera Background
                     ctx.fillStyle = darkCyan;
-                    ctx.shadowBlur = 0;
-                    ctx.beginPath(); 
-                    ctx.arc(0, 0, 50, 0, Math.PI*2); 
-                    ctx.fill();
+                    ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.fill();
                     
                     // Iris Ring
                     ctx.strokeStyle = cyan;
                     ctx.lineWidth = 2;
-                    ctx.beginPath(); 
-                    ctx.arc(0, 0, 35, 0, Math.PI*2); 
-                    ctx.stroke();
+                    ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI*2); ctx.stroke();
                     
                     // Pupil (Dilating)
                     const pupilSize = 18 + Math.sin(time * 4) * 5;
-                    ctx.fillStyle = '#fff'; // Bright white center
-                    ctx.shadowColor = '#fff';
-                    ctx.shadowBlur = 40; // Intense glow
-                    ctx.beginPath(); 
-                    ctx.arc(0, 0, pupilSize, 0, Math.PI*2); 
-                    ctx.fill();
                     
-                    // Specular Highlight (Reflection)
+                    // Glow for pupil (Simple transparent circle)
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                    ctx.beginPath(); ctx.arc(0, 0, pupilSize + 10, 0, Math.PI*2); ctx.fill();
+
+                    // Solid Pupil
+                    ctx.fillStyle = '#fff'; 
+                    ctx.beginPath(); ctx.arc(0, 0, pupilSize, 0, Math.PI*2); ctx.fill();
+                    
+                    // Specular Highlight
                     ctx.fillStyle = 'rgba(255,255,255,0.8)';
-                    ctx.shadowBlur = 0;
-                    ctx.beginPath(); 
-                    ctx.arc(-15, -15, 8, 0, Math.PI*2); 
-                    ctx.fill();
+                    ctx.beginPath(); ctx.arc(-15, -15, 8, 0, Math.PI*2); ctx.fill();
 
                     ctx.restore();
                 }
