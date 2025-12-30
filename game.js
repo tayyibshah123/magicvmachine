@@ -864,6 +864,13 @@ class Entity {
     }
 
     takeDamage(amount, source = null, suppressBlockText = false) {
+        // --- GOD MODE INVINCIBILITY ---
+        if (this instanceof Player && Game.godMode) {
+            ParticleSys.createFloatingText(this.x, this.y - 60, "GOD MODE", "#ff0055");
+            return false;
+        }
+        // ------------------------------
+
         if (this instanceof Enemy && this.invincibleTurns > 0) {
             ParticleSys.createFloatingText(this.x, this.y - 60, "INVINCIBLE", "#888");
             AudioMgr.playSound('defend');
@@ -1636,7 +1643,6 @@ const Game = {
         const attachButtonEvent = (id, callback) => {
             const btn = d.getElementById(id);
             if (!btn) return;
-            // Prevent double-firing on mobile
             btn.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: false });
             btn.onclick = (e) => {
                 e.stopPropagation(); 
@@ -1652,7 +1658,7 @@ const Game = {
             };
         };
 
-        // --- BUTTON BINDINGS (Keep your existing bindings here) ---
+        // --- BUTTON BINDINGS ---
         attachButtonEvent('btn-load-save', () => this.loadGame());
         attachButtonEvent('btn-resume', () => d.getElementById('modal-settings').classList.add('hidden'));
         attachButtonEvent('btn-start', () => {
@@ -1720,6 +1726,22 @@ const Game = {
         attachButtonEvent('btn-menu', () => this.changeState(STATE.MENU));
         d.getElementById('chk-music').onchange = (e) => AudioMgr.toggleMusic(e.target.checked);
         d.getElementById('chk-sfx').onchange = (e) => AudioMgr.toggleSFX(e.target.checked);
+        
+        // --- NEW: GOD MODE LISTENER ---
+        d.getElementById('chk-godmode').onchange = (e) => {
+            this.godMode = e.target.checked;
+            if(this.godMode && this.player) {
+                this.player.mana = 99;
+                this.rerolls = 99;
+                this.player.currentHp = this.player.maxHp;
+                this.updateHUD();
+                if(this.currentState === STATE.COMBAT) {
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "GOD MODE ACTIVE", "#ff0055");
+                    AudioMgr.playSound('upgrade');
+                }
+            }
+        };
+
         attachButtonEvent('btn-tut-next', () => this.nextTutorial());
         attachButtonEvent('btn-tut-prev', () => this.prevTutorial());
         attachButtonEvent('btn-leave-shop', () => this.leaveShop());
@@ -1783,10 +1805,8 @@ const Game = {
             }, { passive: false });
         }
 
-        // --- UNIFIED INPUT HANDLER (Logic Coordinates) ---
         const getLogicCoords = (e) => {
             const rect = this.canvas.getBoundingClientRect();
-            // Map visual size to logical size (1080x1920)
             const scaleX = CONFIG.CANVAS_WIDTH / rect.width;
             const scaleY = CONFIG.CANVAS_HEIGHT / rect.height;
             
@@ -1824,7 +1844,6 @@ const Game = {
              this.mouseX = coords.x;
              this.mouseY = coords.y;
 
-             // PARRY CHECK
              for (let i = this.effects.length - 1; i >= 0; i--) {
                  const eff = this.effects[i];
                  if (eff.type === 'micro_laser' && !eff.parried) {
@@ -1875,7 +1894,6 @@ const Game = {
 
         this.canvas.addEventListener('mousedown', handleInteraction);
         this.canvas.addEventListener('touchstart', (e) => {
-            // Update mouse coordinates immediately on touch start for accurate detection
             const coords = getLogicCoords(e);
             this.mouseX = coords.x;
             this.mouseY = coords.y;
@@ -1901,7 +1919,6 @@ const Game = {
 
         window.addEventListener('pointerup', (e) => {
             if (this.dragState.active) {
-                // Update internal mouse coords to release point
                 const coords = getLogicCoords(e);
                 this.mouseX = coords.x;
                 this.mouseY = coords.y;
@@ -1913,10 +1930,6 @@ const Game = {
         
         window.addEventListener('pointercancel', (e) => {
             if (this.dragState.active) {
-                const coords = getLogicCoords(e);
-                this.mouseX = coords.x;
-                this.mouseY = coords.y;
-                
                 this.handleDragEnd(e);
                 if(dragRaf) { cancelAnimationFrame(dragRaf); dragRaf = null; }
             }
@@ -4181,7 +4194,7 @@ async startCombat(type) {
 
 async startTurn() { 
         this.inputLocked = true;
-        this.recycleBinCount = 0; // Recycle Bin Reset
+        this.recycleBinCount = 0; 
 
         await this.showPhaseBanner("PLAYER PHASE", "COMMAND LINK ESTABLISHED", 'player');
 
@@ -4206,7 +4219,6 @@ async startTurn() {
         
         if(this.player.traits.startShield) this.player.addShield(this.player.traits.startShield);
         
-        // Meta: Hardened Hull (15)
         if(this.hasMetaUpgrade('m_shield') && this.turnCount === 1) this.player.addShield(15);
         
         if (this.player.hasRelic('c_void_shell')) {
@@ -4219,16 +4231,14 @@ async startTurn() {
         }
 
         const shieldStacks = this.player.relics.filter(r => r.id === 'nano_shield').length;
-        if(shieldStacks > 0 && this.turnCount === 1) this.player.addShield(5 * shieldStacks); // +5
+        if(shieldStacks > 0 && this.turnCount === 1) this.player.addShield(5 * shieldStacks); 
         
-        // Relic: Shield Gen (5)
         const shieldGen = this.player.relics.filter(r => r.id === 'shield_gen').length;
         if(shieldGen > 0) this.player.addShield(5 * shieldGen); 
         
         const manaStacks = this.player.relics.filter(r => r.id === 'mana_syphon').length;
         if(manaStacks > 0) this.player.mana += manaStacks;
 
-        // Relic: Static Field (15 DMG)
         if (this.player.hasRelic('static_field') && this.enemy) {
              const targets = [this.enemy, ...this.enemy.minions];
              const t = targets[Math.floor(Math.random() * targets.length)];
@@ -4242,7 +4252,6 @@ async startTurn() {
              }
         }
 
-        // Relic: Solar Battery (Every 2nd Turn)
         if (this.player.hasRelic('solar_battery') && this.turnCount % 2 === 0) {
              const stacks = this.player.relics.filter(r => r.id === 'solar_battery').length;
              const flatMana = stacks; 
@@ -4288,6 +4297,13 @@ async startTurn() {
             }
         }
         this.deadMinionsThisTurn = 0; 
+
+        // --- GOD MODE: Infinite Mana & Rerolls ---
+        if (this.godMode) {
+            this.player.mana = 99;
+            this.rerolls = 99;
+        }
+        // -----------------------------------------
 
         let diceToRoll = this.player.diceCount;
         if (this.enemy && this.enemy.affixes && this.enemy.affixes.includes('Jammer')) {
@@ -4342,6 +4358,12 @@ async startTurn() {
                 dmg = Math.floor(dmg * 1.3);
             }
         }
+        
+        // --- GOD MODE: 10x DAMAGE ---
+        if (this.godMode && type !== 'DEFEND' && type !== 'MANA') {
+            dmg *= 10;
+        }
+        // ----------------------------
         
         return dmg;
     },
