@@ -7121,116 +7121,138 @@ drawEntity(entity) {
             } 
             else {
                 // =========================================================
-                // BOSS RENDERING LOGIC (CORRECTED ORDER)
+                // BOSS RENDERING LOGIC (OPTIMIZED SECTOR 1)
                 // =========================================================
                 
-                // --- SECTOR 1: THE PANOPTICON (Restored Concept Art Style) ---
+                // --- SECTOR 1: THE PANOPTICON (Mobile Optimized) ---
                 if (this.sector === 1) {
                     ctx.save();
-                    const cyan = '#00ffff';
-                    const darkCyan = '#002222';
-                    
-                    // 1. Scanning Light Beams (Projecting downwards)
-                    ctx.save();
-                    const beamWidth = 120 + Math.sin(time * 2) * 20; 
-                    const beamGrad = ctx.createLinearGradient(0, 0, 0, 350);
-                    beamGrad.addColorStop(0, 'rgba(0, 255, 255, 0.5)'); 
-                    beamGrad.addColorStop(1, 'transparent'); 
-                    
-                    ctx.fillStyle = beamGrad;
-                    ctx.beginPath();
-                    ctx.moveTo(-20, 20); 
-                    ctx.lineTo(-beamWidth, 400); 
-                    ctx.lineTo(beamWidth, 400);  
-                    ctx.lineTo(20, 20);  
-                    ctx.fill();
-                    
-                    // Digital Scanlines
-                    ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
-                    ctx.lineWidth = 2;
-                    const scanOffset = (time * 150) % 50;
-                    for(let i=0; i<8; i++) {
-                        const y = 50 + i * 50 + scanOffset;
-                        if (y < 400) {
-                            const w = (y / 400) * beamWidth;
-                            ctx.beginPath();
-                            ctx.moveTo(-w, y);
-                            ctx.lineTo(w, y);
-                            ctx.stroke();
+                    try {
+                        const cyan = '#00ffff';
+                        const darkCyan = '#002222';
+                        
+                        // 1. Scanning Light Beams (Solid Fill - No Gradients)
+                        // OPTIMIZATION: Removed Linear Gradient for performance
+                        ctx.save();
+                        const beamWidth = 120 + Math.sin(time * 2) * 20; 
+                        
+                        ctx.fillStyle = 'rgba(0, 255, 255, 0.15)'; // Flat transparent fill
+                        ctx.beginPath();
+                        ctx.moveTo(-20, 20); 
+                        ctx.lineTo(-beamWidth, 400); 
+                        ctx.lineTo(beamWidth, 400);  
+                        ctx.lineTo(20, 20);  
+                        ctx.fill();
+                        
+                        // Scanlines (Simple Lines)
+                        ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
+                        ctx.lineWidth = 2;
+                        const scanOffset = (time * 150) % 50;
+                        ctx.beginPath();
+                        for(let i=0; i<8; i++) {
+                            const y = 50 + i * 50 + scanOffset;
+                            if (y < 400) {
+                                const w = (y / 400) * beamWidth;
+                                ctx.moveTo(-w, y);
+                                ctx.lineTo(w, y);
+                            }
                         }
+                        ctx.stroke();
+                        ctx.restore();
+
+                        // 2. The Eye Frame (Simulated Glow - No shadowBlur)
+                        // OPTIMIZATION: Draw wide faint stroke behind to simulate glow cheapy
+                        ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
+                        ctx.lineWidth = 15; 
+                        ctx.lineCap = 'round';
+                        ctx.beginPath();
+                        ctx.moveTo(-100, 0);
+                        ctx.quadraticCurveTo(0, -80, 100, 0);
+                        ctx.quadraticCurveTo(0, 80, -100, 0);
+                        ctx.stroke();
+
+                        // Main sharp stroke
+                        ctx.strokeStyle = cyan;
+                        ctx.lineWidth = 5;
+                        ctx.fillStyle = '#000505'; 
+                        ctx.fill();
+                        ctx.stroke();
+
+                        // 3. Rotating HUD Rings (Manual Segments - No setLineDash)
+                        // OPTIMIZATION: Manual arcs prevent dash-calculation overhead
+                        ctx.lineWidth = 3;
+
+                        // Ring 1: Outer segmented
+                        ctx.save();
+                        ctx.rotate(time * 0.15);
+                        ctx.strokeStyle = cyan;
+                        const r1 = 160;
+                        const seg1 = 12;
+                        ctx.beginPath();
+                        for(let i=0; i<seg1; i++) {
+                            const start = (Math.PI * 2 / seg1) * i;
+                            const end = start + (Math.PI * 2 / seg1) * 0.6; 
+                            ctx.moveTo(Math.cos(start)*r1, Math.sin(start)*r1);
+                            ctx.arc(0, 0, r1, start, end);
+                        }
+                        ctx.stroke();
+                        ctx.restore();
+
+                        // Ring 2: Side Brackets
+                        ctx.save();
+                        ctx.rotate(Math.sin(time * 0.5) * 0.2); 
+                        ctx.strokeStyle = cyan;
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 130, -Math.PI/4, Math.PI/4); // Right
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 130, Math.PI - Math.PI/4, Math.PI + Math.PI/4); // Left
+                        ctx.stroke();
+                        ctx.restore();
+
+                        // Ring 3: Fast Inner Spinner
+                        ctx.save();
+                        ctx.rotate(-time * 0.8);
+                        const r3 = 110;
+                        const seg3 = 8;
+                        ctx.beginPath();
+                        for(let i=0; i<seg3; i++) {
+                            const start = (Math.PI * 2 / seg3) * i;
+                            const end = start + (Math.PI * 2 / seg3) * 0.7; 
+                            ctx.moveTo(Math.cos(start)*r3, Math.sin(start)*r3);
+                            ctx.arc(0, 0, r3, start, end);
+                        }
+                        ctx.stroke();
+                        ctx.restore();
+
+                        // 4. The Lens
+                        ctx.fillStyle = darkCyan;
+                        ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.fill();
+                        
+                        ctx.strokeStyle = cyan;
+                        ctx.lineWidth = 2;
+                        ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI*2); ctx.stroke();
+                        
+                        const pupilSize = 18 + Math.sin(time * 4) * 5;
+                        
+                        // Fake Glow for Pupil
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+                        ctx.beginPath(); ctx.arc(0, 0, pupilSize + 15, 0, Math.PI*2); ctx.fill();
+
+                        // Solid Pupil
+                        ctx.fillStyle = '#fff'; 
+                        ctx.beginPath(); ctx.arc(0, 0, pupilSize, 0, Math.PI*2); ctx.fill();
+                        
+                        // Reflection
+                        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+                        ctx.beginPath(); ctx.arc(-15, -15, 8, 0, Math.PI*2); ctx.fill();
+
+                    } finally {
+                        ctx.restore();
                     }
-                    ctx.restore();
-
-                    // 2. The Eye Frame
-                    ctx.strokeStyle = cyan;
-                    ctx.lineWidth = 5;
-                    ctx.shadowColor = cyan;
-                    ctx.shadowBlur = 25;
-                    ctx.fillStyle = '#000505'; 
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(-100, 0);
-                    ctx.quadraticCurveTo(0, -80, 100, 0);
-                    ctx.quadraticCurveTo(0, 80, -100, 0);
-                    ctx.fill();
-                    ctx.stroke();
-
-                    // 3. Rotating HUD Rings
-                    ctx.lineWidth = 2;
-                    ctx.shadowBlur = 10;
-
-                    // Ring 1: Outer
-                    ctx.save();
-                    ctx.rotate(time * 0.15);
-                    ctx.setLineDash([30, 30]); 
-                    ctx.beginPath(); 
-                    ctx.arc(0, 0, 160, 0, Math.PI*2); 
-                    ctx.stroke();
-                    ctx.restore();
-
-                    // Ring 2: Side Brackets
-                    ctx.save();
-                    ctx.rotate(Math.sin(time * 0.5) * 0.2); 
-                    ctx.beginPath();
-                    ctx.arc(0, 0, 130, -Math.PI/4, Math.PI/4); 
-                    ctx.stroke();
-                    ctx.beginPath();
-                    ctx.arc(0, 0, 130, Math.PI - Math.PI/4, Math.PI + Math.PI/4); 
-                    ctx.stroke();
-                    ctx.restore();
-
-                    // Ring 3: Fast Inner
-                    ctx.save();
-                    ctx.rotate(-time * 0.8);
-                    ctx.setLineDash([10, 15]);
-                    ctx.beginPath(); 
-                    ctx.arc(0, 0, 110, 0, Math.PI*2); 
-                    ctx.stroke();
-                    ctx.restore();
-
-                    // 4. The Lens
-                    ctx.fillStyle = darkCyan;
-                    ctx.shadowBlur = 0;
-                    ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.fill();
-                    
-                    ctx.strokeStyle = cyan;
-                    ctx.lineWidth = 2;
-                    ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI*2); ctx.stroke();
-                    
-                    const pupilSize = 18 + Math.sin(time * 4) * 5;
-                    ctx.fillStyle = '#fff'; 
-                    ctx.shadowColor = '#fff';
-                    ctx.shadowBlur = 40; 
-                    ctx.beginPath(); ctx.arc(0, 0, pupilSize, 0, Math.PI*2); ctx.fill();
-                    
-                    ctx.fillStyle = 'rgba(255,255,255,0.8)';
-                    ctx.shadowBlur = 0;
-                    ctx.beginPath(); ctx.arc(-15, -15, 8, 0, Math.PI*2); ctx.fill();
-
-                    ctx.restore();
                 }
 
-                // --- SECTOR 2: NULL_POINTER (Glitch Vortex - 2x SCALED) ---
+                // --- SECTOR 2: NULL_POINTER (Glitch Vortex) ---
                 else if (this.sector === 2) {
                     ctx.save();
                     const magenta = '#ff00ff';
@@ -7241,21 +7263,20 @@ drawEntity(entity) {
                     const jitterY = (Math.random() - 0.5) * 8;
                     ctx.translate(jitterX, jitterY);
 
-                    // 1. The Void (Central Black Hole) - Radius doubled (~180)
+                    // 1. The Void
                     ctx.fillStyle = '#000';
                     ctx.shadowColor = magenta;
-                    ctx.shadowBlur = 100; // Stronger glow for larger mass
+                    ctx.shadowBlur = 60; 
                     ctx.beginPath();
                     for(let i=0; i<=40; i++) { 
                         const angle = (Math.PI*2/40) * i;
-                        // Radius increased from ~90 to ~180
                         const r = 180 + Math.sin(time * 10 + i * 5) * 10 + Math.random()*10; 
                         ctx.lineTo(Math.cos(angle)*r, Math.sin(angle)*r);
                     }
                     ctx.fill();
 
                     // 2. Spiral Overlay
-                    ctx.lineWidth = 4; // Thicker lines
+                    ctx.lineWidth = 4;
                     ctx.globalAlpha = 0.6;
                     const spiralArms = 6;
                     for (let j = 0; j < spiralArms; j++) {
@@ -7263,9 +7284,8 @@ drawEntity(entity) {
                         ctx.strokeStyle = (j % 2 === 0) ? magenta : purple;
                         for (let k = 0; k < 60; k++) {
                             const theta = (time * -3) + (j * (Math.PI * 2) / spiralArms) + (k * 0.1); 
-                            // Spiral radius doubled (k * 4.0 instead of 2.0)
                             const r = k * 4.0; 
-                            if (r > 190) break; // Clip limit doubled
+                            if (r > 190) break; 
                             const x = Math.cos(theta) * r;
                             const y = Math.sin(theta) * r;
                             if (k===0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
@@ -7278,55 +7298,42 @@ drawEntity(entity) {
                     const shards = 12; 
                     for(let i=0; i<shards; i++) {
                         ctx.save();
-                        
-                        // Orbit Logic - Distance doubled (140 -> 280)
                         const angle = time * 1.5 + (i * Math.PI*2 / shards);
                         const dist = 280 + Math.sin(time * 2 + i * 43) * 50; 
                         
                         ctx.translate(Math.cos(angle)*dist, Math.sin(angle)*dist);
-                        
-                        // Self Rotation
                         ctx.rotate(angle + (time * 4) + (i % 2 === 0 ? time : -time)); 
                         
-                        // Fade In/Out
                         const fade = 0.4 + 0.6 * Math.sin(time * 3 + i * 100);
                         ctx.globalAlpha = fade;
 
-                        // Visual Style
                         ctx.fillStyle = '#050005'; 
                         ctx.strokeStyle = brightMagenta; 
-                        ctx.lineWidth = 3; // Thicker lines
+                        ctx.lineWidth = 3; 
                         ctx.shadowColor = magenta;
                         ctx.shadowBlur = 15;
 
-                        // Procedural Reshaping (Splintering) - Amplitude doubled
                         const warp = (offset) => Math.sin(time * 15 + i * 10 + offset) * 16;
 
                         ctx.beginPath();
-                        // Coordinates doubled for 2x size
-                        ctx.moveTo(0 + warp(1), -60 + warp(2)); // Top
-                        ctx.lineTo(30 + warp(3), 20 + warp(4)); // Right
-                        ctx.lineTo(0 + warp(5), 10 + warp(6));   // Inner fracture
-                        ctx.lineTo(-30 + warp(7), 20 + warp(8)); // Left
+                        ctx.moveTo(0 + warp(1), -60 + warp(2)); 
+                        ctx.lineTo(30 + warp(3), 20 + warp(4)); 
+                        ctx.lineTo(0 + warp(5), 10 + warp(6));   
+                        ctx.lineTo(-30 + warp(7), 20 + warp(8)); 
                         ctx.closePath();
                         
-                        ctx.fill();
-                        ctx.stroke();
+                        ctx.fill(); ctx.stroke();
                         
-                        // Extra floating splinter debris
                         if (i % 2 === 0) {
                             ctx.beginPath();
                             ctx.moveTo(0, -80 + warp(0));
                             ctx.lineTo(10, -100 + warp(1));
                             ctx.lineTo(-10, -100 + warp(2));
-                            ctx.fill();
-                            ctx.stroke();
+                            ctx.fill(); ctx.stroke();
                         }
                         
-                        // Glitch particles - Spread and size increased
                         if (Math.random() > 0.8) {
-                            ctx.fillStyle = '#fff'; 
-                            ctx.shadowBlur = 0;
+                            ctx.fillStyle = '#fff'; ctx.shadowBlur = 0;
                             const px = (Math.random()-0.5)*120;
                             const py = (Math.random()-0.5)*120;
                             ctx.fillRect(px, py, Math.random()*4+2, Math.random()*40+2); 
@@ -7334,22 +7341,20 @@ drawEntity(entity) {
                         ctx.restore();
                     }
 
-                    // 4. Floating Glitch Text - Larger Font & Orbit
-                    ctx.font = "bold 32px 'Orbitron', monospace"; // 16px -> 32px
+                    // 4. Glitch Text
+                    ctx.font = "bold 32px 'Orbitron', monospace";
                     ctx.fillStyle = brightMagenta;
                     ctx.shadowBlur = 10;
                     ctx.globalAlpha = 0.8;
-                    
-                    const txtX = Math.sin(time * 1.2) * 140; // 70 -> 140
+                    const txtX = Math.sin(time * 1.2) * 140;
                     const txtY = Math.cos(time * 0.9) * 140;
-                    
                     ctx.fillText("NULL", txtX - 40, txtY);
                     ctx.fillText("VOID", -txtX - 40, -txtY);
                     
                     ctx.restore();
                 }
 
-                // --- SECTOR 3: THE COMPILER (Industrial Piston) ---
+                // --- SECTOR 3: THE COMPILER ---
                 else if (this.sector === 3) {
                     ctx.save();
                     const orange = '#ff4500';
@@ -7359,7 +7364,6 @@ drawEntity(entity) {
                     ctx.strokeStyle = orange;
                     ctx.lineWidth = 4;
 
-                    // Pistons
                     const pistonOffset = Math.sin(time * 3) * 15;
                     ctx.fillStyle = '#331100';
                     ctx.fillRect(-90, -60 + pistonOffset, 40, 100); 
@@ -7379,8 +7383,7 @@ drawEntity(entity) {
                     ctx.moveTo(-60, -40); ctx.lineTo(60, -40);
                     ctx.lineTo(50, 80); ctx.lineTo(-50, 80);
                     ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
+                    ctx.fill(); ctx.stroke();
 
                     ctx.lineWidth = 2;
                     for(let i=0; i<5; i++) {
@@ -7399,7 +7402,7 @@ drawEntity(entity) {
                     ctx.restore();
                 }
 
-                // --- SECTOR 4: HIVE PROTOCOL (Swarm) ---
+                // --- SECTOR 4: HIVE PROTOCOL ---
                 else if (this.sector === 4) {
                     ctx.save();
                     const lime = '#32cd32';
@@ -7434,7 +7437,7 @@ drawEntity(entity) {
                     ctx.restore();
                 }
 
-                // --- SECTOR 5: TESSERACT PRIME (Hypercube) ---
+                // --- SECTOR 5: TESSERACT PRIME ---
                 else if (this.sector === 5) {
                     ctx.save();
                     const gold = '#ffd700';
@@ -7459,7 +7462,6 @@ drawEntity(entity) {
                     const pulse = 100 + Math.sin(time * 2) * 20;
                     drawSquare(pulse, gold, 4);
                     
-                    // Connecting lines
                     ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)';
                     ctx.lineWidth = 1;
                     const o = 70; 
@@ -7479,7 +7481,7 @@ drawEntity(entity) {
                     ctx.shadowBlur = 50;
                     ctx.beginPath(); ctx.arc(0,0, 10, 0, Math.PI*2); ctx.fill();
 
-                    // 4. Sacred Geometry Rays
+                    // 4. Rays
                     ctx.strokeStyle = gold;
                     ctx.globalAlpha = 0.3;
                     for(let k=0; k<4; k++) {
@@ -7487,7 +7489,7 @@ drawEntity(entity) {
                         ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(200, 0); ctx.stroke();
                     }
 
-                    // 5. Invincibility Visuals (Tesseract Shield)
+                    // 5. Shield Visual
                     if (entity.invincibleTurns > 0) {
                         ctx.save();
                         ctx.strokeStyle = '#fff';
