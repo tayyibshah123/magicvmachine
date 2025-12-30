@@ -7048,14 +7048,118 @@ drawEntity(entity) {
                         const shards = 10; for(let i=0; i<shards; i++) { ctx.save(); const angle = time * 1.5 + (i * Math.PI*2 / shards); const dist = 140 + Math.sin(time*3 + i)*20; ctx.translate(Math.cos(angle)*dist, Math.sin(angle)*dist); ctx.rotate(angle + time * 2); ctx.fillStyle = 'rgba(10, 0, 10, 0.95)'; ctx.strokeStyle = brightMagenta; ctx.lineWidth = 3; ctx.shadowColor = magenta; ctx.shadowBlur = 15; ctx.beginPath(); ctx.moveTo(0, -35); ctx.lineTo(15, 20); ctx.lineTo(-15, 20); ctx.closePath(); ctx.fill(); ctx.stroke(); if (Math.random() > 0.7) { ctx.fillStyle = '#fff'; ctx.shadowBlur = 0; const px = (Math.random()-0.5)*50; const py = (Math.random()-0.5)*50; ctx.fillRect(px, py, Math.random()*3+2, Math.random()*3+2); } ctx.restore(); }
                         ctx.font = "bold 16px 'Orbitron', monospace"; ctx.fillStyle = brightMagenta; ctx.shadowBlur = 5; ctx.globalAlpha = 0.8; const txtX = Math.sin(time * 1.2) * 70; const txtY = Math.cos(time * 0.9) * 70; ctx.fillText("NULL", txtX - 20, txtY); ctx.fillText("VOID", -txtX - 20, -txtY); ctx.restore();
                      }
-                     else if (this.sector === 3) {
-                         ctx.save(); const orange = '#ff4500'; ctx.shadowColor = orange; ctx.shadowBlur = 20; ctx.fillStyle = '#1a0500'; ctx.strokeStyle = orange; ctx.lineWidth = 4;
-                         const po = Math.sin(time*3)*15; ctx.fillRect(-90,-60+po,40,100); ctx.strokeRect(-90,-60+po,40,100); ctx.fillRect(50,-60-po,40,100); ctx.strokeRect(50,-60-po,40,100);
-                         if (Math.random() > 0.8) { ctx.fillStyle = 'rgba(255,255,255,0.5)'; const steamX = -70 + (Math.random()-0.5)*20; const steamY = -70 + po; ctx.beginPath(); ctx.arc(steamX, steamY, Math.random()*5+2, 0, Math.PI*2); ctx.fill(); }
-                         ctx.fillStyle = '#110000'; ctx.beginPath(); ctx.moveTo(-60,-40); ctx.lineTo(60,-40); ctx.lineTo(50,80); ctx.lineTo(-50,80); ctx.closePath(); ctx.fill(); ctx.stroke();
-                         ctx.lineWidth = 2; for(let i=0; i<5; i++) { const y = -20 + (i * 20); ctx.beginPath(); ctx.moveTo(-45, y); ctx.lineTo(45, y); ctx.stroke(); }
-                         const pulse = 1 + Math.sin(time * 10) * 0.1; ctx.translate(0, -10); ctx.scale(pulse, pulse); ctx.fillStyle = '#ffaa00'; ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 40; ctx.beginPath(); ctx.rect(-15, -5, 30, 10); ctx.fill(); ctx.restore();
-                     }
+                     // --- SECTOR 3: THE COMPILER (Industrial Mech - High Fidelity) ---
+                else if (this.sector === 3) {
+                    ctx.save();
+                    const orange = '#ff4500';
+                    const darkRust = '#2a0a00';
+                    
+                    // Hover Float
+                    const hover = Math.sin(time * 1.5) * 10;
+                    ctx.translate(0, hover);
+
+                    // 1. Thruster Exhausts (Bottom)
+                    ctx.save();
+                    const thrustLen = 80 + Math.random() * 20;
+                    const thrustGrad = ctx.createLinearGradient(0, 80, 0, 80 + thrustLen);
+                    thrustGrad.addColorStop(0, '#fff'); // Hot core
+                    thrustGrad.addColorStop(0.3, '#ffaa00');
+                    thrustGrad.addColorStop(1, 'transparent');
+                    
+                    ctx.fillStyle = thrustGrad;
+                    // Left Thruster
+                    ctx.beginPath();
+                    ctx.moveTo(-60, 80); ctx.lineTo(-40, 80 + thrustLen); ctx.lineTo(-20, 80);
+                    ctx.fill();
+                    // Right Thruster
+                    ctx.beginPath();
+                    ctx.moveTo(20, 80); ctx.lineTo(40, 80 + thrustLen); ctx.lineTo(60, 80);
+                    ctx.fill();
+                    ctx.restore();
+
+                    // 2. Heavy Mech Body (Torso)
+                    ctx.fillStyle = darkRust;
+                    ctx.strokeStyle = orange;
+                    ctx.lineWidth = 4;
+                    
+                    // Main Chest Block
+                    ctx.beginPath();
+                    ctx.moveTo(-70, -60);
+                    ctx.lineTo(70, -60);  // Top width
+                    ctx.lineTo(50, 40);   // Taper down
+                    ctx.lineTo(0, 60);    // Crotch point
+                    ctx.lineTo(-50, 40);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // 3. Massive Shoulders (Pistons)
+                    const shoulderY = Math.sin(time * 3) * 5; // Idle heave
+                    
+                    // Left Shoulder
+                    ctx.fillStyle = '#1a0500';
+                    ctx.fillRect(-110, -90 + shoulderY, 50, 60);
+                    ctx.strokeRect(-110, -90 + shoulderY, 50, 60);
+                    // Right Shoulder
+                    ctx.fillRect(60, -90 + shoulderY, 50, 60);
+                    ctx.strokeRect(60, -90 + shoulderY, 50, 60);
+
+                    // 4. Arms / Cannons
+                    ctx.lineWidth = 3;
+                    // Left Arm
+                    ctx.beginPath();
+                    ctx.moveTo(-110, -50 + shoulderY);
+                    ctx.lineTo(-130, 20);
+                    ctx.lineTo(-100, 60); // Claw/Hand area
+                    ctx.lineTo(-90, 20);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Right Arm
+                    ctx.beginPath();
+                    ctx.moveTo(110, -50 + shoulderY);
+                    ctx.lineTo(130, 20);
+                    ctx.lineTo(100, 60);
+                    ctx.lineTo(90, 20);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // 5. Central Furnace Core (Head/Chest)
+                    const corePulse = 1 + 0.1 * Math.sin(time * 10);
+                    ctx.fillStyle = '#ffaa00';
+                    
+                    // Chest Vent
+                    ctx.beginPath();
+                    ctx.rect(-20, -20, 40, 20);
+                    ctx.fill();
+                    // Grill lines
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(-20, -10); ctx.lineTo(20, -10);
+                    ctx.stroke();
+
+                    // Head Visor (Small, menacing)
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.rect(-10, -70 + shoulderY, 20, 10);
+                    ctx.fill();
+
+                    // 6. Smoke Stacks (Simple Particles)
+                    if (Math.random() > 0.7) {
+                        ctx.fillStyle = 'rgba(100, 100, 100, 0.5)';
+                        const smokeX = (Math.random() > 0.5 ? -90 : 90);
+                        const smokeY = -100 + shoulderY - Math.random() * 20;
+                        const size = Math.random() * 8 + 4;
+                        ctx.beginPath();
+                        ctx.arc(smokeX, smokeY, size, 0, Math.PI*2);
+                        ctx.fill();
+                    }
+
+                    ctx.restore();
+                }
                      else if (this.sector === 4) {
                          ctx.save(); const lime = '#32cd32'; const droneCount = 12; ctx.shadowColor = lime; ctx.shadowBlur = 30; ctx.fillStyle = 'rgba(50,205,50,0.1)'; ctx.beginPath(); ctx.arc(0,0,80,0,Math.PI*2); ctx.fill();
                          for(let i=0; i<12; i++) { const dx = Math.sin(time*2+i*100)*60; const dy = Math.cos(time*1.2+i*100)*40; ctx.save(); ctx.translate(dx,dy); ctx.rotate(time*3+i); ctx.fillStyle='#0a2a0a'; ctx.strokeStyle='#32cd32'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(0,-15); ctx.lineTo(12,10); ctx.lineTo(-12,10); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.globalAlpha=0.2; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-dx, -dy); ctx.stroke(); ctx.globalAlpha=1.0; ctx.restore(); } ctx.restore();
