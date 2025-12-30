@@ -7124,20 +7124,25 @@ drawEntity(entity) {
                 // BOSS RENDERING LOGIC (OPTIMIZED SECTOR 1)
                 // =========================================================
                 
-                // --- SECTOR 1: THE PANOPTICON (Ultra Performance Mode) ---
+                // --- SECTOR 1: THE PANOPTICON (Wireframe/Bare Metal Mode) ---
                 if (this.sector === 1) {
                     ctx.save();
                     const cyan = '#00ffff';
                     
-                    // 1. Scanning Light Beams (Simple Lines)
+                    // 1. Scanning Beams (Wireframe Only - No Fills/Gradients)
                     ctx.save();
                     const beamWidth = 120 + Math.sin(time * 2) * 20; 
-                    ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
+                    
+                    ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)'; // Low alpha stroke is cheap
                     ctx.lineWidth = 2;
                     const scanOffset = (time * 150) % 50;
+                    
                     ctx.beginPath();
+                    // Outer Cone Lines
                     ctx.moveTo(-20, 20); ctx.lineTo(-beamWidth, 400); 
                     ctx.moveTo(20, 20); ctx.lineTo(beamWidth, 400);
+                    
+                    // Horizontal Scanlines (Just lines, no fills)
                     for(let i=0; i<8; i++) {
                         const y = 50 + i * 50 + scanOffset;
                         if (y < 400) {
@@ -7148,52 +7153,63 @@ drawEntity(entity) {
                     ctx.stroke();
                     ctx.restore();
 
-                    // 2. The Eye Frame (Solid Stroke)
+                    // 2. The Eye Frame (Solid Stroke Only)
                     ctx.strokeStyle = cyan;
-                    ctx.lineWidth = 5;
-                    ctx.fillStyle = '#000505'; 
+                    ctx.lineWidth = 4;
+                    // No fillStyle, just clear geometry
+                    
                     ctx.beginPath();
+                    // Top Lid
                     ctx.moveTo(-100, 0); ctx.quadraticCurveTo(0, -80, 100, 0);
-                    ctx.quadraticCurveTo(0, 80, -100, 0);
-                    ctx.fill(); ctx.stroke();
+                    // Bottom Lid
+                    ctx.moveTo(-100, 0); ctx.quadraticCurveTo(0, 80, 100, 0);
+                    ctx.stroke();
 
-                    // 3. Rotating HUD Rings (Solid Lines)
+                    // 3. Rotating Rings (Solid Lines - No Dashes)
                     ctx.lineWidth = 2;
 
-                    // Ring 1: Outer
-                    ctx.save();
-                    ctx.rotate(time * 0.15);
-                    ctx.strokeStyle = cyan;
-                    const r1 = 160;
-                    ctx.beginPath(); ctx.arc(0, 0, r1, 0, Math.PI*2); ctx.stroke();
-                    ctx.restore();
+                    // Ring 1: Outer Solid Circle
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 160, 0, Math.PI*2);
+                    ctx.stroke();
+                    
+                    // Ring 1 Blip (Simple solid circle marker)
+                    const r1X = Math.cos(time * 0.15) * 160;
+                    const r1Y = Math.sin(time * 0.15) * 160;
+                    ctx.fillStyle = cyan;
+                    ctx.beginPath(); ctx.arc(r1X, r1Y, 5, 0, Math.PI*2); ctx.fill();
 
-                    // Ring 2: Side Brackets
+                    // Ring 2: Side Brackets (Simple Arcs)
                     ctx.save();
                     ctx.rotate(Math.sin(time * 0.5) * 0.2); 
-                    ctx.beginPath(); ctx.arc(0, 0, 130, -Math.PI/4, Math.PI/4); ctx.stroke();
-                    ctx.beginPath(); ctx.arc(0, 0, 130, Math.PI - Math.PI/4, Math.PI + Math.PI/4); ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 130, -Math.PI/4, Math.PI/4); // Right Bracket
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 130, Math.PI - Math.PI/4, Math.PI + Math.PI/4); // Left Bracket
+                    ctx.stroke();
                     ctx.restore();
 
-                    // Ring 3: Fast Inner
-                    ctx.save();
-                    ctx.rotate(-time * 0.8);
-                    const r3 = 110;
-                    ctx.beginPath(); ctx.arc(0, 0, r3, 0, Math.PI*2); ctx.stroke();
-                    ctx.restore();
+                    // Ring 3: Fast Inner (Solid Circle)
+                    ctx.beginPath(); 
+                    ctx.arc(0, 0, 110, 0, Math.PI*2); 
+                    ctx.stroke();
+                    // Inner Blip
+                    const r3X = Math.cos(-time * 0.8) * 110;
+                    const r3Y = Math.sin(-time * 0.8) * 110;
+                    ctx.beginPath(); ctx.arc(r3X, r3Y, 4, 0, Math.PI*2); ctx.fill();
 
-                    // 4. The Lens
-                    ctx.fillStyle = darkCyan;
-                    ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.fill();
-                    
+                    // 4. The Lens (Simple Circles)
+                    // Iris
                     ctx.strokeStyle = cyan;
-                    ctx.lineWidth = 2;
-                    ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI*2); ctx.stroke();
+                    ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.stroke();
                     
+                    // Pupil
                     const pupilSize = 18 + Math.sin(time * 4) * 5;
-                    ctx.fillStyle = '#fff';
+                    ctx.fillStyle = '#fff'; // Solid fill is okay for small objects
                     ctx.beginPath(); ctx.arc(0, 0, pupilSize, 0, Math.PI*2); ctx.fill();
-                    
+
                     ctx.restore();
                 }
 
