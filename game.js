@@ -869,7 +869,6 @@ class Entity {
             ParticleSys.createFloatingText(this.x, this.y - 60, "GOD MODE", "#ff0055");
             return false;
         }
-        // ------------------------------
 
         if (this instanceof Enemy && this.invincibleTurns > 0) {
             ParticleSys.createFloatingText(this.x, this.y - 60, "INVINCIBLE", "#888");
@@ -904,6 +903,16 @@ class Entity {
         if (source instanceof Player && source.hasRelic('c_entropy')) {
             actualDmg = Math.floor(actualDmg * 1.5);
         }
+
+        // --- NEW: ARMOR PLATING (90% Reduction) ---
+        if (this.armorPlating > 0) {
+             actualDmg = Math.floor(actualDmg * 0.1); // Take 10%, mitigate 90%
+             this.armorPlating--;
+             ParticleSys.createFloatingText(this.x, this.y - 80, `ARMOR (${this.armorPlating})`, "#ffaa00");
+             // Play metallic sound? Re-using 'defend' for now
+             AudioMgr.playSound('defend');
+        }
+        // ------------------------------------------
 
         if (this.shield > 0) {
             if (this.shield >= actualDmg) {
@@ -1958,12 +1967,18 @@ const Game = {
                 let txt = `<strong>${ent.name}</strong>\nHP: ${ent.currentHp}/${ent.maxHp}`;
                 if(ent.shield > 0) txt += `\nShield: ${ent.shield}`;
                 
-                // --- NEW: Invincibility Tooltip ---
+                // --- NEW: Armor Plating Tooltip ---
+                if (ent instanceof Enemy && ent.armorPlating > 0) {
+                    txt += `\n\n<span style="color:#ffaa00; font-weight:bold;">🛡️ ARMOR PLATED (${ent.armorPlating})</span>`;
+                    txt += `\nTakes 90% Less Damage.`;
+                    txt += `\nBreaks after ${ent.armorPlating} more hits.`;
+                }
+                // ----------------------------------
+
                 if (ent instanceof Enemy && ent.invincibleTurns > 0) {
                     txt += `\n\n<span style="color:#ff0000; font-weight:bold;">⚠️ INVINCIBLE</span>`;
                     txt += `\nShields active for ${ent.invincibleTurns} more turn(s).`;
                 }
-                // ----------------------------------
 
                 if(ent instanceof Player) {
                     txt += `\nMana: ${ent.mana}/${ent.baseMana}`;
@@ -1996,21 +2011,13 @@ const Game = {
                             if (intent.type === 'consume') typeName = "CONSUME";
                             if (intent.type === 'summon' || intent.type === 'summon_glitch') typeName = "REINFORCE";
                             if (intent.type === 'dispel') typeName = "CLEANSE";
+                            if (intent.type === 'reality_overwrite') { typeName = "REALITY SHIFT"; desc = " (Alters physics)"; }
+                            if (intent.type === 'purge_attack') { typeName = "THE PURGE"; desc = " (Massive Dmg)"; }
+                            if (intent.type === 'charge') { typeName = "CHARGING"; desc = " (Preparing Ult)"; }
                             
-                            if (intent.type === 'reality_overwrite') {
-                                typeName = "REALITY SHIFT";
-                                desc = " (Alters battlefield physics)";
-                            }
-                            if (intent.type === 'purge_attack') {
-                                typeName = "THE PURGE";
-                                desc = " (Massive Damage)";
-                            }
-                            if (intent.type === 'charge') {
-                                typeName = "CHARGING";
-                                desc = " (Preparing Ultimate Attack)";
-                            }
+                            // FIX: Strict check for effectiveVal
+                            let val = (intent.effectiveVal !== undefined) ? intent.effectiveVal : intent.val;
                             
-                            let val = intent.effectiveVal || intent.val;
                             txt += `\n${i+1}. ${typeName}`;
                             if (val > 0) txt += ` (${val})`;
                             txt += desc;
@@ -2023,19 +2030,16 @@ const Game = {
                     } 
                     else if(ent.nextIntent) {
                         const i = ent.nextIntent;
+                        const val = (i.effectiveVal !== undefined) ? i.effectiveVal : i.val;
                         txt += `\n\nIntent: ${i.type.toUpperCase()}`;
-                        if(i.val > 0) txt += ` (${i.val})`;
+                        if(val > 0) txt += ` (${val})`;
                     }
                 }
                 
                 if(ent instanceof Minion) {
                     txt += `\nAtk: ${ent.dmg}`;
-                    if (ent.name.includes("Glitch")) {
-                        txt += `\n(Gains +10% DMG per turn)`;
-                    }
-                    if (ent.isPlayerSide && Game.player.traits.minionTrait) {
-                        txt += `\n${Game.player.traits.minionTrait}`;
-                    }
+                    if (ent.name.includes("Glitch")) txt += `\n(Gains +10% DMG per turn)`;
+                    if (ent.isPlayerSide && Game.player.traits.minionTrait) txt += `\n${Game.player.traits.minionTrait}`;
                 }
                 TooltipMgr.show(txt, screenX, screenY);
                 break;
@@ -2044,9 +2048,7 @@ const Game = {
         
         if (hoveredEntity !== this.currentHoverEntity) {
             this.currentHoverEntity = hoveredEntity;
-            if (hoveredEntity) {
-                AudioMgr.playSound('click');
-            }
+            if (hoveredEntity) AudioMgr.playSound('click');
         }
 
         if(!hoveredEntity) TooltipMgr.hide();
@@ -4077,7 +4079,7 @@ async startCombat(type) {
         // Create New Enemy
         this.enemy = new Enemy(template, level, isElite);
         
-        // Tesseract Prime Logic (Transferred from Source)
+        // Tesseract Prime Logic
         if (this.enemy.name === "TESSERACT PRIME") {
             this.enemy.invincibleTurns = 3;
             setTimeout(() => {
@@ -4087,6 +4089,15 @@ async startCombat(type) {
             AudioMgr.bossSilence = true;
             if (AudioMgr.bgm) AudioMgr.bgm.pause();
         }
+
+        // --- NEW: THE COMPILER LOGIC (Armor Plated) ---
+        if (this.enemy.name === "THE COMPILER") {
+            this.enemy.armorPlating = 10;
+            setTimeout(() => {
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200, "ARMOR PLATED (10)", "#ffaa00");
+            }, 1000);
+        }
+        // ----------------------------------------------
 
         // --- UPDATED SCALING LOGIC ---
         if (isBoss) {
@@ -6608,7 +6619,7 @@ drawEntity(entity) {
         
         const isSpawning = entity.spawnTimer > 0;
 
-        // --- SPAWN ANIMATION (Opacity Only - No Clip to prevent crashes) ---
+        // --- SPAWN ANIMATION (Opacity Only - No Clip) ---
         if (isSpawning) {
             entity.spawnTimer -= 0.02; 
             ctx.globalAlpha = 1.0 - Math.max(0, entity.spawnTimer);
@@ -6889,7 +6900,6 @@ drawEntity(entity) {
                     ctx.arc(0, 0, 30, 0, Math.PI*2);
                     ctx.strokeStyle = mColor; 
                     ctx.lineWidth = 1.5; 
-                    // ctx.setLineDash([5, 15]); <--- REMOVED TO PREVENT MOBILE CRASH
                     ctx.stroke();
 
                     // 4. Satellite Nodes
@@ -7038,174 +7048,191 @@ drawEntity(entity) {
                 // --- OTHER BOSSES ---
                 else if (entity.isBoss) {
                      if (this.sector === 2) {
-                        ctx.save(); const magenta = '#ff00ff'; const brightMagenta = '#ff88ff'; const purple = '#800080';
-                        const jitterX = (Math.random() - 0.5) * 8; const jitterY = (Math.random() - 0.5) * 8; ctx.translate(jitterX, jitterY);
-                        ctx.fillStyle = '#000'; ctx.shadowColor = magenta; ctx.shadowBlur = 60; ctx.beginPath();
-                        for(let i=0; i<=40; i++) { const angle = (Math.PI*2/40) * i; const r = 90 + Math.sin(time * 10 + i * 5) * 5 + Math.random()*5; ctx.lineTo(Math.cos(angle)*r, Math.sin(angle)*r); } ctx.fill();
-                        ctx.lineWidth = 2; ctx.globalAlpha = 0.6; const spiralArms = 6;
-                        for (let j = 0; j < spiralArms; j++) { ctx.beginPath(); ctx.strokeStyle = (j%2===0)?'#ff00ff':'#800080'; for (let k = 0; k < 60; k++) { const theta = (time * -3) + (j * (Math.PI*2)/spiralArms) + (k*0.1); const r = k * 2.0; if (r>95) break; const x = Math.cos(theta)*r; const y = Math.sin(theta)*r; if (k===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); } ctx.stroke(); }
-                        ctx.globalAlpha = 1.0;
-                        const shards = 10; for(let i=0; i<shards; i++) { ctx.save(); const angle = time * 1.5 + (i * Math.PI*2 / shards); const dist = 140 + Math.sin(time*3 + i)*20; ctx.translate(Math.cos(angle)*dist, Math.sin(angle)*dist); ctx.rotate(angle + time * 2); ctx.fillStyle = 'rgba(10, 0, 10, 0.95)'; ctx.strokeStyle = brightMagenta; ctx.lineWidth = 3; ctx.shadowColor = magenta; ctx.shadowBlur = 15; ctx.beginPath(); ctx.moveTo(0, -35); ctx.lineTo(15, 20); ctx.lineTo(-15, 20); ctx.closePath(); ctx.fill(); ctx.stroke(); if (Math.random() > 0.7) { ctx.fillStyle = '#fff'; ctx.shadowBlur = 0; const px = (Math.random()-0.5)*50; const py = (Math.random()-0.5)*50; ctx.fillRect(px, py, Math.random()*3+2, Math.random()*3+2); } ctx.restore(); }
-                        ctx.font = "bold 16px 'Orbitron', monospace"; ctx.fillStyle = brightMagenta; ctx.shadowBlur = 5; ctx.globalAlpha = 0.8; const txtX = Math.sin(time * 1.2) * 70; const txtY = Math.cos(time * 0.9) * 70; ctx.fillText("NULL", txtX - 20, txtY); ctx.fillText("VOID", -txtX - 20, -txtY); ctx.restore();
-                     }
-                     // --- SECTOR 3: THE COMPILER (Industrial Mech - High Fidelity) ---
-                else if (this.sector === 3) {
-                    ctx.save();
-                    const orange = '#ff4500';
-                    const darkMetal = '#1a0500';
-                    const rust = '#4a1a00';
-                    const heat = '#ffcc00';
-                    
-                    // Heavy Industrial Hover
-                    const hover = Math.sin(time * 1.5) * 8;
-                    ctx.translate(0, hover);
-
-                    // 1. Thruster Exhausts (Massive Heat Output)
-                    ctx.save();
-                    const thrustLen = 90 + Math.sin(time * 20) * 10; // Flicker
-                    const thrustGrad = ctx.createLinearGradient(0, 80, 0, 80 + thrustLen);
-                    thrustGrad.addColorStop(0, '#fff'); // White hot
-                    thrustGrad.addColorStop(0.2, heat);
-                    thrustGrad.addColorStop(1, 'transparent');
-                    
-                    ctx.fillStyle = thrustGrad;
-                    // Left Main Thruster
-                    ctx.beginPath();
-                    ctx.moveTo(-50, 80); ctx.lineTo(-30, 80 + thrustLen); ctx.lineTo(-10, 80);
-                    ctx.fill();
-                    // Right Main Thruster
-                    ctx.beginPath();
-                    ctx.moveTo(10, 80); ctx.lineTo(30, 80 + thrustLen); ctx.lineTo(50, 80);
-                    ctx.fill();
-                    ctx.restore();
-
-                    // 2. Rear Exhaust Pipes (Behind body)
-                    ctx.fillStyle = '#111';
-                    ctx.strokeStyle = '#333';
-                    ctx.lineWidth = 4;
-                    // Left Pipe
-                    ctx.fillRect(-90, -110, 20, 60);
-                    ctx.strokeRect(-90, -110, 20, 60);
-                    // Right Pipe
-                    ctx.fillRect(70, -110, 20, 60);
-                    ctx.strokeRect(70, -110, 20, 60);
-
-                    // 3. Smoke Simulation (Procedural Stream)
-                    // Generates a continuous rising column from the pipes
-                    ctx.fillStyle = 'rgba(150, 150, 150, 0.4)';
-                    for(let i=0; i<6; i++) {
-                        const puffY = (time * 100 + i * 40) % 200; // Rising loop
-                        const alpha = 1.0 - (puffY / 200);
-                        const size = 10 + (puffY / 5);
-                        const drift = Math.sin(time * 2 + i) * 15 * (puffY/200); // Wind drift
+                        // Null Pointer
+                        ctx.save();
+                        const magenta = '#ff00ff';
+                        const brightMagenta = '#ff88ff';
+                        const purple = '#800080';
                         
-                        if (alpha > 0) {
-                            ctx.globalAlpha = alpha * 0.5;
-                            // Left Smoke
-                            ctx.beginPath(); 
-                            ctx.arc(-80 + drift, -110 - puffY, size, 0, Math.PI*2); 
-                            ctx.fill();
-                            // Right Smoke
-                            ctx.beginPath(); 
-                            ctx.arc(80 - drift, -110 - puffY, size, 0, Math.PI*2); 
-                            ctx.fill();
+                        const jitterX = (Math.random() - 0.5) * 8; 
+                        const jitterY = (Math.random() - 0.5) * 8;
+                        ctx.translate(jitterX, jitterY);
+
+                        // 1. The Void
+                        ctx.fillStyle = '#000';
+                        ctx.shadowColor = magenta;
+                        ctx.shadowBlur = 60; 
+                        ctx.beginPath();
+                        for(let i=0; i<=40; i++) { 
+                            const angle = (Math.PI*2/40) * i;
+                            const r = 180 + Math.sin(time * 10 + i * 5) * 10 + Math.random()*10; 
+                            ctx.lineTo(Math.cos(angle)*r, Math.sin(angle)*r);
                         }
+                        ctx.fill();
+
+                        // 2. Spiral Overlay
+                        ctx.lineWidth = 4;
+                        ctx.globalAlpha = 0.6;
+                        const spiralArms = 6;
+                        for (let j = 0; j < spiralArms; j++) {
+                            ctx.beginPath();
+                            ctx.strokeStyle = (j % 2 === 0) ? magenta : purple;
+                            for (let k = 0; k < 60; k++) {
+                                const theta = (time * -3) + (j * (Math.PI * 2) / spiralArms) + (k * 0.1); 
+                                const r = k * 4.0; 
+                                if (r > 190) break; 
+                                const x = Math.cos(theta) * r;
+                                const y = Math.sin(theta) * r;
+                                if (k===0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                            }
+                            ctx.stroke();
+                        }
+                        ctx.globalAlpha = 1.0;
+
+                        // 3. Orbiting Splinter Shards
+                        const shards = 12; 
+                        for(let i=0; i<shards; i++) {
+                            ctx.save();
+                            const angle = time * 1.5 + (i * Math.PI*2 / shards);
+                            const dist = 280 + Math.sin(time * 2 + i * 43) * 50; 
+                            
+                            ctx.translate(Math.cos(angle)*dist, Math.sin(angle)*dist);
+                            ctx.rotate(angle + (time * 4) + (i % 2 === 0 ? time : -time)); 
+                            
+                            const fade = 0.4 + 0.6 * Math.sin(time * 3 + i * 100);
+                            ctx.globalAlpha = fade;
+
+                            ctx.fillStyle = '#050005'; 
+                            ctx.strokeStyle = brightMagenta; 
+                            ctx.lineWidth = 3; 
+                            ctx.shadowColor = magenta;
+                            ctx.shadowBlur = 15;
+
+                            const warp = (offset) => Math.sin(time * 15 + i * 10 + offset) * 16;
+
+                            ctx.beginPath();
+                            ctx.moveTo(0 + warp(1), -60 + warp(2)); 
+                            ctx.lineTo(30 + warp(3), 20 + warp(4)); 
+                            ctx.lineTo(0 + warp(5), 10 + warp(6));   
+                            ctx.lineTo(-30 + warp(7), 20 + warp(8)); 
+                            ctx.closePath();
+                            
+                            ctx.fill(); ctx.stroke();
+                            
+                            if (i % 2 === 0) {
+                                ctx.beginPath();
+                                ctx.moveTo(0, -80 + warp(0));
+                                ctx.lineTo(10, -100 + warp(1));
+                                ctx.lineTo(-10, -100 + warp(2));
+                                ctx.fill(); ctx.stroke();
+                            }
+                            
+                            if (Math.random() > 0.8) {
+                                ctx.fillStyle = '#fff'; ctx.shadowBlur = 0;
+                                const px = (Math.random()-0.5)*120;
+                                const py = (Math.random()-0.5)*120;
+                                ctx.fillRect(px, py, Math.random()*4+2, Math.random()*40+2); 
+                            }
+                            ctx.restore();
+                        }
+
+                        // 4. Glitch Text
+                        ctx.font = "bold 32px 'Orbitron', monospace";
+                        ctx.fillStyle = brightMagenta;
+                        ctx.shadowBlur = 10;
+                        ctx.globalAlpha = 0.8;
+                        const txtX = Math.sin(time * 1.2) * 140;
+                        const txtY = Math.cos(time * 0.9) * 140;
+                        ctx.fillText("NULL", txtX - 40, txtY);
+                        ctx.fillText("VOID", -txtX - 40, -txtY);
+                        
+                        ctx.restore();
+                     }
+                     // --- SECTOR 3: THE COMPILER ---
+                    else if (this.sector === 3) {
+                        ctx.save();
+                        // UPDATED: Scale reduced to 1.6 (20% reduction from 2.0)
+                        ctx.scale(1.6, 1.6); 
+
+                        const orange = '#ff4500';
+                        const darkMetal = '#1a0500';
+                        const rust = '#4a1a00';
+                        const heat = '#ffcc00';
+                        
+                        const hover = Math.sin(time * 1.5) * 8;
+                        ctx.translate(0, hover);
+
+                        // 1. Thruster Exhausts
+                        ctx.save();
+                        const thrustLen = 90 + Math.sin(time * 20) * 10;
+                        const thrustGrad = ctx.createLinearGradient(0, 80, 0, 80 + thrustLen);
+                        thrustGrad.addColorStop(0, '#fff');
+                        thrustGrad.addColorStop(0.2, heat);
+                        thrustGrad.addColorStop(1, 'transparent');
+                        
+                        ctx.fillStyle = thrustGrad;
+                        ctx.beginPath(); ctx.moveTo(-50, 80); ctx.lineTo(-30, 80 + thrustLen); ctx.lineTo(-10, 80); ctx.fill();
+                        ctx.beginPath(); ctx.moveTo(10, 80); ctx.lineTo(30, 80 + thrustLen); ctx.lineTo(50, 80); ctx.fill();
+                        ctx.restore();
+
+                        // 2. Rear Exhaust Pipes
+                        ctx.fillStyle = '#111'; ctx.strokeStyle = '#333'; ctx.lineWidth = 4;
+                        ctx.fillRect(-90, -110, 20, 60); ctx.strokeRect(-90, -110, 20, 60);
+                        ctx.fillRect(70, -110, 20, 60); ctx.strokeRect(70, -110, 20, 60);
+
+                        // 3. Smoke Simulation
+                        ctx.fillStyle = 'rgba(150, 150, 150, 0.4)';
+                        for(let i=0; i<6; i++) {
+                            const puffY = (time * 100 + i * 40) % 200;
+                            const alpha = 1.0 - (puffY / 200);
+                            const size = 10 + (puffY / 5);
+                            const drift = Math.sin(time * 2 + i) * 15 * (puffY/200);
+                            
+                            if (alpha > 0) {
+                                ctx.globalAlpha = alpha * 0.5;
+                                ctx.beginPath(); ctx.arc(-80 + drift, -110 - puffY, size, 0, Math.PI*2); ctx.fill();
+                                ctx.beginPath(); ctx.arc(80 - drift, -110 - puffY, size, 0, Math.PI*2); ctx.fill();
+                            }
+                        }
+                        ctx.globalAlpha = 1.0;
+
+                        // 4. Main Chassis
+                        ctx.fillStyle = darkMetal; ctx.strokeStyle = orange; ctx.lineWidth = 3; ctx.shadowColor = orange; ctx.shadowBlur = 10;
+                        ctx.beginPath(); ctx.moveTo(-70, -70); ctx.lineTo(70, -70); ctx.lineTo(80, -20); ctx.lineTo(50, 80); ctx.lineTo(0, 90); ctx.lineTo(-50, 80); ctx.lineTo(-80, -20); ctx.closePath(); ctx.fill(); ctx.stroke();
+
+                        // 5. Shoulders
+                        const shoulderOffset = Math.sin(time * 2) * 5;
+                        ctx.fillStyle = rust;
+                        ctx.beginPath(); ctx.moveTo(-80, -70 + shoulderOffset); ctx.lineTo(-120, -50 + shoulderOffset); ctx.lineTo(-110, 20 + shoulderOffset); ctx.lineTo(-70, 0 + shoulderOffset); ctx.fill(); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(80, -70 + shoulderOffset); ctx.lineTo(120, -50 + shoulderOffset); ctx.lineTo(110, 20 + shoulderOffset); ctx.lineTo(70, 0 + shoulderOffset); ctx.fill(); ctx.stroke();
+
+                        // 6. Arms
+                        ctx.fillStyle = '#220a00';
+                        ctx.fillRect(-120, 20 + shoulderOffset, 30, 60); ctx.strokeRect(-120, 20 + shoulderOffset, 30, 60);
+                        ctx.fillRect(90, 20 + shoulderOffset, 30, 60); ctx.strokeRect(90, 20 + shoulderOffset, 30, 60);
+
+                        // 7. Furnace Core
+                        const pulse = 1 + 0.1 * Math.sin(time * 8);
+                        ctx.save(); ctx.translate(0, -10); ctx.scale(pulse, pulse);
+                        ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 30; ctx.fillStyle = '#ffcc00';
+                        ctx.beginPath(); const r = 25; for(let i=0; i<6; i++) { const a = (Math.PI/3)*i; ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r); } ctx.closePath(); ctx.fill();
+                        ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(15, 0); ctx.moveTo(-15, -10); ctx.lineTo(15, -10); ctx.moveTo(-15, 10); ctx.lineTo(15, 10); ctx.stroke();
+                        ctx.restore();
+
+                        // 8. Head Visor
+                        ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 15;
+                        ctx.fillRect(-15, -80 + shoulderOffset*0.5, 30, 8);
+
+                        ctx.restore();
                     }
-                    ctx.globalAlpha = 1.0;
-
-                    // 4. Main Chassis (Torso)
-                    ctx.fillStyle = darkMetal;
-                    ctx.strokeStyle = orange;
-                    ctx.lineWidth = 3;
-                    ctx.shadowColor = orange;
-                    ctx.shadowBlur = 10;
-                    
-                    ctx.beginPath();
-                    // Bulkier Shape
-                    ctx.moveTo(-70, -70); // Top Left
-                    ctx.lineTo(70, -70);  // Top Right
-                    ctx.lineTo(80, -20);  // Shoulder flare
-                    ctx.lineTo(50, 80);   // Waist taper
-                    ctx.lineTo(0, 90);    // Crotch guard
-                    ctx.lineTo(-50, 80);  // Waist taper
-                    ctx.lineTo(-80, -20); // Shoulder flare
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
-
-                    // 5. Hydraulic Shoulders (Animated)
-                    const shoulderOffset = Math.sin(time * 2) * 5;
-                    ctx.fillStyle = rust;
-                    // Left Pauldron
-                    ctx.beginPath();
-                    ctx.moveTo(-80, -70 + shoulderOffset);
-                    ctx.lineTo(-120, -50 + shoulderOffset);
-                    ctx.lineTo(-110, 20 + shoulderOffset);
-                    ctx.lineTo(-70, 0 + shoulderOffset);
-                    ctx.fill();
-                    ctx.stroke();
-                    // Right Pauldron
-                    ctx.beginPath();
-                    ctx.moveTo(80, -70 + shoulderOffset);
-                    ctx.lineTo(120, -50 + shoulderOffset);
-                    ctx.lineTo(110, 20 + shoulderOffset);
-                    ctx.lineTo(70, 0 + shoulderOffset);
-                    ctx.fill();
-                    ctx.stroke();
-
-                    // 6. Heavy Arms
-                    ctx.fillStyle = '#220a00';
-                    // Left Arm
-                    ctx.fillRect(-120, 20 + shoulderOffset, 30, 60);
-                    ctx.strokeRect(-120, 20 + shoulderOffset, 30, 60);
-                    // Right Arm
-                    ctx.fillRect(90, 20 + shoulderOffset, 30, 60);
-                    ctx.strokeRect(90, 20 + shoulderOffset, 30, 60);
-
-                    // 7. Furnace Core (Chest)
-                    const pulse = 1 + 0.1 * Math.sin(time * 8);
-                    ctx.save();
-                    ctx.translate(0, -10);
-                    ctx.scale(pulse, pulse);
-                    
-                    ctx.shadowColor = '#ffaa00';
-                    ctx.shadowBlur = 30;
-                    ctx.fillStyle = '#ffcc00';
-                    
-                    // Hexagon Core
-                    ctx.beginPath();
-                    const r = 25;
-                    for(let i=0; i<6; i++) {
-                        const a = (Math.PI/3)*i;
-                        ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
-                    }
-                    ctx.closePath();
-                    ctx.fill();
-                    
-                    // Grill overlay
-                    ctx.strokeStyle = '#000';
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.moveTo(-15, 0); ctx.lineTo(15, 0);
-                    ctx.moveTo(-15, -10); ctx.lineTo(15, -10);
-                    ctx.moveTo(-15, 10); ctx.lineTo(15, 10);
-                    ctx.stroke();
-                    
-                    ctx.restore();
-
-                    // 8. Head Visor
-                    ctx.fillStyle = '#fff';
-                    ctx.shadowColor = '#fff';
-                    ctx.shadowBlur = 15;
-                    ctx.fillRect(-15, -80 + shoulderOffset*0.5, 30, 8);
-
-                    ctx.restore();
-                }
                      else if (this.sector === 4) {
-                         ctx.save(); const lime = '#32cd32'; const droneCount = 12; ctx.shadowColor = lime; ctx.shadowBlur = 30; ctx.fillStyle = 'rgba(50,205,50,0.1)'; ctx.beginPath(); ctx.arc(0,0,80,0,Math.PI*2); ctx.fill();
+                         // Hive
+                         ctx.save();
+                         ctx.fillStyle = 'rgba(50,205,50,0.1)'; ctx.beginPath(); ctx.arc(0,0,80,0,Math.PI*2); ctx.fill();
                          for(let i=0; i<12; i++) { const dx = Math.sin(time*2+i*100)*60; const dy = Math.cos(time*1.2+i*100)*40; ctx.save(); ctx.translate(dx,dy); ctx.rotate(time*3+i); ctx.fillStyle='#0a2a0a'; ctx.strokeStyle='#32cd32'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(0,-15); ctx.lineTo(12,10); ctx.lineTo(-12,10); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.globalAlpha=0.2; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-dx, -dy); ctx.stroke(); ctx.globalAlpha=1.0; ctx.restore(); } ctx.restore();
                      }
                      else if (this.sector === 5) {
+                         // Tesseract
                          ctx.save(); ctx.rotate(time*0.2); const gold='#ffd700'; const white='#ffffff'; ctx.strokeStyle=white; ctx.lineWidth=2; ctx.strokeRect(-70,-70,140,140);
                          ctx.save(); ctx.rotate(time); const p=100+Math.sin(time*2)*20; ctx.strokeStyle=gold; ctx.lineWidth=4; ctx.strokeRect(-p/2,-p/2,p,p); ctx.restore();
                          ctx.strokeStyle='rgba(255,215,0,0.3)'; ctx.lineWidth=1; const o=70; const i=p/2; ctx.beginPath(); ctx.moveTo(-o,-o); ctx.lineTo(-i,-i); ctx.moveTo(o,-o); ctx.lineTo(i,-i); ctx.moveTo(o,o); ctx.lineTo(i,i); ctx.moveTo(-o,o); ctx.lineTo(-i,i); ctx.stroke();
@@ -7330,7 +7357,7 @@ drawEntity(entity) {
         if (entity.hasEffect('frail')) { ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; ctx.lineWidth = 1; ctx.beginPath(); const seed = entity.name.length; for(let k=0; k<3; k++) { ctx.moveTo(Math.sin(seed+k)*20, Math.cos(seed+k)*20); ctx.lineTo(Math.sin(seed+k+1)*40, Math.cos(seed+k+1)*40); } ctx.stroke(); }
         if ((entity instanceof Player && entity.traits.vulnerable) || entity.hasEffect('vulnerable')) { ctx.rotate(time); ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 2; ctx.setLineDash([10, 10]); ctx.beginPath(); ctx.arc(0, 0, entity.radius + 15, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]); }
 
-        // --- ENEMY INTENT ICON ---
+        // --- ENEMY INTENT ICON (UPDATED: 50% larger font + accurate value) ---
         if (entity instanceof Enemy && ((entity.nextIntents && entity.nextIntents.length > 0) || entity.nextIntent)) {
             ctx.restore(); 
             ctx.save();
@@ -7354,15 +7381,17 @@ drawEntity(entity) {
                     if(intent.type === 'heal') icon = '💚'; else if(intent.type === 'shield') icon = '🛡️'; else if(intent.type === 'buff') icon = '💪'; else if(intent.type === 'debuff') icon = '🦠'; else if(intent.type === 'consume') icon = '🍽️'; else if(intent.type === 'charge' || intent.type === 'purge_attack') icon = '⚠️'; else if(intent.type === 'reality_overwrite') icon = '🌌'; else if(intent.type === 'dispel') icon = '✨';
                     ctx.fillText(icon, ix, iy + 35); 
 
+                    // FIX: Larger Font (16px -> 24px) & Effective Value
                     const displayVal = (intent.effectiveVal !== undefined) ? intent.effectiveVal : intent.val;
                     if(displayVal !== undefined && displayVal > 0) {
-                        ctx.font = 'bold 24px "Orbitron"';
+                        ctx.font = 'bold 24px "Orbitron"'; // Increased
                         ctx.fillStyle = (intent.type === 'heal') ? '#0f0' : '#fff';
                         ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
                         ctx.fillText(displayVal, ix, iy - 5); 
                     }
                 }
             } else {
+                // Fallback for Single Intent
                 ctx.fillStyle = COLORS.MECH_LIGHT; const hover = Math.cos(time * 5) * 5; ctx.fillRect(-40, -entity.radius - 40 + hover, 80, 25);
                 ctx.fillStyle = '#fff'; ctx.font = '40px "Segoe UI Emoji"'; ctx.textAlign = 'center'; ctx.shadowBlur = 0;
                 let icon = '⚔️'; if(entity.nextIntent.type === 'heal') icon = '💚'; else if(entity.nextIntent.type === 'summon') icon = '🤖';
