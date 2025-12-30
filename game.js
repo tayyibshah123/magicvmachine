@@ -7684,20 +7684,19 @@ drawEntity(entity) {
             ctx.globalCompositeOperation = 'source-over';
         }
 
-        // --- SHIELD VISUAL (MOBILE SAFE MODE) ---
+        // --- SHIELD VISUAL (BARE METAL OPTIMIZATION) ---
         if (entity.shield > 0) {
             ctx.save();
             const r = entity.radius + 15;
             
-            // Pulse opacity instead of shadow blur
-            const pulse = 0.6 + 0.4 * Math.sin(time * 5); 
-            ctx.globalAlpha = pulse;
+            // Simple opacity pulse
+            ctx.globalAlpha = 0.6 + 0.2 * Math.sin(time * 3);
 
-            // 1. Simple Hexagon Outline (No Gradients)
+            // Single Hexagon Outline ONLY (No Fill, No Inner Ring)
             ctx.beginPath();
-            const segments = 6;
-            for (let i = 0; i < segments; i++) {
-                const angle = (Math.PI * 2 / segments) * i + (time * 0.5);
+            for (let i = 0; i < 6; i++) {
+                // Pre-calculated rotation to avoid complex transforms
+                const angle = (Math.PI / 3) * i + (time * 0.5);
                 const sx = Math.cos(angle) * r;
                 const sy = Math.sin(angle) * r;
                 if (i === 0) ctx.moveTo(sx, sy);
@@ -7705,20 +7704,9 @@ drawEntity(entity) {
             }
             ctx.closePath();
 
-            // Solid semi-transparent fill
-            ctx.fillStyle = 'rgba(0, 243, 255, 0.15)'; 
-            ctx.fill();
-            
-            // Solid Stroke
+            // Solid Stroke Only
+            ctx.lineWidth = 4;
             ctx.strokeStyle = '#00f3ff';
-            ctx.lineWidth = 3;
-            ctx.stroke();
-
-            // 2. Inner Ring (Solid, No Dashes)
-            ctx.beginPath();
-            ctx.arc(0, 0, r * 0.8, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-            ctx.lineWidth = 1;
             ctx.stroke();
             
             ctx.restore();
