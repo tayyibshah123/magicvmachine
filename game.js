@@ -7124,29 +7124,20 @@ drawEntity(entity) {
                 // BOSS RENDERING LOGIC (OPTIMIZED SECTOR 1)
                 // =========================================================
                 
-                // --- SECTOR 1: THE PANOPTICON (Test Block 2: Gradients/Dashes Removed) ---
+                // --- SECTOR 1: THE PANOPTICON (Ultra Performance Mode) ---
                 if (this.sector === 1) {
                     ctx.save();
                     const cyan = '#00ffff';
-                    const darkCyan = '#002222';
                     
-                    // 1. Scanning Light Beams (Solid Fill - No Gradients)
+                    // 1. Scanning Light Beams (Simple Lines)
                     ctx.save();
                     const beamWidth = 120 + Math.sin(time * 2) * 20; 
-                    
-                    // OPTIMIZATION: Simple flat fill
-                    ctx.fillStyle = 'rgba(0, 255, 255, 0.15)'; 
-                    ctx.beginPath();
-                    ctx.moveTo(-20, 20); ctx.lineTo(-beamWidth, 400); 
-                    ctx.lineTo(beamWidth, 400);  
-                    ctx.lineTo(20, 20);  
-                    ctx.fill();
-                    
-                    // Scanlines (Simple Lines)
                     ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
                     ctx.lineWidth = 2;
                     const scanOffset = (time * 150) % 50;
                     ctx.beginPath();
+                    ctx.moveTo(-20, 20); ctx.lineTo(-beamWidth, 400); 
+                    ctx.moveTo(20, 20); ctx.lineTo(beamWidth, 400);
                     for(let i=0; i<8; i++) {
                         const y = 50 + i * 50 + scanOffset;
                         if (y < 400) {
@@ -7172,8 +7163,9 @@ drawEntity(entity) {
                     // Ring 1: Outer
                     ctx.save();
                     ctx.rotate(time * 0.15);
-                    // OPTIMIZATION: Removed setLineDash
-                    ctx.beginPath(); ctx.arc(0, 0, 160, 0, Math.PI*2); ctx.stroke();
+                    ctx.strokeStyle = cyan;
+                    const r1 = 160;
+                    ctx.beginPath(); ctx.arc(0, 0, r1, 0, Math.PI*2); ctx.stroke();
                     ctx.restore();
 
                     // Ring 2: Side Brackets
@@ -7186,8 +7178,8 @@ drawEntity(entity) {
                     // Ring 3: Fast Inner
                     ctx.save();
                     ctx.rotate(-time * 0.8);
-                    // OPTIMIZATION: Removed setLineDash
-                    ctx.beginPath(); ctx.arc(0, 0, 110, 0, Math.PI*2); ctx.stroke();
+                    const r3 = 110;
+                    ctx.beginPath(); ctx.arc(0, 0, r3, 0, Math.PI*2); ctx.stroke();
                     ctx.restore();
 
                     // 4. The Lens
@@ -7199,7 +7191,7 @@ drawEntity(entity) {
                     ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI*2); ctx.stroke();
                     
                     const pupilSize = 18 + Math.sin(time * 4) * 5;
-                    ctx.fillStyle = '#fff'; 
+                    ctx.fillStyle = '#fff';
                     ctx.beginPath(); ctx.arc(0, 0, pupilSize, 0, Math.PI*2); ctx.fill();
                     
                     ctx.restore();
