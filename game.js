@@ -554,11 +554,12 @@ const AudioMgr = {
         }
     },
 
-    // ... [Rest of AudioMgr methods: playSound, playTone, createNoise remain unchanged] ...
     playSound(type) {
         // Check SFX flag specifically
         if (!this.ctx || !this.sfxEnabled) return;
-        if (this.ctx.state === 'suspended') this.ctx.resume();
+        
+        // FIX: Do NOT force resume here. It causes lag spikes on mobile.
+        if (this.ctx.state === 'suspended') return;
 
         const t = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
@@ -1548,25 +1549,13 @@ const Game = {
 
     init() {
         this.canvas = document.getElementById('gameCanvas');
-        this.ctx = this.canvas.getContext('2d', { alpha: false }); // Optimize: Disable alpha channel on canvas if possible
+        // Optimize: Disable alpha channel for performance (we draw a full opaque background)
+        this.ctx = this.canvas.getContext('2d', { alpha: false });
         
-        // --- MOBILE OPTIMIZATION: RESOLUTION SCALING ---
-        const isMobile = window.innerWidth <= 768;
-        
-        if (isMobile) {
-            // Render at half resolution (Quarter pixel count)
-            this.canvas.width = 540; 
-            this.canvas.height = 960;
-            // Scale all drawing commands down by 50% automatically
-            this.ctx.scale(0.5, 0.5); 
-            this.mobileScale = 0.5; // Store for input correction
-        } else {
-            // Desktop: Full Resolution
-            this.canvas.width = CONFIG.CANVAS_WIDTH; // 1080
-            this.canvas.height = CONFIG.CANVAS_HEIGHT; // 1920
-            this.mobileScale = 1.0;
-        }
-        // -----------------------------------------------
+        // --- FIX: Restore Full Resolution (Fixes Split-Screen Glitch) ---
+        this.canvas.width = CONFIG.CANVAS_WIDTH;
+        this.canvas.height = CONFIG.CANVAS_HEIGHT;
+        // -------------------------------------------------------------
 
         this.shopInventory = null;
         this.inputCooldown = 0; 
@@ -1617,14 +1606,19 @@ const Game = {
 
         if (this.corruptionLevel > 0) {
             const sub = document.querySelector('.subtitle');
-            if(sub) sub.innerText = `ASCENSION LEVEL ${this.corruptionLevel}`;
-            if(sub) sub.style.color = '#ff0055';
+            if(sub) {
+                sub.innerText = `ASCENSION LEVEL ${this.corruptionLevel}`;
+                sub.style.color = '#ff0055';
+            }
         }
 
         this.effects = [];
 
-        document.getElementById('run-fragments').innerText = this.techFragments;
-        document.getElementById('fragment-count').innerText = `Fragments: ${this.techFragments}`;
+        const fragEl = document.getElementById('run-fragments');
+        if(fragEl) fragEl.innerText = this.techFragments;
+        
+        const fragCountEl = document.getElementById('fragment-count');
+        if(fragCountEl) fragCountEl.innerText = `Fragments: ${this.techFragments}`;
 
         const unlockAudio = () => {
             AudioMgr.init();
@@ -6177,7 +6171,6 @@ drawEffects() {
         this.bgState.particles.push(p);
     },
 
-    // --- REPLACED: drawEnvironment ---
     drawEnvironment(dt) {
         if (this.currentState === STATE.META) {
             this.drawSanctuary(dt);
@@ -6190,8 +6183,9 @@ drawEffects() {
         }
 
         const ctx = this.ctx;
-        const w = this.canvas.width;
-        const h = this.canvas.height;
+        // FIX: Use CONFIG constants to ensure full screen clear
+        const w = CONFIG.CANVAS_WIDTH;
+        const h = CONFIG.CANVAS_HEIGHT;
         const time = Date.now() / 1000;
         
         let conf = SECTOR_CONFIG[this.sector] || SECTOR_CONFIG[1];
@@ -6203,15 +6197,15 @@ drawEffects() {
             type = 'source';
         }
 
-        // 1. Sky Gradient
+        // 1. Sky Gradient (Background)
         const grad = ctx.createLinearGradient(0, 0, 0, h);
         grad.addColorStop(0, conf.bgTop);
         grad.addColorStop(0.4, conf.bgBot);
         grad.addColorStop(1, conf.bgTop);
         ctx.fillStyle = grad;
+        
+        // FIX: Clear entire logical space to prevent smear/glitch
         ctx.fillRect(0, 0, w, h);
-
-        // [REMOVED] 2. Sun / Moon Block
 
         // 3. Dynamic Skyline (Parallax)
         const horizon = h * 0.45;
@@ -6337,6 +6331,7 @@ drawEffects() {
         for(let y = horizon; y < h; y += 40) {
             const dist = (y - horizon) / (h - horizon);
             const perspectiveY = horizon + (Math.pow(dist, 0.7)) * (h - horizon);
+            
             const moveY = perspectiveY + (offsetY * (1-dist)); 
             if (moveY > h) continue;
 
