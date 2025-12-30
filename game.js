@@ -284,6 +284,22 @@ const UPGRADES_POOL = [
     { id: 'data_miner', name: "Data Miner", desc: "Gain 20 Fragments if you end combat with full HP.", icon: "⛏️" }
 ];
 
+// --- MISSING DATA: CORRUPTED RELICS ---
+const CORRUPTED_RELICS = [
+    { id: 'c_blood_pact', name: "Blood Pact", desc: "Deal +50% DMG, but take 2 DMG at start of turn.", icon: "🩸", rarity: 'corrupted' },
+    { id: 'c_unstable_core', name: "Unstable Core", desc: "+2 Base Mana, but 25% chance to lose turn when casting skills.", icon: "☢️", rarity: 'corrupted' },
+    { id: 'c_void_shell', name: "Void Shell", desc: "Start with 30 Shield, but cannot gain Shield from cards.", icon: "⬛", rarity: 'corrupted' },
+    { id: 'c_glitch_blade', name: "Glitch Blade", desc: "Attacks deal random DMG (1 to 3x Base).", icon: "👾", rarity: 'corrupted' },
+    { id: 'c_entropy', name: "Entropy", desc: "Enemies start with -20% HP, but deal +50% DMG.", icon: "📉", rarity: 'corrupted' }
+];
+
+const GLITCH_MODIFIERS = [
+    { id: 'volatile', name: 'Volatile', icon: '💣', desc: 'Explodes for 15 DMG on death.' },
+    { id: 'evasive', name: 'Evasive', icon: '💨', desc: '20% chance to dodge attacks.' },
+    { id: 'regen', name: 'Regenerator', icon: '❤️', desc: 'Heals 5% HP each turn.' },
+    { id: 'thorns', name: 'Sharp', icon: '🌵', desc: 'Reflects 2 DMG on hit.' }
+];
+
 const DICE_UPGRADES = {
     ATTACK:     { name: "Blade Storm", desc: "Deal 8 DMG. 30% chance to hit ALL enemies.", cost: 190, icon: "⚔️" },
     DEFEND:     { name: "Aegis Field", desc: "Gain 10 Shield. All allies gain 5 Shield.", cost: 175, icon: "🏰" },
@@ -5813,8 +5829,9 @@ drawEffects() {
         
         let pool = [...UPGRADES_POOL];
         
-        // --- NEW: Add Corrupted Relics if Ascended ---
-        if (this.corruptionLevel > 0) {
+        // --- ADD CORRUPTED RELICS (If Ascended) ---
+        // Added safety check: only push if CORRUPTED_RELICS is defined
+        if (this.corruptionLevel > 0 && typeof CORRUPTED_RELICS !== 'undefined') {
             pool.push(...CORRUPTED_RELICS);
         }
         
@@ -5825,6 +5842,7 @@ drawEffects() {
         if(this.player.hasRelic('overcharge_chip')) pool = pool.filter(i => i.id !== 'overcharge_chip');
         if(this.player.hasRelic('reckless_drive')) pool = pool.filter(i => i.id !== 'reckless_drive'); 
         
+        // Filter Maxed Items
         const coreCount = this.player.relics.filter(r => r.id === 'minion_core').length;
         if(coreCount >= 2) pool = pool.filter(i => i.id !== 'minion_core');
 
@@ -5840,7 +5858,6 @@ drawEffects() {
         const holoCount = this.player.relics.filter(r => r.id === 'hologram').length;
         if(holoCount >= 3) pool = pool.filter(i => i.id !== 'hologram');
 
-        // FIX: Filter Firewall if maxed
         const fireCount = this.player.relics.filter(r => r.id === 'firewall').length;
         if(fireCount >= 3) pool = pool.filter(i => i.id !== 'firewall');
 
@@ -5849,30 +5866,37 @@ drawEffects() {
             const j = Math.floor(Math.random() * (i + 1));
             [pool[i], pool[j]] = [pool[j], pool[i]];
         }
+        
+        // Select Options
         const options = pool.slice(0, choices);
         
         options.forEach(item => {
             const card = document.createElement('div');
             const isGold = item.rarity === 'gold';
             const isRed = item.rarity === 'red';
-            const isCorrupted = item.rarity === 'corrupted'; // NEW
+            const isCorrupted = item.rarity === 'corrupted'; 
             
             let borderClass = '';
             if (isGold) borderClass = 'gold-border';
             if (isRed) borderClass = 'red-border';
-            if (isCorrupted) borderClass = 'corrupted-border'; // New class needed in CSS or inline logic
+            if (isCorrupted) borderClass = 'red-border'; // Re-use red border for now or add specific style
 
-            // Add style for corrupted
+            card.className = `reward-card ${borderClass}`;
+            
+            // Special styling for Corrupted items
             if (isCorrupted) {
                 card.style.borderColor = "#ff00ff";
                 card.style.boxShadow = "0 0 15px #ff00ff";
                 card.style.background = "linear-gradient(135deg, rgba(50,0,50,0.8), rgba(20,0,20,0.9))";
             }
-
-            card.className = `reward-card ${borderClass}`;
             
             const currentCount = this.player.relics.filter(r => r.id === item.id).length;
-            const nextDesc = this.getRelicDescription(item, currentCount + 1);
+            
+            // Safety for description scaling
+            let nextDesc = item.desc;
+            if (this.getRelicDescription) {
+                 nextDesc = this.getRelicDescription(item, currentCount + 1);
+            }
 
             card.innerHTML = `
                 <div class="reward-icon">${item.icon}</div>
@@ -5884,8 +5908,11 @@ drawEffects() {
                 AudioMgr.playSound('click');
                 
                 if (item.instant) {
-                    if(item.id === 'repair') this.player.heal(10); // Reduced
-                    if(item.id === 'hull_plating') { this.player.maxHp += 5; this.player.currentHp += 5; } // Reduced
+                    if(item.id === 'repair') {
+                        const amt = Math.floor(this.player.maxHp * 0.3);
+                        this.player.heal(amt);
+                    }
+                    if(item.id === 'hull_plating') { this.player.maxHp += 10; this.player.currentHp += 10; } 
                     if(item.id === 'mana_battery') this.player.baseMana += 1;
                 } else {
                     this.player.addRelic(item);
