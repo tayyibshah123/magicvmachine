@@ -240,7 +240,50 @@ const ParticleSys = {
         }
     },
 
+    // Nearby recent floating texts get staggered by a short gap so a burst
+    // of simultaneous status labels (OVERFLOW, BLOOD TIER UP, COMBO, …)
+    // cascades one at a time instead of piling into an unreadable stack.
+    // Only labels landing in the same region (~220 px) and within a short
+    // window (~800 ms) are delayed — labels on opposite sides of the screen
+    // still fire instantly. Damage numbers pass `immediate: true` since
+    // they must sync with the impact beat; the stagger is for status text.
+    _recentFloatingTexts: [],
+    _FT_NEAR: 220,       // px radius for "same region"
+    _FT_STAGGER: 220,    // ms gap between successive nearby texts
+    _FT_WINDOW: 800,     // ms before a recent entry is pruned
     createFloatingText(x, y, text, color, opts) {
+        if (opts && opts.immediate) {
+            this._spawnFloatingText(x, y, text, color, opts);
+            return;
+        }
+        const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        // Prune stale entries so the list stays tiny.
+        const fresh = [];
+        for (let i = 0; i < this._recentFloatingTexts.length; i++) {
+            if (now - this._recentFloatingTexts[i].time < this._FT_WINDOW) {
+                fresh.push(this._recentFloatingTexts[i]);
+            }
+        }
+        this._recentFloatingTexts = fresh;
+        // Find the latest nearby entry — the new text waits a gap after it.
+        let latest = 0;
+        for (let i = 0; i < fresh.length; i++) {
+            const r = fresh[i];
+            const dx = r.x - x, dy = r.y - y;
+            if (dx * dx + dy * dy < this._FT_NEAR * this._FT_NEAR && r.time > latest) {
+                latest = r.time;
+            }
+        }
+        const delay = latest > 0 ? Math.max(0, latest + this._FT_STAGGER - now) : 0;
+        const fireAt = now + delay;
+        this._recentFloatingTexts.push({ x, y, time: fireAt });
+        if (delay === 0) {
+            this._spawnFloatingText(x, y, text, color, opts);
+        } else {
+            setTimeout(() => this._spawnFloatingText(x, y, text, color, opts), delay);
+        }
+    },
+    _spawnFloatingText(x, y, text, color, opts) {
         const p = this._acquire();
         p.x = x; p.y = y;
         p.vx = 0; p.vy = (opts && opts.vy != null) ? opts.vy : -1.5;
@@ -266,7 +309,9 @@ const ParticleSys = {
         else if (amount < 100){ tier = 'heavy';        color = '#ff1100'; fontSize = 64; vy = -2.0; }
         else                  { tier = 'catastrophic'; color = '#ffdd33'; fontSize = 84; vy = -2.4; }
         if (isPlayerTarget && tier === 'solid') color = '#ff5566';
-        this.createFloatingText(x, y - 60, "-" + amount, color, { fontSize, vy, life: 1.6 });
+        // Damage numbers must land on the same frame as the hit VFX —
+        // bypass the status-text stagger queue so they stay tied to impact.
+        this.createFloatingText(x, y - 60, "-" + amount, color, { fontSize, vy, life: 1.6, immediate: true });
         return tier;
     },
 
