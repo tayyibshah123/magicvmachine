@@ -2459,7 +2459,7 @@ startQTE(type, x, y, callback) {
         bloodstalker: {
             description: "A vampiric predator who treats HP as currency. The Bloodstalker takes +1 damage from every hit (a lasting vulnerability), but heals on lifesteal kills and can pay HP to empower brutal finishers. Players who like trading life for lethal bursts will thrive — the trick is knowing when you can afford to bleed.",
             style: "HP-as-resource. High risk, high reward. Burst-window class — all-in plays backed by heal triggers.",
-            minion: "Blood Thrall — an aggressive predator that heals the player for 10 HP whenever it secures a kill.",
+            minion: "Blood Thrall — a predatory shield. While alive it absorbs every hit that would land on you. The Blood Pool still fills on those hits, so the tribute cycle keeps churning even when you're untouched.",
             ability: "BLOOD POOL — tap to pay 5 HP for one Blood Charge (up to 3). The next damage die you play consumes all charges for +5 damage per charge (up to +15).",
             attack: "Bite → Gouge → Maul — predatory strike that also heals you on hit.",
             combo:  "FEEDING FRENZY (2 ATK + 1 DEF) — heal 5 HP at climax on top of the per-hit lifesteal.",
@@ -9950,10 +9950,10 @@ drawEffects() {
                         const dmg = Math.floor((m.dmg + swarmBonus) * multiplier);
                         if (t.takeDamage(dmg, m) && t === this.enemy) { this.winCombat(); return; }
                         if (t !== this.enemy && t.currentHp <= 0) {
-                             if (this.player.traits.lifesteal && !t.isPlayerSide) {
-                                 this.player.heal(10);
-                                 ParticleSys.createFloatingText(this.player.x, this.player.y, "FEED", "#ff0000");
-                             }
+                             // Blood Thrall kills no longer heal the player — the
+                             // thrall's value now comes from soaking damage while
+                             // alive (see Player.takeDamage redirect). Per-hit
+                             // lifesteal on the player's own attacks is still on.
                              if (this.enemy) this.enemy.minions = this.enemy.minions.filter(min => min !== t);
                              if(this.player.hasRelic('brutalize') && !t.isPlayerSide) {
                                  this.triggerBrutalize(t);

@@ -227,8 +227,8 @@ const PLAYER_CLASSES = [
     },
     {
         id: 'bloodstalker', name: 'Blood Stalker', icon: ICONS.classBloodstalker, color: '#ff0000',
-        desc: 'Lifesteal 2 HP on hit.\nTake +1 DMG from all sources.\nBlood Tier ticks up on every kill — each tier adds +1 lifesteal.\nMinion: Blood Thrall (Heal Player 10HP on kill)',
-        traits: { lifesteal: true, vulnerable: true, minionName: "Blood Thrall", minionTrait: "Kill: Heals Player 10HP.", bloodTierPerKill: 1, bloodTierLifestealBonus: 1 },
+        desc: 'Lifesteal 2 HP on hit.\nTake +1 DMG from all sources.\nBlood Tier ticks up on every kill — each tier adds +1 lifesteal.\nMinion: Blood Thrall (soaks damage meant for you).',
+        traits: { lifesteal: true, vulnerable: true, minionName: "Blood Thrall", minionTrait: "Alive: absorbs damage meant for the player.", bloodTierPerKill: 1, bloodTierLifestealBonus: 1 },
         classDice: { attack: 'BLD_ATTACK', defend: 'BLD_DEFEND', mana: 'BLD_MANA', minion: 'BLD_MINION' }
     },
     {

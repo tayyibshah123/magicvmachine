@@ -57,6 +57,27 @@ class Entity {
             return false;
         }
 
+        // Bloodstalker: Blood Thrall redirects all player-bound damage to
+        // itself while alive. The Blood Pool (Tribute) bar still fills off
+        // the incoming amount — the thrall shields the hit but the player's
+        // class ability still ticks as if the damage had landed, so the
+        // bloodstalker's charge-up loop isn't interrupted by keeping a
+        // thrall up.
+        if (this instanceof Player && this.traits && this.traits.minionName === 'Blood Thrall' && amount > 0) {
+            const thrall = (this.minions || []).find(m => m && m.currentHp > 0);
+            if (thrall) {
+                ParticleSys.createFloatingText(thrall.x, thrall.y - 60, `SHIELDED -${amount}`, '#ff0055');
+                AudioMgr.playSound('hit');
+                thrall.takeDamage(amount, source, suppressBlockText);
+                // Remove the thrall from the live minion list if the hit killed it.
+                if (thrall.currentHp <= 0) {
+                    this.minions = this.minions.filter(m => m !== thrall);
+                }
+                try { ClassAbility.onEvent('damage_taken', { amount, source }); } catch (_) {}
+                return false;
+            }
+        }
+
         if (this instanceof Enemy && this.invincibleTurns > 0) {
             ParticleSys.createFloatingText(this.x, this.y - 60, "INVINCIBLE", "#888");
             AudioMgr.playSound('defend');
