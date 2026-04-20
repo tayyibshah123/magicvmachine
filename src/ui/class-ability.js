@@ -632,11 +632,26 @@ export const ClassAbility = {
                         </span>
                         <div class="ca-tributes">
                             <button class="ca-tribute ca-tribute-minor" data-action="tribute-minor"
-                                title="Minor Tribute — pay 5% Max HP for +1 reroll.">m</button>
+                                title="Minor Tribute — pay 5% Max HP for +1 reroll.">
+                                <span class="ca-tribute-rank" aria-hidden="true">I</span>
+                                <span class="ca-tribute-fill" aria-hidden="true"></span>
+                                <span class="ca-tribute-drop" aria-hidden="true"></span>
+                                <span class="ca-tribute-cost">5%</span>
+                            </button>
                             <button class="ca-tribute ca-tribute-major" data-action="tribute-major"
-                                title="Major Tribute — pay 15% Max HP. Deal ${CFG.bloodstalker.majorAttack} DMG and apply ${CFG.bloodstalker.majorBleed} Bleed (3 turns).">M</button>
+                                title="Major Tribute — pay 15% Max HP. Deal ${CFG.bloodstalker.majorAttack} DMG and apply ${CFG.bloodstalker.majorBleed} Bleed (3 turns).">
+                                <span class="ca-tribute-rank" aria-hidden="true">II</span>
+                                <span class="ca-tribute-fill" aria-hidden="true"></span>
+                                <span class="ca-tribute-drop" aria-hidden="true"></span>
+                                <span class="ca-tribute-cost">15%</span>
+                            </button>
                             <button class="ca-tribute ca-tribute-grand" data-action="tribute-grand"
-                                title="Grand Tribute — pay 30% Max HP. Deal ${CFG.bloodstalker.grandAttack} DMG, apply ${CFG.bloodstalker.grandBleed} Bleed (3 turns), +${CFG.bloodstalker.grandManaGain} Mana, +${CFG.bloodstalker.grandRerolls} rerolls.">G</button>
+                                title="Grand Tribute — pay 30% Max HP. Deal ${CFG.bloodstalker.grandAttack} DMG, apply ${CFG.bloodstalker.grandBleed} Bleed (3 turns), +${CFG.bloodstalker.grandManaGain} Mana, +${CFG.bloodstalker.grandRerolls} rerolls.">
+                                <span class="ca-tribute-rank" aria-hidden="true">III</span>
+                                <span class="ca-tribute-fill" aria-hidden="true"></span>
+                                <span class="ca-tribute-drop" aria-hidden="true"></span>
+                                <span class="ca-tribute-cost">30%</span>
+                            </button>
                         </div>
                     </div>`;
             case 'annihilator':

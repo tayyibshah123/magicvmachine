@@ -2599,44 +2599,203 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     50%      { box-shadow: 0 0 22px rgba(255, 0, 40, 1.0),  inset 0 0 8px rgba(255, 120, 140, 0.7); }
 }
 
-/* Three Tribute buttons (minor / major / grand). Disabled by default —
-   light up when the pool is ready and the player can afford the cost. */
+/* =========================================================
+   BLOOD TRIBUTE — three crimson vials.
+   Each tribute is a neon test-tube filled with blood to a level
+   that telegraphs its size/cost: the minor vial is barely dribbled,
+   the grand vial is brimming. The three buttons literally scale
+   up (width + height), so the small-mid-large hierarchy reads both
+   as size and as fill-level without any explicit "SMALL/MID/LARGE"
+   label — it just reads.
+   Disabled by default (pool not ready), fully lit when the Blood
+   Pool fills. The Grand vial pulses to draw the eye because that's
+   the burst the player is usually saving for. On hit, a blood-drop
+   animation trickles from the rim on ready vials for a visceral cue.
+   ========================================================= */
 .ca-bloodstalker .ca-tributes {
     flex: 0 0 auto;
     display: flex;
-    gap: 4px;
+    gap: 6px;
+    align-items: flex-end;
+    padding-left: 2px;
 }
 .ca-bloodstalker .ca-tribute {
-    width: 26px;
-    height: 26px;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 0, 40, 0.35);
-    background: rgba(60, 0, 10, 0.55);
-    color: #ffb0b8;
+    position: relative;
+    /* Test-tube shape: sharp squared shoulders, rounded belly at the base. */
+    border-radius: 3px 3px 50% 50% / 3px 3px 28% 28%;
+    border: 1.5px solid rgba(255, 40, 60, 0.55);
+    background: linear-gradient(180deg, rgba(28, 0, 6, 0.95) 0%, rgba(6, 0, 3, 0.98) 70%);
+    padding: 0;
+    overflow: hidden;
+    cursor: not-allowed;
+    opacity: 0.55;
+    transition: opacity 220ms, transform 140ms, box-shadow 220ms, border-color 220ms;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    color: #ffd8e0;
     font-family: 'Orbitron', sans-serif;
     font-weight: 700;
-    font-size: 0.85rem;
-    cursor: not-allowed;
-    opacity: 0.45;
-    transition: opacity 200ms, transform 120ms, box-shadow 200ms;
-    padding: 0;
     line-height: 1;
+    flex: 0 0 auto;
 }
+/* Size hierarchy — small, mid, large. Width AND height scale so the
+   difference reads on a glance. */
+.ca-bloodstalker .ca-tribute-minor { width: 18px; height: 26px; }
+.ca-bloodstalker .ca-tribute-major { width: 22px; height: 34px; }
+.ca-bloodstalker .ca-tribute-grand { width: 26px; height: 42px; }
+
+/* Glass highlight — thin vertical sheen on the left of each vial. */
+.ca-bloodstalker .ca-tribute::before {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 2px;
+    width: 2px;
+    height: 50%;
+    background: linear-gradient(180deg, rgba(255, 200, 220, 0.55), transparent);
+    border-radius: 1px;
+    pointer-events: none;
+    z-index: 3;
+}
+
+/* Blood fill — height reflects the cost tier. Uses a darker base and
+   a bright rim at the meniscus. */
+.ca-bloodstalker .ca-tribute-fill {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    background:
+        linear-gradient(180deg,
+            rgba(255, 80, 110, 0.55) 0%,
+            rgba(220, 0, 40, 0.92) 18%,
+            rgba(140, 0, 20, 0.98) 100%);
+    box-shadow:
+        inset 0 3px 6px rgba(255, 100, 130, 0.55),
+        inset 0 -2px 4px rgba(80, 0, 10, 0.9);
+    pointer-events: none;
+    z-index: 1;
+    transition: height 320ms ease-out, filter 200ms;
+}
+.ca-bloodstalker .ca-tribute-minor .ca-tribute-fill { height: 35%; }
+.ca-bloodstalker .ca-tribute-major .ca-tribute-fill { height: 62%; }
+.ca-bloodstalker .ca-tribute-grand .ca-tribute-fill { height: 88%; }
+
+/* Rank numeral (I / II / III) sits at the top of the vial, faint by
+   default, glowing when ready. */
+.ca-bloodstalker .ca-tribute-rank {
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.56rem;
+    letter-spacing: 0.5px;
+    color: rgba(255, 170, 185, 0.55);
+    z-index: 3;
+    text-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+}
+.ca-bloodstalker .ca-tribute-grand .ca-tribute-rank { font-size: 0.6rem; }
+
+/* Cost label sits at the base over the blood — bright, always readable. */
+.ca-bloodstalker .ca-tribute-cost {
+    position: relative;
+    z-index: 3;
+    font-size: 0.55rem;
+    padding-bottom: 2px;
+    letter-spacing: 0.3px;
+    color: #fff;
+    text-shadow: 0 0 4px rgba(0, 0, 0, 0.95), 0 0 2px rgba(255, 0, 40, 0.9);
+}
+.ca-bloodstalker .ca-tribute-major .ca-tribute-cost { font-size: 0.58rem; }
+.ca-bloodstalker .ca-tribute-grand .ca-tribute-cost { font-size: 0.62rem; padding-bottom: 3px; }
+
+/* Blood drip — a small droplet at the rim that only animates on ready
+   vials. Hidden when not ready. */
+.ca-bloodstalker .ca-tribute-drop {
+    position: absolute;
+    top: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 3px;
+    height: 5px;
+    border-radius: 50% 50% 50% 50% / 30% 30% 70% 70%;
+    background: #ff2a55;
+    box-shadow: 0 0 6px #ff0040;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 4;
+}
+
+/* READY — all three light up. Rank numerals brighten, fills shimmer. */
 .ca-bloodstalker.ready .ca-tribute:not(:disabled) {
     opacity: 1;
     cursor: pointer;
-    border-color: rgba(255, 60, 90, 0.95);
-    box-shadow: 0 0 8px rgba(255, 0, 40, 0.7);
+    border-color: rgba(255, 80, 110, 1);
+    box-shadow:
+        0 0 10px rgba(255, 0, 50, 0.7),
+        inset 0 0 6px rgba(255, 40, 70, 0.35);
+}
+.ca-bloodstalker.ready .ca-tribute:not(:disabled) .ca-tribute-rank {
     color: #fff;
+    text-shadow: 0 0 6px rgba(255, 60, 90, 1);
 }
-.ca-bloodstalker.ready .ca-tribute:not(:disabled):hover {
-    transform: translateY(-1px);
-    box-shadow: 0 0 14px rgba(255, 0, 40, 0.95);
+.ca-bloodstalker.ready .ca-tribute:not(:disabled) .ca-tribute-fill {
+    animation: ca-blood-shimmer 2.4s ease-in-out infinite;
 }
-.ca-bloodstalker .ca-tribute-grand { color: #ffe0a0; }
+.ca-bloodstalker.ready .ca-tribute:not(:disabled) .ca-tribute-drop {
+    animation: ca-blood-drip 2.8s ease-in-out infinite;
+}
+@keyframes ca-blood-shimmer {
+    0%, 100% { filter: brightness(1.0) saturate(1.0); }
+    50%      { filter: brightness(1.35) saturate(1.35); }
+}
+@keyframes ca-blood-drip {
+    0%, 70%  { opacity: 0; transform: translate(-50%, 0) scaleY(0.6); }
+    75%      { opacity: 1; transform: translate(-50%, 0) scaleY(1); }
+    100%     { opacity: 0; transform: translate(-50%, 14px) scaleY(1.3); }
+}
+
+/* The Grand vial earns extra drama — deeper pulsing glow (it's the big
+   burst every blood build aims for). */
 .ca-bloodstalker.ready .ca-tribute-grand:not(:disabled) {
-    border-color: rgba(255, 180, 80, 0.95);
-    box-shadow: 0 0 10px rgba(255, 140, 40, 0.85);
+    border-color: rgba(255, 60, 90, 1);
+    animation: ca-tribute-grand-pulse 1.6s ease-in-out infinite;
+}
+@keyframes ca-tribute-grand-pulse {
+    0%, 100% {
+        box-shadow:
+            0 0 10px rgba(255, 0, 50, 0.75),
+            inset 0 0 6px rgba(255, 40, 70, 0.4);
+    }
+    50% {
+        box-shadow:
+            0 0 22px rgba(255, 60, 110, 1),
+            0 0 36px rgba(255, 0, 50, 0.55),
+            inset 0 0 12px rgba(255, 40, 70, 0.6);
+    }
+}
+/* Stagger the drip on Grand slightly so the three drops don't fall in sync. */
+.ca-bloodstalker.ready .ca-tribute-grand:not(:disabled) .ca-tribute-drop {
+    animation-delay: 0.8s;
+}
+.ca-bloodstalker.ready .ca-tribute-major:not(:disabled) .ca-tribute-drop {
+    animation-delay: 0.4s;
+}
+
+/* Hover — lift + intensify the glow. Pointer-device only so mobile
+   doesn't get a stuck hover halo from a tap. */
+@media (hover: hover) {
+    .ca-bloodstalker.ready .ca-tribute:not(:disabled):hover {
+        transform: translateY(-2px);
+        box-shadow:
+            0 0 16px rgba(255, 60, 110, 1),
+            inset 0 0 10px rgba(255, 40, 70, 0.55);
+    }
+}
+
+/* Active-tap feedback — tiny squish so taps feel responsive. */
+.ca-bloodstalker.ready .ca-tribute:not(:disabled):active {
+    transform: translateY(0) scale(0.94);
 }
 
 /* Shared keyframes used by other widgets (arcanist conduit) — kept here
@@ -3119,7 +3278,15 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     .ca-bloodstalker .ca-blood { padding: 4px 12px 4px 12px; gap: 8px; }
     .ca-bloodstalker .ca-heart { width: 44px; height: 44px; margin-left: 44px; }
     .ca-bloodstalker .ca-blood-readout { font-size: 0.6rem; }
-    .ca-bloodstalker .ca-tribute { width: 22px; height: 22px; font-size: 0.78rem; }
+    /* Tributes stay vial-shaped on mobile but shrink slightly to fit the
+       narrower widget. The size hierarchy is preserved. */
+    .ca-bloodstalker .ca-tributes { gap: 4px; }
+    .ca-bloodstalker .ca-tribute-minor { width: 16px; height: 22px; }
+    .ca-bloodstalker .ca-tribute-major { width: 19px; height: 28px; }
+    .ca-bloodstalker .ca-tribute-grand { width: 22px; height: 34px; }
+    .ca-bloodstalker .ca-tribute-rank { font-size: 0.48rem; top: 1px; }
+    .ca-bloodstalker .ca-tribute-cost { font-size: 0.48rem; padding-bottom: 1px; }
+    .ca-bloodstalker .ca-tribute-grand .ca-tribute-cost { font-size: 0.52rem; }
     /* Annihilator: reactor bar slightly shorter so the title has room. */
     .ca-annihilator .ca-heat { left: 52px; right: 10px; }
     .ca-annihilator .ca-heat-bar { height: 28px; }

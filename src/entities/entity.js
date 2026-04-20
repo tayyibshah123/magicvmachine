@@ -57,19 +57,26 @@ class Entity {
             return false;
         }
 
-        // Bloodstalker: Blood Thrall redirects all player-bound damage to
-        // itself while alive. The Blood Pool (Tribute) bar still fills off
-        // the incoming amount — the thrall shields the hit but the player's
-        // class ability still ticks as if the damage had landed, so the
-        // bloodstalker's charge-up loop isn't interrupted by keeping a
-        // thrall up.
-        if (this instanceof Player && this.traits && this.traits.minionName === 'Blood Thrall' && amount > 0) {
+        // Bloodstalker: Blood Thrall redirects EXTERNAL player-bound damage
+        // to itself while alive. "External" = damage originating from an
+        // Enemy or an enemy-side Minion — so blocking enemy attacks counts,
+        // but self-costs (Blood Tribute HP payment, reroll costs, event
+        // choices that drain HP, annihilator autovent) still hit the player.
+        // DOT ticks from debuffs (bleed/poison, null source) also bypass the
+        // thrall, which keeps the bar from double-filling off self-applied
+        // tick damage. The Blood Pool bar still fills off the redirected
+        // amount so the tribute charge-up loop keeps running untouched.
+        const _isExternalSource = !!(source && (
+            (Enemy && source instanceof Enemy) ||
+            (Minion && source instanceof Minion && source.isPlayerSide === false)
+        ));
+        if (this instanceof Player && _isExternalSource && amount > 0
+            && this.traits && this.traits.minionName === 'Blood Thrall') {
             const thrall = (this.minions || []).find(m => m && m.currentHp > 0);
             if (thrall) {
                 ParticleSys.createFloatingText(thrall.x, thrall.y - 60, `SHIELDED -${amount}`, '#ff0055');
                 AudioMgr.playSound('hit');
                 thrall.takeDamage(amount, source, suppressBlockText);
-                // Remove the thrall from the live minion list if the hit killed it.
                 if (thrall.currentHp <= 0) {
                     this.minions = this.minions.filter(m => m !== thrall);
                 }
