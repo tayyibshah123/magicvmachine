@@ -201,7 +201,25 @@ const Game = {
                 // First-launch onboarding (§1.1). Skipped on subsequent launches.
                 if (!Onboarding.isComplete()) {
                     Onboarding.run({
-                        onFinished: () => { /* menu already visible */ },
+                        onFinished: () => {
+                            // Don't trust that the menu is still visible — on
+                            // iOS Safari/Brave the screen-start's .active flag
+                            // sometimes gets lost behind the onboarding overlay
+                            // and SKIP leaves the player looking at a black
+                            // page. Force a MENU transition so there's always
+                            // something to fall back to.
+                            if (this.currentState !== STATE.MENU) {
+                                this.changeState(STATE.MENU);
+                            } else {
+                                // Already MENU — just make sure screen-start
+                                // is actually active and visible.
+                                const el = document.getElementById('screen-start');
+                                if (el) {
+                                    el.classList.remove('hidden');
+                                    el.classList.add('active');
+                                }
+                            }
+                        },
                         onStartTutorial: () => {
                             // Ensure the tutorial auto-runs after class selection.
                             try { localStorage.removeItem('mvm_first_run_done'); } catch (e) {}
@@ -3333,19 +3351,18 @@ triggerPhaseGlitch() {
         // etc.) inject content scripts into the page and sometimes throw from a
         // context that bubbles up to window.onerror. Those aren't our bugs and
         // must not trigger the game's SYSTEM FAULT overlay.
+        // Token list used by both error and rejection paths. Matches the raw
+        // identifier so "Can't find variable: __firefox__" (Safari) and
+        // "window.__firefox__ is undefined" (Chromium) both get caught.
+        const EXT_TOKEN_RE = /__firefox__|__gCrWeb|__gBleyer|webkit\.messageHandlers|Grammarly|__REACT_DEVTOOLS_|__REDUX_DEVTOOLS_|ResizeObserver loop/i;
         const isExternalError = (event) => {
             const msg = String((event && (event.message || (event.error && event.error.message))) || '');
             // Opaque cross-origin script errors — browsers strip all detail.
             if (msg === 'Script error.' || msg === 'Script error') return true;
-            // Known extension globals (Brave/Firefox iOS reader, page-translation, etc.).
-            if (/window\.__firefox__|__gCrWeb|__gBleyer|webkit\.messageHandlers|Grammarly/i.test(msg)) return true;
+            if (EXT_TOKEN_RE.test(msg)) return true;
             // Source file lives in an extension, not our origin.
             const src = String((event && event.filename) || '');
             if (/^(chrome|moz|safari-web|brave|webkit-masked)-extension:/i.test(src)) return true;
-            // GitHub Pages / Netlify serve from our origin — anything from a
-            // filename that doesn't include our host AND isn't empty is suspect.
-            // (event.filename is empty for inline scripts and our own bundles
-            // in some browsers, so only filter when we have a real URL.)
             if (src && typeof location !== 'undefined' && location.origin &&
                 src.indexOf('://') >= 0 && src.indexOf(location.origin) !== 0) {
                 return true;
@@ -3354,8 +3371,7 @@ triggerPhaseGlitch() {
         };
         const isExternalRejection = (reason) => {
             const msg = (reason && reason.message) ? String(reason.message) : String(reason || '');
-            if (/window\.__firefox__|__gCrWeb|__gBleyer|webkit\.messageHandlers|Grammarly/i.test(msg)) return true;
-            return false;
+            return EXT_TOKEN_RE.test(msg);
         };
         window.addEventListener('error', (event) => {
             if (isExternalError(event)) {

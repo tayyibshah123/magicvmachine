@@ -1205,30 +1205,28 @@ h2 {
 }
 
 .die.selected {
-    /* Selected = LOCKED (won't be rerolled). Gold lock pill hovers above.
-       overflow:visible is required so the ::after pill can escape the die's
-       own overflow:hidden (set for the slot-machine reel mask above). */
+    /* Selected = LOCKED (won't be rerolled). Static outer halo (no inset
+       pulse — that was making the die interior glow gold and look like it
+       was fading in/out on mobile). The "LOCKED" pill does the attention-
+       grabbing work instead. overflow:visible lets the pill escape the die's
+       own slot-reel mask. */
     border-color: #ffd700 !important;
     transform: translateY(-4px);
-    box-shadow: 0 0 14px #ffd700, 0 0 28px rgba(255, 215, 0, 0.55), inset 0 0 10px rgba(255, 215, 0, 0.35);
+    box-shadow: 0 0 16px #ffd700, 0 0 32px rgba(255, 215, 0, 0.45);
     position: relative;
     overflow: visible !important;
-    animation: die-lock-glow 1.8s ease-in-out infinite;
-}
-@keyframes die-lock-glow {
-    0%, 100% { box-shadow: 0 0 14px #ffd700, 0 0 28px rgba(255, 215, 0, 0.45), inset 0 0 10px rgba(255, 215, 0, 0.35); }
-    50%      { box-shadow: 0 0 20px #ffd700, 0 0 44px rgba(255, 215, 0, 0.80), inset 0 0 14px rgba(255, 215, 0, 0.55); }
 }
 .die.selected::after {
-    /* Floating "LOCKED" pill above the die — icon + label so it reads at a glance.
-       Counter-rotates against the crescent arc so the pill stays upright at any
-       slot, and gently bobs to draw the eye without stealing focus. */
+    /* Floating "LOCKED" pill above the die — padlock icon + caps label.
+       Counter-rotation against the crescent arc was dropped: calc() with
+       CSS variables inside pseudo-element animations rendered inconsistently
+       on Safari/Brave iOS. The arc tilt is subtle enough that a static pill
+       reads fine. */
     content: 'LOCKED';
     position: absolute;
-    top: -26px;
+    top: -24px;
     left: 50%;
-    transform-origin: 50% 130%;
-    transform: translateX(-50%) rotate(calc(-1 * var(--arc-rot, 0deg)));
+    transform: translateX(-50%);
     background: #ffd700;
     color: #000;
     font-family: 'Orbitron', sans-serif;
@@ -1248,8 +1246,8 @@ h2 {
     animation: die-lock-bob 1.8s ease-in-out infinite;
 }
 @keyframes die-lock-bob {
-    0%, 100% { transform: translateX(-50%) translateY(0) rotate(calc(-1 * var(--arc-rot, 0deg))); }
-    50%      { transform: translateX(-50%) translateY(-4px) rotate(calc(-1 * var(--arc-rot, 0deg))); }
+    0%, 100% { transform: translateX(-50%) translateY(0); }
+    50%      { transform: translateX(-50%) translateY(-3px); }
 }
 
 /* Sealed dice — pinned by an event/relic. Magenta aura + pin badge.
