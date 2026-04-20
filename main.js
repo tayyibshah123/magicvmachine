@@ -89,25 +89,51 @@ Hints.init();
 Unlocks.init();
 
 // Global error hook — surface client-side crashes into the analytics stream.
+// Skip known browser-extension / cross-origin noise so the crash dashboard
+// isn't dominated by Brave/Firefox iOS reader-mode, Grammarly, or ResizeObserver
+// notifications we can't fix.
+const EXT_NOISE_RE = /__firefox__|__gCrWeb|__gBleyer|webkit\.messageHandlers|Grammarly|__REACT_DEVTOOLS_|__REDUX_DEVTOOLS_|ResizeObserver loop/i;
+const isNoiseMessage = (msg) => {
+    const s = String(msg || '');
+    if (s === 'Script error.' || s === 'Script error') return true;
+    return EXT_NOISE_RE.test(s);
+};
 window.addEventListener('error', (e) => {
+    const msg = e && (e.message || (e.error && e.error.message));
+    if (isNoiseMessage(msg)) return;
+    const src = String((e && e.filename) || '');
+    if (/^(chrome|moz|safari-web|brave|webkit-masked)-extension:/i.test(src)) return;
     Analytics.emit('error_client', {
         where: 'window.onerror',
-        message: String(e && e.message),
+        message: String(msg),
         stack: String(e && e.error && e.error.stack).slice(0, 500)
     });
 });
 window.addEventListener('unhandledrejection', (e) => {
+    const msg = e && e.reason && (e.reason.message || e.reason);
+    if (isNoiseMessage(msg)) return;
     Analytics.emit('error_client', {
         where: 'unhandledrejection',
-        message: String(e && e.reason && e.reason.message || e.reason),
+        message: String(msg),
         stack: String(e && e.reason && e.reason.stack).slice(0, 500)
     });
 });
 
+// Landscape-hint dismiss handler — moved here from an inline onclick= attribute
+// so we stay CSP-clean for App Store / Capacitor wrapping.
+function wireLandscapeHint() {
+    const hint = document.getElementById('landscape-hint');
+    if (!hint) return;
+    const dismiss = () => hint.classList.add('dismissed');
+    hint.addEventListener('click', dismiss);
+    hint.addEventListener('touchstart', dismiss, { passive: true });
+}
+
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => Game.init());
+  document.addEventListener('DOMContentLoaded', () => { Game.init(); wireLandscapeHint(); });
 } else {
   Game.init();
+  wireLandscapeHint();
 }
 
 // Register the service worker for offline play (PWA)

@@ -73,6 +73,12 @@ const AudioMgr = {
     // Music library — keyed by short id. `synth` is the default; `lofi` is
     // the original track. Tracks with multiple `sources` shuffle through
     // the files (no-repeat) instead of looping a single file.
+    //
+    // Per entry, `sources` / `src` are OGG Vorbis. For App Store / older iOS
+    // (WKWebView before 17.4) we prefer an AAC/MP4 alternative if present:
+    // `_resolveTrackSrc` checks whether a matching .m4a exists and returns
+    // that instead. Drop-in fallback — no code change needed when the files
+    // are added to ./music/.
     TRACKS: {
         synth: {
             sources: [
@@ -83,10 +89,34 @@ const AudioMgr = {
             ],
             label: 'Synth (default)'
         },
-        lofi:  { src: './music/lofi.mp3',  label: 'Lofi' }
+        lofi:  { src: './music/lofi.ogg',  label: 'Lofi' }
     },
     currentTrack: 'synth',
     _lastShuffleIdx: -1,
+
+    // Pick an alternate file extension for environments that can't play OGG
+    // Vorbis (older iOS/WKWebView). Probe the browser once with an <audio>
+    // element's canPlayType; cache the result. Returns the candidate URL if
+    // the browser reports better support, else returns the original.
+    _preferredFmt: null,
+    _resolveTrackSrc(oggUrl) {
+        if (!oggUrl || typeof oggUrl !== 'string') return oggUrl;
+        if (this._preferredFmt === null) {
+            let best = 'ogg';
+            try {
+                const probe = document.createElement('audio');
+                const oggOk = probe.canPlayType && probe.canPlayType('audio/ogg; codecs="vorbis"');
+                const m4aOk = probe.canPlayType && probe.canPlayType('audio/mp4; codecs="mp4a.40.2"');
+                // Prefer M4A when the browser says it's the more reliable option
+                // (e.g. iOS Safari/WKWebView) — but only if we haven't disabled
+                // it (Chrome/Firefox report both equally, keep OGG there).
+                if (m4aOk === 'probably' && oggOk !== 'probably') best = 'm4a';
+            } catch (e) { /* keep ogg */ }
+            this._preferredFmt = best;
+        }
+        if (this._preferredFmt === 'm4a') return oggUrl.replace(/\.ogg$/i, '.m4a');
+        return oggUrl;
+    },
 
     // Pick a random source that isn't the one we just played. Falls back to
     // plain random when the playlist only has one entry.
@@ -109,7 +139,7 @@ const AudioMgr = {
         const nextSrc = this._pickShuffleSrc(track.sources);
         if (!nextSrc) return;
         const currentVol = this.bgm ? this.bgm.volume : (this._baseVol ?? 0.3);
-        this.bgm = new Audio(nextSrc);
+        this.bgm = new Audio(this._resolveTrackSrc(nextSrc));
         this.bgm.loop = false;
         this.bgm.volume = currentVol;
         this.bgm.addEventListener('ended', () => this._onShuffleTrackEnded());
@@ -134,9 +164,9 @@ const AudioMgr = {
         if (wasNew) {
             const track = this.TRACKS[this.currentTrack] || this.TRACKS.synth;
             const isShuffle = Array.isArray(track.sources) && track.sources.length > 1;
-            const trackSrc = isShuffle ? this._pickShuffleSrc(track.sources)
-                                       : (track.sources ? track.sources[0] : track.src);
-            this.bgm = new Audio(trackSrc);
+            const rawSrc = isShuffle ? this._pickShuffleSrc(track.sources)
+                                     : (track.sources ? track.sources[0] : track.src);
+            this.bgm = new Audio(this._resolveTrackSrc(rawSrc));
             this.bgm.loop = !isShuffle;
             this.bgm.volume = 0;
             if (isShuffle) {
@@ -306,10 +336,13 @@ const AudioMgr = {
         const status = this._sfxStatus[id];
         if (status === 'loaded' || status === 'pending' || status === 'missing') return;
         this._sfxStatus[id] = 'pending';
-        fetch(`./sfx/${id}.ogg`)
+        // Try format-preferred first; if the request or decode fails (e.g.
+        // m4a not provided yet), retry with the native .ogg. If both fail
+        // the synth fallback takes over permanently.
+        const primary = this._resolveTrackSrc(`./sfx/${id}.ogg`);
+        const attempt = (url, isRetry) => fetch(url)
             .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
             .then(buf => new Promise((resolve, reject) => {
-                // Support both promise and callback decodeAudioData forms.
                 const ret = this.ctx.decodeAudioData(buf, resolve, reject);
                 if (ret && typeof ret.then === 'function') ret.then(resolve, reject);
             }))
@@ -318,9 +351,13 @@ const AudioMgr = {
                 this._sfxStatus[id] = 'loaded';
             })
             .catch(e => {
+                if (!isRetry && primary !== `./sfx/${id}.ogg`) {
+                    return attempt(`./sfx/${id}.ogg`, true);
+                }
                 console.warn(`[sfx] load failed for ${id} — falling back to synth:`, e);
                 this._sfxStatus[id] = 'missing';
             });
+        attempt(primary, false);
     },
 
     // Play a cached sample via a fresh BufferSource + GainNode. Concurrent

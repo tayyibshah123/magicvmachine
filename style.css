@@ -18,8 +18,12 @@
     --surface-2: rgba(10, 10, 20, 0.9);
     --transition-screen: 500ms;
     --ease-out-smart: cubic-bezier(0.2, 0.8, 0.2, 1);
-    --font-main: 'Rajdhani', 'Segoe UI', sans-serif;
-    --font-cyber: 'Orbitron', sans-serif;
+    /* System-font fallbacks so the game still renders legibly if Google Fonts
+       are blocked / unavailable (offline, App Store wrapped build under file://,
+       corporate proxies). Orbitron → wide monospace-ish feel via Consolas +
+       Menlo; Rajdhani → clean sans stack. */
+    --font-main: 'Rajdhani', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-cyber: 'Orbitron', 'Consolas', 'Menlo', 'Courier New', monospace;
     /* Typography scale (all interior text should eventually use these tokens).
        Multiplier set by the Accessibility menu text-size slider (Phase 6). */
     --text-scale-multiplier: 1;
@@ -5103,7 +5107,11 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
         display: flex;
         align-items: center;
         justify-content: center;
+        /* 100vh fallback for browsers without dvh; 100dvh on modern iOS/Android
+           excludes the dynamic browser chrome (address bar), so the game
+           doesn't jump when the chrome hides/shows. */
         height: 100vh;
+        height: 100dvh;
         overflow: hidden;
     }
 

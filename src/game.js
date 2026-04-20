@@ -179,11 +179,19 @@ const Game = {
         const fragCountEl = document.getElementById('fragment-count');
         if(fragCountEl) fragCountEl.innerText = `Fragments: ${this.techFragments}`;
 
+        // iOS/WKWebView requires audio to start from a user-gesture handler.
+        // Listen on every gesture type we might see (including pointerdown and
+        // keydown for keyboard users) so the first interaction unlocks no
+        // matter where the user taps.
         const unlockAudio = () => {
             AudioMgr.init(); AudioMgr.startMusic();
-            window.removeEventListener('click', unlockAudio); window.removeEventListener('touchstart', unlockAudio);
+            ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'].forEach(ev =>
+                window.removeEventListener(ev, unlockAudio)
+            );
         };
-        window.addEventListener('click', unlockAudio); window.addEventListener('touchstart', unlockAudio);
+        ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'].forEach(ev =>
+            window.addEventListener(ev, unlockAudio, { once: false, passive: true })
+        );
 
         // Intro splash — tap-to-continue overlay. Fades out, starts music, reveals main menu.
         const intro = document.getElementById('intro-overlay');

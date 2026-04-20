@@ -13,16 +13,22 @@
     <title>Magic v Machine</title>
     
     <link rel="manifest" href="manifest.json">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <!-- Home-screen icon for iOS when the site is added to the home screen
+         or packaged via Capacitor. Maskable is fine for Android/Chrome. -->
+    <link rel="apple-touch-icon" href="intro.png">
+    <link rel="icon" type="image/png" href="intro.png">
+    <!-- Google Fonts with font-display=swap (in the URL) — the CSS swaps
+         in Orbitron/Rajdhani when loaded, otherwise system fonts from
+         style.css are used. For offline / App Store wrapped builds, drop
+         these two lines and ship self-hosted woff2 copies instead. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-
-    </script>
 </head>
 <body>
 
-    <div id="landscape-hint" onclick="this.classList.add('dismissed')">
+    <div id="landscape-hint">
         <span>&#x21bb; Rotate for best experience</span>
     </div>
     <div id="game-container">

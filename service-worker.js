@@ -5,7 +5,7 @@
 // Keep in sync with src/version.js — service worker runs in a separate
 // worker context that can't import ES modules, so the version string is
 // duplicated by design. Old caches are deleted on activate.
-const CACHE_NAME = 'mvm-shell-v1-2-1';
+const CACHE_NAME = 'mvm-shell-v1-2-2';
 const SHELL_ASSETS = [
     './',
     './index.html',
@@ -15,7 +15,7 @@ const SHELL_ASSETS = [
     './music/synth2.ogg',
     './music/synth3.ogg',
     './music/synth4.ogg',
-    './music/lofi.mp3',
+    './music/lofi.ogg',
     './intro.png',
     './manifest.json',
     './src/game.js',
