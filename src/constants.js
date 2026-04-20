@@ -924,4 +924,51 @@ const EVENTS_DB = [
     }
 ];
 
-export { CONFIG, COLORS, SECTOR_CONFIG, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES };
+/* =========================================
+   CUSTOM RUN MODIFIERS (Roadmap Part 29)
+   ----------------------------------------
+   Data layer only — the selection UI on character select is feature-
+   flagged off until balance playtesting. Modifier effects are applied
+   via `applyCustomRunModifiers(runState, ids)` in game.js (to be
+   written in Milestone 4). Each modifier:
+     - id: stable string used in save state
+     - kind: 'negative' | 'positive' | 'chaotic' — drives UI sorting
+     - name: display name on the modifier card
+     - desc: 1-line effect summary
+     - payoutBonus: positive number (percentage) to apply as a multiplier
+       bonus on final fragment payout; negative = reduction
+     - Flags used by the applier (implement as the modifiers ship):
+         startHpPct, disableRest, dmgOutMult, dmgInMult, diceCount,
+         disableReroll, resurrectChance, fragDrainPerSector,
+         relicPickDmg, disableLore, hotHandsDmg, startRelicCount,
+         extraRerollPerTurn, bossHpMult, shopDiscountPct,
+         scrambleDiceEachCombat, hideIntentNumbers, attackCritVariance,
+         relicPickDupe
+   ========================================= */
+const CUSTOM_RUN_MODIFIERS = [
+    { id: 'hard_heart',    kind: 'negative', name: 'Low-Health Start',  desc: 'Start every run at 50% HP.',                        payoutBonus: 15, startHpPct: 0.5 },
+    { id: 'no_rest',       kind: 'negative', name: 'Merciless',         desc: 'Rest nodes do nothing.',                            payoutBonus: 20, disableRest: true },
+    { id: 'glass_cannon',  kind: 'negative', name: 'Glass Cannon',      desc: '+50% DMG dealt, +50% DMG taken.',                  payoutBonus: 20, dmgOutMult: 1.5, dmgInMult: 1.5 },
+    { id: 'slim_dice',     kind: 'negative', name: 'Narrow Hand',       desc: 'Start with 3 dice instead of 4.',                  payoutBonus: 30, diceCount: 3 },
+    { id: 'no_reroll',     kind: 'negative', name: 'Locked In',         desc: 'No rerolls available.',                            payoutBonus: 35, disableReroll: true },
+    { id: 'undead_mob',    kind: 'negative', name: 'Undead Protocol',   desc: '20% of enemies resurrect once at 50% HP.',         payoutBonus: 30, resurrectChance: 0.2 },
+    { id: 'tax_man',       kind: 'negative', name: 'Tax Man',           desc: '-10% fragments at each sector transition.',        payoutBonus: 15, fragDrainPerSector: 0.10 },
+    { id: 'cursed_deck',   kind: 'negative', name: 'Cursed Relics',     desc: 'Each relic picked deals 3 DMG on acquire.',        payoutBonus: 25, relicPickDmg: 3 },
+    { id: 'limit_lore',    kind: 'negative', name: 'Silent Chronicle',  desc: 'No lore unlocks this run.',                        payoutBonus: 10, disableLore: true },
+    { id: 'hot_hands',     kind: 'negative', name: 'Hot Hands',         desc: 'First die played each turn costs 3 HP.',           payoutBonus: 15, hotHandsDmg: 3 },
+    { id: 'starter_kit',   kind: 'positive', name: 'Starter Kit',       desc: 'Begin with 2 random common relics.',               payoutBonus: -30, startRelicCount: 2 },
+    { id: 'extra_reroll',  kind: 'positive', name: 'Steady Hand',       desc: '+1 extra reroll per turn.',                        payoutBonus: -25, extraRerollPerTurn: 1 },
+    { id: 'soft_bosses',   kind: 'positive', name: 'Soft Bosses',       desc: 'All bosses -20% HP.',                              payoutBonus: -40, bossHpMult: 0.8 },
+    { id: 'free_shops',    kind: 'positive', name: 'Open Markets',      desc: 'Shop prices -30%.',                                payoutBonus: -25, shopDiscountPct: 0.3 },
+    { id: 'scrambled',     kind: 'chaotic',  name: 'Scrambled Protocol', desc: 'Dice types shuffle to random slots every combat.', payoutBonus: 10, scrambleDiceEachCombat: true },
+    { id: 'dark_visions',  kind: 'chaotic',  name: 'Dark Visions',      desc: 'Enemy intent icons hidden — must be inferred.',    payoutBonus: 20, hideIntentNumbers: true },
+    { id: 'double_or_none',kind: 'chaotic',  name: 'Double or None',    desc: 'Attack dice 50%: deal 2× or 0 damage.',            payoutBonus: 15, attackCritVariance: 'double_or_none' },
+    { id: 'daily_dupes',   kind: 'chaotic',  name: 'Daily Dupes',       desc: 'Each relic is duplicated on pickup.',              payoutBonus: -15, relicPickDupe: true }
+];
+
+/* Feature flag for the Custom Runs UI — toggle to `true` when Part 29
+   UI + effect applier land. Data shape above is stable and safe to read
+   even with the flag off. */
+const FEATURE_CUSTOM_RUNS = false;
+
+export { CONFIG, COLORS, SECTOR_CONFIG, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS };

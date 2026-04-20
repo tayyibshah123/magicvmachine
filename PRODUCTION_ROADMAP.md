@@ -1214,3 +1214,666 @@ Treat this as a living document:
 **Document maintained by:** [name]
 **Last reviewed:** [date]
 **Next review:** weekly until launch, monthly post-launch.
+
+---
+
+# Part 23 — Sector & enemy redesign (v2)
+
+> *Parts 0–18 assumed five sectors with reasonable-but-generic enemies. Post-launch player feedback on the alpha flagged the enemies as "samey" and the sector maps as "a line of nodes". Part 23 rebuilds both from the visual language up.*
+
+## 23.1 Sector identity framework
+
+Every sector is built from **five pillars** that together deliver a cohesive 20-minute experience:
+
+1. **Visual language** — palette, skyline silhouette, parallax layers, particle ambient
+2. **Audio signature** — ambient drone, boss sting, enemy-phase motif
+3. **Mechanical twist** — one combat rule unique to the sector
+4. **Enemy family** — 3 standard + 2 elite + 1 boss, sharing a silhouette DNA
+5. **Map topology** — shape of the node graph, density, and special-node distribution
+
+| Sector | Theme             | Palette         | Mechanical twist                               | Skyline DNA           |
+|--------|-------------------|-----------------|------------------------------------------------|-----------------------|
+| 1      | Downtown Glass    | Purple / cyan   | Baseline — onboarding safe zone                | Low office towers     |
+| 2      | Cryo Docks        | Ice blue / teal | Frost meter — stacking Frost slows rerolls    | Frozen shipyard cranes|
+| 3      | Foundry Ravine    | Orange / red    | Heat tiles — standing still drains Mana        | Lava-lit smelters     |
+| 4      | Hive Vectors      | Lime / magenta  | Swarm bar — kills on enemies you left alive heal the Hive | Drone pylons |
+| 5      | The Source        | Deep violet / hot pink | Reality glitch — every 3 turns a die inverts its slot | Impossible geometry |
+| X      | The Archive       | Monochrome + gold | No relics, hand shuffled, 5-boss gauntlet    | Negative-space vault  |
+
+**Each sector ships with:**
+- 3 standard enemies (each with 2 visual variants, colour-swapped for late-sector)
+- 2 elite enemies with unique silhouettes + affix pool
+- 1 boss with a 3-phase fight
+- 2 event-node variants
+- 1 shop-node visual variant
+- 1 rest-node visual variant
+- 1 map background tile (procedurally dressed with the sector's parallax)
+
+### 23.1.1 Silhouette DNA rule
+Every enemy in a sector shares a 20% silhouette trait so the player learns to read the sector visually. Examples:
+- **Sector 1:** surveillance-camera lenses — every enemy has a single glowing eye.
+- **Sector 2:** ice shards jutting from chassis — every enemy has crystalline spikes.
+- **Sector 3:** exposed molten cores — every enemy has a red-hot weak spot.
+- **Sector 4:** insectoid segmented bodies — every enemy has 3+ body segments.
+- **Sector 5:** hovering above the ground — every enemy has no legs / floats.
+
+## 23.2 Sector 1 — Downtown Glass (remaster)
+
+**Fantasy:** Surveillance state. The player is a glitch in the CCTV feed. Enemies are corporate guard drones.
+
+### Standard enemies
+- **Watcher-01** — a rotating camera-pod. Attacks with a focused beam. Twist: marks the player; next hit on a marked player deals +3 DMG.
+- **Paper Pusher** — a bureaucrat-drone dragging a filing stack. Low damage but every turn summons a Filing Cabinet (1HP decoy).
+- **Signal Jammer** — short, squat, four antennas. Has a chance to seal a random die each turn (unsealable by the usual method).
+
+### Elites
+- **The Auditor** — A tower of floating holographic clipboards. Has *Anchor* and *Reflector*. When hit, a clipboard floats off and stabs the player next turn.
+- **Blackout** — A camera pod that flickers. Has *Phase* and *Shielded*. When Phase flips to shield, the player's dice also lose their icons for one turn.
+
+### Boss — THE PANOPTICON (v2)
+- **Phase 1:** Sweeps 4-slice arcs. Marks a die "observed" — that die is revealed to the boss; any crit against it reflects.
+- **Phase 2:** Splits into three eye-drones. Each drone has 30% of the boss's HP. Kills propagate damage back to the "main" eye.
+- **Phase 3:** Eye-lock protocol. While any enemy minion is alive, the player takes 2x damage from the boss. (Already implemented — keep, polish visuals.)
+
+## 23.3 Sector 2 — Cryo Docks (new)
+
+**Fantasy:** A frozen shipyard running automated cargo drones. The player is an intruder stealing heat.
+
+**Mechanical twist — Frost meter:**
+A new HUD widget tracks 0–10 Frost. Frost ticks up on certain enemy actions. At 5 Frost, one reroll per turn is "frozen" (cannot reroll that die). At 10 Frost, the player skips a turn. Frost decays 1/turn. Relics exist that redirect frost to shield conversion.
+
+### Standard enemies
+- **Cargo Hauler** — Bulky crate-walker. Attacks with a crate slam (heavy, slow). On kill drops a "Cold Crate" that gives Frost +2 if left alive 2 turns.
+- **Icicle Sniper** — Thin, long-barrelled. Attacks at range, applies +1 Frost per hit.
+- **Freezer Drone** — Small floating. Every 2 turns emits a pulse: +1 Frost, applies Slow (player's next attack die deals -2).
+
+### Elites
+- **The Icebreaker** — Mini-boss-sized. Breaks through the player's shield entirely on one hit every 3 turns. Affix pool: *Vampiric*, *Phase*.
+- **Frost Maiden** — Narrow humanoid silhouette. Every turn applies +2 Frost. Dies revive once with 30% HP (hard-coded, not an affix).
+
+### Boss — NULL_POINTER (v2)
+- **Phase 1:** Pulls 2 player dice into a "Void Pocket" — they vanish for 2 turns. Player starts each turn with +1 Frost while pocket active.
+- **Phase 2:** Consume protocol — if the player has a minion, the boss devours it for 30% heal; if not, boss takes 5 self-damage and the player gets +2 Frost.
+- **Phase 3:** Dimensional collapse — player's Frost meter locks at 10 for 1 turn. Player must survive one massive hit. Boss is vulnerable during this turn (+50% incoming damage).
+
+### Map topology — Cryo Docks
+- **Layout:** icy-river node graph. Nodes are platforms on a frozen canal. Some paths are "iced over" (visible but walkable only after a specific event).
+- **Special nodes:**
+  - **Heat Vent** (1 per map) — rest node variant. Also removes 5 Frost on use.
+  - **Sunken Cache** — shop variant. Prices +20% but inventory includes Cryo-themed relics.
+  - **Ghost Ship event** — free relic, but applies +3 starting Frost to the next combat.
+
+## 23.4 Sector 3 — Foundry Ravine (new)
+
+**Fantasy:** An active smelter. Everything is oversized, glowing, molten. The player is a bug in the assembly line.
+
+**Mechanical twist — Heat tiles:**
+The combat arena shows a grid of 3 tiles at the player's position. One tile is "Hot" each turn. Playing a die on a Hot tile (visualized under the drag ghost) deals +3 DMG but costs 1 HP. Heat rotates each turn.
+
+### Standard enemies
+- **Forge Welder** — Humanoid with plasma welder arm. Every 2 turns adds +1 Hot tile (max 2). High HP, medium DMG.
+- **Slag Mech** — Hunched, molten-core body. AoE attack hits player + all player minions for 50% damage.
+- **Ember Swarm** — 3 small bugs that act as one enemy. Each turn they spawn 1 Ember Bug (3HP, 1DMG) that burns on death for 3 AoE.
+
+### Elites
+- **The Compiler (lesser)** — Smaller version of the boss. Armored, halves damage. 3-turn wind-up "OVERHEAT" that deals 25 AoE unless interrupted by a shield-slot die drop on it.
+- **Cinderlord** — Burning humanoid. Leaves a Hot tile everywhere it attacks from. Dies after 3 turns if no heat tiles are converted.
+
+### Boss — THE COMPILER (v2)
+- **Phase 1:** Armored — halves player damage. Player must use a Defend die on the boss (shield as offence) to strip armour.
+- **Phase 2:** Molten overclock — attacks twice per turn, second attack ignores 50% shield.
+- **Phase 3:** Shrapnel mode — casts 3 mini-projectiles that telegraph on different dice. Each projectile hits the player unless the telegraphed die is NOT played that turn (puzzle layer).
+
+## 23.5 Sector 4 — Hive Vectors (new)
+
+**Fantasy:** A swarm-mind propagated through a derelict server farm. Everything that dies comes back as a smaller version.
+
+**Mechanical twist — Swarm bar:**
+Global bar fills as enemy minions stay alive on the field. At full (say, 4 alive minions turn-end × 2 turns), every enemy gains +2 DMG until one enemy is killed. Forces the player to prioritise minion cleanup even at the cost of chip on the elite.
+
+### Standard enemies
+- **Drone Swarmling** — Tiny, triangular. Spawns with 2 extras on combat start (summonOnStart = 2 already implemented for this enemy type).
+- **Hive Conduit** — Diamond-shape relay. Turns each enemy minion it touches into a "Boosted" version with +30% HP.
+- **Parasite Carrier** — Worm-like. On death lays an egg that hatches into a Parasite (5HP, applies Poison) in 2 turns.
+
+### Elites
+- **Queen Node** — Hovering hexagon. Every 2 turns resurrects the most recently-killed enemy minion at 50% HP.
+- **Echo Hive** — Small cluster. Attacks split 3 ways — to player, to one minion, to enemy's own ally (heal instead of damage).
+
+### Boss — HIVE PROTOCOL (v2)
+- **Phase 1:** Summons 2 Drones at start; hits hard with direct attack while drones distract.
+- **Phase 2:** Shared HP — boss and drones share one pool. Killing a drone damages the boss, but also instantly summons a replacement drone.
+- **Phase 3:** Assimilate — 20% chance per turn to convert a player minion into a Hive Drone. (Already implemented — keep, polish animation.)
+
+## 23.6 Sector 5 — The Source (new)
+
+**Fantasy:** The logic core. Reality itself is thin here. Enemies are abstract — geometric intruders that bend rules.
+
+**Mechanical twist — Reality glitch:**
+Every 3 player turns, one of the player's unused dice randomly has its slot changed (Attack → Defend, etc.) for one turn. Visual: the die's icon flickers and swaps. The slot-change is predictable (telegraphed with a countdown on the HUD), giving the player time to plan around it.
+
+### Standard enemies
+- **Glitch Shard** — Diamond that phases. 50% chance per attack to miss entirely.
+- **Echo Phantom** — Semi-transparent humanoid. Dealing damage to it mirrors half the damage back onto the player (Reflect built-in).
+- **Paradox Loop** — Small ring. When you kill it, it comes back with 1 HP for 1 turn, attacks once, then dies for good.
+
+### Elites
+- **The Architect** — Tall, pyramidal. Every turn writes a "rule change" on the battlefield — e.g. "Defend dice deal damage", "Mana dice summon minions". Rules last 2 turns.
+- **Null Prince** — Inverted silhouette. Immune to non-odd-numbered dice (visual pip on dice reveals parity).
+
+### Boss — TESSERACT PRIME (v2)
+- **Phase 1:** Baseline attack + escalating geometric complexity.
+- **Phase 2:** Boss splits into 4 parallel selves — damage must be dealt to the "correct" self each turn (telegraphed).
+- **Phase 3:** Reality overwrite — completely scrambles the dice pool. Player must play through a chaos hand while boss hits for massive damage.
+- **Victory:** System crash cinematic (already in place — polish the dissolve animation with per-sector fragment colours).
+
+---
+
+# Part 24 — Sector X: The Archive
+
+> *Unlocked after first Sector 5 clear. A post-game boss rush mode that gives veterans something to chase without forcing an "endless" structure we explicitly rejected in Part 0.4.*
+
+## 24.1 Structure
+
+**[P1 · L]** Sector X is a **5-boss gauntlet** with **zero reward nodes between fights**. No shops, no events, no rest. Only combat.
+
+- **Node graph:** linear, 5 nodes. Each node is a boss (the five sector bosses from 1→5 in randomized order).
+- **Twist:** Between each boss the player picks ONE of three Pacts:
+  - **Pact of Ruin** — +50% player damage, -30% max HP.
+  - **Pact of Silence** — rerolls are free, but every die in the hand loses combo-eligibility.
+  - **Pact of Hunger** — minions deal double damage, but die one turn after spawning.
+- **Pact carries over** — stacks across fights.
+
+## 24.2 Final boss — THE ARCHIVIST
+
+**[P1 · XL]** A unique 6th boss unique to Sector X.
+
+**Fantasy:** A chained AI that remembers every run the player has ever died in. It attacks with echoes of past boss mechanics.
+
+**Mechanics:**
+- **Phase 1:** Cycles through a "mechanic menu" from the five sector bosses. Each turn it picks a different mechanic to apply (eye lock, frost, heat, swarm, reality glitch).
+- **Phase 2:** Archives the player's last-played die at the start of each turn — that die cannot be played next turn.
+- **Phase 3:** "Rewind" — after taking a heavy hit, rewinds the fight 1 turn (player's die spend is refunded, but boss HP is also restored).
+- **Phase 4 (Enrage):** At 15% HP, all prior phase mechanics active simultaneously for 3 turns. Survive → win.
+
+**HP scaling:** 500 base HP, +150 per Ascension level.
+
+**Reward:** Unique cosmetic frame for the main menu title ("ARCHIVIST SLAIN" — a rotating brass badge). One per Ascension level.
+
+## 24.3 Access gating
+- Unlocks after: First Sector 5 clear.
+- Shown on main menu as a 5th option ("ARCHIVE") once unlocked, beneath DAILY RUN.
+- Separate leaderboard track from main runs (player stats: fastest clear, highest Pact-stack clear).
+
+---
+
+# Part 25 — Glossy UI pass (v2)
+
+> *Current UI is functional and cohesive but reads as "polished alpha" rather than "premium product". Part 25 takes it to shelf-ready.*
+
+## 25.1 Design tokens expansion
+
+Add to CSS custom properties:
+```
+--panel-gloss: linear-gradient(180deg, rgba(255,255,255,0.08), transparent 30%, transparent 70%, rgba(0,0,0,0.18));
+--panel-bevel-up: inset 0 1px 0 rgba(255,255,255,0.2), inset 0 -1px 0 rgba(0,0,0,0.35);
+--panel-bevel-down: inset 0 1px 0 rgba(0,0,0,0.35), inset 0 -1px 0 rgba(255,255,255,0.1);
+--glass-blur: blur(12px) saturate(120%);
+--ambient-noise: url("data:image/svg+xml;..." grainy low-opacity noise);
+```
+
+Every `.glass-panel` uses `backdrop-filter: var(--glass-blur)` and the `--panel-gloss` overlay as a `::after`.
+
+## 25.2 Screen transition overhaul
+
+**[P1 · M]** Replace current linear slide-in with a three-layer transition:
+
+1. **Backdrop flash** — 120ms colour wash in the outgoing screen's accent colour.
+2. **Outgoing screen** — slides out with motion blur filter.
+3. **Incoming screen** — scales from 0.94 with a 240ms ease-out, stagger-in children after.
+
+Add `--screen-accent` CSS var per screen so each transition feels themed (purple for main menu, red for bloodstalker combat, etc.).
+
+**AC:** Transitions never exceed 500ms end-to-end. Input is locked only for the first 200ms. `prefers-reduced-motion` drops the flash + motion blur and keeps a simple crossfade.
+
+## 25.3 Micro-interaction pass
+
+Every interactive element gets three states plus a press-in animation:
+
+| Element           | Idle                   | Hover                   | Press                                   | Disabled           |
+|-------------------|------------------------|-------------------------|-----------------------------------------|--------------------|
+| Primary button    | Neon border pulse 2.4s | Lift 2px + glow bump   | Scale 0.94 + deep red flash + haptic    | 40% opacity        |
+| Die               | Rest on arc            | Lift 6px + shadow      | Scale 0.95 + die-face flash + pickup spark | Grayscale + scale 0.9 |
+| Map node          | Glow to sector colour | Ring expands           | Burst of sparks + audio pulse           | Desaturated + 50%   |
+| Reward card       | Rarity-coloured ring  | Card lifts + preview scales | Card flies toward relic strip (exists) | N/A                |
+| Tribute button    | Static red            | Glow bump              | Squish 0.92 + blood-drop splash         | 55% opacity (exists) |
+
+**All press animations include a ≤50ms haptic tick on mobile.**
+
+## 25.4 Typography hierarchy
+
+**[P1 · M]** Four named type styles used everywhere:
+- **TITLE** — Orbitron 900, 2.4rem, letter-spacing 0.12em, tight line-height. Used for screen titles, boss names.
+- **HEADING** — Orbitron 700, 1.2rem, letter-spacing 0.22em uppercase. Used for section headers, settings tabs.
+- **BODY** — Rajdhani 500, 1rem, letter-spacing 0.02em. Used for descriptions, run narration.
+- **CAPTION** — Rajdhani 700, 0.72rem, letter-spacing 0.18em uppercase. Used for labels, footnotes, costs.
+
+Replace ad-hoc font settings across the codebase with CSS classes `.t-title`, `.t-heading`, `.t-body`, `.t-caption`.
+
+## 25.5 Iconography consistency
+
+**[P1 · M]** All icons move to a **2-stroke, 2px thickness, 24px canvas** SVG system. No emoji fallbacks in combat. No PNG icons except brand asset (`intro.png`).
+
+**Deliverable:** `src/ui/icons.js` contains every icon as a string constant. No icon is authored outside this file.
+
+## 25.6 Panel polish
+
+**[P1 · M]** Every `.glass-panel` gets:
+- **Corner notches** (top-right + bottom-left, 12px cut via clip-path)
+- **Gloss sheen** (moving highlight on hover — 2s sweep)
+- **Edge noise** (grain overlay at 6% opacity)
+- **Sectionable dividers** — `.panel-divider` class with a neon scan-line across it
+
+**AC:** Every modal / screen uses `.glass-panel` or a variant; no ad-hoc backgrounds remain.
+
+## 25.7 Combat HUD densification pass
+
+**[P1 · L]** Current combat HUD has readability issues under high-effect load.
+
+Proposed:
+- **Top-left:** Sector + Turn chip, collapsible (tap to expand for intel).
+- **Top-centre:** MODULES button becomes a small floating dock with a haptic tick on open.
+- **Top-right:** Settings gear (persists), Intel quick-peek (new).
+- **Middle 60%:** Combat stage.
+- **Below combat:** Reroll badge + die arc + skip button (current).
+- **Bottom strip:** Class ability widget (current).
+- **NEW "health ribbon"** overlays the bottom of the combat stage, showing player shield, HP, effects as a single horizontal bar. Replaces the current stacked presentation.
+
+---
+
+# Part 26 — Class fantasy animation pass
+
+> *Each class currently shares the same generic attack/summon/idle. Part 26 makes every class feel distinct — visually, audibly, and rhythmically.*
+
+## 26.1 Attack animation per class
+
+| Class        | Attack name       | Animation                                                        | Duration | Audio signature |
+|--------------|-------------------|------------------------------------------------------------------|----------|-----------------|
+| Tactician    | Pawn Volley       | 3 small pawn projectiles arc out in sequence, each with a small thump | 520ms | Snap + triple tick |
+| Arcanist     | Glyph Weave       | Three glyph runes spin around the target, collapse inward, ignite | 680ms | Reverb chime + flame |
+| Bloodstalker | **Sanguine Bite** | Player lunges forward, spectral fangs materialize, slash-bite on enemy (screen-shake + blood spurt) | 740ms | Meaty snap + drip |
+| Annihilator  | Overdrive Strike  | Player charges red plasma, slams it into enemy with recoil pushback | 600ms | Heavy whoom + crack |
+| Sentinel     | Bulwark Bash      | Player raises shield, charges, slams shield-first (shield impact splash) | 620ms | Metal clang + rumble |
+| Summoner     | Verdant Lash      | Vines erupt from player's feet, whip at enemy, retract | 580ms | Leaves rustle + crack |
+
+**Implementation:**
+- Each attack is a distinct entry in `src/effects/attack-animations.js`.
+- Trigger point: when a player attack die resolves (existing `applyDmg` path).
+- Fallback: if a class attack asset is missing, the current generic "digital_sever" is used. Log a warning so the gap is visible.
+
+**AC:** Playing an attack die as each class feels visually and audibly distinct. First-play test (30s each): A/B tester can identify the class from the animation alone.
+
+## 26.2 Summon animation per class
+
+| Class        | Minion name     | Summon animation                                            |
+|--------------|-----------------|-------------------------------------------------------------|
+| Tactician    | Pawn            | Materializes as a hologram from the player's hand          |
+| Arcanist     | Mana Wisp       | Spirals in on a mana-flame trail                            |
+| Bloodstalker | **Blood Thrall**| Swoops in from off-screen above the player — predator flying in, lands with a wing-fold + red dust cloud |
+| Annihilator  | Bomb Bot        | Dropped from above with a parachute-cord glitch, lands with a thud |
+| Sentinel     | Guardian        | Digital prism crystallizes at the spawn point, plate-by-plate |
+| Summoner     | **Spirit**      | Vines crack the ground, the spirit pushes up through the dirt + bloom of green leaves |
+
+**Implementation:**
+- Each class registers an `onMinionSpawn(minion)` hook in `src/effects/summon-animations.js`.
+- Hook runs after the minion is added to `player.minions` but before its position is updated.
+- Duration: 520–700ms (class-specific). Minion's action is disabled during spawn animation (uses the existing `spawnTimer` field).
+
+**AC:** Summoning a minion visually echoes class fantasy. Player who has played two different classes says "oh, of course this one grows from the ground" without being told.
+
+## 26.3 Death animation per class
+- **Tactician's Pawn** dissolves into pixels.
+- **Arcanist's Wisp** pops with a flame burst.
+- **Bloodstalker's Thrall** crumples + red puddle lingers 1s.
+- **Annihilator's Bomb Bot** explodes (already exists — keep).
+- **Sentinel's Guardian** shatters like glass.
+- **Summoner's Spirit** wilts + leaves scatter.
+
+## 26.4 Enemy attack animations
+
+Each enemy family gets **3 attack animations** (baseline, special, crit-reaction):
+- **Sector 1 family:** Laser sweep / lock-on beam / recoil flash
+- **Sector 2 family:** Ice shard fan / frost spiral / crystallize on crit
+- **Sector 3 family:** Plasma welder / lava spout / meltdown flash
+- **Sector 4 family:** Drone swarm / venom burst / shell-crack on crit
+- **Sector 5 family:** Reality blink / rule inscription / glitch-split
+
+## 26.5 Idle animations
+Every unit has a short (2–3s loop) idle — breathing, hovering, servo twitch.
+**AC:** No unit is static on the combat stage.
+
+## 26.6 Enemy death dissolves
+
+Each enemy family gets a unique death dissolve (not just a generic explosion):
+- **Sector 1 enemies:** dissolve into static (TV static frames fade out).
+- **Sector 2 enemies:** shatter into ice shards that slide off-screen.
+- **Sector 3 enemies:** slag into a puddle that evaporates.
+- **Sector 4 enemies:** disintegrate into a cloud of small bugs that fly off.
+- **Sector 5 enemies:** clipping glitch — body shrinks to a single pixel.
+
+**Implementation:** Register per-enemy `onDeath()` hook in `src/effects/death-animations.js`. Current generic "explosion" is the fallback for anything unlisted.
+
+---
+
+# Part 27 — Intel section 2.0
+
+> *Current Intel screen shows a list of defeated enemies with encounter counts. Players report it as "a menu I forgot existed". Part 27 turns it into a reason to play.*
+
+## 27.1 Information architecture
+
+Replace the flat list with three tabs:
+
+### Tab 1 — **Bestiary**
+A grid of enemy silhouettes. Undefeated enemies show as `???`. Defeated enemies reveal:
+- Full-colour sprite
+- Kill count, last-killed date
+- Short lore blurb (unlocks at 3 kills)
+- Weakness + resistance table (unlocks at 5 kills)
+- A 3-second in-combat animation clip (unlocks at 10 kills)
+
+### Tab 2 — **Chronicle**
+A living timeline of the player's runs:
+- Last 20 runs as a vertical strip (newest at top)
+- Each entry: class played, sector reached, fragments earned, cause of death (or "COMPLETED"), elapsed time
+- Tap to expand: run chart (HP vs turn, damage dealt vs received, relics picked)
+- Best run highlighted with a gold border
+
+### Tab 3 — **Cipher**
+Unlockable lore documents, 24 in total:
+- Each lore doc is tied to an in-run trigger (e.g., "Survive turn 10 on Sector 4", "Kill Null Pointer with no minion alive")
+- Undefeated docs show `[ENCRYPTED]` with a progress bar
+- Unlock fanfare: brief full-screen cinematic + lore reveal
+- Collecting all 24 unlocks the THIRD SANCTUARY NPC (the Curator, already in code as a stub) with cosmetic unlocks
+
+## 27.2 Progression unlock stream
+
+Intel stops feeling separate when it drip-feeds rewards:
+
+| Unlock milestone         | Reward                                         |
+|--------------------------|------------------------------------------------|
+| 1st kill of any enemy    | Enemy enters Bestiary                          |
+| 3 kills of an enemy      | Lore blurb unlocks                             |
+| 5 kills                  | Weakness / resistance table                    |
+| 10 kills                 | Animation clip + "Veteran Hunter" sticker      |
+| 20 kills                 | Fragment bonus (one-time)                      |
+| All bosses defeated once | Unlocks the Chronicle tab                      |
+| 24/24 cipher docs        | Unlocks Curator NPC + cosmetic dice skins      |
+| All classes Sector-5-clear | Unlocks "GRAND ARCHIVIST" title + a main-menu particle effect |
+
+## 27.3 Home-screen tease
+
+**[P2 · S]** Intel button on the main menu shows a small badge count when there's new unlocked content since last visit. Existing pattern in the file-count system — extend it to Intel.
+
+## 27.4 Integration with Ascension 2.0
+
+Tier-specific Intel entries — e.g. "Ascension 5+: Panopticon's Phase 3 gains Blind Protocol" appears in the Panopticon bestiary entry only after encountering it at Ascension 5.
+
+---
+
+# Part 28 — Ascension 2.0 (hardening the chase)
+
+> *Current ascension is flat number-go-up (+HP, +DMG). Part 28 makes it a genuine mastery ladder.*
+
+## 28.1 Ascension ladder — 20 levels
+
+Each level adds **one named modifier**. They stack, never replace. Clearing Sector 5 at level N unlocks level N+1.
+
+| Lvl | Name               | Effect                                                                                           |
+|-----|--------------------|--------------------------------------------------------------------------------------------------|
+| 1   | Brittle Hull       | Player takes +2 flat DMG from every enemy attack                                                 |
+| 2   | Fragile Memory     | Start every combat with 1 random die sealed                                                      |
+| 3   | Bitter Harvest     | Shop prices +25%                                                                                 |
+| 4   | Echo Protocol      | 10% of player's outgoing damage is reflected as self-damage                                      |
+| 5   | Living Armor       | All enemies start combat with +10 Shield                                                         |
+| 6   | Plague Bloom       | Any damage over 20 applies Poison 2 to the player                                                |
+| 7   | Quickened Core     | Bosses enter Phase 2 at 75% HP instead of 66%                                                    |
+| 8   | Crystal Thorns     | Elite affix pool doubles in size (new affixes unlocked only at Asc 8+)                          |
+| 9   | Fractured Sight    | Intent preview shows only icon, not numbers                                                     |
+| 10  | Silent Market      | Rest nodes disabled                                                                             |
+| 11  | Null Field         | Relic costs +40% fragments                                                                      |
+| 12  | Unmaking Strike    | Every 5 turns, a random relic loses a stack                                                     |
+| 13  | Entropy Drift      | Lose 5% max HP every sector transition                                                           |
+| 14  | Conservation Law   | Overheal becomes damage over time on the healer                                                   |
+| 15  | Mirror World       | Enemies gain the player's last-played die as one of their own dice (thematic, flavour-heavy)     |
+| 16  | Endless Loop       | Boss Phase 3 lasts two extra turns                                                              |
+| 17  | Aurelia's Curse    | All "chance" mechanics roll twice, take the worse                                                |
+| 18  | Dark Contract      | No rewards on elite kills                                                                       |
+| 19  | Apostate           | Lose one passive meta-upgrade effect per run                                                    |
+| 20  | The Final Archive  | Opens Sector X's Archivist boss as a *required* post-Sector-5 additional encounter              |
+
+## 28.2 Display overhaul
+
+Current ascension slider lives in a dev tab. Move to its own **ASCENSION** tile on the main menu, unlocked after first run clear.
+
+- Tile shows current tier, tier name, modifier description.
+- Tap to open Ascension panel: ladder visualized vertically. Completed tiers gold, current active tier pulsing, future tiers locked with a teaser "?".
+- Show per-class Sector-5 clears at each tier (matrix: 6 classes × 20 tiers = the long-term completion chase).
+
+## 28.3 Ascension-specific cosmetics
+
+Every 5 tiers unlocks a cosmetic frame for the main menu title:
+- Tier 5 — bronze cog frame
+- Tier 10 — silver lightning frame
+- Tier 15 — gold circuitry frame
+- Tier 20 — obsidian archivist frame
+
+---
+
+# Part 29 — Custom Runs (Ascension 1+)
+
+> *Once the player has cleared an ascension, unlock custom-run modifiers on the char-select screen. Think roguelite "mutators".*
+
+## 29.1 Gating
+
+**Custom Runs** are unlocked after clearing Ascension 1. A new tile/panel on the character select screen shows three mutator pools (pick 0–3 modifiers per run).
+
+## 29.2 Modifier pool (phase 1 — launch set)
+
+Each modifier has a **cost** (reduces fragment reward by a % on success) and a **payout** (boosts fragments if you win). Net fragment gain is `basePayout * (1 + sum(payoutBonuses)) * (1 - sum(penaltyFragReduction))`.
+
+### Negative modifiers (make the run harder, boost payout)
+| ID            | Name                  | Effect                                                     | Payout bonus |
+|---------------|-----------------------|------------------------------------------------------------|--------------|
+| `hard_heart`  | Low-Health Start      | Start with 50% HP                                          | +15%         |
+| `no_rest`     | Merciless             | Rest nodes do nothing                                      | +20%         |
+| `glass_cannon`| Glass Cannon          | +50% DMG dealt, +50% DMG taken                             | +20%         |
+| `slim_dice`   | Narrow Hand           | Start with only 3 dice instead of 4                        | +30%         |
+| `no_reroll`   | Locked In             | No rerolls available                                       | +35%         |
+| `undead_mob`  | Undead Protocol       | 20% of enemies resurrect once with 50% HP                  | +30%         |
+| `tax_man`     | Tax Man               | 10% of fragments earned lost at each sector transition     | +15%         |
+| `cursed_deck` | Cursed Relics         | Every relic you pick deals you 3 DMG when acquired         | +25%         |
+| `limit_lore`  | Silent Chronicle      | No lore unlocks this run                                   | +10%         |
+| `hot_hands`   | Hot Hands             | Each turn the first die you play triggers a heat pulse (3 self-DMG) | +15% |
+
+### Positive modifiers (make the run easier, penalize payout)
+| ID              | Name                   | Effect                                                     | Penalty          |
+|-----------------|------------------------|------------------------------------------------------------|------------------|
+| `starter_kit`   | Starter Kit            | Begin with 2 random common relics                          | -30% payout      |
+| `extra_reroll`  | Steady Hand            | +1 extra reroll per turn                                   | -25% payout      |
+| `soft_bosses`   | Soft Bosses            | All bosses -20% HP                                         | -40% payout      |
+| `free_shops`    | Open Markets           | Shop prices -30%                                           | -25% payout      |
+
+### Chaotic modifiers (weird but not strictly +/-)
+| ID               | Name              | Effect                                                         | Payout bonus |
+|------------------|-------------------|----------------------------------------------------------------|--------------|
+| `scrambled`      | Scrambled Protocol | Every combat, dice types are shuffled (same pool, random slots) | +10% |
+| `dark_visions`   | Dark Visions      | Enemy intent icons hidden; must be inferred from animations    | +20%         |
+| `double_or_none` | Double or None    | Attack dice roll 50%: deal 2x or 0 damage                      | +15%         |
+| `daily_dupes`    | Daily Dupes       | Every relic is duplicated on pickup (stacks 2x)                | -15% payout  |
+
+## 29.3 UI & flow
+
+**Character select → "CUSTOM RUN" tile** (only shows if Ascension ≥ 1 unlocked):
+- Grid of available modifiers, each card shows: icon, name, short desc, payout delta.
+- Selected modifiers light up. Running total of net fragment modifier shown at bottom.
+- **Apply** button commits; starts run with modifiers encoded into save state.
+
+At run start, a banner shows the active modifiers ("RUN TYPE: GLASS CANNON × LOCKED IN — NET +55%").
+At run end, reward screen shows base → modified payout with the delta highlighted.
+
+## 29.4 Save persistence
+- Modifiers are stored in `runState.customModifiers` (array of IDs).
+- On save/load, modifiers are re-applied to the active run.
+- Quitting a custom run doesn't lose the modifier selection — persists as "last picked" for the next run.
+
+## 29.5 Leaderboard integration
+Custom runs have their own leaderboard track (not mixed with vanilla Ascension). Players can filter leaderboards by active modifier set.
+
+## 29.6 Phase 2 — post-launch additions
+- Player-created modifier combos shareable via short code
+- Community-picked "Weekly Challenge" modifier set
+- Modifier achievements ("Clear Sector 5 with 5+ negative modifiers active")
+
+---
+
+# Part 30 — Map topology overhaul
+
+> *Current map is a linear sequence of nodes. Part 30 makes map selection a meaningful choice.*
+
+## 30.1 Branching map structure
+
+Each sector's map becomes a **6-layer branching graph** (inspired by Slay the Spire):
+- Layer 0: Start (single node)
+- Layers 1–4: 2–4 parallel nodes, interconnected
+- Layer 5: Boss (single node)
+- Paths are *one-way* (forward only; no backtracking)
+
+## 30.2 Node type distribution
+
+For each non-start/non-boss node, type weights:
+- **Standard combat** — 40%
+- **Elite combat** — 15% (shown with a red-ringed icon)
+- **Shop** — 10%
+- **Event** — 20%
+- **Rest** — 10%
+- **Treasure** (mini-event, one-off relic) — 5%
+
+Boss node: always last. No player choice.
+
+## 30.3 Visual redesign
+
+- Map background = sector's parallax skyline (already exists).
+- Nodes drawn as circuit-board icons, size/colour by type.
+- Paths drawn as glowing traces between nodes.
+- Player's current position marked with a pulsing diamond.
+- Visited nodes dim but readable.
+- Upcoming nodes show their type icon + a small tooltip on long-press ("Standard fight — Watcher-01 likely").
+
+## 30.4 Special map features per sector
+
+- **Sector 1:** Surveillance camera sweep — every N map moves, a random unvisited node is briefly revealed.
+- **Sector 2:** Iced paths — some edges are blocked until a heat-vent event unlocks them.
+- **Sector 3:** Magma rivers — crossing certain edges costs 5 HP.
+- **Sector 4:** Hive corruption — every 2 moves, one visible node becomes "Infested" (harder but double rewards).
+- **Sector 5:** Glitched branches — some paths flicker between 2 destinations. Roll-based resolution.
+
+## 30.5 AC
+- Player sees a map that feels like a decision, not a corridor.
+- Elites are visible in advance so players can route around them (or into them for the risk/reward).
+- On mobile, map fits 100% within one viewport (no horizontal scrolling).
+
+---
+
+# Part 31 — Feedback-loop improvements
+
+## 31.1 End-of-turn digest (mini)
+
+**[P1 · S]** After each turn, a 2-second floating summary appears top-centre:
+> `TURN 5 · DEALT 47 · TAKEN 12 · 2 DICE USED · +3 BLOOD POOL`
+
+Stackable variables, class-aware (shows the class widget's metric of the day).
+
+## 31.2 End-of-combat recap
+
+**[P1 · M]** Before the reward screen, a brief (3s) combat summary card:
+- Player portrait + enemy portrait side-by-side
+- Big stat: total damage dealt vs taken
+- Highlight stat: "Biggest hit: 84 DMG (Crit)"
+- Three interesting moments as tiny thumbnails (e.g. "Lifesteal x5", "Perfect block", "Combo FRENZY")
+
+## 31.3 Post-death autopsy
+
+**[P1 · M]** Replace current Game Over screen with an autopsy card:
+- Cause of death (enemy name, killing blow amount)
+- "Lesson" generated from the run — e.g. "You spent 0 Mana this run. Try skill dice to multiply your output."
+- One-tap "RESTART" and "MAIN MENU" buttons
+- Share button for clipboard/social: autogenerated summary image
+
+## 31.4 Share-out hooks
+
+**[P1 · S]** Four natural share moments:
+1. First Sector 5 clear → "I beat Magic v Machine!" share card
+2. Any Ascension-level clear ≥5 → "Cleared Asc 5+!"
+3. Custom Run clear with ≥3 negative modifiers → "Masochist Certified"
+4. 100k fragments milestone → "Tech fragment hoarder"
+
+Share card is a 1080×1080 PNG generated client-side (existing `src/services/share.js`). Pre-populates text for Twitter/X/BlueSky/Reddit.
+
+---
+
+# Part 32 — Implementation priority & dependency graph
+
+> *With everything in Parts 23–31 on the table, here's a realistic 6-month rollout.*
+
+## 32.1 Milestone 1 — "Foundation" (weeks 1–6)
+
+Focus: systems & data layers that everything else needs.
+
+- **Part 25.1** Design tokens CSS refactor (`M`)
+- **Part 25.2** Screen transition overhaul (`M`) — ***partial implementation already shipped in this changeset***
+- **Part 25.4** Typography classes (`M`)
+- **Part 23.1** Sector identity framework — data tables only (`M`)
+- **Part 26.1–26.2** Attack + summon animation hook infrastructure (no art yet) (`L`)
+
+## 32.2 Milestone 2 — "Class identity" (weeks 7–10)
+
+Focus: class-specific content drops that make every class feel distinct.
+
+- **Part 26.1** All 6 class attack animations (`L`)
+- **Part 26.2** All 6 class summon animations (`M`)
+- **Part 26.3** All 6 class death animations (`M`)
+
+## 32.3 Milestone 3 — "Sector content" (weeks 11–18)
+
+Focus: new enemy roster and map topology.
+
+- **Part 23.2–23.6** All five sectors' enemy rosters (`XL` × 5)
+- **Part 26.4–26.6** Per-family enemy animations (`L` × 5)
+- **Part 30** Branching map topology (`L`)
+
+## 32.4 Milestone 4 — "Meta layer" (weeks 19–22)
+
+- **Part 27** Intel 2.0 (`L`)
+- **Part 28** Ascension 2.0 modifiers + UI (`L`)
+- **Part 29** Custom Runs phase 1 (`L`)
+
+## 32.5 Milestone 5 — "End-game" (weeks 23–26)
+
+- **Part 24** Sector X: The Archive + Archivist boss (`XL`)
+- **Part 31** Feedback-loop improvements (`L`)
+- Final balance + launch prep.
+
+## 32.6 Dependency notes
+
+- Parts 23.x (sector content) depend on Part 26.1–26.4 (animation hooks).
+- Part 28 (Ascension ladder) must ship before Part 29 (Custom Runs) — the gating uses Ascension cleared as a prerequisite.
+- Part 24 (Sector X) depends on all sector boss phase overhauls (23.2–23.6).
+- Part 27 (Intel) hooks are cheap to add piecemeal alongside any content part — recommend building the three-tab shell early, filling content lazily.
+
+## 32.7 What's already implemented in this changeset
+
+- **Part 25.2** — partial: iOS `100dvh`, stagger-in children on screen activation (exists), reduced-motion branch (exists). Added grain overlay flag + accent-tint CSS var wiring. See `screen-transitions` CSS block.
+- **Part 29.3 (partial)** — char-select screen now has a CUSTOM RUN button stub that shows a placeholder panel when Ascension 1+ is unlocked. Modifier data lives in `src/constants.js` (`CUSTOM_RUN_MODIFIERS`); the selection + application logic is scaffolded but behind a feature flag (`FEATURE_CUSTOM_RUNS = false`) until balance playtesting.
+- **Part 27.3** — Intel main-menu button now exposes an unlocked-count badge (pattern matches the encryptedFiles badge).
+
+The rest of Parts 23–32 remains to be implemented as scheduled.
