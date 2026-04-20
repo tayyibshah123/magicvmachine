@@ -8247,10 +8247,25 @@ async startTurn() {
                         if (rerollBadge) rerollBadge.innerText = this.rerolls;
                         ParticleSys.createFloatingText(this.player.x, this.player.y - 170, `+${rerollBonus} REROLL`, "#00d4e6");
                     } else if (cid === 'bloodstalker') {
-                        // Heal instead of shield — Blood Ward gives no shield
+                        // Sanguine Pact: heal the player; any heal that would
+                        // overflow past max HP contributes to the Blood Pool
+                        // instead (routed through the damage_taken hook so the
+                        // bar fill logic is shared). Makes the die still
+                        // valuable when at full HP — you're charging the
+                        // tribute bar instead of wasting the heal.
                         const healAmt = isUpgraded ? 5 : 3;
-                        this.player.currentHp = Math.min(this.player.maxHp, this.player.currentHp + healAmt);
-                        ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `+${healAmt} HP`, "#ff0000");
+                        const before = this.player.currentHp;
+                        const after = Math.min(this.player.maxHp, before + healAmt);
+                        const actualHeal = after - before;
+                        const overflow = healAmt - actualHeal;
+                        this.player.currentHp = after;
+                        if (actualHeal > 0) {
+                            ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `+${actualHeal} HP`, "#ff0000");
+                        }
+                        if (overflow > 0) {
+                            ClassAbility.onEvent('damage_taken', { amount: overflow, source: 'sanguine_overflow' });
+                            ParticleSys.createFloatingText(this.player.x, this.player.y - 140, `+${overflow} BLOOD POOL`, "#ff2244");
+                        }
                     } else if (cid === 'annihilator') {
                         // Ricochet — reduce incoming damage next turn by 20%, stacking
                         this.player.ricochetStacks = (this.player.ricochetStacks || 0) + 1;
