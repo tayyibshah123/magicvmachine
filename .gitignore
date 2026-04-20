@@ -1,0 +1,32 @@
+# Dependencies — regenerated from package.json via `npm install`
+node_modules/
+
+# Claude Code local session state
+.claude/
+
+# Test runner caches
+.vitest/
+coverage/
+
+# Build / temp
+dist/
+build/
+.cache/
+*.log
+npm-debug.log*
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Local env overrides
+.env
+.env.local

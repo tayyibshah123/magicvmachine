@@ -1,0 +1,499 @@
+// Particle system with object pool + adaptive quality.
+// Pool eliminates per-frame allocations (and the GC pauses they cause on
+// mid-tier Android). Quality factor (set externally via ParticleSys.quality)
+// trims spawn counts on low-end devices.
+//
+// Visual quality upgrade:
+//  • Particles render as a pre-baked radial-gradient sprite (soft edges,
+//    real anti-aliased falloff) instead of a flat arc fill.
+//  • Glow-tagged particles use `lighter` composite mode so light stacks
+//    additively (like real luminance).
+//  • Per-particle drag, gravity, rotation, and spin for natural motion.
+
+// Pool size set by Game.init() via ParticleSys.maxParticles based on Perf tier.
+const POOL_SIZE = 384;
+
+// One-time pre-baked radial-gradient sprite. White + alpha falloff — the
+// runtime multiplies by `color` via globalCompositeOperation = 'source-in'.
+let _softSprite = null;
+const SOFT_SPRITE_RES = 64;
+function _buildSoftSprite() {
+    const c = (typeof OffscreenCanvas === 'function')
+        ? new OffscreenCanvas(SOFT_SPRITE_RES, SOFT_SPRITE_RES)
+        : Object.assign(document.createElement('canvas'), { width: SOFT_SPRITE_RES, height: SOFT_SPRITE_RES });
+    const sctx = c.getContext('2d');
+    const cx = SOFT_SPRITE_RES / 2, cy = SOFT_SPRITE_RES / 2;
+    const g = sctx.createRadialGradient(cx, cy, 0, cx, cy, cx);
+    g.addColorStop(0,   'rgba(255,255,255,1)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0.55)');
+    g.addColorStop(0.85,'rgba(255,255,255,0.12)');
+    g.addColorStop(1,   'rgba(255,255,255,0)');
+    sctx.fillStyle = g;
+    sctx.fillRect(0, 0, SOFT_SPRITE_RES, SOFT_SPRITE_RES);
+    return c;
+}
+
+function _newParticle() {
+    return {
+        active: false,
+        x: 0, y: 0, vx: 0, vy: 0,
+        life: 0, maxLife: 0,
+        size: 0, color: '#fff',
+        alpha: 0, text: null,
+        fontSize: 48,
+        // Visual-quality additions
+        rotation: 0,
+        spin: 0,
+        drag: 0.985,
+        gravity: 0,
+        glow: false      // additive blending when true
+    };
+}
+
+const ParticleSys = {
+    pool: Array.from({ length: POOL_SIZE }, _newParticle),
+    activeCount: 0,
+    quality: 1.0, // 0.4 = low, 0.7 = medium, 1.0 = high; trims spawn counts
+    maxParticles: POOL_SIZE,
+
+    // Backwards-compat: code that iterates `particles` still works (returns active subset).
+    // Also supports `ParticleSys.particles = []` (legacy "clear everything") by
+    // releasing all pool slots — avoids "property has only a getter" errors.
+    get particles() {
+        return this.pool.filter(p => p.active);
+    },
+    set particles(_) {
+        // Legacy reset — any assignment to .particles is treated as "clear all"
+        this.clear();
+    },
+
+    // Release every pool slot — called on combat start / restart
+    clear() {
+        for (let i = 0; i < this.pool.length; i++) {
+            this.pool[i].active = false;
+            this.pool[i].text = null;
+        }
+        this.activeCount = 0;
+    },
+
+    _acquire() {
+        // Find first inactive particle in pool
+        for (let i = 0; i < this.pool.length; i++) {
+            if (!this.pool[i].active) {
+                this.pool[i].active = true;
+                this.pool[i].text = null;
+                this.activeCount++;
+                return this.pool[i];
+            }
+        }
+        // Pool exhausted — recycle the oldest active particle (smallest life remaining)
+        let oldest = this.pool[0], oldestIdx = 0;
+        for (let i = 1; i < this.pool.length; i++) {
+            if (this.pool[i].life < oldest.life) { oldest = this.pool[i]; oldestIdx = i; }
+        }
+        oldest.text = null;
+        return oldest;
+    },
+
+    _release(p) {
+        if (p.active) {
+            p.active = false;
+            this.activeCount--;
+        }
+    },
+
+    update(dt) {
+        for (let i = 0; i < this.pool.length; i++) {
+            const p = this.pool[i];
+            if (!p.active) continue;
+            p.life -= dt;
+            // Physics: apply gravity, integrate velocity with drag, update
+            // position + rotation. Values are gentle so the existing scenes
+            // still look recognisable — but motion now has arcs + settle.
+            if (p.gravity) p.vy += p.gravity * dt * 60;
+            p.vx *= p.drag;
+            p.vy *= p.drag;
+            p.x += p.vx;
+            p.y += p.vy;
+            if (p.spin) p.rotation += p.spin * dt;
+            // Cubic ease-out on alpha so particles linger visually then fade fast
+            const t = Math.max(0, p.life / p.maxLife);
+            p.alpha = t * t * (3 - 2 * t);
+            if (p.life <= 0) this._release(p);
+        }
+    },
+
+    draw(ctx) {
+        if (!_softSprite) _softSprite = _buildSoftSprite();
+
+        ctx.save();
+        // Two-pass render: glow particles first in additive mode (light stacks),
+        // then the rest in normal compositing on top. Text particles always last
+        // so they stay legible.
+        let lastColor = null;
+
+        // Pass 1 — additive glow particles (skipped when quality < 0.5 for FPS)
+        if (this.quality >= 0.5) {
+            ctx.globalCompositeOperation = 'lighter';
+            for (let i = 0; i < this.pool.length; i++) {
+                const p = this.pool[i];
+                if (!p.active || p.text || !p.glow) continue;
+                ctx.globalAlpha = p.alpha;
+                if (p.color !== lastColor) {
+                    ctx.fillStyle = p.color;
+                    lastColor = p.color;
+                }
+                this._drawSoftDot(ctx, p);
+            }
+        }
+
+        // Pass 2 — normal particles (solid dots, sharp pixels — used for
+        // ground debris, small rain, etc.)
+        ctx.globalCompositeOperation = 'source-over';
+        lastColor = null;
+        for (let i = 0; i < this.pool.length; i++) {
+            const p = this.pool[i];
+            if (!p.active || p.text || p.glow) continue;
+            ctx.globalAlpha = p.alpha;
+            if (p.color !== lastColor) {
+                ctx.fillStyle = p.color;
+                lastColor = p.color;
+            }
+            // Still use the soft sprite — even non-glow particles look better
+            // with anti-aliased falloff than a hard arc.
+            this._drawSoftDot(ctx, p);
+        }
+
+        // Pass 3 — text particles
+        ctx.globalCompositeOperation = 'source-over';
+        for (let i = 0; i < this.pool.length; i++) {
+            const p = this.pool[i];
+            if (!p.active || !p.text) continue;
+            ctx.globalAlpha = p.alpha;
+            const fs = p.fontSize || 48;
+            ctx.font = `900 ${fs}px 'Orbitron'`;
+            ctx.textAlign = 'center';
+            ctx.lineWidth = Math.max(4, fs / 6);
+            ctx.strokeStyle = '#000000';
+            ctx.lineJoin = 'round';
+            ctx.strokeText(p.text, p.x, p.y);
+            ctx.fillStyle = p.color;
+            if (this.quality >= 0.5) {
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = fs >= 56 ? 18 : fs >= 40 ? 12 : 8;
+            }
+            ctx.fillText(p.text, p.x, p.y);
+            ctx.shadowBlur = 0;
+        }
+
+        ctx.restore();
+    },
+
+    // Soft-edge dot via the pre-baked sprite, tinted to p.color. Uses a
+    // cached offscreen canvas per color so the per-frame work is just
+    // drawImage (cheap even on mid-range Android).
+    _drawSoftDot(ctx, p) {
+        const tint = this._getTintedSprite(p.color);
+        const s = p.size * 4; // sprite is the "soft halo"; size ≈ dot radius
+        if (p.rotation) {
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.rotation);
+            ctx.drawImage(tint, -s / 2, -s / 2, s, s);
+            ctx.restore();
+        } else {
+            ctx.drawImage(tint, p.x - s / 2, p.y - s / 2, s, s);
+        }
+    },
+
+    _tintCache: {},
+    _getTintedSprite(color) {
+        if (this._tintCache[color]) return this._tintCache[color];
+        if (!_softSprite) _softSprite = _buildSoftSprite();
+        const c = document.createElement('canvas');
+        c.width = SOFT_SPRITE_RES; c.height = SOFT_SPRITE_RES;
+        const cc = c.getContext('2d');
+        cc.drawImage(_softSprite, 0, 0);
+        cc.globalCompositeOperation = 'source-in';
+        cc.fillStyle = color;
+        cc.fillRect(0, 0, SOFT_SPRITE_RES, SOFT_SPRITE_RES);
+        this._tintCache[color] = c;
+        return c;
+    },
+
+    createExplosion(x, y, count, color) {
+        // Quality scales spawn count down on low-end devices
+        const c = Math.max(2, Math.round(count * this.quality));
+        for (let i = 0; i < c; i++) {
+            const p = this._acquire();
+            p.x = x; p.y = y;
+            p.glow = true;
+            p.drag = 0.93 + Math.random() * 0.04;
+            p.gravity = 0.08;
+            p.rotation = Math.random() * Math.PI * 2;
+            p.spin = (Math.random() - 0.5) * 8;
+            p.vx = (Math.random() - 0.5) * 12;
+            p.vy = (Math.random() - 0.5) * 12;
+            p.life = 0.6; p.maxLife = 0.6;
+            p.size = Math.random() * 5 + 2;
+            p.color = color; p.alpha = 1;
+        }
+    },
+
+    createFloatingText(x, y, text, color, opts) {
+        const p = this._acquire();
+        p.x = x; p.y = y;
+        p.vx = 0; p.vy = (opts && opts.vy != null) ? opts.vy : -1.5;
+        p.life = (opts && opts.life) || 1.5;
+        p.maxLife = p.life;
+        p.size = 0;
+        p.color = color;
+        p.text = text;
+        p.alpha = 1;
+        p.fontSize = (opts && opts.fontSize) || 48;
+    },
+
+    // Tiered damage text. Picks font size/colour by damage magnitude.
+    // Returns the tier key so callers can pair it with shake/haptic/sound.
+    createDamageText(x, y, amount, isPlayerTarget) {
+        let tier = 'solid';
+        let color = '#ff3333';
+        let fontSize = 48;
+        let vy = -1.5;
+        if (amount <= 0) return 'zero';
+        if (amount < 10)      { tier = 'chip';         color = '#e6e6e6'; fontSize = 30; }
+        else if (amount < 30) { tier = 'solid';        color = '#ff3333'; fontSize = 44; }
+        else if (amount < 100){ tier = 'heavy';        color = '#ff1100'; fontSize = 64; vy = -2.0; }
+        else                  { tier = 'catastrophic'; color = '#ffdd33'; fontSize = 84; vy = -2.4; }
+        if (isPlayerTarget && tier === 'solid') color = '#ff5566';
+        this.createFloatingText(x, y - 60, "-" + amount, color, { fontSize, vy, life: 1.6 });
+        return tier;
+    },
+
+    createShockwave(x, y, color, count = 40) {
+        const c = Math.max(8, Math.round(count * this.quality));
+        for (let i = 0; i < c; i++) {
+            const angle = (Math.PI * 2 / c) * i;
+            const speed = 9 + Math.random() * 3;
+            const p = this._acquire();
+            p.x = x; p.y = y;
+            p.vx = Math.cos(angle) * speed;
+            p.vy = Math.sin(angle) * speed;
+            p.life = 0.8; p.maxLife = 0.8;
+            p.size = 3 + Math.random() * 2;
+            p.color = color; p.alpha = 1;
+            p.glow = true;
+            p.drag = 0.92;
+            p.gravity = 0;
+            p.rotation = angle;
+            p.spin = 0;
+        }
+    },
+
+    createTrail(x, y, color, ttl = 0.35) {
+        // Suppressed during isolated preview renders (character-select detail
+        // overlay) — drawEntity emits ambient trails using world coordinates,
+        // which would otherwise pollute the main combat pool.
+        if (this.suppress) return;
+        // Trails are skipped under heavy load
+        if (this.quality < 0.5 && this.activeCount > POOL_SIZE * 0.7) return;
+        const p = this._acquire();
+        p.x = x + (Math.random() - 0.5) * 6;
+        p.y = y + (Math.random() - 0.5) * 6;
+        p.vx = (Math.random() - 0.5) * 0.4;
+        p.vy = -0.2 + Math.random() * -0.4;
+        p.life = ttl; p.maxLife = ttl;
+        p.size = 2 + Math.random() * 2;
+        p.color = color; p.alpha = 1;
+        p.glow = true;
+        p.drag = 0.95;
+        p.gravity = 0;
+        p.rotation = 0;
+        p.spin = 0;
+    },
+
+    // Tapered-line SPARK burst — for sword-hit feel. Uses a separate effect
+    // type so callers can opt in. Particles streak linearly then fade.
+    createSparks(x, y, color, count = 8) {
+        const c = Math.max(3, Math.round(count * this.quality));
+        for (let i = 0; i < c; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 6 + Math.random() * 6;
+            const p = this._acquire();
+            p.x = x; p.y = y;
+            p.vx = Math.cos(angle) * speed;
+            p.vy = Math.sin(angle) * speed;
+            p.life = 0.35 + Math.random() * 0.2;
+            p.maxLife = p.life;
+            p.size = 1.5 + Math.random() * 1.2;
+            p.color = color;
+            p.alpha = 1;
+            p.glow = true;
+            p.drag = 0.87;
+            p.gravity = 0.12;
+            p.rotation = angle;
+            p.spin = 0;
+        }
+    },
+
+    // ─── CLASS-SPECIFIC DICE VFX ─── Each has a distinct visual signature.
+
+    // Tactician: geometric cyan shards radiating in a precise ring
+    createTacticianBurst(x, y) {
+        const c = Math.max(4, Math.round(12 * this.quality));
+        for (let i = 0; i < c; i++) {
+            const angle = (Math.PI * 2 / c) * i;
+            const p = this._acquire();
+            p.x = x; p.y = y;
+            p.vx = Math.cos(angle) * 7;
+            p.vy = Math.sin(angle) * 7;
+            p.life = 0.5; p.maxLife = 0.5;
+            p.size = 3; p.color = '#00f3ff'; p.alpha = 1;
+            p.glow = true; p.drag = 0.90; p.gravity = 0;
+            p.rotation = angle; p.spin = 0;
+        }
+        // Central data-pulse ring
+        for (let i = 0; i < 3; i++) {
+            const p = this._acquire();
+            p.x = x; p.y = y;
+            p.vx = 0; p.vy = 0;
+            p.life = 0.35 + i * 0.12; p.maxLife = p.life;
+            p.size = 8 + i * 5; p.color = '#00d4e6'; p.alpha = 0.7;
+            p.glow = true; p.drag = 1; p.gravity = 0;
+            p.rotation = 0; p.spin = 2;
+        }
+    },
+
+    // Arcanist: purple arcane spirals with sparkle trail
+    createArcanistBurst(x, y) {
+        const c = Math.max(6, Math.round(16 * this.quality));
+        for (let i = 0; i < c; i++) {
+            const angle = (Math.PI * 2 / c) * i + Math.sin(i * 0.8) * 0.4;
+            const speed = 5 + Math.random() * 4;
+            const p = this._acquire();
+            p.x = x + Math.cos(angle) * 8; p.y = y + Math.sin(angle) * 8;
+            p.vx = Math.cos(angle + 0.6) * speed;
+            p.vy = Math.sin(angle + 0.6) * speed;
+            p.life = 0.7; p.maxLife = 0.7;
+            p.size = 2 + Math.random() * 3;
+            p.color = i % 3 === 0 ? '#d070ff' : '#bc13fe'; p.alpha = 1;
+            p.glow = true; p.drag = 0.92; p.gravity = -0.03;
+            p.rotation = Math.random() * 6; p.spin = (Math.random() - 0.5) * 10;
+        }
+    },
+
+    // Bloodstalker: red droplets with downward drip + splatter
+    createBloodstalkerBurst(x, y) {
+        const c = Math.max(5, Math.round(14 * this.quality));
+        for (let i = 0; i < c; i++) {
+            const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.2;
+            const speed = 4 + Math.random() * 6;
+            const p = this._acquire();
+            p.x = x + (Math.random() - 0.5) * 10; p.y = y;
+            p.vx = Math.cos(angle) * speed * 0.5;
+            p.vy = Math.sin(angle) * speed;
+            p.life = 0.6; p.maxLife = 0.6;
+            p.size = 2 + Math.random() * 3;
+            p.color = i % 4 === 0 ? '#cc0000' : '#ff0000'; p.alpha = 1;
+            p.glow = true; p.drag = 0.94; p.gravity = 0.25;
+            p.rotation = 0; p.spin = 0;
+        }
+    },
+
+    // Annihilator: explosive orange sparks flying outward with heat shimmer
+    createAnnihilatorBurst(x, y) {
+        const c = Math.max(6, Math.round(18 * this.quality));
+        for (let i = 0; i < c; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 8 + Math.random() * 8;
+            const p = this._acquire();
+            p.x = x; p.y = y;
+            p.vx = Math.cos(angle) * speed;
+            p.vy = Math.sin(angle) * speed;
+            p.life = 0.4 + Math.random() * 0.3; p.maxLife = p.life;
+            p.size = 2 + Math.random() * 4;
+            p.color = ['#ff8800', '#ff6600', '#ff4400', '#ffcc00'][i % 4]; p.alpha = 1;
+            p.glow = true; p.drag = 0.88; p.gravity = 0.15;
+            p.rotation = angle; p.spin = (Math.random() - 0.5) * 12;
+        }
+        // Central flash
+        const flash = this._acquire();
+        flash.x = x; flash.y = y; flash.vx = 0; flash.vy = 0;
+        flash.life = 0.2; flash.maxLife = 0.2;
+        flash.size = 14; flash.color = '#ffffff'; flash.alpha = 1;
+        flash.glow = true; flash.drag = 1; flash.gravity = 0;
+        flash.rotation = 0; flash.spin = 0;
+    },
+
+    // Sentinel: white/silver metallic flashes — sharp, angular
+    createSentinelBurst(x, y) {
+        const c = Math.max(5, Math.round(10 * this.quality));
+        for (let i = 0; i < c; i++) {
+            const angle = (Math.PI * 2 / c) * i;
+            const speed = 5 + Math.random() * 3;
+            const p = this._acquire();
+            p.x = x; p.y = y;
+            p.vx = Math.cos(angle) * speed;
+            p.vy = Math.sin(angle) * speed;
+            p.life = 0.45; p.maxLife = 0.45;
+            p.size = 3 + Math.random() * 2;
+            p.color = i % 2 === 0 ? '#ffffff' : '#c0c0c0'; p.alpha = 1;
+            p.glow = true; p.drag = 0.91; p.gravity = 0;
+            p.rotation = angle; p.spin = 0;
+        }
+        // Shield shimmer ring
+        for (let i = 0; i < 6; i++) {
+            const ang = (Math.PI * 2 / 6) * i;
+            const p = this._acquire();
+            p.x = x + Math.cos(ang) * 20; p.y = y + Math.sin(ang) * 20;
+            p.vx = Math.cos(ang) * 2; p.vy = Math.sin(ang) * 2;
+            p.life = 0.6; p.maxLife = 0.6;
+            p.size = 2; p.color = '#e0e0e0'; p.alpha = 0.8;
+            p.glow = true; p.drag = 0.96; p.gravity = 0;
+            p.rotation = 0; p.spin = 3;
+        }
+    },
+
+    // Summoner: green nature leaves spiraling outward + pollen dust
+    createSummonerBurst(x, y) {
+        const c = Math.max(5, Math.round(12 * this.quality));
+        for (let i = 0; i < c; i++) {
+            const angle = (Math.PI * 2 / c) * i + Math.random() * 0.3;
+            const speed = 3 + Math.random() * 4;
+            const p = this._acquire();
+            p.x = x; p.y = y;
+            p.vx = Math.cos(angle) * speed;
+            p.vy = Math.sin(angle) * speed - 1;
+            p.life = 0.8; p.maxLife = 0.8;
+            p.size = 3 + Math.random() * 3;
+            p.color = i % 3 === 0 ? '#00ff66' : '#00ff99'; p.alpha = 1;
+            p.glow = true; p.drag = 0.93; p.gravity = -0.05;
+            p.rotation = Math.random() * 6; p.spin = (Math.random() - 0.5) * 6;
+        }
+        // Pollen dust
+        for (let i = 0; i < 5; i++) {
+            const p = this._acquire();
+            p.x = x + (Math.random() - 0.5) * 30; p.y = y + (Math.random() - 0.5) * 20;
+            p.vx = (Math.random() - 0.5) * 1; p.vy = -0.5 - Math.random();
+            p.life = 1.0; p.maxLife = 1.0;
+            p.size = 1.5; p.color = '#ffd700'; p.alpha = 0.6;
+            p.glow = true; p.drag = 0.98; p.gravity = -0.02;
+            p.rotation = 0; p.spin = 0;
+        }
+    },
+
+    // Dispatch: call the right class burst by classId
+    createClassBurst(x, y, classId) {
+        const fn = {
+            tactician:    'createTacticianBurst',
+            arcanist:     'createArcanistBurst',
+            bloodstalker: 'createBloodstalkerBurst',
+            annihilator:  'createAnnihilatorBurst',
+            sentinel:     'createSentinelBurst',
+            summoner:     'createSummonerBurst'
+        }[classId];
+        if (fn && this[fn]) this[fn](x, y);
+    }
+};
+
+export { ParticleSys };

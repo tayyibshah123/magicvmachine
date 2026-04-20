@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#050011">
+    <meta name="color-scheme" content="dark">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="Magic v Machine. A Cyber-Roguelite. Infiltrate the Silicon Empire.">
+
+    <title>Magic v Machine</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+
+    </script>
+</head>
+<body>
+
+    <div id="landscape-hint" onclick="this.classList.add('dismissed')">
+        <span>&#x21bb; Rotate for best experience</span>
+    </div>
+    <div id="game-container">
+        <!-- Main Game Canvas -->
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- UI Overlay Layer -->
+        <div id="ui-layer">
+            
+            <!-- NEW: Phase Banner -->
+            <div id="phase-banner" class="hidden">
+                <div class="banner-text">PLAYER PHASE</div>
+                <div class="banner-sub">SYSTEM READY</div>
+            </div>
+
+            <!-- CRT Scanline & Vignette Overlay -->
+            <div id="crt-overlay"></div>
+
+            <!-- Intro splash (first thing shown on launch) -->
+            <div id="intro-overlay" role="button" tabindex="0" aria-label="Tap to continue">
+                <!-- Nebula backdrop (3 drifting colored clouds) -->
+                <div class="intro-nebula intro-nebula-a"></div>
+                <div class="intro-nebula intro-nebula-b"></div>
+                <div class="intro-nebula intro-nebula-c"></div>
+
+                <!-- Starfield (deep space twinkle) -->
+                <div class="intro-starfield">
+                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                </div>
+
+                <div class="intro-scanlines"></div>
+                <div class="intro-vignette"></div>
+
+                <!-- Perspective grid floor (kept) -->
+                <div class="intro-grid"></div>
+                <div class="intro-grid intro-grid-top"></div>
+
+                <!-- Horizontal scan beam sweeping across -->
+                <div class="intro-scanbeam"></div>
+
+                <!-- Radial pulse behind title -->
+                <div class="intro-pulse"></div>
+
+                <!-- Expanding rings from center — 6 for denser coverage so
+                     at every animation moment at least 2-3 rings are visible. -->
+                <div class="intro-rings">
+                    <span></span><span></span><span></span>
+                    <span></span><span></span><span></span>
+                </div>
+
+                <!-- Animated light rays fanning out from title -->
+                <div class="intro-rays"></div>
+
+                <!-- Darting light streaks / meteors -->
+                <div class="intro-streaks">
+                    <span></span><span></span><span></span><span></span>
+                </div>
+
+                <!-- Rising particle motes (kept) -->
+                <div class="intro-particles">
+                    <span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span>
+                </div>
+
+                <!-- Corner tech frame -->
+                <div class="intro-corner tl"></div>
+                <div class="intro-corner tr"></div>
+                <div class="intro-corner bl"></div>
+                <div class="intro-corner br"></div>
+
+                <div class="intro-content">
+                    <h1 class="intro-title" data-text="MvM">
+                        <span class="m1" data-char="M">M</span><span class="vs-sep" data-char="v">v</span><span class="m2" data-char="M">M</span>
+                        <span class="intro-title-full">MAGIC <span class="vs-small">v</span> MACHINE</span>
+                    </h1>
+                    <div class="intro-rule">
+                        <span class="intro-rule-left"></span>
+                        <span class="intro-rule-node"></span>
+                        <span class="intro-rule-right"></span>
+                    </div>
+                    <div class="intro-tap">
+                        <span class="intro-bracket">&#91;</span>
+                        <span class="intro-tap-text">TAP TO CONTINUE</span>
+                        <span class="intro-bracket">&#93;</span>
+                        <span class="intro-tap-sweep"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tooltip -->
+            <div id="tooltip" class="tooltip hidden"></div>
+
+            <!-- NEW: Tutorial Spotlight Ring -->
+            <div id="tutorial-spotlight" class="hidden"></div>
+
+	<!-- NEW: Ending Cinematic Screen -->
+<div id="screen-ending" class="screen hidden">
+    <div id="ending-content" class="story-crawl">
+        <!-- JS injects text here -->
+    </div>
+    <button id="btn-finish-ending" class="btn primary hidden" style="position: absolute; bottom: max(50px, calc(env(safe-area-inset-bottom, 0px) + 12px));">PROCEED</button>
+</div>
+
+<!-- Post-combat celebration (between combat kill and reward picker) -->
+<div id="screen-combat-win" class="screen hidden combat-win">
+    <div class="combat-win-rings" aria-hidden="true">
+        <div class="combat-win-ring r1"></div>
+        <div class="combat-win-ring r2"></div>
+        <div class="combat-win-ring r3"></div>
+    </div>
+    <div id="combat-win-callout" class="combat-win-callout">
+        <div id="combat-win-title" class="combat-win-title">TARGET NEUTRALIZED</div>
+        <div id="combat-win-sub" class="combat-win-sub">+0 FRAGMENTS</div>
+    </div>
+</div>
+
+<!-- Victory Screen — full run celebration -->
+<div id="screen-victory" class="screen hidden">
+    <div class="victory-grade-ring" id="victory-grade-ring">
+        <span id="victory-grade">S</span>
+    </div>
+    <h1 class="neon-text-gold victory-title">SYSTEM RESTORED</h1>
+    <div id="victory-stats" class="victory-stats"></div>
+    <div class="victory-actions">
+        <button id="btn-share-victory" class="btn secondary">SHARE RUN</button>
+        <button id="btn-victory-sanctuary" class="btn primary neon-border-green">ENTER SANCTUARY</button>
+    </div>
+</div>
+
+            <!-- Main Menu -->
+            <div id="screen-start" class="screen active">
+                <div style="position: absolute; top: 20px; right: 20px; z-index: 20;">
+                    <button id="btn-settings-main" class="btn-icon" aria-label="Settings"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5 L20 7 L20 17 L12 21.5 L4 17 L4 7 Z" fill="currentColor" fill-opacity="0.14"/><circle cx="12" cy="12" r="4.5" fill="none"/><path d="M12 5.5 L12 7.5 M12 16.5 L12 18.5 M5.5 12 L7.5 12 M16.5 12 L18.5 12 M7.6 7.6 L9 9 M15 15 L16.4 16.4 M16.4 7.6 L15 9 M7.6 16.4 L9 15" stroke-width="1.4"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg></button>
+                </div>
+                <div class="glow-container">
+                    <h1 class="title">MAGIC <span class="vs">v</span> MACHINE</h1>
+                    <div class="subtitle"></div>
+                </div>
+                <div class="spacer"></div>
+                <!-- CHANGED ID: btn-load-save -->
+                <button id="btn-load-save" class="btn primary hidden" style="border-color: var(--neon-gold); color: var(--neon-gold);">RESUME RUN</button>
+                
+                <button id="btn-start" class="btn primary">INITIATE RUN</button>
+                <button id="btn-daily" class="btn secondary neon-border-gold">DAILY RUN <span id="daily-status" style="opacity:0.7; font-size:0.85em;"></span></button>
+                <button id="btn-intel" class="btn secondary">INTEL</button>
+                <button id="btn-upgrades" class="btn secondary neon-border-gold">SANCTUARY</button>
+                <div id="login-streak" class="login-streak hidden"></div>
+                <div class="version" style="font-family: 'Orbitron'; margin-top: 20px; opacity: 0.5;">ALPHA V1</div>
+            </div>
+
+            <!-- Character Select -->
+            <div id="screen-char-select" class="screen hidden">
+                <h2 class="neon-text-blue">SELECT OPERATOR</h2>
+                <div id="char-grid" class="char-grid">
+                    <!-- Populated by JS -->
+                </div>
+                <button id="btn-back-char" class="btn secondary">ABORT</button>
+
+                <!-- Detail overlay (expands when a class card is tapped) -->
+                <div id="char-detail-overlay" class="char-detail-overlay hidden">
+                    <div class="char-detail-content glass-panel">
+                        <div class="char-detail-header">
+                            <div class="char-detail-previews">
+                                <div class="char-detail-canvas-slot">
+                                    <!-- Player canvas injected on open -->
+                                </div>
+                                <div class="char-detail-minion-slot">
+                                    <!-- Minion canvas injected on open -->
+                                </div>
+                            </div>
+                            <div class="char-detail-header-text">
+                                <h2 class="char-detail-name neon-text-blue">CLASS</h2>
+                                <div class="char-detail-difficulty"></div>
+                            </div>
+                        </div>
+                        <div class="char-detail-desc"></div>
+                        <div class="char-detail-rows">
+                            <div class="char-detail-row">
+                                <span class="char-detail-label">Style</span>
+                                <span class="char-detail-style char-detail-value"></span>
+                            </div>
+                            <div class="char-detail-row">
+                                <span class="char-detail-label">Minion</span>
+                                <span class="char-detail-minion char-detail-value"></span>
+                            </div>
+                            <div class="char-detail-row">
+                                <span class="char-detail-label">Class Ability</span>
+                                <span class="char-detail-ability char-detail-value"></span>
+                            </div>
+                            <div class="char-detail-row">
+                                <span class="char-detail-label">Default Attack</span>
+                                <span class="char-detail-attack char-detail-value"></span>
+                            </div>
+                            <div class="char-detail-row">
+                                <span class="char-detail-label">Unique Combo</span>
+                                <span class="char-detail-combo char-detail-value"></span>
+                            </div>
+                        </div>
+                        <div class="char-detail-actions">
+                            <button id="btn-char-detail-back" class="btn secondary">BACK</button>
+                            <button id="btn-char-detail-confirm" class="btn primary">CONFIRM</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Debriefing / Tutorial Screen -->
+            <div id="screen-tutorial" class="screen hidden">
+                <h2 class="neon-text-blue">DEBRIEFING</h2>
+                <div class="tutorial-container glass-panel">
+                    <h3 id="tut-title" class="neon-text-gold" style="font-family: 'Orbitron'; margin-top: 0;">TOPIC</h3>
+                    <div id="tut-content" class="tut-content">
+                        <!-- Dynamic Content -->
+                    </div>
+                    
+                    <div class="tut-nav">
+                        <button id="btn-tut-prev" class="btn secondary small">PREV</button>
+                        <span id="tut-page-num" class="neon-text-blue" style="font-family: 'Orbitron';">1 / 5</span>
+                        <button id="btn-tut-next" class="btn secondary small">NEXT</button>
+                    </div>
+                </div>
+                <div class="spacer"></div>
+                <button id="btn-back-tutorial" class="btn primary">CLOSE DEBRIEFING</button>
+            </div>
+
+           <!-- Meta Progression (Sanctuary) -->
+            <div id="screen-meta" class="screen hidden">
+                <h2 class="neon-text-green" style="text-shadow: 0 0 15px lime; margin-top: 20px; margin-bottom: 10px;">SANCTUARY</h2>
+                <div id="fragment-count" class="currency-display neon-text-gold">Fragments: 0</div>
+                
+                <div id="upgrade-list" class="meta-grid">
+                    <!-- Populated by JS -->
+                </div>
+                
+                <div class="meta-controls">
+                    <button id="btn-view-sanctuary" class="btn secondary" style="width: auto; min-width: 150px;"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12 Q7 4 12 4 Q17 4 22 12 Q17 20 12 20 Q7 20 2 12 Z" fill="currentColor" fill-opacity="0.18"/><circle cx="12" cy="12" r="3.5" fill="currentColor" fill-opacity="0.5"/></svg> VIEW WORLD</button>
+                    <button id="btn-achievements" class="btn secondary" style="width: auto; min-width: 150px;">ACHIEVEMENTS</button>
+                    <button id="btn-back-meta" class="btn secondary" style="width: auto; min-width: 150px;">RETURN TO MENU</button>
+                </div>
+            </div>
+
+            <!-- Achievements Panel (overlay) -->
+            <div id="screen-achievements" class="screen hidden">
+                <h2 class="neon-text-gold">ACHIEVEMENTS</h2>
+                <div id="achievements-progress" class="currency-display neon-text-gold" style="font-size: 0.85rem;">0 / 0 unlocked</div>
+                <div id="achievements-list" class="achievements-list"></div>
+                <button id="btn-back-achievements" class="btn secondary" style="width: auto; min-width: 150px;">BACK</button>
+            </div>
+
+            <!-- Intel / Debriefing Screen -->
+            <div id="screen-intel" class="screen hidden">
+                <h2 class="neon-text-blue">INTEL DATABASE</h2>
+                <div id="intel-stats" class="currency-display neon-text-pink" style="font-size: 1rem; margin-bottom: 10px;">
+                    Encrypted Files: <span id="encrypted-count">0</span>
+                </div>
+
+                <div id="lore-grid" class="lore-grid">
+                    <!-- Populated by JS -->
+                </div>
+
+                <div class="spacer"></div>
+
+                <div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;">
+                    <button id="btn-decrypt" class="btn primary neon-border-pink">DECRYPT FILE</button>
+                    <button id="btn-view-codex" class="btn secondary">CODEX</button>
+                    <button id="btn-back-intel" class="btn secondary">RETURN</button>
+                </div>
+            </div>
+
+            <!-- Codex (enemy kill ledger) -->
+            <div id="screen-codex" class="screen hidden">
+                <h2 class="neon-text-blue">ENEMY CODEX</h2>
+                <div id="codex-stats" class="currency-display neon-text-pink" style="font-size: 1rem; margin-bottom: 10px;">
+                    Total kills: <span id="codex-total">0</span>
+                </div>
+                <div id="codex-grid" class="codex-grid"></div>
+                <div class="spacer"></div>
+                <button id="btn-back-codex" class="btn secondary" style="min-width: 150px;">RETURN</button>
+            </div>
+
+            <!-- Hex Breach Minigame Overlay -->
+            <div id="screen-hex" class="screen hidden" style="background: rgba(0,0,0,0.95); z-index: 200;">
+                <h2 class="neon-text-pink">HEX BREACH</h2>
+                <p id="hex-status" style="font-family: 'Orbitron'; color: #fff;">MEMORIZE THE PATTERN</p>
+                
+                <div id="hex-grid" class="hex-grid">
+                    <!-- 9 Hex Nodes generated by JS -->
+                </div>
+
+                <div id="hex-progress" class="neon-text-blue" style="margin-top: 20px; font-family: 'Orbitron';">
+                    SEQUENCE: <span id="hex-round">1</span> / <span id="hex-max-round">3</span>
+                </div>
+            </div>
+            <!-- Event Screen -->
+            <div id="screen-event" class="screen hidden">
+                <h2 id="event-title" class="neon-text-purple">SIGNAL DETECTED</h2>
+                <div class="event-content glass-panel">
+                    <p id="event-desc" class="event-text">...</p>
+                    <div id="event-options" class="event-options">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Game HUD (Hidden by default) -->
+            <div id="hud" class="hidden">
+                <div class="top-bar">
+                    <div class="resources">
+                        <div class="sector-turn-group">
+                            <div id="sector-display" class="neon-text-purple" style="font-family: 'Orbitron'; font-size: 1.2rem;">SECTOR 1</div>
+                            <div id="turn-display" class="neon-text-blue turn-display">TURN 1</div>
+                        </div>
+                    </div>
+                    <!-- Relic/Upgrade Dropdown -->
+                    <div id="relic-menu-wrapper" style="position: relative;">
+                        <button id="btn-relics" class="btn-icon btn-modules-toggle" aria-label="Modules"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.2" fill="currentColor" fill-opacity="0.22"/><rect x="13" y="3" width="8" height="8" rx="1.2" fill="currentColor" fill-opacity="0.22"/><rect x="3" y="13" width="8" height="8" rx="1.2" fill="currentColor" fill-opacity="0.22"/><rect x="13" y="13" width="8" height="8" rx="1.2" fill="currentColor" fill-opacity="0.22"/></svg><span class="btn-modules-label">MODULES</span><svg viewBox="0 0 24 24" class="game-icon btn-modules-chevron" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9 L12 16 L19 9"/></svg></button>
+                        <div id="relic-dropdown" class="relic-dropdown hidden">
+                            <h3 class="neon-text-blue" style="margin: 0 0 10px 0; font-size: 1rem; border-bottom: 1px solid #333; padding-bottom: 5px; font-family: 'Orbitron';">MODULES</h3>
+                            <div id="relic-list" class="relic-grid"></div>
+                        </div>
+                    </div>
+
+                    <button id="btn-combat-log" class="btn-icon" aria-label="Combat Log"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4 L19 4 L19 20 L5 20 Z" fill="currentColor" fill-opacity="0.12"/><path d="M8 8 L16 8 M8 12 L16 12 M8 16 L13 16"/></svg></button>
+                    <button id="btn-settings" class="btn-icon" aria-label="Settings"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5 L20 7 L20 17 L12 21.5 L4 17 L4 7 Z" fill="currentColor" fill-opacity="0.14"/><circle cx="12" cy="12" r="4.5" fill="none"/><path d="M12 5.5 L12 7.5 M12 16.5 L12 18.5 M5.5 12 L7.5 12 M16.5 12 L18.5 12 M7.6 7.6 L9 9 M15 15 L16.4 16.4 M16.4 7.6 L15 9 M7.6 16.4 L9 15" stroke-width="1.4"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg></button>
+                </div>
+                
+                <!-- Bottom Area: Dice & Controls -->
+                <div class="bottom-controls">
+                    <div id="dice-container"></div>
+                    
+                    <div class="control-bar">
+                        <!-- Reroll Button (Circular with Badge) -->
+                        <div class="reroll-wrapper">
+                            <button id="btn-reroll" class="btn-circle" aria-label="Reroll"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12 A8 8 0 0 1 12 4 L16 4"/><path d="M14 1 L17 4 L14 7"/><path d="M20 12 A8 8 0 0 1 12 20 L8 20"/><path d="M10 23 L7 20 L10 17"/></svg></button>
+                            <div id="reroll-badge" class="badge">2</div>
+                        </div>
+
+                        <!-- Class Ability Widget (populated per-class at combat start) -->
+                        <div id="class-ability-widget" class="class-ability hidden" role="group" aria-label="Class ability"></div>
+
+                        <button id="btn-end-turn" class="btn primary" aria-label="End turn" title="End turn"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5 L11 12 L5 19 Z" fill="currentColor" fill-opacity="0.3"/><path d="M12 5 L18 12 L12 19 Z" fill="currentColor" fill-opacity="0.3"/><path d="M19 5 L19 19" stroke-width="2.2"/></svg></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Map Screen -->
+            <div id="screen-map" class="screen hidden">
+                <h2 class="neon-text-blue map-title">SECTOR MAP <span id="map-sector-display" style="font-size: 0.6em; color: var(--neon-gold); margin-left: 15px;"></span></h2>
+                <div id="map-legend-top" class="map-legend-top"></div>
+                <div id="map-nodes" class="map-container"></div>
+            </div>
+
+            <!-- Shop Screen -->
+            <div id="screen-shop" class="screen hidden">
+                <div class="shop-header">
+                    <h2 class="neon-text-gold shop-title-main">FABRICATOR</h2>
+                    <div class="shop-header-strip">
+                        <div class="shop-fragment-pill">
+                            <span class="shop-fragment-label">FRAGMENTS</span>
+                            <span id="shop-frag-count" class="shop-fragment-count">0</span>
+                        </div>
+                        <button id="btn-hack-shop" class="btn-hack" type="button">
+                            <span class="hack-label">
+                                <span class="hack-icon" aria-hidden="true">⚡</span>
+                                HACK FABRICATOR
+                            </span>
+                            <span class="hack-sub">MINIGAME · WIN = −25% PRICES · LOSE = PRICES ×2 · MIN 100 FRAGS</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="shop-grid" class="shop-grid"></div>
+                <button id="btn-leave-shop" class="btn primary">EXIT SHOP</button>
+            </div>
+
+	<!-- Rest Screen -->
+            <div id="screen-rest" class="screen hidden">
+                <h2 class="neon-text-green">SYSTEM RESTORE</h2>
+                <div class="event-content glass-panel">
+                    <p style="margin-bottom: 30px;">Select maintenance protocol:</p>
+                    <div class="event-options">
+                        <button id="btn-rest-sleep" class="btn secondary">
+                            <div><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 14 A8 8 0 1 1 14 4 A6 6 0 0 0 22 14 Z" fill="currentColor" fill-opacity="0.25"/><path d="M3 5 L9 5 L3 11 L9 11" stroke-width="1.6"/></svg> SLEEP</div>
+                            <div style="font-size: 0.8rem; color: #aaa;">Heal 50% HP</div>
+                        </button>
+                        <button id="btn-rest-meditate" class="btn secondary">
+                            <div><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="9" r="3" fill="currentColor" fill-opacity="0.4"/><path d="M5 19 Q8 14 12 14 Q16 14 19 19" stroke-width="1.8"/><path d="M9 17 L7 20 M15 17 L17 20"/></svg> MEDITATE</div>
+                            <div style="font-size: 0.8rem; color: #aaa;">+1 Max Reroll (Permanent)</div>
+                        </button>
+                        <button id="btn-rest-tinker" class="btn secondary">
+                            <div><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19 L11 13"/><path d="M11 13 L13 11 L15 13 L17 11 Q19 9 17 7 Q15 5 13 7 L11 9 L13 11 Z" fill="currentColor" fill-opacity="0.22"/></svg> TINKER</div>
+                            <div style="font-size: 0.8rem; color: #aaa;">Upgrade a Random Skill</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+	<!-- Tutorial Dark Background -->
+            <div id="tutorial-overlay" class="hidden"></div>
+
+            <!-- Tutorial Text (Now Separate) -->
+            <div id="tutorial-text" class="hidden">Initializing...</div>
+
+            <!-- Sector intro overlay (P6) — brief banner when sector advances -->
+            <div id="sector-intro" class="sector-intro hidden">
+                <div class="sector-intro-content">
+                    <div class="sector-intro-num" id="sector-intro-num">SECTOR 1</div>
+                    <div class="sector-intro-name" id="sector-intro-name">THE GATE</div>
+                    <svg class="sector-intro-sweep" viewBox="0 0 400 6" preserveAspectRatio="none">
+                        <line x1="0" y1="3" x2="400" y2="3" stroke="url(#siGrad)" stroke-width="2"/>
+                        <defs>
+                            <linearGradient id="siGrad" x1="0" x2="1">
+                                <stop offset="0%" stop-color="transparent"/>
+                                <stop offset="50%" stop-color="#00f3ff"/>
+                                <stop offset="100%" stop-color="transparent"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Phase 3: narration pane under combat tutorial + always-working skip -->
+            <div id="tutorial-narration" class="tutorial-narration hidden">
+                <div class="tutorial-narration-story" id="tutorial-narration-story"></div>
+                <div class="tutorial-narration-action" id="tutorial-narration-action"></div>
+                <button id="btn-tutorial-skip" class="btn ghost tutorial-skip-btn">SKIP TUTORIAL</button>
+            </div>
+
+            <!-- Story / Outro Screen -->
+            <div id="screen-story" class="screen hidden">
+                <div id="story-content" class="story-crawl">
+                    <!-- JS injects text here -->
+                </div>
+                <button id="btn-finish-story" class="btn primary hidden" style="position: absolute; bottom: max(50px, calc(env(safe-area-inset-bottom, 0px) + 12px));">SYSTEM READY</button>
+            </div>
+
+            <!-- Reward Screen -->
+            <div id="screen-reward" class="screen hidden">
+                <h2 class="neon-text-gold">SECTOR CLEARED</h2>
+                <p style="font-family: 'Orbitron'; margin-bottom: 20px;">Select augmentation:</p>
+                <div id="reward-options" class="card-container"></div>
+            </div>
+
+            <!-- Game Over -->
+            <div id="screen-gameover" class="screen hidden">
+                <h2 id="go-title" class="neon-text-pink">CRITICAL ERROR</h2>
+                <div class="go-portrait-slot" aria-hidden="true">
+                    <!-- Enemy portrait canvas injected on death. -->
+                </div>
+                <p id="go-desc" style="font-family: 'Orbitron'; font-size: 1.2rem;">System integrity compromised.</p>
+                <div class="currency-display neon-text-gold" style="margin-top: 20px;">Fragments: <span id="run-fragments">0</span></div>
+                <button id="btn-retry-class" class="btn secondary">RETRY SAME CLASS</button>
+                <button id="btn-menu" class="btn primary">REBOOT SYSTEM</button>
+                <button id="btn-share-run" class="btn secondary" style="margin-top: 6px;">SHARE RESULT</button>
+            </div>
+            
+            <!-- Pause/Settings Modal -->
+            <div id="modal-settings" class="modal hidden">
+                <div class="modal-content glass-panel neon-border-white settings-modal">
+                    <h3 class="neon-text-white settings-title">SYSTEM SETTINGS</h3>
+
+                    <div class="settings-tabs" role="tablist">
+                        <button class="settings-tab active" data-tab="audio" role="tab">AUDIO</button>
+                        <button class="settings-tab" data-tab="display" role="tab">DISPLAY</button>
+                        <button class="settings-tab" data-tab="gameplay" role="tab">GAMEPLAY</button>
+                        <button class="settings-tab" data-tab="dev" role="tab">DEV</button>
+                    </div>
+
+                    <div class="settings-body">
+                        <!-- AUDIO TAB -->
+                        <div class="settings-pane active" data-pane="audio">
+                            <div class="setting-row">
+                                <label for="chk-music">Music</label>
+                                <input type="checkbox" id="chk-music" checked>
+                            </div>
+                            <div class="setting-row setting-select">
+                                <label for="sel-music-track">Music track</label>
+                                <select id="sel-music-track">
+                                    <option value="synth">Synth (default)</option>
+                                    <option value="lofi">Lofi</option>
+                                </select>
+                            </div>
+                            <div class="setting-row setting-slider">
+                                <label for="sld-music-vol">Music volume</label>
+                                <input type="range" id="sld-music-vol" min="0" max="100" step="5" value="30">
+                                <span class="setting-value" data-for="sld-music-vol">30</span>
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-sfx">Sound effects</label>
+                                <input type="checkbox" id="chk-sfx" checked>
+                            </div>
+                            <div class="setting-row setting-slider">
+                                <label for="sld-sfx-vol">SFX volume</label>
+                                <input type="range" id="sld-sfx-vol" min="0" max="100" step="5" value="80">
+                                <span class="setting-value" data-for="sld-sfx-vol">80</span>
+                            </div>
+                            <div class="setting-row setting-slider">
+                                <label for="sld-ambient-vol">Sector ambient</label>
+                                <input type="range" id="sld-ambient-vol" min="0" max="100" step="5" value="60">
+                                <span class="setting-value" data-for="sld-ambient-vol">60</span>
+                            </div>
+                        </div>
+
+                        <!-- DISPLAY TAB -->
+                        <div class="settings-pane" data-pane="display">
+                            <div class="setting-row setting-slider">
+                                <label for="sld-text-scale">Text size</label>
+                                <input type="range" id="sld-text-scale" min="80" max="200" step="10" value="100">
+                                <span class="setting-value" data-for="sld-text-scale">100%</span>
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-reduced-motion">Reduced motion</label>
+                                <input type="checkbox" id="chk-reduced-motion">
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-high-contrast">High contrast</label>
+                                <input type="checkbox" id="chk-high-contrast">
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-reduced-glow">Reduced glow (perf + readability)</label>
+                                <input type="checkbox" id="chk-reduced-glow">
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-large-touch">Larger touch targets</label>
+                                <input type="checkbox" id="chk-large-touch">
+                            </div>
+                            <div class="setting-row setting-select">
+                                <label for="sel-handedness">Handedness</label>
+                                <select id="sel-handedness">
+                                    <option value="right">Right-handed</option>
+                                    <option value="left">Left-handed</option>
+                                </select>
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-auto-qte">Auto-QTE (accessibility)</label>
+                                <input type="checkbox" id="chk-auto-qte">
+                            </div>
+                            <div class="setting-row setting-select">
+                                <label for="sel-perf-tier">Performance mode</label>
+                                <select id="sel-perf-tier">
+                                    <option value="auto">Auto-detect</option>
+                                    <option value="high">High (full effects)</option>
+                                    <option value="mid">Balanced</option>
+                                    <option value="low">Low (save battery)</option>
+                                </select>
+                            </div>
+                            <div class="setting-row setting-select">
+                                <label for="sel-colorblind">Color-blind mode</label>
+                                <select id="sel-colorblind">
+                                    <option value="none">None</option>
+                                    <option value="deuteranopia">Deuteranopia (red-green)</option>
+                                    <option value="protanopia">Protanopia (red-green)</option>
+                                    <option value="tritanopia">Tritanopia (blue-yellow)</option>
+                                </select>
+                            </div>
+                            <div class="setting-row setting-select">
+                                <label for="sel-dmg-size">Damage number size</label>
+                                <select id="sel-dmg-size">
+                                    <option value="small">Small</option>
+                                    <option value="medium" selected>Medium</option>
+                                    <option value="large">Large</option>
+                                </select>
+                            </div>
+                            <div class="setting-row setting-slider">
+                                <label for="sld-combat-pace">Combat pace</label>
+                                <input type="range" id="sld-combat-pace" min="60" max="150" step="10" value="100">
+                                <span class="setting-value" data-for="sld-combat-pace">100%</span>
+                            </div>
+                        </div>
+
+                        <!-- GAMEPLAY TAB -->
+                        <div class="settings-pane" data-pane="gameplay">
+                            <div class="setting-row">
+                                <label for="chk-tutorial-hints">Tutorial hints</label>
+                                <input type="checkbox" id="chk-tutorial-hints" checked>
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-haptics">Haptic feedback (mobile)</label>
+                                <input type="checkbox" id="chk-haptics" checked>
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-assist">Adaptive difficulty assist</label>
+                                <input type="checkbox" id="chk-assist" checked>
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Replay tutorial next run</label>
+                                <button id="btn-replay-tutorial" class="btn-inline btn-dev">REPLAY</button>
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Export save (for backup)</label>
+                                <button id="btn-export-save" class="btn-inline btn-dev">EXPORT</button>
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Import save (from backup file)</label>
+                                <button id="btn-import-save" class="btn-inline btn-dev">IMPORT</button>
+                                <input type="file" id="file-import-save" accept="application/json" style="display:none;">
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Export analytics (JSON)</label>
+                                <button id="btn-export-analytics" class="btn-inline btn-dev">EXPORT</button>
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Reset all progress</label>
+                                <button id="btn-reset-progress" class="btn-inline btn-reset">RESET</button>
+                            </div>
+                            <div id="reset-progress-confirm" class="setting-confirm hidden">
+                                <p>This will erase <strong>all</strong> saves, meta upgrades, fragments, lore, settings, and reload. This cannot be undone.</p>
+                                <div class="setting-confirm-actions">
+                                    <button id="btn-reset-cancel" class="btn-inline btn-ghost">Cancel</button>
+                                    <button id="btn-reset-confirm" class="btn-inline btn-danger-solid">Erase everything</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- DEV TAB -->
+                        <div class="settings-pane" data-pane="dev">
+                            <div class="setting-row">
+                                <label class="god-mode-label" for="chk-godmode">God mode</label>
+                                <input type="checkbox" id="chk-godmode">
+                            </div>
+                            <div class="setting-row setting-slider">
+                                <label for="sld-ascension">Ascension level</label>
+                                <input type="range" id="sld-ascension" min="0" max="10" step="1" value="0">
+                                <span class="setting-value" data-for="sld-ascension">0</span>
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Grant +500 Fragments</label>
+                                <button id="btn-dev-frags" class="btn-inline btn-dev">+500</button>
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Reset Sanctuary (meta upgrades)</label>
+                                <button id="btn-dev-reset-meta" class="btn-inline btn-dev">CLEAR</button>
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Skip to next sector</label>
+                                <button id="btn-dev-skip-sector" class="btn-inline btn-dev">SKIP</button>
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Kill current enemy</label>
+                                <button id="btn-dev-kill-enemy" class="btn-inline btn-dev">KILL</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="spacer"></div>
+                    <button id="btn-resume" class="btn primary">RESUME</button>
+                    <button id="btn-quit" class="btn danger">ABORT RUN</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sanctuary NPC service modal (Smith / Oracle / Curator). Top-level so
+         it can overlay the sanctuary (META) screen. -->
+    <div id="sanctuary-npc-modal" class="sanctuary-npc-modal hidden" role="dialog" aria-modal="true">
+        <div class="sanctuary-npc-content glass-panel">
+            <h2 class="sanctuary-npc-title neon-text-gold">NPC</h2>
+            <div class="sanctuary-npc-body"></div>
+            <div class="sanctuary-npc-actions">
+                <button class="btn secondary" data-action="npc-close">CLOSE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hack Fabricator minigame (maze-escape). Lives at body top-level so it
+         can overlay any screen without being trapped in a hidden ancestor. -->
+    <div id="hack-minigame-overlay" class="hack-overlay hidden" role="dialog" aria-modal="true" aria-label="Hack Fabricator">
+        <div class="hack-panel glass-panel">
+            <div class="hack-header">
+                <h2 class="hack-title neon-text-pink">DECRYPT FABRICATOR</h2>
+                <div class="hack-subtitle" id="hack-subtitle">Escape the data maze — reach the exit before the timer expires.</div>
+            </div>
+            <div class="hack-status-row">
+                <div class="hack-status" id="hack-status">STANDBY</div>
+                <div class="hack-timer">
+                    <span id="hack-timer-label">TIMER</span>
+                    <span id="hack-timer-value">--</span>
+                </div>
+            </div>
+            <canvas id="hack-maze" class="hack-maze" aria-hidden="true"></canvas>
+            <div class="hack-joypad" role="group" aria-label="Directional pad">
+                <div class="hack-joypad-row">
+                    <button class="hack-dpad" data-dir="up" aria-label="Up">▲</button>
+                </div>
+                <div class="hack-joypad-row">
+                    <button class="hack-dpad" data-dir="left" aria-label="Left">◀</button>
+                    <button class="hack-dpad hack-dpad-center" aria-hidden="true" tabindex="-1"></button>
+                    <button class="hack-dpad" data-dir="right" aria-label="Right">▶</button>
+                </div>
+                <div class="hack-joypad-row">
+                    <button class="hack-dpad" data-dir="down" aria-label="Down">▼</button>
+                </div>
+            </div>
+            <div class="hack-result" id="hack-result"></div>
+        </div>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>

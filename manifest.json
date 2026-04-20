@@ -1,0 +1,50 @@
+{
+  "name": "Magic v Machine",
+  "short_name": "MvM",
+  "description": "Cyberpunk roguelite dice-builder. Infiltrate the Silicon Empire one run at a time.",
+  "start_url": "./index.html?src=pwa",
+  "id": "/mvm",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#050011",
+  "theme_color": "#050011",
+  "orientation": "portrait",
+  "scope": "./",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["games", "strategy", "role-playing"],
+  "iarc_rating_id": "",
+  "prefer_related_applications": false,
+  "launch_handler": {
+    "client_mode": "auto"
+  },
+  "icons": [
+    {
+      "src": "intro.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "intro.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "intro.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "intro.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Main menu"
+    }
+  ]
+}
