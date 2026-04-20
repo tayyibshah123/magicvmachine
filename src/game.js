@@ -3329,11 +3329,48 @@ triggerPhaseGlitch() {
 
     installErrorBoundary() {
         const self = this;
+        // Browser extensions (Brave/Firefox iOS reader-mode, ad blockers, Grammarly,
+        // etc.) inject content scripts into the page and sometimes throw from a
+        // context that bubbles up to window.onerror. Those aren't our bugs and
+        // must not trigger the game's SYSTEM FAULT overlay.
+        const isExternalError = (event) => {
+            const msg = String((event && (event.message || (event.error && event.error.message))) || '');
+            // Opaque cross-origin script errors — browsers strip all detail.
+            if (msg === 'Script error.' || msg === 'Script error') return true;
+            // Known extension globals (Brave/Firefox iOS reader, page-translation, etc.).
+            if (/window\.__firefox__|__gCrWeb|__gBleyer|webkit\.messageHandlers|Grammarly/i.test(msg)) return true;
+            // Source file lives in an extension, not our origin.
+            const src = String((event && event.filename) || '');
+            if (/^(chrome|moz|safari-web|brave|webkit-masked)-extension:/i.test(src)) return true;
+            // GitHub Pages / Netlify serve from our origin — anything from a
+            // filename that doesn't include our host AND isn't empty is suspect.
+            // (event.filename is empty for inline scripts and our own bundles
+            // in some browsers, so only filter when we have a real URL.)
+            if (src && typeof location !== 'undefined' && location.origin &&
+                src.indexOf('://') >= 0 && src.indexOf(location.origin) !== 0) {
+                return true;
+            }
+            return false;
+        };
+        const isExternalRejection = (reason) => {
+            const msg = (reason && reason.message) ? String(reason.message) : String(reason || '');
+            if (/window\.__firefox__|__gCrWeb|__gBleyer|webkit\.messageHandlers|Grammarly/i.test(msg)) return true;
+            return false;
+        };
         window.addEventListener('error', (event) => {
+            if (isExternalError(event)) {
+                // Log for debugging but don't surface to the player.
+                console.warn('[Error boundary] Ignoring external error:', event.message || event);
+                return;
+            }
             console.error('[Error boundary]', event.error || event.message, event);
             self._recoverFromCombatError('window_error', event.error || new Error(event.message || 'Unknown error'), /*showFullOverlay*/ true);
         });
         window.addEventListener('unhandledrejection', (event) => {
+            if (isExternalRejection(event.reason)) {
+                console.warn('[Error boundary] Ignoring external rejection:', event.reason);
+                return;
+            }
             console.error('[Error boundary] Unhandled promise:', event.reason);
             self._recoverFromCombatError('unhandled_rejection', event.reason instanceof Error ? event.reason : new Error(String(event.reason)), /*showFullOverlay*/ true);
         });
