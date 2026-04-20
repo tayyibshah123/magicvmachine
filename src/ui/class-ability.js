@@ -620,40 +620,35 @@ export const ClassAbility = {
                         </span>
                     </button>
                     <div class="ca-used-label">READY</div>`;
-            case 'bloodstalker':
-                // Blood Pool — bar fills from damage taken; tributes unlock when full.
+            case 'bloodstalker': {
+                // Compact blood droplet glyph — used as the "tier pip" inside each tribute button.
+                const drop = `<svg viewBox="0 0 10 14" class="ca-drop-glyph" aria-hidden="true"><path d="M5 0.8 C 5 4, 9 7, 9 10 C 9 12.5, 7.2 13.4, 5 13.4 C 2.8 13.4, 1 12.5, 1 10 C 1 7, 5 4, 5 0.8 Z" fill="currentColor"/></svg>`;
                 return `
-                    <div class="ca-title ca-title-right">BLOOD</div>
+                    <div class="ca-title">BLOOD</div>
                     <div class="ca-blood">
                         <span class="ca-heart" aria-hidden="true">${ICONS.bloodstalkerHeart}</span>
                         <span class="ca-blood-bar">
                             <span class="ca-blood-fill"></span>
-                            <span class="ca-blood-readout">0 / ${CFG.bloodstalker.damageToFill}</span>
                         </span>
                         <div class="ca-tributes">
                             <button class="ca-tribute ca-tribute-minor" data-action="tribute-minor"
                                 title="Minor Tribute — pay 5% Max HP for +1 reroll.">
-                                <span class="ca-tribute-rank" aria-hidden="true">I</span>
-                                <span class="ca-tribute-fill" aria-hidden="true"></span>
-                                <span class="ca-tribute-drop" aria-hidden="true"></span>
+                                <span class="ca-tribute-pips" aria-hidden="true">${drop}</span>
                                 <span class="ca-tribute-cost">5%</span>
                             </button>
                             <button class="ca-tribute ca-tribute-major" data-action="tribute-major"
                                 title="Major Tribute — pay 15% Max HP. Deal ${CFG.bloodstalker.majorAttack} DMG and apply ${CFG.bloodstalker.majorBleed} Bleed (3 turns).">
-                                <span class="ca-tribute-rank" aria-hidden="true">II</span>
-                                <span class="ca-tribute-fill" aria-hidden="true"></span>
-                                <span class="ca-tribute-drop" aria-hidden="true"></span>
+                                <span class="ca-tribute-pips" aria-hidden="true">${drop}${drop}</span>
                                 <span class="ca-tribute-cost">15%</span>
                             </button>
                             <button class="ca-tribute ca-tribute-grand" data-action="tribute-grand"
                                 title="Grand Tribute — pay 30% Max HP. Deal ${CFG.bloodstalker.grandAttack} DMG, apply ${CFG.bloodstalker.grandBleed} Bleed (3 turns), +${CFG.bloodstalker.grandManaGain} Mana, +${CFG.bloodstalker.grandRerolls} rerolls.">
-                                <span class="ca-tribute-rank" aria-hidden="true">III</span>
-                                <span class="ca-tribute-fill" aria-hidden="true"></span>
-                                <span class="ca-tribute-drop" aria-hidden="true"></span>
+                                <span class="ca-tribute-pips" aria-hidden="true">${drop}${drop}${drop}</span>
                                 <span class="ca-tribute-cost">30%</span>
                             </button>
                         </div>
                     </div>`;
+            }
             case 'annihilator':
                 return `
                     <div class="ca-title">REACTOR</div>
