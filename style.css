@@ -1209,26 +1209,30 @@ h2 {
 }
 
 .die.selected {
-    /* Selected = LOCKED (won't be rerolled). Static outer halo (no inset
-       pulse — that was making the die interior glow gold and look like it
-       was fading in/out on mobile). The "LOCKED" pill does the attention-
-       grabbing work instead. overflow:visible lets the pill escape the die's
-       own slot-reel mask. */
+    /* Selected = LOCKED (won't be rerolled). Gold border + restrained halo.
+       Combo-eligible dice already emit their own intense pulsing halo via
+       ::before / ::after pseudos, so we keep this box-shadow soft and let
+       the LOCKED pill (rendered on .die-slot via :has) carry the lock
+       signal. The inset pulse was removed earlier — it was making the die
+       interior fade gold on mobile. overflow:visible is kept so combo
+       dice's aura pseudos still extend correctly. */
     border-color: #ffd700 !important;
     transform: translateY(-4px);
-    box-shadow: 0 0 16px #ffd700, 0 0 32px rgba(255, 215, 0, 0.45);
+    box-shadow: 0 0 10px #ffd700;
     position: relative;
     overflow: visible !important;
 }
-.die.selected::after {
-    /* Floating "LOCKED" pill above the die — padlock icon + caps label.
-       Counter-rotation against the crescent arc was dropped: calc() with
-       CSS variables inside pseudo-element animations rendered inconsistently
-       on Safari/Brave iOS. The arc tilt is subtle enough that a static pill
-       reads fine. */
+/* The "LOCKED" pill rides on the .die-slot wrapper (not the die itself)
+   because combo-eligible dice already claim both ::before and ::after on
+   the die for their halo/spinner auras. Using the slot's ::after via
+   :has() lets the pill coexist with combo dice cleanly — the die keeps
+   its combo glow AND gains the LOCKED badge. Modern browsers only
+   (Safari 16.4+, Chrome 105+); the pill is redundant with the gold
+   border/halo, so older engines just skip it without breaking anything. */
+.die-slot:has(> .die.selected)::after {
     content: 'LOCKED';
     position: absolute;
-    top: -24px;
+    top: -22px;
     left: 50%;
     transform: translateX(-50%);
     background: #ffd700;
@@ -1245,7 +1249,7 @@ h2 {
     background-size: 14px 14px;
     background-repeat: no-repeat;
     background-position: 5px center;
-    z-index: 3;
+    z-index: 10;
     pointer-events: none;
     animation: die-lock-bob 1.8s ease-in-out infinite;
 }
