@@ -50,7 +50,7 @@ class Entity {
         this.maxSpawnTimer = 1.0; // 1 second spawn in
     }
 
-    takeDamage(amount, source = null, suppressBlockText = false) {
+    takeDamage(amount, source = null, suppressBlockText = false, bypassShield = false) {
         // --- GOD MODE INVINCIBILITY ---
         if (this instanceof Player && Game.godMode) {
             ParticleSys.createFloatingText(this.x, this.y - 60, "GOD MODE", "#ff0055");
@@ -176,7 +176,7 @@ class Entity {
         }
         // ------------------------------------------
 
-        if (this.shield > 0) {
+        if (this.shield > 0 && !bypassShield) {
             const shieldWas = this.shield;
             if (this.shield >= actualDmg) {
                 this.shield -= actualDmg;

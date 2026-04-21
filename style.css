@@ -6610,6 +6610,9 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
     z-index: 2;
     transform: scale(0.88);
     opacity: 0;
+    max-width: 92cqw;
+    padding: 0 12px;
+    box-sizing: border-box;
 }
 #screen-combat-win.active .combat-win-callout {
     animation: callout-pop 600ms var(--ease-out-smart) 120ms forwards;
@@ -6623,11 +6626,17 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
 .combat-win-title {
     font-family: var(--font-cyber);
     font-weight: 900;
-    font-size: clamp(1.8rem, 13cqw, 3rem);
-    letter-spacing: 0.12em;
+    /* Sized to fit "TARGET NEUTRALIZED" on the narrowest mobile widths
+       without clipping. Previous 13cqw / 1.8rem minimum overflowed a
+       ~420px container; this ceiling keeps the callout inside. */
+    font-size: clamp(1.05rem, 8cqw, 2.4rem);
+    letter-spacing: 0.08em;
     color: var(--neon-gold);
     text-shadow: 0 0 20px rgba(255, 215, 0, 0.7), 0 0 40px rgba(255, 215, 0, 0.35);
     margin-bottom: 14px;
+    word-break: keep-all;
+    overflow-wrap: normal;
+    white-space: nowrap;
 }
 .combat-win-title.boss-kill {
     color: var(--neon-pink);

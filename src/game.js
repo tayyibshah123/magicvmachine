@@ -9214,7 +9214,10 @@ async startTurn() {
             ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "QTE REROLL", "#ffcc00");
             this.updateHUD && this.updateHUD();
         } else if (hpCost > 0) {
-            this.player.takeDamage(hpCost);
+            // Blood Reroll is a self-cost — it must bite HP directly, even
+            // through shields. Shield-absorbed blood makes the entire class
+            // fantasy pointless.
+            this.player.takeDamage(hpCost, null, false, /*bypassShield*/ true);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `BLOOD REROLL`, "#ff0000");
         } else if (this.player.hasRelic && this.player.hasRelic('dice_cache') && !this.freeRerollUsedThisTurn) {
             // Relic: DICE CACHE — first reroll each turn is free.
@@ -9222,7 +9225,8 @@ async startTurn() {
             ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "DICE CACHE (free reroll)", COLORS.GOLD);
         } else if (this.player.hasRelic && this.player.hasRelic('c_fracture')) {
             // Corrupted: FRACTURE — rerolls cost 2 HP but refund themselves (infinite rerolls as long as HP lasts).
-            this.player.takeDamage(2);
+            // Same reasoning as blood reroll: bypass shield so the HP cost is real.
+            this.player.takeDamage(2, null, false, /*bypassShield*/ true);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "FRACTURE -2HP", "#ff4444");
         } else {
             this.rerolls--;
@@ -17441,20 +17445,35 @@ drawEntity(entity) {
         if(canvas) canvas.onclick = null;
         overlay.onclick = null;
         
-        // --- HELPER: Wait for Tap (Robust onclick version) ---
+        // --- HELPER: Wait for Tap (robust — advances on any pointerdown) ---
+        // The overlay-onclick path alone breaks when the tap lands on a
+        // child widget (e.g. a die) whose own pointerdown handler calls
+        // preventDefault. That cancels the synthetic click iOS would have
+        // fired, so overlay.onclick never runs and the tutorial stalls.
+        // We also listen for pointerdown on document in the capture phase,
+        // which fires before any child handler and isn't blocked by the
+        // child's preventDefault. SKIP button is excluded so its own
+        // handler still runs without being pre-empted.
         const waitForTap = () => {
             overlay.style.pointerEvents = 'auto';
-            overlay.onclick = null; 
-            
+            overlay.onclick = null;
+            let advanced = false;
+            const advance = (e) => {
+                if (advanced) return;
+                if (e && e.target && e.target.closest && e.target.closest('#btn-tutorial-skip')) return;
+                advanced = true;
+                overlay.onclick = null;
+                document.removeEventListener('pointerdown', advance, true);
+                this.tutorialStep++;
+                this.updateTutorialStep();
+            };
+            // Short delay so the pointerdown that just advanced us to this
+            // step (from the previous step) doesn't immediately re-advance.
             setTimeout(() => {
-                overlay.onclick = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    overlay.onclick = null; 
-                    this.tutorialStep++;
-                    this.updateTutorialStep();
-                };
-            }, 100);
+                if (advanced) return;
+                overlay.onclick = advance;
+                document.addEventListener('pointerdown', advance, true);
+            }, 120);
         };
 
         // --- SPOTLIGHT HELPERS ---
