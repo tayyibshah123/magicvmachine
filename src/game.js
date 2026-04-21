@@ -7348,6 +7348,12 @@ async startCombat(type) {
 
         this.enemy.decideTurn();
         ClassAbility.startCombat();
+        // Stamp the moment we hand control to the player so endTurn can
+        // reject rogue calls during the combat-entry hand-off. Mobile taps
+        // on the map node can momentarily land on the newly-positioned
+        // END TURN button if the click dispatches before the layout
+        // finishes settling, which caused combats to "auto-skip turn 1".
+        this._combatStartedAt = Date.now();
         this.startTurn();
     },
 
@@ -7659,7 +7665,7 @@ async startTurn() {
 
         this.inputLocked = false;
         this.rollDice(diceToRoll);
-        
+
         const btnEnd = document.getElementById('btn-end-turn');
         if(btnEnd) {
              btnEnd.disabled = false;
@@ -7668,7 +7674,11 @@ async startTurn() {
         }
 
         this.updateHUD();
+        // Player phase is live — release the single-flight endTurn gate so
+        // the player's next END TURN press can fire.
+        this._endTurnRunning = false;
       } catch (err) {
+        this._endTurnRunning = false;
         this._recoverFromCombatError('startTurn', err, false);
       }
     },
@@ -11253,6 +11263,15 @@ drawEffects() {
     },
 
     async endTurn() {
+      // Reject endTurn calls that land too soon after combat start or while
+      // a previous endTurn is already running the enemy phase. Fixes a
+      // mobile bug where the same tap that picked the map node leaked
+      // through to the newly-positioned END TURN button, auto-skipping
+      // turn 1 and kicking the enemy phase before the player could act.
+      if (this._endTurnRunning) return;
+      if (this._combatStartedAt && (Date.now() - this._combatStartedAt) < 500) return;
+      if (this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT) return;
+      this._endTurnRunning = true;
       try {
         ClassAbility.onTurnEnd();
         // Relic: TEMPO LOOP — count unused dice for next-turn shield bonus.
