@@ -22,9 +22,13 @@ const AudioMgr = {
             // Lazy-preload every known SFX file into decoded AudioBuffers so
             // combat's first click/hit/attack is already cached. Fires once.
             this.preloadSfx();
-        } else if (this.ctx.state !== 'running') {
-            // Covers both 'suspended' and iOS Safari's 'interrupted' states
-            // that appear after the tab is backgrounded.
+        }
+        // A freshly-created AudioContext starts in 'suspended' even when we
+        // built it inside a user gesture — we still have to explicitly
+        // resume(). Doing it here (same call-stack as the gesture) is what
+        // makes the first tap audible instead of requiring a second tap.
+        // Also covers iOS Safari's 'interrupted' state after backgrounding.
+        if (this.ctx.state !== 'running') {
             this.ctx.resume().catch(() => {});
         }
         // Re-wire the current bgm element to WebAudio if we couldn't at
@@ -104,13 +108,13 @@ const AudioMgr = {
         this._cancelFade();
         const targetVol = this._baseVol ?? 0.3;
         this._setBgmVolume(0);
-        this.bgm.play().catch(() => {});
-        // Some mobile browsers leave the AudioContext suspended after a
-        // background→foreground transition. WebAudio-routed music stays
-        // silent unless we resume it here.
+        // Resume the context FIRST — WebAudio-piped bgm is silent on a
+        // suspended ctx even after .play() succeeds, so waiting until after
+        // play() means the first tap's audio doesn't land.
         if (this.ctx && this.ctx.state !== 'running') {
             this.ctx.resume().catch(() => {});
         }
+        this.bgm.play().catch(() => {});
         const start = performance.now();
         this._fadeInterval = setInterval(() => {
             const t = Math.min(1, (performance.now() - start) / durationMs);
@@ -215,6 +219,15 @@ const AudioMgr = {
 
         // Honor the stored preference on first play.
         if (!this._trackPrefLoaded) { this._loadTrackPreference(); this._trackPrefLoaded = true; }
+
+        // Resume in the CURRENT call-stack (user-gesture) BEFORE we touch
+        // MediaElementSource / .play(). A suspended ctx routes piped audio
+        // into a muted graph — a subsequent async resume() doesn't always
+        // revive the already-started element, which is why the first intro
+        // tap used to stay silent until a second tap came in.
+        if (this.ctx && this.ctx.state !== 'running') {
+            this.ctx.resume().catch(() => {});
+        }
 
         const wasNew = !this.bgm;
         if (wasNew) {
