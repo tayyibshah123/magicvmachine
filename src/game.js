@@ -213,6 +213,17 @@ const Game = {
                 if (startEl) {
                     startEl.classList.remove('hidden');
                     startEl.classList.add('active');
+                    // Intro → menu slide-in: seed the offset state, let the
+                    // browser paint one frame with the children pushed out
+                    // of position, then clear the flag so the transitions
+                    // animate the title up from center and the buttons up
+                    // from below the fold.
+                    startEl.classList.add('menu-entering');
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            startEl.classList.remove('menu-entering');
+                        });
+                    });
                 }
 
                 // First-launch onboarding (§1.1). Skipped on subsequent launches.

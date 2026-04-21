@@ -8303,6 +8303,52 @@ canvas + .game-icon { filter: none; }
     50%      { opacity: 1;    filter: drop-shadow(0 0 14px rgba(0, 243, 255, 0.9)); }
 }
 
+/* Intro → main menu entrance. The intro's title sits centered; when
+   the player taps to continue, the menu's own title slides up into its
+   top position while the buttons slide up from below the fold. Both
+   use the same set of CSS transitions; JS adds .menu-entering for one
+   frame to seed the offset states, then removes it so the transitions
+   animate to the rest position. */
+#screen-start .glow-container,
+#screen-start .btn,
+#screen-start #login-streak,
+#screen-start .version,
+#screen-start .spacer,
+#screen-start #btn-load-save {
+    transition:
+        transform 620ms var(--ease-out-smart),
+        opacity 480ms ease-out;
+}
+#screen-start.menu-entering .glow-container {
+    transform: translateY(24vh) scale(1.12);
+    opacity: 0;
+}
+#screen-start.menu-entering .btn,
+#screen-start.menu-entering #login-streak,
+#screen-start.menu-entering .version,
+#screen-start.menu-entering #btn-load-save {
+    transform: translateY(60px);
+    opacity: 0;
+}
+/* Stagger the button slide-in on the OUT direction (class removal),
+   so each button arrives a beat after the last for a cascade. */
+#screen-start:not(.menu-entering) #btn-load-save { transition-delay: 80ms; }
+#screen-start:not(.menu-entering) #btn-start     { transition-delay: 150ms; }
+#screen-start:not(.menu-entering) #btn-daily     { transition-delay: 220ms; }
+#screen-start:not(.menu-entering) #btn-intel     { transition-delay: 290ms; }
+#screen-start:not(.menu-entering) #btn-upgrades  { transition-delay: 360ms; }
+#screen-start:not(.menu-entering) #login-streak  { transition-delay: 430ms; }
+#screen-start:not(.menu-entering) .version       { transition-delay: 500ms; }
+body.reduced-motion #screen-start .glow-container,
+body.reduced-motion #screen-start .btn,
+body.reduced-motion #screen-start #login-streak,
+body.reduced-motion #screen-start .version,
+body.reduced-motion #screen-start #btn-load-save {
+    transition: none;
+    transform: none !important;
+    opacity: 1 !important;
+}
+
 /* Title — add a pulsing halo behind it */
 #screen-start .glow-container {
     position: relative;

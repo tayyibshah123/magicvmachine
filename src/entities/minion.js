@@ -3,6 +3,7 @@ import { AudioMgr } from '../audio.js';
 import { ParticleSys } from '../effects/particles.js';
 import { Entity } from './entity.js';
 import { Game } from '../game.js';
+import { ClassAbility } from '../ui/class-ability.js';
 
 
 class Minion extends Entity {
@@ -72,15 +73,14 @@ class Minion extends Entity {
         // entity.js ↔ class-ability.js circular; if not yet loaded, skip
         // silently (first-launch edge case before ClassAbility.init).
         if (isPlayerSide) {
+            // Synchronous call so the grove UI updates in the same frame
+            // the minion spawns — the earlier dynamic-import version
+            // deferred the plot bloom by a microtask, which was visible
+            // as a one-frame delay on mobile.
             try {
-                // The ClassAbility module exported via late binding in
-                // src/ui/class-ability.js may not be available during save
-                // restore — guarded by typeof to avoid a load-order throw.
-                import('../ui/class-ability.js').then(mod => {
-                    if (mod && mod.ClassAbility && typeof mod.ClassAbility.onEvent === 'function') {
-                        mod.ClassAbility.onEvent('minion_summoned', { minion: this });
-                    }
-                }).catch(() => { /* ignore */ });
+                if (ClassAbility && typeof ClassAbility.onEvent === 'function') {
+                    ClassAbility.onEvent('minion_summoned', { minion: this });
+                }
             } catch (_) { /* ignore */ }
         }
     }
@@ -101,16 +101,13 @@ class Minion extends Entity {
         AudioMgr.playSound('upgrade');
 
         // Fire a grove-trigger event so Summoner's Sacred Grove blooms a
-        // plot on upgrade just like it does on summon. Same late-binding
-        // dynamic import pattern used in the constructor to dodge the
-        // entity.js ↔ class-ability.js circular import.
+        // plot on upgrade just like it does on summon. Synchronous so the
+        // plot update lands on the same frame as the upgrade VFX.
         if (this.isPlayerSide) {
             try {
-                import('../ui/class-ability.js').then(mod => {
-                    if (mod && mod.ClassAbility && typeof mod.ClassAbility.onEvent === 'function') {
-                        mod.ClassAbility.onEvent('minion_upgraded', { minion: this });
-                    }
-                }).catch(() => { /* ignore */ });
+                if (ClassAbility && typeof ClassAbility.onEvent === 'function') {
+                    ClassAbility.onEvent('minion_upgraded', { minion: this });
+                }
             } catch (_) { /* ignore */ }
         }
     }
