@@ -1607,10 +1607,13 @@ startQTE(type, x, y, callback) {
         document.getElementById('tutorial-overlay').classList.add('hidden');
         document.getElementById('tutorial-spotlight').classList.add('hidden');
 
-        // Defensive: narration pane must only appear in TUTORIAL_COMBAT.
+        // Defensive: narration pane (and its sibling skip button) must
+        // only appear in TUTORIAL_COMBAT.
         if (newState !== STATE.TUTORIAL_COMBAT) {
             const narrPane = document.getElementById('tutorial-narration');
             if (narrPane) narrPane.classList.add('hidden');
+            const skipBtn = document.getElementById('btn-tutorial-skip');
+            if (skipBtn) skipBtn.classList.add('hidden');
         }
 
         TooltipMgr.hide();
@@ -1796,6 +1799,8 @@ startQTE(type, x, y, callback) {
         document.getElementById('tutorial-text').classList.add('hidden');
         const narrPane = document.getElementById('tutorial-narration');
         if (narrPane) narrPane.classList.add('hidden');
+        const skipBtnDone = document.getElementById('btn-tutorial-skip');
+        if (skipBtnDone) skipBtnDone.classList.add('hidden');
 
         // Tutorial complete — go straight to the map. The post-tutorial debriefing
         // page-flip screen has been removed; players learn the rest in-game via
@@ -1831,6 +1836,8 @@ startQTE(type, x, y, callback) {
         // Force-kill the tutorial enemy so we can exit combat cleanly.
         const narrPane = document.getElementById('tutorial-narration');
         if (narrPane) narrPane.classList.add('hidden');
+        const skipBtnSkip = document.getElementById('btn-tutorial-skip');
+        if (skipBtnSkip) skipBtnSkip.classList.add('hidden');
         document.querySelectorAll('.tutorial-focus').forEach(el => el.classList.remove('tutorial-focus'));
         document.getElementById('tutorial-overlay').classList.add('hidden');
         document.getElementById('tutorial-text').classList.add('hidden');
@@ -18238,17 +18245,35 @@ drawEntity(entity) {
             }
             // Pane sits in the OPPOSITE half-screen from the action it's
             // teaching, so it never overlaps the element the player needs
-            // to see or interact with. top/bottom changes are animated via
-            // CSS transitions on .tutorial-narration so the pane glides
-            // between safe zones instead of teleporting.
+            // to see or interact with. top value is computed in pixels so
+            // the CSS transition can animate between anchors — anchoring
+            // via `bottom: Npx; top: auto` broke because CSS transitions
+            // can't animate to/from `auto`.
             narrPane.classList.remove('anchor-top', 'anchor-bottom');
-            // Steps whose action lives in the bottom half (dice, reroll,
-            // end-turn, player QTE) → pane goes to top safe zone.
-            // Steps whose action lives in the top half (enemy, intent,
-            // enemy QTE) → pane goes to bottom safe zone.
             const bottomHalfSteps = new Set([1, 3, 5, 7, 8, 9, 10, 11, 12]);
-            const cls = bottomHalfSteps.has(this.tutorialStep) ? 'anchor-top' : 'anchor-bottom';
-            narrPane.classList.add(cls);
+            const anchorTop = bottomHalfSteps.has(this.tutorialStep);
+            narrPane.classList.add(anchorTop ? 'anchor-top' : 'anchor-bottom');
+            // Compute pixel `top` for whichever anchor we're targeting.
+            // The container is the game frame; measuring after any
+            // reflow from class changes settles, and falling back to
+            // CONFIG heights avoids a zero-height first-show flash.
+            const container = document.getElementById('game-container');
+            const containerH = (container && container.getBoundingClientRect().height)
+                || (typeof CONFIG !== 'undefined' ? (CONFIG.CANVAS_HEIGHT / (window.devicePixelRatio || 1)) : 960);
+            const paneH = narrPane.getBoundingClientRect().height || 80;
+            const TOP_MARGIN = 60;
+            const BOTTOM_MARGIN = 260;
+            const targetTop = anchorTop ? TOP_MARGIN : Math.max(TOP_MARGIN, containerH - BOTTOM_MARGIN - paneH);
+            narrPane.style.top = `${targetTop}px`;
+        }
+
+        // Skip button is now a sibling, shown whenever the narration pane
+        // is shown and hidden alongside it. Lives at the bottom-center of
+        // the game container regardless of where the pane is anchored.
+        const skipBtn = document.getElementById('btn-tutorial-skip');
+        if (skipBtn) {
+            if (this.tutorialAutoRun) skipBtn.classList.remove('hidden');
+            else skipBtn.classList.add('hidden');
         }
 
         // --- 1. Reset Classes and Clear Focus ---

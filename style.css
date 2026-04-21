@@ -5208,9 +5208,10 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     left: 50%;
     width: 86%;
     max-width: 300px;
-    /* Smaller, tighter footprint — bottom band still reserves space for
-       the SKIP TUTORIAL button but everything is tighter now. */
-    padding: 9px 14px 36px;
+    /* Smaller, tighter footprint. Skip button is now a sibling pinned
+       to the bottom-center, so the pane doesn't need the extra bottom
+       band it used to reserve. */
+    padding: 9px 14px 11px;
     /* Heavily translucent + backdrop blur so the combat read-through
        underneath stays visible. Previous opaque 0.96 gradient blocked
        too much of the enemy/intent when anchored. */
@@ -5222,18 +5223,18 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     box-shadow: 0 0 18px rgba(0, 243, 255, 0.22), 0 4px 10px rgba(0, 0, 0, 0.55);
     z-index: 6500;
     pointer-events: auto;
-    /* Whole-pane fade+slide on stage change. Opacity + translateY on the
-       transform do the lift; top/bottom transitions handle anchor-zone
-       swaps. translateX(-50%) is the base transform for horizontal
-       centering and is preserved in both rest + switching states. */
+    /* All vertical positioning via `top` in pixels so CSS can transition
+       between anchor zones. `bottom: auto` and swapping to `bottom:X` was
+       the root cause of the teleport — CSS transitions can't animate
+       to/from `auto`. Game.updateTutorialStep now computes the pixel
+       `top` for each anchor (anchor-top ≈ 60, anchor-bottom ≈ container
+       height minus a bottom margin) and writes it inline. */
     transform: translate(-50%, 0);
-    transition: top 250ms var(--ease-out-smart),
-                bottom 250ms var(--ease-out-smart),
+    transition: top 380ms var(--ease-out-smart),
                 opacity 180ms ease-out,
                 transform 240ms var(--ease-out-smart);
     animation: tutorialNarrationIn 340ms var(--ease-out-smart);
     top: 60px;
-    bottom: auto;
 }
 /* Dedicated keyframe that preserves translateX(-50%) horizontal centering
    (the shared fadeInUp keyframe wipes out the X transform during playback). */
@@ -5256,16 +5257,12 @@ body.reduced-motion .tutorial-narration.narration-switching {
     opacity: 1;
     transform: translate(-50%, 0);
 }
-/* Two simple anchor zones. `anchor-top` sits under the HUD top bar; */
-/* `anchor-bottom` sits above the dice tray + controls.                */
-.tutorial-narration.anchor-top {
-    top: 60px;
-    bottom: auto;
-}
-.tutorial-narration.anchor-bottom {
-    top: auto;
-    bottom: 270px;
-}
+/* Anchor-class markers are kept for specificity + any child-scoped
+   styling; the actual `top` value is set inline by JS so the CSS
+   transition can animate between two real pixel values (an `auto`
+   transition wouldn't slide). */
+.tutorial-narration.anchor-top,
+.tutorial-narration.anchor-bottom { bottom: auto; }
 .tutorial-narration-story {
     font-family: var(--font-cyber);
     font-size: calc(var(--text-sm) * 0.82);
@@ -5307,17 +5304,20 @@ body.reduced-motion .tutorial-narration.narration-switching .tutorial-narration-
     transform: none;
 }
 .tutorial-skip-btn {
-    /* Pinned to the bottom-right of the pane in the reserved 36px band
-       set aside via the pane's bottom padding. Never overlaps the action
-       text above. */
+    /* Free-floating bottom-center of the game container — sibling of
+       the narration pane, never moves with it. Appears whenever the
+       narration pane is active; hidden when Game removes the hidden
+       class alongside the pane. */
     position: absolute !important;
-    right: 8px;
-    bottom: 6px;
+    left: 50% !important;
+    bottom: 18px;
+    transform: translateX(-50%);
     width: auto !important;
     min-height: 0 !important;
-    padding: 3px 10px !important;
+    padding: 5px 16px !important;
     margin: 0 !important;
-    font-size: 0.58rem !important;
+    z-index: 6500;
+    font-size: 0.62rem !important;
     letter-spacing: 0.14em;
     color: var(--text-dim) !important;
     background: rgba(0, 0, 0, 0.35) !important;

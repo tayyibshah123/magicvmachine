@@ -493,12 +493,15 @@
                 </div>
             </div>
 
-            <!-- Phase 3: narration pane under combat tutorial + always-working skip -->
+            <!-- Phase 3: narration pane under combat tutorial. Skip button
+                 is a sibling, pinned to the bottom-center of the game
+                 container so it never follows the pane when it swaps
+                 between anchor-top and anchor-bottom. -->
             <div id="tutorial-narration" class="tutorial-narration hidden">
                 <div class="tutorial-narration-story" id="tutorial-narration-story"></div>
                 <div class="tutorial-narration-action" id="tutorial-narration-action"></div>
-                <button id="btn-tutorial-skip" class="btn ghost tutorial-skip-btn">SKIP TUTORIAL</button>
             </div>
+            <button id="btn-tutorial-skip" class="btn ghost tutorial-skip-btn hidden">SKIP TUTORIAL</button>
 
             <!-- Story / Outro Screen -->
             <div id="screen-story" class="screen hidden">
