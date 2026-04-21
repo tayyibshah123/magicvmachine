@@ -470,17 +470,16 @@ export const ClassAbility = {
                 const idx = parseInt(action.split('-')[1], 10);
                 if (isNaN(idx) || idx < 0 || idx >= state.plots.length) return;
                 if (state.plots[idx] !== 2) return; // only Bloomed plots
-                // AMPLIFY path — when the grove is full (3 living minions) the
-                // bloom instead empowers every minion in one shot. GROVE APEX
-                // (×3) triggers when ALL 3 plots are also bloomed; otherwise
-                // the standard ×2 amplify applies.
+                // APEX path — when the grove is full (3 living minions) AND
+                // every plot is bloomed, a bloom tap empowers every minion
+                // at ×3. The previous ×2 "amplify" intermediate tier was
+                // removed — APEX is the only whole-grove payoff now.
                 const atMax = p.minions && p.minions.length >= (p.maxMinions || 3);
-                if (atMax) {
-                    const bloomCount = state.plots.filter(v => v === 2).length;
-                    const isApex = bloomCount >= 3;
-                    const mult = isApex ? 3 : 2;
-                    const color = isApex ? '#ffd76a' : '#00ff99';
-                    const label = isApex ? 'APEX ×3' : 'AMPLIFY ×2';
+                const bloomCount = (state.plots || []).filter(v => v === 2).length;
+                const isApex = !!(atMax && bloomCount >= 3);
+                if (isApex) {
+                    const color = '#ffd76a';
+                    const mult = 3;
                     let buffed = 0;
                     p.minions.forEach(m => {
                         if (!m) return;
@@ -488,22 +487,25 @@ export const ClassAbility = {
                         m.currentHp = Math.floor((m.currentHp || 1) * mult);
                         m.dmg = Math.floor((m.dmg || 1) * mult);
                         if (typeof m.playAnim === 'function') m.playAnim('pulse');
-                        ParticleSys.createShockwave(m.x, m.y, color, isApex ? 30 : 22);
-                        ParticleSys.createFloatingText(m.x, m.y - 50, label, color);
+                        ParticleSys.createShockwave(m.x, m.y, color, 30);
+                        ParticleSys.createFloatingText(m.x, m.y - 50, 'APEX ×3', color);
                         buffed++;
                     });
-                    // AMPLIFY/APEX is a whole-grove sacrifice — every plot
-                    // drains back to seed stage regardless of its current
-                    // growth. APEX consumes the full canopy for the ×3 boon.
+                    // APEX consumes the entire canopy — every plot drains
+                    // back to seed stage regardless of its current growth.
                     for (let i = 0; i < state.plots.length; i++) state.plots[i] = 0;
-                    const headline = isApex
-                        ? `GROVE APEX — ×3 EMPOWERS ${buffed} ALLIES`
-                        : `GROVE EMPOWERS ${buffed} ALLIES`;
-                    ParticleSys.createFloatingText(p.x, p.y - 100, headline, color);
-                    ParticleSys.createShockwave(p.x, p.y, color, isApex ? 48 : 36);
-                    if (Game.shake) Game.shake(isApex ? 16 : 10);
+                    ParticleSys.createFloatingText(p.x, p.y - 100, `GROVE APEX — ×3 EMPOWERS ${buffed} ALLIES`, color);
+                    ParticleSys.createShockwave(p.x, p.y, color, 48);
+                    if (Game.shake) Game.shake(16);
                     if (Game.haptic) Game.haptic('heavy');
                     AudioMgr.playSound('upgrade');
+                    break;
+                }
+                // At max but not apex — don't consume the bloom. Let the
+                // player keep building toward the three-plot Apex condition.
+                if (atMax) {
+                    ParticleSys.createFloatingText(p.x, p.y - 80, 'GROVE FULL — NEED FULL BLOOM', '#88eaff');
+                    AudioMgr.playSound('defend');
                     break;
                 }
                 // Otherwise standard spawn path.
@@ -844,21 +846,21 @@ export const ClassAbility = {
 
     _renderSummoner() {
         const el = $w(); if (!el) return;
-        // AMPLIFY-ready flag: grove is full AND at least one plot has bloomed
-        // → a bloom tap will ×2 all minion HP/DMG instead of spawning. APEX-ready
-        // is the upgraded form — full grove (3/3 plots bloomed) AND 3 minions
-        // out → ×3 instead of ×2. Both flags are read by CSS to recolor plots
-        // and (for APEX) make the canopy buds bloom with gold petals.
+        // APEX-ready is now the ONLY whole-grove payoff: full grove (3/3
+        // minions out AND 3/3 plots bloomed) → tap any bloom to ×3 every
+        // minion. The previous ×2 "amplify" intermediate tier was removed.
+        // CSS still reads .apex-ready to paint the gold canopy treatment.
         const p = Game && Game.player;
         const atMax = p && p.minions && p.minions.length >= (p.maxMinions || 3);
-        const anyBloomed = (state.plots || []).some(v => v === 2);
         const bloomCount = (state.plots || []).filter(v => v === 2).length;
         const isApexReady = !!(atMax && bloomCount >= 3);
-        el.classList.toggle('amplify-ready', !!(atMax && anyBloomed));
+        // Keep the amplify-ready class as a harmless alias so older CSS
+        // references don't break mid-deploy, but it tracks apex now.
+        el.classList.toggle('amplify-ready', isApexReady);
         el.classList.toggle('apex-ready', isApexReady);
-        const apexTip    = 'GROVE APEX READY — bloom a plot to ×3 every minion (consumes the canopy).';
-        const amplifyTip = 'MINIONS AT MAX — bloom a plot to DOUBLE all minion HP & DMG.';
-        const spawnTip   = 'Bloom a plot to free-summon a Spirit.';
+        const apexTip  = 'GROVE APEX READY — bloom a plot to ×3 every minion (consumes the canopy).';
+        const fullTip  = 'MINIONS AT MAX — complete the canopy (3/3 blooms) to unleash APEX ×3.';
+        const spawnTip = 'Bloom a plot to free-summon a Spirit.';
         // Grove growth = count of bloomed plots (0..3). Drives the tree
         // silhouette's brightness so the center tree visibly "grows" with
         // the forest behind the scenes.
@@ -869,12 +871,13 @@ export const ClassAbility = {
             const stage = state.plots[idx] || 0;
             btn.classList.remove('stage-seed', 'stage-sprout', 'stage-bloom');
             btn.classList.add(stage === 0 ? 'stage-seed' : stage === 1 ? 'stage-sprout' : 'stage-bloom');
-            btn.title = isApexReady ? apexTip : (atMax ? amplifyTip : spawnTip);
+            btn.title = isApexReady ? apexTip : (atMax ? fullTip : spawnTip);
             const icon = stage === 0 ? ICONS.grovePlotSeed
                        : stage === 1 ? ICONS.grovePlotSprout
                                      : ICONS.grovePlotBloom;
-            const badge = (stage === 2 && atMax)
-                ? `<span class="ca-plot-amp-badge">×${isApexReady ? 3 : 2}</span>`
+            // Only show the ×3 badge when apex is live — no more ×2 tier.
+            const badge = (stage === 2 && isApexReady)
+                ? `<span class="ca-plot-amp-badge">×3</span>`
                 : '';
             btn.innerHTML = icon + badge;
         });

@@ -9053,13 +9053,16 @@ async startTurn() {
                             ParticleSys.createFloatingText(this.player.x, this.player.y - 200, "+1 BONUS MANA", "#ffffff");
                         }
                     } else if (cid === 'summoner') {
-                        // Heal all minions 2 HP (3 upgraded)
-                        const healAmt = isUpgraded ? 3 : 2;
+                        // Grove Tap: heal player + all minions. Base 1 HP,
+                        // upgraded (Deep Roots) 2 HP.
+                        const healAmt = isUpgraded ? 2 : 1;
+                        this.player.heal(healAmt);
+                        ParticleSys.createFloatingText(this.player.x, this.player.y - 110, `+${healAmt} HP`, '#00ff66');
                         if (this.player.minions) {
                             this.player.minions.forEach(m => {
                                 if (m && m.currentHp > 0) {
                                     m.currentHp = Math.min(m.maxHp, m.currentHp + healAmt);
-                                    ParticleSys.createFloatingText(m.x, m.y - 50, `+${healAmt} HP`, "#00ff66");
+                                    ParticleSys.createFloatingText(m.x, m.y - 50, `+${healAmt} HP`, '#00ff66');
                                 }
                             });
                         }
@@ -9077,6 +9080,25 @@ async startTurn() {
                         ParticleSys.createFloatingText(target.x, target.y - 80, "ALPHA BOOST!", COLORS.GOLD);
                         target.playAnim('pulse');
                         AudioMgr.playSound('upgrade');
+                    } else if (this.player.classId === 'summoner') {
+                        // Call Spirit on an existing Spirit → bonded growth:
+                        // +2 HP + +2 DMG instead of the generic +1/+1 from
+                        // upgrade(). Mirrors the fantasy of the call feeding
+                        // an already-summoned ally rather than making a new
+                        // one. Still fires the minion_upgraded event so the
+                        // grove plot blooms.
+                        target.maxHp += 2;
+                        target.currentHp += 2;
+                        target.dmg += 2;
+                        target.level++;
+                        ParticleSys.createFloatingText(target.x, target.y - 80, "+2 HP / +2 DMG", '#00ff99');
+                        target.playAnim('pulse');
+                        AudioMgr.playSound('upgrade');
+                        try {
+                            if (typeof ClassAbility !== 'undefined' && ClassAbility.onEvent) {
+                                ClassAbility.onEvent('minion_upgraded', { minion: target });
+                            }
+                        } catch (_) { /* ignore */ }
                     } else {
                         target.upgrade();
                     }

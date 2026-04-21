@@ -307,7 +307,7 @@ const DICE_TYPES = {
     // ─── SUMMONER ───
     SUM_ATTACK: { name: "Primal Howl",      icon: ICONS.sumAttack, color: '#00ff99', desc: 'Deal 4 DMG + 2 per alive minion.', cost: 0, target: 'enemy', classId: 'summoner', slot: 'attack' },
     SUM_DEFEND: { name: "Bramble Ward",     icon: ICONS.sumDefend, color: '#00cc77', desc: '4 Shield self + 3 Shield each minion.', cost: 0, target: 'self', classId: 'summoner', slot: 'defend' },
-    SUM_MANA:   { name: "Grove Tap",        icon: ICONS.sumMana,   color: '#00ff66', desc: '+1 Mana. Heal all minions 2 HP.', cost: 0, target: 'self', classId: 'summoner', slot: 'mana' },
+    SUM_MANA:   { name: "Grove Tap",        icon: ICONS.sumMana,   color: '#00ff66', desc: '+1 Mana. Heal player and all minions 1 HP.', cost: 0, target: 'self', classId: 'summoner', slot: 'mana' },
     SUM_MINION: { name: "Call Spirit",      icon: ICONS.sumMinion, color: '#00ff99', desc: 'Call Spirit.', cost: 0, target: 'any', classId: 'summoner', slot: 'minion' },
 
     // ─── SHARED SKILL DICE ───
@@ -507,7 +507,7 @@ const DICE_UPGRADES = {
     // ─── SUMMONER ───
     SUM_ATTACK: { name: "Wrath of the Wild",  desc: "Deal 6 DMG + 3 per alive minion. Heal self 1 per minion.", cost: 190, icon: ICONS.sumAttack },
     SUM_DEFEND: { name: "Living Fortress",    desc: "6 Shield self + 4 Shield each minion. Minions gain 1 Thorns.", cost: 175, icon: ICONS.sumDefend },
-    SUM_MANA:   { name: "Deep Roots",         desc: "+2 Mana. Heal all minions 3 HP. +1 minion DMG this turn.", cost: 200, icon: ICONS.sumMana },
+    SUM_MANA:   { name: "Deep Roots",         desc: "+2 Mana. Heal player and all minions 2 HP.", cost: 200, icon: ICONS.sumMana },
     SUM_MINION: { name: "Elder Spirit",       desc: "Call L2 Spirit (+5 Block, +5 DMG, 30% Revive).", cost: 200, icon: ICONS.sumMinion },
 
     // ─── SHARED SKILL UPGRADES (unchanged) ───
