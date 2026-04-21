@@ -33,8 +33,9 @@ function _buildSoftSprite() {
     return c;
 }
 
-function _newParticle() {
+function _newParticle(idx) {
     return {
+        _idx: idx,       // pool index — enables O(1) release
         active: false,
         x: 0, y: 0, vx: 0, vy: 0,
         life: 0, maxLife: 0,
@@ -51,7 +52,15 @@ function _newParticle() {
 }
 
 const ParticleSys = {
-    pool: Array.from({ length: POOL_SIZE }, _newParticle),
+    pool: Array.from({ length: POOL_SIZE }, (_, i) => _newParticle(i)),
+    // Stack of free pool indices. O(1) acquire = pop; O(1) release = push.
+    // Replaces a linear scan that was showing up on burst spawns (shockwaves,
+    // class bursts) as 380+ iterations per call on mid-tier mobile.
+    _freeList: (function() {
+        const a = new Array(POOL_SIZE);
+        for (let i = 0; i < POOL_SIZE; i++) a[i] = POOL_SIZE - 1 - i;
+        return a;
+    })(),
     activeCount: 0,
     quality: 1.0, // 0.4 = low, 0.7 = medium, 1.0 = high; trims spawn counts
     maxParticles: POOL_SIZE,
@@ -69,27 +78,31 @@ const ParticleSys = {
 
     // Release every pool slot — called on combat start / restart
     clear() {
-        for (let i = 0; i < this.pool.length; i++) {
+        const fl = this._freeList;
+        fl.length = 0;
+        for (let i = this.pool.length - 1; i >= 0; i--) {
             this.pool[i].active = false;
             this.pool[i].text = null;
+            fl.push(i);
         }
         this.activeCount = 0;
     },
 
     _acquire() {
-        // Find first inactive particle in pool
-        for (let i = 0; i < this.pool.length; i++) {
-            if (!this.pool[i].active) {
-                this.pool[i].active = true;
-                this.pool[i].text = null;
-                this.activeCount++;
-                return this.pool[i];
-            }
+        const fl = this._freeList;
+        if (fl.length > 0) {
+            const idx = fl.pop();
+            const p = this.pool[idx];
+            p.active = true;
+            p.text = null;
+            this.activeCount++;
+            return p;
         }
-        // Pool exhausted — recycle the oldest active particle (smallest life remaining)
-        let oldest = this.pool[0], oldestIdx = 0;
+        // Pool exhausted — recycle the oldest active particle (smallest life remaining).
+        // Rare path; the linear scan only runs when we're already at capacity.
+        let oldest = this.pool[0];
         for (let i = 1; i < this.pool.length; i++) {
-            if (this.pool[i].life < oldest.life) { oldest = this.pool[i]; oldestIdx = i; }
+            if (this.pool[i].life < oldest.life) oldest = this.pool[i];
         }
         oldest.text = null;
         return oldest;
@@ -99,6 +112,7 @@ const ParticleSys = {
         if (p.active) {
             p.active = false;
             this.activeCount--;
+            this._freeList.push(p._idx);
         }
     },
 
@@ -164,28 +178,38 @@ const ParticleSys = {
             this._drawSoftDot(ctx, p);
         }
 
-        // Pass 3 — text particles
+        // Pass 3 — text particles. Shared state (textAlign, strokeStyle,
+        // lineJoin) is set once outside the loop. shadowBlur reset is deferred
+        // to a single ctx.restore() after the loop, so we don't churn shadow
+        // state when there are no text particles at all.
         ctx.globalCompositeOperation = 'source-over';
+        let wroteTextState = false;
+        let lastFont = null;
+        let lastLineWidth = -1;
+        const useShadow = this.quality >= 0.5;
         for (let i = 0; i < this.pool.length; i++) {
             const p = this.pool[i];
             if (!p.active || !p.text) continue;
+            if (!wroteTextState) {
+                ctx.textAlign = 'center';
+                ctx.strokeStyle = '#000000';
+                ctx.lineJoin = 'round';
+                wroteTextState = true;
+            }
             ctx.globalAlpha = p.alpha;
             const fs = p.fontSize || 48;
-            ctx.font = `900 ${fs}px 'Orbitron'`;
-            ctx.textAlign = 'center';
-            ctx.lineWidth = Math.max(4, fs / 6);
-            ctx.strokeStyle = '#000000';
-            ctx.lineJoin = 'round';
+            const font = `900 ${fs}px 'Orbitron'`;
+            if (font !== lastFont) { ctx.font = font; lastFont = font; }
+            const lw = Math.max(4, fs / 6);
+            if (lw !== lastLineWidth) { ctx.lineWidth = lw; lastLineWidth = lw; }
             ctx.strokeText(p.text, p.x, p.y);
             ctx.fillStyle = p.color;
-            if (this.quality >= 0.5) {
+            if (useShadow) {
                 ctx.shadowColor = p.color;
                 ctx.shadowBlur = fs >= 56 ? 18 : fs >= 40 ? 12 : 8;
             }
             ctx.fillText(p.text, p.x, p.y);
-            ctx.shadowBlur = 0;
         }
-
         ctx.restore();
     },
 

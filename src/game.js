@@ -203,28 +203,28 @@ const Game = {
                 intro.dataset.dismissed = '1';
                 AudioMgr.init();
                 AudioMgr.startMusic();
-                intro.classList.add('intro-fade');
-                setTimeout(() => intro.remove(), 750);
-                // Safety net for mobile background-restore: if the browser
-                // reloaded the page from a suspended state the main menu
-                // may still be hidden when we finish the intro. Force it
-                // visible so the tap doesn't dead-end in a black screen.
+
+                // Reveal the main menu underneath and seed the button glitch-in
+                // state — buttons stay hidden until .menu-entering is removed,
+                // which happens after the intro has fully faded out.
                 const startEl = document.getElementById('screen-start');
                 if (startEl) {
                     startEl.classList.remove('hidden');
                     startEl.classList.add('active');
-                    // Intro → menu slide-in: seed the offset state, let the
-                    // browser paint one frame with the children pushed out
-                    // of position, then clear the flag so the transitions
-                    // animate the title up from center and the buttons up
-                    // from below the fold.
                     startEl.classList.add('menu-entering');
-                    requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                            startEl.classList.remove('menu-entering');
-                        });
-                    });
                 }
+
+                intro.classList.add('intro-fade');
+                setTimeout(() => {
+                    intro.remove();
+                    if (startEl) {
+                        requestAnimationFrame(() => {
+                            requestAnimationFrame(() => {
+                                startEl.classList.remove('menu-entering');
+                            });
+                        });
+                    }
+                }, 620);
 
                 // First-launch onboarding (§1.1). Skipped on subsequent launches.
                 if (!Onboarding.isComplete()) {
@@ -433,7 +433,6 @@ const Game = {
         }
         attachButtonEvent('btn-decrypt', () => this.startHexBreach());
         attachButtonEvent('btn-upgrades', () => {
-            this.renderMeta();
             this.changeState(STATE.META);
         });
         attachButtonEvent('btn-back-meta', () => {
@@ -12675,18 +12674,11 @@ drawEffects() {
     updateMinionPositions() {
         const spacing = 280; // FIX: Increased spacing (was 180) to move minions further out
         if (this.player) {
-            if (this.player.minions[0]) {
-                this.player.minions[0].x = this.player.x - spacing;
-                this.player.minions[0].y = this.player.y;
-            }
-            if (this.player.minions[1]) {
-                this.player.minions[1].x = this.player.x + spacing;
-                this.player.minions[1].y = this.player.y;
-            }
-            if (this.player.minions[2]) {
-                this.player.minions[2].x = this.player.x;
-                this.player.minions[2].y = this.player.y + spacing; 
-            }
+            const pm = this.player.minions;
+            const px = this.player.x, py = this.player.y;
+            if (pm[0]) { pm[0].x = px - spacing;  pm[0].y = py; }
+            if (pm[1]) { pm[1].x = px + spacing;  pm[1].y = py; }
+            if (pm[2]) { pm[2].x = px;            pm[2].y = py + spacing; }
         }
         if (this.enemy) {
             // Slots 0/1 flank the enemy; extras (Multiplier clone, HIVE drones
@@ -12694,18 +12686,21 @@ drawEffects() {
             // at stale spawn coordinates off-canvas.
             const ROW2_DX = Math.floor(spacing * 0.55);
             const ROW2_DY = -160;
-            this.enemy.minions.forEach((m, i) => {
-                if (!m) return;
-                if (i === 0)      { m.x = this.enemy.x - spacing; m.y = this.enemy.y; }
-                else if (i === 1) { m.x = this.enemy.x + spacing; m.y = this.enemy.y; }
+            const em = this.enemy.minions;
+            const ex = this.enemy.x, ey = this.enemy.y;
+            for (let i = 0, n = em.length; i < n; i++) {
+                const m = em[i];
+                if (!m) continue;
+                if (i === 0)      { m.x = ex - spacing; m.y = ey; }
+                else if (i === 1) { m.x = ex + spacing; m.y = ey; }
                 else {
                     const j = i - 2;
                     const side = (j % 2 === 0) ? -1 : 1;
-                    const tier = Math.floor(j / 2);
-                    m.x = this.enemy.x + side * ROW2_DX;
-                    m.y = this.enemy.y + ROW2_DY - tier * 140;
+                    const tier = (j >>> 1);
+                    m.x = ex + side * ROW2_DX;
+                    m.y = ey + ROW2_DY - tier * 140;
                 }
-            });
+            }
         }
     },
 
@@ -14074,13 +14069,23 @@ drawEffects() {
             type = 'source';
         }
 
-        // 1. Richer sky gradient — top / mid / bottom using sector palette
-        const grad = ctx.createLinearGradient(0, 0, 0, h);
-        grad.addColorStop(0, conf.bgTop);
-        grad.addColorStop(0.35, conf.bgMid || conf.bgBot);
-        grad.addColorStop(0.7, conf.bgBot);
-        grad.addColorStop(1, conf.bgTop);
-        ctx.fillStyle = grad;
+        // 1. Richer sky gradient — top / mid / bottom using sector palette.
+        // Cached per (sector config, height). Rebuilt only when the palette or
+        // canvas dims shift; otherwise reused across every combat frame.
+        const bgMid = conf.bgMid || conf.bgBot;
+        if (!this._skyCache ||
+            this._skyCache.h !== h ||
+            this._skyCache.top !== conf.bgTop ||
+            this._skyCache.mid !== bgMid ||
+            this._skyCache.bot !== conf.bgBot) {
+            const g = ctx.createLinearGradient(0, 0, 0, h);
+            g.addColorStop(0, conf.bgTop);
+            g.addColorStop(0.35, bgMid);
+            g.addColorStop(0.7, conf.bgBot);
+            g.addColorStop(1, conf.bgTop);
+            this._skyCache = { h, top: conf.bgTop, mid: bgMid, bot: conf.bgBot, grad: g };
+        }
+        ctx.fillStyle = this._skyCache.grad;
         ctx.fillRect(0, 0, w, h);
 
         const isBossFight = !!(this.enemy && this.enemy.isBoss);
@@ -14098,59 +14103,63 @@ drawEffects() {
         //     bespoke boss backdrop isn't cluttered with generic silhouettes.
         const horizon = h * 0.45;
 
-        if (!isBossFight) this.bgState.skyline.forEach(b => {
-            // Move
-            b.x -= b.speed * dt;
-            if (b.x + b.w < 0) b.x = w + 50; // Wrap around
+        if (!isBossFight) {
+            const skyline = this.bgState.skyline;
+            for (let si = 0, sn = skyline.length; si < sn; si++) {
+                const b = skyline[si];
+                // Move
+                b.x -= b.speed * dt;
+                if (b.x + b.w < 0) b.x = w + 50; // Wrap around
 
-            // Draw
-            ctx.fillStyle = b.layer === 0 ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.8)'; // Dark silhouettes
-            
-            // Shape based on sector type
-            if (type === 'city') {
-                // Skyscrapers
-                ctx.fillRect(b.x, horizon - b.h, b.w, b.h);
-                // Windows
-                if (b.layer === 1) {
-                    ctx.fillStyle = conf.grid;
-                    for(let wy = 0; wy < b.h; wy += 20) {
-                        if(Math.random()>0.8) ctx.fillRect(b.x + 5, horizon - b.h + wy, 5, 5);
-                        if(Math.random()>0.8) ctx.fillRect(b.x + b.w - 10, horizon - b.h + wy, 5, 5);
+                // Draw
+                ctx.fillStyle = b.layer === 0 ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.8)'; // Dark silhouettes
+
+                // Shape based on sector type
+                if (type === 'city') {
+                    // Skyscrapers
+                    ctx.fillRect(b.x, horizon - b.h, b.w, b.h);
+                    // Windows
+                    if (b.layer === 1) {
+                        ctx.fillStyle = conf.grid;
+                        for(let wy = 0; wy < b.h; wy += 20) {
+                            if(Math.random()>0.8) ctx.fillRect(b.x + 5, horizon - b.h + wy, 5, 5);
+                            if(Math.random()>0.8) ctx.fillRect(b.x + b.w - 10, horizon - b.h + wy, 5, 5);
+                        }
+                    }
+                } else if (type === 'ice') {
+                    // Spikes / Mountains
+                    ctx.beginPath();
+                    ctx.moveTo(b.x, horizon);
+                    ctx.lineTo(b.x + b.w/2, horizon - b.h);
+                    ctx.lineTo(b.x + b.w, horizon);
+                    ctx.fill();
+                } else if (type === 'fire') {
+                    // Trapezoid Factories
+                    ctx.beginPath();
+                    ctx.moveTo(b.x - 10, horizon);
+                    ctx.lineTo(b.x + 10, horizon - b.h);
+                    ctx.lineTo(b.x + b.w - 10, horizon - b.h);
+                    ctx.lineTo(b.x + b.w + 10, horizon);
+                    ctx.fill();
+                    // Smoke
+                    if (b.layer === 1 && Math.random() > 0.95) {
+                        this.spawnBgParticle('fire', false);
+                    }
+                } else if (type === 'tech') {
+                    // Floating Hexagons/Monoliths
+                    ctx.save();
+                    ctx.translate(b.x + b.w/2, horizon - b.h/2 - Math.sin(time + b.x)*20);
+                    this.drawPolygon(ctx, 0, 0, b.w/2, 6, time * 0.2);
+                    ctx.restore();
+                } else if (type === 'source') {
+                    // Glitchy rectangles
+                    if (Math.random() > 0.1) {
+                        ctx.fillStyle = Math.random() > 0.5 ? '#000' : '#200';
+                        ctx.fillRect(b.x, horizon - b.h, b.w, b.h);
                     }
                 }
-            } else if (type === 'ice') {
-                // Spikes / Mountains
-                ctx.beginPath();
-                ctx.moveTo(b.x, horizon);
-                ctx.lineTo(b.x + b.w/2, horizon - b.h);
-                ctx.lineTo(b.x + b.w, horizon);
-                ctx.fill();
-            } else if (type === 'fire') {
-                // Trapezoid Factories
-                ctx.beginPath();
-                ctx.moveTo(b.x - 10, horizon);
-                ctx.lineTo(b.x + 10, horizon - b.h);
-                ctx.lineTo(b.x + b.w - 10, horizon - b.h);
-                ctx.lineTo(b.x + b.w + 10, horizon);
-                ctx.fill();
-                // Smoke
-                if (b.layer === 1 && Math.random() > 0.95) {
-                    this.spawnBgParticle('fire', false); 
-                }
-            } else if (type === 'tech') {
-                // Floating Hexagons/Monoliths
-                ctx.save();
-                ctx.translate(b.x + b.w/2, horizon - b.h/2 - Math.sin(time + b.x)*20);
-                this.drawPolygon(ctx, 0, 0, b.w/2, 6, time * 0.2);
-                ctx.restore();
-            } else if (type === 'source') {
-                // Glitchy rectangles
-                if (Math.random() > 0.1) {
-                    ctx.fillStyle = Math.random() > 0.5 ? '#000' : '#200';
-                    ctx.fillRect(b.x, horizon - b.h, b.w, b.h);
-                }
             }
-        });
+        }
 
         // 4. Distant Drones — skipped during boss fights.
         if (!isBossFight) {
@@ -14411,12 +14420,15 @@ drawEffects() {
             // HTML overlays on these states, so the combat backdrop + particle update
             // is pure waste. On CHAR_SELECT we also have a second rAF chain redrawing
             // 6 preview canvases; keeping the main loop idle here is a major win.
-            const domOnlyStates = new Set([
-                STATE.MENU, STATE.CHAR_SELECT, STATE.MAP, STATE.SHOP,
-                STATE.REWARD, STATE.GAMEOVER, STATE.ACHIEVEMENTS,
-                STATE.TUTORIAL, STATE.EVENT, STATE.INTEL
-            ]);
-            if (domOnlyStates.has(this.currentState)) {
+            // Set is lazily built once and reused every frame (avoids per-frame alloc).
+            if (!Game._domOnlyStates) {
+                Game._domOnlyStates = new Set([
+                    STATE.MENU, STATE.CHAR_SELECT, STATE.MAP, STATE.SHOP,
+                    STATE.REWARD, STATE.GAMEOVER, STATE.ACHIEVEMENTS,
+                    STATE.TUTORIAL, STATE.EVENT, STATE.INTEL
+                ]);
+            }
+            if (Game._domOnlyStates.has(this.currentState)) {
                 requestAnimationFrame(this._boundLoop);
                 return;
             }
@@ -14442,40 +14454,47 @@ drawEffects() {
             this.updateMinionPositions();
 
             if ((this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT) && this.player && this.enemy) {
+                // Hot-path: plain for-loops instead of forEach to avoid allocating
+                // a closure per call per frame (×4 — drawEntity + drawHealthBar for
+                // both sides' minions). Adds up on mid-tier mobile.
                 this.drawEntity(this.player);
-                
-                if (this.player.minions) {
-                    this.player.minions.forEach(m => {
+                const pMinions = this.player.minions;
+                if (pMinions) {
+                    for (let i = 0, n = pMinions.length; i < n; i++) {
+                        const m = pMinions[i];
                         if (m) this.drawEntity(m);
-                    });
+                    }
                 }
-                
+
                 this.drawEntity(this.enemy);
-                
-                if (this.enemy.minions) {
-                    this.enemy.minions.forEach(m => {
+                const eMinions = this.enemy.minions;
+                if (eMinions) {
+                    for (let i = 0, n = eMinions.length; i < n; i++) {
+                        const m = eMinions[i];
                         if (m) this.drawEntity(m);
-                    });
+                    }
                 }
-                
+
                 this.drawIntentLine(this.enemy);
                 this.drawEffects();
-                
+
                 // QTE Updates
                 this.updateQTE(dt);
                 this.drawQTE();
 
                 this.drawHealthBar(this.player);
-                if (this.player.minions) {
-                    this.player.minions.forEach(m => {
+                if (pMinions) {
+                    for (let i = 0, n = pMinions.length; i < n; i++) {
+                        const m = pMinions[i];
                         if (m) this.drawHealthBar(m);
-                    });
+                    }
                 }
                 this.drawHealthBar(this.enemy);
-                if (this.enemy.minions) {
-                    this.enemy.minions.forEach(m => {
+                if (eMinions) {
+                    for (let i = 0, n = eMinions.length; i < n; i++) {
+                        const m = eMinions[i];
                         if (m) this.drawHealthBar(m);
-                    });
+                    }
                 }
             }
 
@@ -14484,20 +14503,39 @@ drawEffects() {
 
             // Combat mood vignette: tint shifts by who's in danger.
             // Skipped on low tier (gradient creation per frame is expensive).
+            // Gradient is cached at full strength per tint colour; per-frame work
+            // is just a globalAlpha paint + rect fill.
             if (Perf.tier !== 'low' && (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT) && this.player && this.enemy) {
-                const pHp = this.player.currentHp / (this.player.maxHp || 1);
-                const eHp = this.enemy.currentHp / (this.enemy.maxHp || 1);
-                let tintColor = null;
-                let tintStrength = 0;
-                if (pHp < 0.3) { tintColor = [255, 0, 85]; tintStrength = (0.3 - pHp) / 0.3; }
-                else if (eHp < 0.3) { tintColor = [0, 243, 255]; tintStrength = (0.3 - eHp) / 0.3; }
-                if (tintColor) {
+                // Compare against pre-multiplied 0.3 * maxHp to skip the HP ratio
+                // division on every frame when nobody's in the danger band.
+                const pMax = this.player.maxHp || 1;
+                const eMax = this.enemy.maxHp  || 1;
+                const pInDanger = this.player.currentHp < pMax * 0.3;
+                const eInDanger = this.enemy.currentHp  < eMax * 0.3;
+                if (pInDanger || eInDanger) {
+                    let tintKey, tintStrength;
+                    if (pInDanger) {
+                        tintKey = 'p';
+                        tintStrength = 1 - (this.player.currentHp / pMax) / 0.3;
+                    } else {
+                        tintKey = 'e';
+                        tintStrength = 1 - (this.enemy.currentHp / eMax) / 0.3;
+                    }
                     const cw = CONFIG.CANVAS_WIDTH, chh = CONFIG.CANVAS_HEIGHT;
-                    const vGrad = this.ctx.createRadialGradient(cw/2, chh/2, chh*0.35, cw/2, chh/2, chh*0.7);
-                    vGrad.addColorStop(0, 'transparent');
-                    vGrad.addColorStop(1, `rgba(${tintColor[0]}, ${tintColor[1]}, ${tintColor[2]}, ${0.28 * tintStrength})`);
+                    // Build-once gradient templates (alpha=1 inner stop), reuse forever.
+                    // Rebuild only if canvas dimensions changed (device rotate / resize).
+                    if (!this._vignetteCache || this._vignetteCache.w !== cw || this._vignetteCache.h !== chh) {
+                        const make = (r, g, b) => {
+                            const grad = this.ctx.createRadialGradient(cw/2, chh/2, chh*0.35, cw/2, chh/2, chh*0.7);
+                            grad.addColorStop(0, 'transparent');
+                            grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 1)`);
+                            return grad;
+                        };
+                        this._vignetteCache = { w: cw, h: chh, p: make(255, 0, 85), e: make(0, 243, 255) };
+                    }
                     this.ctx.save();
-                    this.ctx.fillStyle = vGrad;
+                    this.ctx.globalAlpha = 0.28 * tintStrength;
+                    this.ctx.fillStyle = this._vignetteCache[tintKey];
                     this.ctx.fillRect(0, 0, cw, chh);
                     this.ctx.restore();
                 }

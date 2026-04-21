@@ -8238,115 +8238,193 @@ canvas + .game-icon { filter: none; }
    MAIN MENU — #screen-start
    ========================================= */
 #screen-start {
-    /* Layered backdrop: nebula gradients + faint grid + diagonal scan */
+    /* Layered backdrop matching the intro: deeper nebula tints with a pink
+       accent tilted toward the pink/purple wash seen on the intro splash. */
     background:
-        radial-gradient(ellipse at 20% 20%, rgba(0, 243, 255, 0.09), transparent 40%),
-        radial-gradient(ellipse at 80% 80%, rgba(255, 0, 85, 0.08), transparent 40%),
-        radial-gradient(ellipse at 60% 30%, rgba(188, 19, 254, 0.05), transparent 55%),
-        linear-gradient(180deg, #05000d 0%, #06001a 100%);
+        radial-gradient(ellipse at 50% 40%, rgba(188, 19, 254, 0.12), transparent 55%),
+        radial-gradient(ellipse at 15% 15%, rgba(0, 243, 255, 0.10), transparent 45%),
+        radial-gradient(ellipse at 85% 85%, rgba(255, 0, 85, 0.12), transparent 50%),
+        linear-gradient(180deg, #060018 0%, #0b0020 55%, #05000f 100%);
 }
+/* Scanlines + vignette + sweeping scan bar. Scanlines use the same 1px/3px
+   cadence as the intro overlay for a consistent texture across screens. */
 #screen-start::before {
-    /* Background: horizontal sweeping scan bar + perspective grid */
     content: '';
     position: absolute; inset: 0;
-    background:
+    background-image:
+        /* Horizontal sweep bar (driven by menu-scan keyframes) */
         linear-gradient(
             90deg,
             transparent 0%,
-            rgba(0, 243, 255, 0.04) 45%,
-            rgba(0, 243, 255, 0.1) 50%,
-            rgba(0, 243, 255, 0.04) 55%,
+            rgba(0, 243, 255, 0.05) 45%,
+            rgba(0, 243, 255, 0.12) 50%,
+            rgba(0, 243, 255, 0.05) 55%,
             transparent 100%),
-        linear-gradient(rgba(0, 243, 255, 0.04) 1px, transparent 1px) 0 0 / 40px 40px,
-        linear-gradient(90deg, rgba(0, 243, 255, 0.04) 1px, transparent 1px) 0 0 / 40px 40px;
-    background-repeat: no-repeat, repeat, repeat;
+        /* Fine horizontal scanlines */
+        repeating-linear-gradient(
+            to bottom,
+            rgba(0, 243, 255, 0.05) 0px,
+            rgba(0, 243, 255, 0.05) 1px,
+            transparent 1px,
+            transparent 3px),
+        /* Corner vignette for depth */
+        radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.55) 85%, #000 110%);
+    background-size: 100% 100%, 100% 3px, 100% 100%;
+    background-repeat: no-repeat, repeat, no-repeat;
     mix-blend-mode: screen;
     pointer-events: none;
     z-index: 0;
-    animation: menu-scan 12s linear infinite;
+    animation: menu-scan 12s linear infinite, menu-scanlines 8s linear infinite;
 }
 @keyframes menu-scan {
     0%   { background-position: -100% 0, 0 0, 0 0; }
-    100% { background-position: 100% 0, 0 0, 0 0; }
+    100% { background-position:  100% 0, 0 0, 0 0; }
 }
+@keyframes menu-scanlines {
+    from { background-position: 0 0,   0 0,   0 0; }
+    to   { background-position: 0 0,   0 120px, 0 0; }
+}
+/* L-bracket corner accents — thicker + longer than before, matching the
+   intro's introv2-corner treatment. Blue at top, pink at bottom. */
 #screen-start::after {
-    /* Inner HUD frame with animated corner accents */
     content: '';
     position: absolute;
-    top: 16px; left: 16px; right: 16px; bottom: 16px;
-    border-radius: 10px;
+    top: 14px; left: 14px; right: 14px; bottom: 14px;
     pointer-events: none;
     z-index: 0;
     background-image:
-        /* Four corners */
-        linear-gradient(to right, var(--neon-blue) 0, var(--neon-blue) 36px, transparent 36px),
-        linear-gradient(to bottom, var(--neon-blue) 0, var(--neon-blue) 36px, transparent 36px),
-        linear-gradient(to left,  var(--neon-pink) 0, var(--neon-pink) 36px, transparent 36px),
-        linear-gradient(to bottom,var(--neon-pink) 0, var(--neon-pink) 36px, transparent 36px),
-        linear-gradient(to right, var(--neon-pink) 0, var(--neon-pink) 36px, transparent 36px),
-        linear-gradient(to top,   var(--neon-pink) 0, var(--neon-pink) 36px, transparent 36px),
-        linear-gradient(to left,  var(--neon-blue) 0, var(--neon-blue) 36px, transparent 36px),
-        linear-gradient(to top,   var(--neon-blue) 0, var(--neon-blue) 36px, transparent 36px);
+        /* Top-left (blue) */
+        linear-gradient(to right,  var(--neon-blue), var(--neon-blue)),
+        linear-gradient(to bottom, var(--neon-blue), var(--neon-blue)),
+        /* Top-right (blue) */
+        linear-gradient(to left,   var(--neon-blue), var(--neon-blue)),
+        linear-gradient(to bottom, var(--neon-blue), var(--neon-blue)),
+        /* Bottom-right (pink) */
+        linear-gradient(to left,   var(--neon-pink), var(--neon-pink)),
+        linear-gradient(to top,    var(--neon-pink), var(--neon-pink)),
+        /* Bottom-left (pink) */
+        linear-gradient(to right,  var(--neon-pink), var(--neon-pink)),
+        linear-gradient(to top,    var(--neon-pink), var(--neon-pink));
     background-repeat: no-repeat;
-    background-size: 36px 2px, 2px 36px, 36px 2px, 2px 36px,
-                     36px 2px, 2px 36px, 36px 2px, 2px 36px;
+    background-size:
+        48px 2px, 2px 48px,
+        48px 2px, 2px 48px,
+        48px 2px, 2px 48px,
+        48px 2px, 2px 48px;
     background-position:
         top left,     top left,
         top right,    top right,
         bottom right, bottom right,
         bottom left,  bottom left;
-    filter: drop-shadow(0 0 6px rgba(0, 243, 255, 0.5));
+    filter: drop-shadow(0 0 8px rgba(0, 243, 255, 0.55));
     animation: menu-frame-pulse 3s ease-in-out infinite;
 }
 @keyframes menu-frame-pulse {
-    0%, 100% { opacity: 0.55; filter: drop-shadow(0 0 6px rgba(0, 243, 255, 0.5)); }
-    50%      { opacity: 1;    filter: drop-shadow(0 0 14px rgba(0, 243, 255, 0.9)); }
+    0%, 100% { opacity: 0.65; filter: drop-shadow(0 0 6px rgba(0, 243, 255, 0.5)); }
+    50%      { opacity: 1;    filter: drop-shadow(0 0 16px rgba(0, 243, 255, 0.9)); }
 }
 
-/* Intro → main menu entrance. The intro's title sits centered; when
-   the player taps to continue, the menu's own title slides up into its
-   top position while the buttons slide up from below the fold. Both
-   use the same set of CSS transitions; JS adds .menu-entering for one
-   frame to seed the offset states, then removes it so the transitions
-   animate to the rest position. */
-#screen-start .glow-container,
-#screen-start .btn,
-#screen-start #login-streak,
-#screen-start .version,
-#screen-start .spacer,
-#screen-start #btn-load-save {
-    transition:
-        transform 620ms var(--ease-out-smart),
-        opacity 480ms ease-out;
-}
-#screen-start.menu-entering .glow-container {
-    transform: translateY(24vh) scale(1.12);
-    opacity: 0;
-}
+/* Intro → main menu entrance. The intro's title slides up into the menu
+   title's slot (JS-driven FLIP). The buttons then phase/glitch into place
+   with a chromatic-aberration flicker. While .menu-entering is on #screen-start,
+   the buttons are invisible; when JS removes it, the glitch-in animation plays
+   with a per-button stagger. */
 #screen-start.menu-entering .btn,
 #screen-start.menu-entering #login-streak,
-#screen-start.menu-entering .version,
 #screen-start.menu-entering #btn-load-save {
-    transform: translateY(60px);
     opacity: 0;
+    visibility: hidden;
 }
-/* Stagger the button slide-in on the OUT direction (class removal),
-   so each button arrives a beat after the last for a cascade. */
-#screen-start:not(.menu-entering) #btn-load-save { transition-delay: 80ms; }
-#screen-start:not(.menu-entering) #btn-start     { transition-delay: 150ms; }
-#screen-start:not(.menu-entering) #btn-daily     { transition-delay: 220ms; }
-#screen-start:not(.menu-entering) #btn-intel     { transition-delay: 290ms; }
-#screen-start:not(.menu-entering) #btn-upgrades  { transition-delay: 360ms; }
-#screen-start:not(.menu-entering) #login-streak  { transition-delay: 430ms; }
-#screen-start:not(.menu-entering) .version       { transition-delay: 500ms; }
-body.reduced-motion #screen-start .glow-container,
+#screen-start:not(.menu-entering) .btn,
+#screen-start:not(.menu-entering) #login-streak,
+#screen-start:not(.menu-entering) #btn-load-save {
+    animation: btn-glitch-in 780ms steps(1, end) both;
+}
+#screen-start:not(.menu-entering) #btn-load-save { animation-delay:  80ms; }
+#screen-start:not(.menu-entering) #btn-start     { animation-delay: 180ms; }
+#screen-start:not(.menu-entering) #btn-daily     { animation-delay: 300ms; }
+#screen-start:not(.menu-entering) #btn-intel     { animation-delay: 420ms; }
+#screen-start:not(.menu-entering) #btn-upgrades  { animation-delay: 540ms; }
+#screen-start:not(.menu-entering) #login-streak  { animation-delay: 620ms; }
+
+/* Glitch/phase-in: clipped wipes + horizontal RGB-split flickers + final
+   settle. Uses steps() timing so the glitch frames are crisp, not eased. */
+@keyframes btn-glitch-in {
+    0% {
+        opacity: 0;
+        visibility: visible;
+        transform: translate3d(-8px, 0, 0) skewX(-6deg);
+        clip-path: inset(0 100% 0 0);
+        filter: hue-rotate(120deg) saturate(2.4) brightness(1.4);
+    }
+    10% {
+        opacity: 1;
+        visibility: visible;
+        transform: translate3d(6px, 0, 0) skewX(4deg);
+        clip-path: inset(0 0 0 55%);
+        filter: hue-rotate(-40deg) saturate(2.2);
+    }
+    18% {
+        opacity: 0;
+        transform: translate3d(-3px, 1px, 0);
+        clip-path: inset(38% 0 42% 0);
+        filter: none;
+    }
+    28% {
+        opacity: 1;
+        transform: translate3d(3px, 0, 0) skewX(-2deg);
+        clip-path: inset(0 35% 0 0);
+        filter: hue-rotate(60deg) saturate(1.8);
+    }
+    40% {
+        opacity: 0.2;
+        transform: translate3d(-2px, 0, 0);
+        clip-path: inset(0 0 55% 0);
+    }
+    55% {
+        opacity: 1;
+        transform: translate3d(1px, 0, 0);
+        clip-path: inset(0);
+        filter: brightness(1.5) drop-shadow(0 0 10px var(--neon-blue));
+    }
+    70% {
+        opacity: 0.6;
+        transform: translate3d(-1px, 0, 0);
+        clip-path: inset(8% 0 0 0);
+    }
+    85%, 100% {
+        opacity: 1;
+        visibility: visible;
+        transform: none;
+        clip-path: inset(0);
+        filter: none;
+    }
+}
 body.reduced-motion #screen-start .btn,
 body.reduced-motion #screen-start #login-streak,
-body.reduced-motion #screen-start .version,
 body.reduced-motion #screen-start #btn-load-save {
-    transition: none;
-    transform: none !important;
+    animation: none !important;
     opacity: 1 !important;
+    visibility: visible !important;
+    transform: none !important;
+    clip-path: inset(0) !important;
+    filter: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+    #screen-start .btn,
+    #screen-start #login-streak,
+    #screen-start #btn-load-save {
+        animation: btn-fade-in 300ms ease-out both !important;
+        opacity: 1;
+        visibility: visible;
+        transform: none !important;
+        clip-path: inset(0) !important;
+        filter: none !important;
+    }
+}
+@keyframes btn-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
 }
 
 /* Title — add a pulsing halo behind it */
@@ -8374,6 +8452,133 @@ body.reduced-motion #screen-start #btn-load-save {
 @keyframes menu-title-halo {
     0%, 100% { transform: translate(-50%, -50%) scale(0.92); opacity: 0.55; }
     50%      { transform: translate(-50%, -50%) scale(1.08); opacity: 1; }
+}
+
+/* Main menu title — adopts the intro's neon pulse so the two screens share
+   a consistent identity. Preserves the gradient fill set in h1.title. */
+#screen-start h1.title {
+    animation:
+        text-flicker 5s infinite,
+        menu-title-pulse 3.2s ease-in-out infinite;
+}
+@keyframes menu-title-pulse {
+    0%, 100% {
+        filter:
+            drop-shadow(0 0 8px rgba(0, 243, 255, 0.6))
+            drop-shadow(0 0 14px rgba(188, 19, 254, 0.35));
+    }
+    50% {
+        filter:
+            drop-shadow(0 0 14px rgba(0, 243, 255, 0.9))
+            drop-shadow(0 0 26px rgba(188, 19, 254, 0.6))
+            drop-shadow(0 0 40px rgba(255, 0, 85, 0.35));
+    }
+}
+
+/* Main menu subtitle (OPERATOR TAZ / ASCENSION LEVEL N) — prefix with the
+   intro's "// " terminal marker and match its spaced blue styling so it reads
+   like the intro's sub-top line. */
+#screen-start .subtitle {
+    font-family: var(--font-cyber);
+    color: var(--neon-blue);
+    text-shadow:
+        0 0 5px var(--neon-blue),
+        0 0 14px rgba(0, 243, 255, 0.45);
+    letter-spacing: 0.42em;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    padding-left: 0.42em;
+}
+#screen-start .subtitle::before {
+    content: '// ';
+    opacity: 0.9;
+}
+
+/* Sleek neon button styling — scoped to the main menu only so no other
+   screen's buttons are affected. Thin translucent fill, crisp neon border,
+   bright text, with a subtle top/bottom accent line. */
+#screen-start .btn.primary,
+#screen-start .btn.secondary {
+    background: linear-gradient(180deg,
+        rgba(8, 18, 32, 0.55) 0%,
+        rgba(4, 10, 22, 0.78) 100%);
+    border: 1px solid var(--neon-color, var(--neon-blue));
+    border-left: 2px solid var(--neon-color, var(--neon-blue));
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+        0 0 12px rgba(0, 243, 255, 0.22),
+        0 0 28px rgba(0, 243, 255, 0.12);
+    color: #fff;
+    text-shadow:
+        0 0 4px rgba(255, 255, 255, 0.8),
+        0 0 10px var(--neon-color, var(--neon-blue)),
+        0 0 20px rgba(0, 243, 255, 0.4);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+}
+#screen-start .btn.primary {
+    --neon-color: var(--neon-blue);
+}
+#screen-start .btn.secondary {
+    --neon-color: rgba(255, 255, 255, 0.85);
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+        0 0 10px rgba(255, 255, 255, 0.18),
+        0 0 22px rgba(255, 255, 255, 0.08);
+    text-shadow:
+        0 0 4px rgba(255, 255, 255, 0.7),
+        0 0 10px rgba(255, 255, 255, 0.4);
+}
+#screen-start #btn-load-save {
+    --neon-color: var(--neon-gold);
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+        0 0 12px rgba(255, 215, 106, 0.28),
+        0 0 28px rgba(255, 215, 106, 0.14);
+    text-shadow:
+        0 0 4px rgba(255, 255, 255, 0.8),
+        0 0 10px var(--neon-gold),
+        0 0 20px rgba(255, 215, 106, 0.4);
+}
+#screen-start #btn-daily,
+#screen-start #btn-upgrades {
+    --neon-color: var(--neon-gold);
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+        0 0 12px rgba(255, 215, 106, 0.24),
+        0 0 26px rgba(255, 215, 106, 0.12);
+    text-shadow:
+        0 0 4px rgba(255, 255, 255, 0.75),
+        0 0 10px var(--neon-gold);
+}
+/* Thin neon accent line along the top edge inside the clip-path, for that
+   "HUD terminal" feel. Uses ::before which was unused on #screen-start .btn. */
+#screen-start .btn::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 10px; right: 10px;
+    height: 1px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        var(--neon-color, var(--neon-blue)) 40%,
+        var(--neon-color, var(--neon-blue)) 60%,
+        transparent 100%);
+    opacity: 0.75;
+    pointer-events: none;
+    z-index: 3;
+}
+@media (hover: hover) {
+    #screen-start .btn.primary:hover,
+    #screen-start .btn.secondary:hover {
+        background: linear-gradient(180deg,
+            rgba(14, 32, 52, 0.7) 0%,
+            rgba(6, 14, 28, 0.85) 100%);
+        box-shadow:
+            0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+            0 0 18px var(--neon-color, var(--neon-blue)),
+            0 0 40px rgba(0, 243, 255, 0.3);
+        filter: brightness(1.15);
+    }
 }
 
 /* Button shimmer — sweeping light reflection on hover + idle slow sheen */
