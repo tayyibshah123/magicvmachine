@@ -3287,9 +3287,15 @@ triggerPhaseGlitch() {
         name.textContent = SECTOR_NAMES[sectorNum] || '';
         // Surface the sector signature mechanic (Part 23) so the player
         // reads what rule will colour their combats here before stepping in.
+        // Only render when the sector actually has a mechanical effect —
+        // Sector 1 is the baseline and the blurb is pure flavour there.
         if (mech) {
             const mechData = SECTOR_MECHANICS[sectorNum];
-            mech.textContent = mechData
+            const hasRealMech = !!(mechData && (
+                mechData.enemyShieldBonus || mechData.playerHeatDmg ||
+                mechData.minionDmgMult || mechData.damageNoiseRange
+            ));
+            mech.textContent = hasRealMech
                 ? `${mechData.label} — ${mechData.desc}`
                 : '';
         }
@@ -7087,9 +7093,16 @@ async startCombat(type) {
         // scripted moments stay clean.
         const sectorMech = SECTOR_MECHANICS[this.sector];
         const mechPill = document.getElementById('sector-mech-pill');
+        // Only surface the pill when the sector actually changes combat —
+        // Sector 1 is labelled "Standard Ops" with no effect fields, so
+        // showing that pill is visual noise for an empty rule.
+        const hasRealMech = !!(sectorMech && (
+            sectorMech.enemyShieldBonus || sectorMech.playerHeatDmg ||
+            sectorMech.minionDmgMult || sectorMech.damageNoiseRange
+        ));
         if (sectorMech && this.currentState !== STATE.TUTORIAL_COMBAT) {
             this._activeSectorMech = sectorMech;
-            if (mechPill) mechPill.textContent = sectorMech.label || '';
+            if (mechPill) mechPill.textContent = hasRealMech ? (sectorMech.label || '') : '';
             if (sectorMech.enemyShieldBonus && !this.enemy.isBoss) {
                 this.enemy.shield = (this.enemy.shield || 0) + sectorMech.enemyShieldBonus;
                 if (Array.isArray(this.enemy.minions)) {

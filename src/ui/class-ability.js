@@ -169,11 +169,14 @@ export const ClassAbility = {
             const gain = (isTacAttack && traits.pipPerAttack > 0) ? traits.pipPerAttack : 1;
             state.pips = Math.min(CFG.tactician.pipMax, state.pips + gain);
         }
-        // Summoner: every player-minion SUMMON (from any source — MINION die,
-        // signature die, event, relic, class ability, starting spawn) advances
-        // the least-mature plot by one stage. Keeps the grove rewarding
-        // active summoning, complements the existing passive growth on turn end.
-        if (classId === 'summoner' && type === 'minion_summoned') {
+        // Summoner: player-minion SUMMON or UPGRADE (from any source — MINION
+        // die, signature die, event, relic, class ability, starting spawn,
+        // dice upgrades) immediately blooms the youngest unbloomed plot, so
+        // the player can tap it for a Spirit / Amplify on the SAME turn the
+        // trigger fired. This replaces the previous +1-stage-per-summon
+        // model, which only fully bloomed plots via the end-of-turn passive
+        // tick and left new Summoners wondering why nothing was usable.
+        if (classId === 'summoner' && (type === 'minion_summoned' || type === 'minion_upgraded')) {
             // Pick the youngest plot so growth spreads across the grove rather
             // than stacking on a single already-bloomed plot.
             let youngestIdx = -1;
@@ -183,11 +186,10 @@ export const ClassAbility = {
                 }
             }
             if (youngestIdx >= 0) {
-                state.plots[youngestIdx] = Math.min(2, state.plots[youngestIdx] + 1);
+                state.plots[youngestIdx] = 2; // jump straight to Bloom
                 if (Game.player) {
                     ParticleSys.createFloatingText(Game.player.x - 60, Game.player.y - 40,
-                        state.plots[youngestIdx] === 2 ? 'BLOOM!' : 'GROW',
-                        '#00ff99');
+                        'BLOOM!', '#00ff99');
                 }
             }
         }

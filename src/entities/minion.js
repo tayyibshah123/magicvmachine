@@ -90,7 +90,7 @@ class Minion extends Entity {
         this.currentHp += 1;
         this.dmg += 1;
         this.level++;
-        
+
         if (this.name.includes("Bomb")) {
             this.charges++;
             ParticleSys.createFloatingText(this.x, this.y - 100, "+1 CHARGE", COLORS.ORANGE);
@@ -99,6 +99,20 @@ class Minion extends Entity {
         ParticleSys.createFloatingText(this.x, this.y - 80, "UPGRADE!", COLORS.GOLD);
         this.playAnim('pulse');
         AudioMgr.playSound('upgrade');
+
+        // Fire a grove-trigger event so Summoner's Sacred Grove blooms a
+        // plot on upgrade just like it does on summon. Same late-binding
+        // dynamic import pattern used in the constructor to dodge the
+        // entity.js ↔ class-ability.js circular import.
+        if (this.isPlayerSide) {
+            try {
+                import('../ui/class-ability.js').then(mod => {
+                    if (mod && mod.ClassAbility && typeof mod.ClassAbility.onEvent === 'function') {
+                        mod.ClassAbility.onEvent('minion_upgraded', { minion: this });
+                    }
+                }).catch(() => { /* ignore */ });
+            } catch (_) { /* ignore */ }
+        }
     }
 }
 
