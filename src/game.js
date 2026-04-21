@@ -1523,9 +1523,12 @@ startQTE(type, x, y, callback) {
                      if (this.enemy) {
                          ParticleSys.createShockwave(this.enemy.x, this.enemy.y, COLORS.GOLD, 32);
                          ParticleSys.createExplosion(this.enemy.x, this.enemy.y, 24, COLORS.GOLD);
+                         // QTE object never sets plain .x / .y — only targetX / targetY.
+                         // Reading .x / .y gave undefined, so the shatter ring + shards
+                         // rendered at (0, 0) in the top-left corner of the canvas.
                          this.effects.push({
                              type: 'qte_shatter',
-                             x: this.qte.x, y: this.qte.y,
+                             x: this.qte.targetX, y: this.qte.targetY,
                              baseRadius: this.qte.radius || 30,
                              life: 28, maxLife: 28,
                              color: COLORS.GOLD
