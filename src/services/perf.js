@@ -170,18 +170,29 @@ export const Perf = {
         const UPGRADE_FPS   = 58;
         const DOWNGRADE_COOL_MS = 15000; // don't re-check too often
         let last = performance.now();
-        let deltas = [];
+        // Circular buffer — O(1) per frame. Previously used Array.shift()
+        // on a 180-entry Array, which was O(n) × 60fps = 10k+ ops/sec of
+        // pure churn and contributed to mobile GC stalls.
+        const deltas = new Float32Array(WINDOW);
+        let writeIdx = 0;
+        let filled = 0;
         let sum = 0;
         let lastChange = performance.now();
         const tick = (now) => {
             const dt = now - last;
             last = now;
-            deltas.push(dt);
-            sum += dt;
-            if (deltas.length > WINDOW) sum -= deltas.shift();
+            if (filled < WINDOW) {
+                deltas[writeIdx] = dt;
+                sum += dt;
+                filled++;
+            } else {
+                sum += dt - deltas[writeIdx];
+                deltas[writeIdx] = dt;
+            }
+            writeIdx = (writeIdx + 1) % WINDOW;
             // Only react once we have a full window + cool-down elapsed.
-            if (deltas.length >= WINDOW && (now - lastChange) > DOWNGRADE_COOL_MS) {
-                const avgDt = sum / deltas.length;
+            if (filled >= WINDOW && (now - lastChange) > DOWNGRADE_COOL_MS) {
+                const avgDt = sum / WINDOW;
                 const fps = 1000 / avgDt;
                 if (fps < DOWNGRADE_FPS && this.tier !== 'low') {
                     const nextTier = this.tier === 'high' ? 'mid' : 'low';

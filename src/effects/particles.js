@@ -240,17 +240,20 @@ const ParticleSys = {
         }
     },
 
-    // Nearby recent floating texts get staggered by a short gap so a burst
+    // Nearby recent floating texts get staggered by a longer gap so a burst
     // of simultaneous status labels (OVERFLOW, BLOOD TIER UP, COMBO, …)
     // cascades one at a time instead of piling into an unreadable stack.
     // Only labels landing in the same region (~220 px) and within a short
-    // window (~800 ms) are delayed — labels on opposite sides of the screen
+    // window (~2000 ms) are delayed — labels on opposite sides of the screen
     // still fire instantly. Damage numbers pass `immediate: true` since
     // they must sync with the impact beat; the stagger is for status text.
+    // Queued texts also receive a small vertical offset per stack-index so
+    // they don't visually overlap while the earlier one is still floating up.
     _recentFloatingTexts: [],
-    _FT_NEAR: 220,       // px radius for "same region"
-    _FT_STAGGER: 220,    // ms gap between successive nearby texts
-    _FT_WINDOW: 800,     // ms before a recent entry is pruned
+    _FT_NEAR: 220,        // px radius for "same region"
+    _FT_STAGGER: 420,     // ms gap between successive nearby texts
+    _FT_WINDOW: 2000,     // ms before a recent entry is pruned
+    _FT_Y_STEP: 36,       // px downward offset per stack index
     createFloatingText(x, y, text, color, opts) {
         if (opts && opts.immediate) {
             this._spawnFloatingText(x, y, text, color, opts);
@@ -265,22 +268,27 @@ const ParticleSys = {
             }
         }
         this._recentFloatingTexts = fresh;
-        // Find the latest nearby entry — the new text waits a gap after it.
+        // Count how many nearby recent entries we already have so the new one
+        // knows its stack index (for vertical offset + staggered fire time).
         let latest = 0;
+        let stackIndex = 0;
+        const nearSq = this._FT_NEAR * this._FT_NEAR;
         for (let i = 0; i < fresh.length; i++) {
             const r = fresh[i];
             const dx = r.x - x, dy = r.y - y;
-            if (dx * dx + dy * dy < this._FT_NEAR * this._FT_NEAR && r.time > latest) {
-                latest = r.time;
+            if (dx * dx + dy * dy < nearSq) {
+                stackIndex++;
+                if (r.time > latest) latest = r.time;
             }
         }
         const delay = latest > 0 ? Math.max(0, latest + this._FT_STAGGER - now) : 0;
         const fireAt = now + delay;
-        this._recentFloatingTexts.push({ x, y, time: fireAt });
+        const stackY = y + stackIndex * this._FT_Y_STEP;
+        this._recentFloatingTexts.push({ x, y: stackY, time: fireAt });
         if (delay === 0) {
-            this._spawnFloatingText(x, y, text, color, opts);
+            this._spawnFloatingText(x, stackY, text, color, opts);
         } else {
-            setTimeout(() => this._spawnFloatingText(x, y, text, color, opts), delay);
+            setTimeout(() => this._spawnFloatingText(x, stackY, text, color, opts), delay);
         }
     },
     _spawnFloatingText(x, y, text, color, opts) {

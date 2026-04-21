@@ -295,7 +295,12 @@ const Game = {
         if (typeof Achievements !== 'undefined') {
             if (this.techFragments >= 10000) Achievements.unlock('FRAGMENTS_10K');
         }
-        requestAnimationFrame(this.loop.bind(this));
+        // Bind the loop ONCE so requestAnimationFrame doesn't allocate a new
+        // bound function every frame. That allocation was a steady source of
+        // GC churn on mobile and correlated with the combat-lag drift
+        // players hit after several minutes of play.
+        this._boundLoop = this.loop.bind(this);
+        requestAnimationFrame(this._boundLoop);
     },
 
      bindEvents() {
@@ -13502,16 +13507,28 @@ drawEffects() {
             dt = 0;
         }
 
-        // Rolling FPS sample for adaptive quality manager
-        this._fpsSamples = this._fpsSamples || [];
-        if (dt > 0) this._fpsSamples.push(1 / dt);
-        if (this._fpsSamples.length > 60) this._fpsSamples.shift();
+        // Rolling FPS sample for adaptive quality manager. Circular buffer
+        // (fixed-size Float32Array + write index) so we don't do per-frame
+        // array.shift() — that was O(n) on 60 items every frame and compounded
+        // into visible GC pressure on mid-tier mobile during long combats.
+        if (!this._fpsSamples) {
+            this._fpsSamples = new Float32Array(60);
+            this._fpsWrite = 0;
+            this._fpsCount = 0;
+        }
+        if (dt > 0) {
+            this._fpsSamples[this._fpsWrite] = 1 / dt;
+            this._fpsWrite = (this._fpsWrite + 1) % 60;
+            if (this._fpsCount < 60) this._fpsCount++;
+        }
 
         // Re-evaluate quality every ~60 frames; smooth changes via hysteresis
         this._qualityCheckFrame = (this._qualityCheckFrame || 0) + 1;
-        if (this._qualityCheckFrame >= 60 && this._fpsSamples.length >= 30) {
+        if (this._qualityCheckFrame >= 60 && this._fpsCount >= 30) {
             this._qualityCheckFrame = 0;
-            const avg = this._fpsSamples.reduce((a, b) => a + b, 0) / this._fpsSamples.length;
+            let sum = 0;
+            for (let i = 0; i < this._fpsCount; i++) sum += this._fpsSamples[i];
+            const avg = sum / this._fpsCount;
             // Only step at most ±1 quality tier per check to avoid flapping
             let q = ParticleSys.quality;
             if (avg < 38 && q > 0.4) q = Math.max(0.4, q - 0.3);
@@ -13549,7 +13566,7 @@ drawEffects() {
                 STATE.TUTORIAL, STATE.EVENT, STATE.INTEL
             ]);
             if (domOnlyStates.has(this.currentState)) {
-                requestAnimationFrame(this.loop.bind(this));
+                requestAnimationFrame(this._boundLoop);
                 return;
             }
 
@@ -13557,7 +13574,7 @@ drawEffects() {
 
             if (this.currentState === STATE.META) {
                 this.drawSanctuary(dt);
-                requestAnimationFrame(this.loop.bind(this));
+                requestAnimationFrame(this._boundLoop);
                 return;
             }
 
@@ -13655,7 +13672,7 @@ drawEffects() {
             this.ctx.restore();
         }
 
-        requestAnimationFrame(this.loop.bind(this));
+        requestAnimationFrame(this._boundLoop);
     },
 
 // --- DRAWING HELPERS ---
