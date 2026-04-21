@@ -4,17 +4,28 @@
 
 export const ASCENSION_TWISTS = [
     // Level 0 — base game, no twist
-    { level: 0, name: 'Standard',     desc: 'Standard run.',                              effect: { } },
-    { level: 1, name: 'Tougher Foes', desc: 'All enemies have +10% HP.',                 effect: { enemyHpMult: 1.10 } },
-    { level: 2, name: 'Sharper Blows',desc: 'Enemy attacks deal +10% damage.',           effect: { enemyDmgMult: 1.10 } },
-    { level: 3, name: 'Lean Start',   desc: 'You start each combat with -1 base mana.',  effect: { startManaPenalty: -1 } },
-    { level: 4, name: 'Brittle Hull', desc: 'You take +1 damage from every source.',     effect: { incomingFlat: 1 } },
-    { level: 5, name: 'Compounding',  desc: 'Stacks the previous four effects.',         effect: { stack: true } },
-    { level: 6, name: 'Heavy Bosses', desc: 'Bosses gain +25% HP.',                      effect: { bossHpMult: 1.25 } },
-    { level: 7, name: 'Less Reroll',  desc: '-1 reroll per turn.',                       effect: { rerollPenalty: -1 } },
-    { level: 8, name: 'Ablative Foes',desc: 'All non-boss enemies start with 5 shield.', effect: { enemyShieldStart: 5 } },
-    { level: 9, name: 'No Mercy',     desc: 'Elites become as strong as bosses.',        effect: { elitesAsBosses: true } },
-    { level: 10,name: 'Apex',         desc: 'Apex challenge: all twists active + relic prices doubled.', effect: { apex: true } },
+    { level: 0,  name: 'Standard',        desc: 'Standard run.',                                   effect: { } },
+    { level: 1,  name: 'Tougher Foes',    desc: 'All enemies have +10% HP.',                       effect: { enemyHpMult: 1.10 } },
+    { level: 2,  name: 'Sharper Blows',   desc: 'Enemy attacks deal +10% damage.',                 effect: { enemyDmgMult: 1.10 } },
+    { level: 3,  name: 'Lean Start',      desc: 'You start each combat with -1 base mana.',        effect: { startManaPenalty: -1 } },
+    { level: 4,  name: 'Brittle Hull',    desc: 'You take +1 damage from every source.',           effect: { incomingFlat: 1 } },
+    { level: 5,  name: 'Compounding',     desc: 'Stacks the previous four effects.',               effect: { stack: true } },
+    { level: 6,  name: 'Heavy Bosses',    desc: 'Bosses gain +25% HP.',                            effect: { bossHpMult: 1.25 } },
+    { level: 7,  name: 'Less Reroll',     desc: '-1 reroll per turn.',                             effect: { rerollPenalty: -1 } },
+    { level: 8,  name: 'Ablative Foes',   desc: 'All non-boss enemies start with 5 shield.',       effect: { enemyShieldStart: 5 } },
+    { level: 9,  name: 'No Mercy',        desc: 'Elites become as strong as bosses.',              effect: { elitesAsBosses: true } },
+    { level: 10, name: 'Apex',            desc: 'All prior twists active; relic prices doubled.',  effect: { apex: true, shopPriceMult: 2 } },
+    // ---- Ascension 2.0 extension (Roadmap Part 28) ------------------
+    { level: 11, name: 'Null Field',      desc: 'Relic costs +40% fragments.',                     effect: { shopPriceMult: 1.4 } },
+    { level: 12, name: 'Unmaking Strike', desc: 'Every 5 turns a random relic loses a stack.',     effect: { relicDecayEveryN: 5 } },
+    { level: 13, name: 'Entropy Drift',   desc: 'Lose 5% max HP every sector transition.',         effect: { maxHpLossPerSector: 0.05 } },
+    { level: 14, name: 'Conservation Law',desc: 'Overheal becomes damage over time.',              effect: { overhealBecomesDot: true } },
+    { level: 15, name: 'Mirror World',    desc: 'Enemies copy the player\'s last-played die.',     effect: { enemyCopiesLastDie: true } },
+    { level: 16, name: 'Endless Loop',    desc: 'Boss Phase 3 lasts two extra turns.',             effect: { bossPhase3Bonus: 2 } },
+    { level: 17, name: 'Aurelia\'s Curse',desc: 'All chance rolls are taken twice — worse wins.',  effect: { doubleRollWorse: true } },
+    { level: 18, name: 'Dark Contract',   desc: 'No rewards on elite kills.',                      effect: { noEliteRewards: true } },
+    { level: 19, name: 'Apostate',        desc: 'Lose one passive meta-upgrade effect per run.',   effect: { loseOneMeta: true } },
+    { level: 20, name: 'The Final Archive',desc: 'Archivist (Sector X) becomes a required boss.',  effect: { forceArchivist: true } },
 ];
 
 const KEY_UNLOCKED = 'mvm_ascension_unlocked';
@@ -47,23 +58,49 @@ export const Ascension = {
     // Resolve the cumulative effect at a level (stacks effects ≤ level when twist.stack is true)
     activeEffects(level) {
         const eff = {
+            // Legacy L1-L10 keys
             enemyHpMult: 1, enemyDmgMult: 1, startManaPenalty: 0,
             incomingFlat: 0, bossHpMult: 1, rerollPenalty: 0,
-            enemyShieldStart: 0, elitesAsBosses: false, apex: false
+            enemyShieldStart: 0, elitesAsBosses: false, apex: false,
+            // Ascension 2.0 keys (L11-L20). Data present on the effect
+            // object even when the applier isn't yet wired, so UI can
+            // surface the active modifier list accurately.
+            shopPriceMult: 1,
+            relicDecayEveryN: 0,
+            maxHpLossPerSector: 0,
+            overhealBecomesDot: false,
+            enemyCopiesLastDie: false,
+            bossPhase3Bonus: 0,
+            doubleRollWorse: false,
+            noEliteRewards: false,
+            loseOneMeta: false,
+            forceArchivist: false
         };
         for (let l = 1; l <= level; l++) {
             const t = ASCENSION_TWISTS[l] && ASCENSION_TWISTS[l].effect;
             if (!t) continue;
-            // Levels that don't "stack: true" still apply themselves
-            if (t.enemyHpMult)    eff.enemyHpMult    *= t.enemyHpMult;
-            if (t.enemyDmgMult)   eff.enemyDmgMult   *= t.enemyDmgMult;
-            if (t.startManaPenalty) eff.startManaPenalty += t.startManaPenalty;
-            if (t.incomingFlat)   eff.incomingFlat   += t.incomingFlat;
-            if (t.bossHpMult)     eff.bossHpMult     *= t.bossHpMult;
-            if (t.rerollPenalty)  eff.rerollPenalty  += t.rerollPenalty;
+            // Numeric stacking
+            if (t.enemyHpMult)        eff.enemyHpMult      *= t.enemyHpMult;
+            if (t.enemyDmgMult)       eff.enemyDmgMult     *= t.enemyDmgMult;
+            if (t.startManaPenalty)   eff.startManaPenalty += t.startManaPenalty;
+            if (t.incomingFlat)       eff.incomingFlat     += t.incomingFlat;
+            if (t.bossHpMult)         eff.bossHpMult       *= t.bossHpMult;
+            if (t.rerollPenalty)      eff.rerollPenalty    += t.rerollPenalty;
+            if (t.shopPriceMult)      eff.shopPriceMult    *= t.shopPriceMult;
+            if (t.maxHpLossPerSector) eff.maxHpLossPerSector = Math.max(eff.maxHpLossPerSector, t.maxHpLossPerSector);
+            if (t.bossPhase3Bonus)    eff.bossPhase3Bonus  += t.bossPhase3Bonus;
+            if (t.relicDecayEveryN)   eff.relicDecayEveryN = t.relicDecayEveryN; // latest wins
+            // Max-taking
             if (t.enemyShieldStart) eff.enemyShieldStart = Math.max(eff.enemyShieldStart, t.enemyShieldStart);
-            if (t.elitesAsBosses) eff.elitesAsBosses = true;
-            if (t.apex) eff.apex = true;
+            // Flags
+            if (t.elitesAsBosses)     eff.elitesAsBosses    = true;
+            if (t.apex)               eff.apex              = true;
+            if (t.overhealBecomesDot) eff.overhealBecomesDot= true;
+            if (t.enemyCopiesLastDie) eff.enemyCopiesLastDie= true;
+            if (t.doubleRollWorse)    eff.doubleRollWorse   = true;
+            if (t.noEliteRewards)     eff.noEliteRewards    = true;
+            if (t.loseOneMeta)        eff.loseOneMeta       = true;
+            if (t.forceArchivist)     eff.forceArchivist    = true;
         }
         return eff;
     },

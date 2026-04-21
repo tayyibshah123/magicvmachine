@@ -47,80 +47,49 @@
             <!-- CRT Scanline & Vignette Overlay -->
             <div id="crt-overlay"></div>
 
-            <!-- Intro splash (first thing shown on launch) -->
-            <div id="intro-overlay" role="button" tabindex="0" aria-label="Tap to continue">
-                <!-- Nebula backdrop (3 drifting colored clouds) -->
-                <div class="intro-nebula intro-nebula-a"></div>
-                <div class="intro-nebula intro-nebula-b"></div>
-                <div class="intro-nebula intro-nebula-c"></div>
+            <!-- Intro splash (first thing shown on launch). V2 rework:
+                 every size is authored in container-query units (cqw / cqh /
+                 cqmin) so the layout renders identically on mobile and
+                 desktop. Decorative layers are kept minimal so the brand
+                 moment is clean, not cluttered. -->
+            <div id="intro-overlay" class="intro-v2" role="button" tabindex="0" aria-label="Tap to continue">
+                <!-- Layered backgrounds — all use container-percent dimensions
+                     so they track the container box identically across sizes. -->
+                <div class="introv2-bg"></div>
+                <div class="introv2-vignette"></div>
+                <div class="introv2-scanlines"></div>
+                <div class="introv2-gridfloor"></div>
 
-                <!-- Starfield (deep space twinkle) -->
-                <div class="intro-starfield">
-                    <span></span><span></span><span></span><span></span><span></span><span></span>
-                    <span></span><span></span><span></span><span></span><span></span><span></span>
-                    <span></span><span></span><span></span><span></span><span></span><span></span>
-                    <span></span><span></span><span></span><span></span><span></span><span></span>
-                </div>
-
-                <div class="intro-scanlines"></div>
-                <div class="intro-vignette"></div>
-
-                <!-- Perspective grid floor (kept) -->
-                <div class="intro-grid"></div>
-                <div class="intro-grid intro-grid-top"></div>
-
-                <!-- Horizontal scan beam sweeping across -->
-                <div class="intro-scanbeam"></div>
-
-                <!-- Radial pulse behind title -->
-                <div class="intro-pulse"></div>
-
-                <!-- Expanding rings from center — 6 for denser coverage so
-                     at every animation moment at least 2-3 rings are visible. -->
-                <div class="intro-rings">
-                    <span></span><span></span><span></span>
-                    <span></span><span></span><span></span>
-                </div>
-
-                <!-- Animated light rays fanning out from title -->
-                <div class="intro-rays"></div>
-
-                <!-- Darting light streaks / meteors -->
-                <div class="intro-streaks">
-                    <span></span><span></span><span></span><span></span>
-                </div>
-
-                <!-- Rising particle motes (kept) -->
-                <div class="intro-particles">
-                    <span></span><span></span><span></span><span></span><span></span>
-                    <span></span><span></span><span></span><span></span><span></span>
-                    <span></span><span></span><span></span><span></span><span></span>
-                    <span></span><span></span><span></span>
-                </div>
-
-                <!-- Corner tech frame -->
-                <div class="intro-corner tl"></div>
-                <div class="intro-corner tr"></div>
-                <div class="intro-corner bl"></div>
-                <div class="intro-corner br"></div>
-
-                <div class="intro-content">
-                    <h1 class="intro-title" data-text="MvM">
-                        <span class="m1" data-char="M">M</span><span class="vs-sep" data-char="v">v</span><span class="m2" data-char="M">M</span>
-                        <span class="intro-title-full">MAGIC <span class="vs-small">v</span> MACHINE</span>
-                    </h1>
-                    <div class="intro-rule">
-                        <span class="intro-rule-left"></span>
-                        <span class="intro-rule-node"></span>
-                        <span class="intro-rule-right"></span>
+                <!-- Centered brand block -->
+                <div class="introv2-center">
+                    <div class="introv2-pulse" aria-hidden="true"></div>
+                    <div class="introv2-brand">
+                        <span class="introv2-sub-top">// SYSTEM BOOT</span>
+                        <h1 class="introv2-title">
+                            <span class="introv2-word">MAGIC</span>
+                            <span class="introv2-vs" aria-hidden="true">v</span>
+                            <span class="introv2-word">MACHINE</span>
+                        </h1>
+                        <div class="introv2-divider" aria-hidden="true">
+                            <span class="introv2-divider-line"></span>
+                            <span class="introv2-divider-node"></span>
+                            <span class="introv2-divider-line"></span>
+                        </div>
+                        <div class="introv2-tagline">A CYBER&ndash;ROGUELITE</div>
                     </div>
-                    <div class="intro-tap">
-                        <span class="intro-bracket">&#91;</span>
-                        <span class="intro-tap-text">TAP TO CONTINUE</span>
-                        <span class="intro-bracket">&#93;</span>
-                        <span class="intro-tap-sweep"></span>
+                    <div class="introv2-tap" aria-live="polite">
+                        <span class="introv2-tap-bracket">[</span>
+                        <span class="introv2-tap-text">TAP TO CONTINUE</span>
+                        <span class="introv2-tap-bracket">]</span>
                     </div>
                 </div>
+
+                <!-- Corner tech brackets — pure CSS, scale via cqmin so they
+                     stay the same visual weight on any device. -->
+                <span class="introv2-corner introv2-corner-tl" aria-hidden="true"></span>
+                <span class="introv2-corner introv2-corner-tr" aria-hidden="true"></span>
+                <span class="introv2-corner introv2-corner-bl" aria-hidden="true"></span>
+                <span class="introv2-corner introv2-corner-br" aria-hidden="true"></span>
             </div>
 
             <!-- Tooltip -->
@@ -187,10 +156,50 @@
             <!-- Character Select -->
             <div id="screen-char-select" class="screen hidden">
                 <h2 class="neon-text-blue">SELECT OPERATOR</h2>
+                <!-- Custom Run panel (Roadmap Part 29). Hidden until the
+                     player unlocks Ascension 1+. JS toggles display. -->
+                <div id="custom-run-bar" class="custom-run-bar hidden">
+                    <div class="custom-run-bar-info">
+                        <span class="custom-run-bar-label">CUSTOM RUN</span>
+                        <span id="custom-run-bar-summary" class="custom-run-bar-summary">Standard run</span>
+                    </div>
+                    <button id="btn-custom-run" class="btn secondary">CONFIGURE</button>
+                </div>
                 <div id="char-grid" class="char-grid">
                     <!-- Populated by JS -->
                 </div>
                 <button id="btn-back-char" class="btn secondary">ABORT</button>
+
+                <!-- Custom Run configuration modal -->
+                <div id="custom-run-modal" class="custom-run-modal hidden" role="dialog" aria-modal="true">
+                    <div class="custom-run-panel glass-panel glass-panel--premium">
+                        <h3 class="custom-run-title neon-text-pink">CUSTOM RUN</h3>
+                        <p class="custom-run-sub">Stack modifiers to sharpen the run. Payout scales with the difficulty you accept.</p>
+                        <div class="custom-run-sections">
+                            <div class="custom-run-section" data-kind="negative">
+                                <div class="custom-run-section-head neon-text-pink">Harder &mdash; bigger payout</div>
+                                <div class="custom-run-grid" data-kind="negative"></div>
+                            </div>
+                            <div class="custom-run-section" data-kind="chaotic">
+                                <div class="custom-run-section-head neon-text-purple">Chaotic</div>
+                                <div class="custom-run-grid" data-kind="chaotic"></div>
+                            </div>
+                            <div class="custom-run-section" data-kind="positive">
+                                <div class="custom-run-section-head neon-text-green">Easier &mdash; reduced payout</div>
+                                <div class="custom-run-grid" data-kind="positive"></div>
+                            </div>
+                        </div>
+                        <div class="custom-run-footer">
+                            <div class="custom-run-net">
+                                NET PAYOUT: <span id="custom-run-net">100%</span>
+                            </div>
+                            <div class="custom-run-actions">
+                                <button id="btn-custom-run-clear" class="btn secondary">CLEAR</button>
+                                <button id="btn-custom-run-apply" class="btn primary">APPLY</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Detail overlay (expands when a class card is tapped) -->
                 <div id="char-detail-overlay" class="char-detail-overlay hidden">
@@ -290,15 +299,42 @@
                     Encrypted Files: <span id="encrypted-count">0</span>
                 </div>
 
-                <div id="lore-grid" class="lore-grid">
-                    <!-- Populated by JS -->
+                <!-- Intel 2.0 tab bar (Roadmap Part 27). Three tabs —
+                     Cipher (lore), Bestiary (defeated enemies), Chronicle
+                     (recent runs). Tab switching is handled in game.js. -->
+                <div id="intel-tabs" class="intel-tabs" role="tablist">
+                    <button class="intel-tab active" data-intel-tab="cipher" role="tab">CIPHER</button>
+                    <button class="intel-tab" data-intel-tab="bestiary" role="tab">BESTIARY</button>
+                    <button class="intel-tab" data-intel-tab="chronicle" role="tab">CHRONICLE</button>
+                </div>
+
+                <!-- Cipher pane (original lore grid) -->
+                <div class="intel-pane active" data-intel-pane="cipher">
+                    <div id="lore-grid" class="lore-grid">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Bestiary pane (in-place; previously a separate screen) -->
+                <div class="intel-pane" data-intel-pane="bestiary">
+                    <div id="intel-bestiary-grid" class="codex-grid"></div>
+                    <div id="intel-bestiary-empty" class="intel-empty" style="display: none;">
+                        No enemies defeated yet. Go clear a combat to populate the Bestiary.
+                    </div>
+                </div>
+
+                <!-- Chronicle pane — last 20 runs as a scrollable timeline -->
+                <div class="intel-pane" data-intel-pane="chronicle">
+                    <div id="intel-chronicle-list" class="intel-chronicle"></div>
+                    <div id="intel-chronicle-empty" class="intel-empty" style="display: none;">
+                        No runs logged yet. Every run — win or loss — appears here for review.
+                    </div>
                 </div>
 
                 <div class="spacer"></div>
 
                 <div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;">
                     <button id="btn-decrypt" class="btn primary neon-border-pink">DECRYPT FILE</button>
-                    <button id="btn-view-codex" class="btn secondary">CODEX</button>
                     <button id="btn-back-intel" class="btn secondary">RETURN</button>
                 </div>
             </div>
@@ -495,11 +531,26 @@
                     <h3 class="neon-text-white settings-title">SYSTEM SETTINGS</h3>
 
                     <div class="settings-tabs" role="tablist">
-                        <button class="settings-tab active" data-tab="audio" role="tab">AUDIO</button>
-                        <button class="settings-tab" data-tab="display" role="tab">DISPLAY</button>
-                        <button class="settings-tab" data-tab="gameplay" role="tab">GAMEPLAY</button>
-                        <button class="settings-tab" data-tab="credits" role="tab">CREDITS</button>
-                        <button class="settings-tab" data-tab="dev" role="tab">DEV</button>
+                        <button class="settings-tab active" data-tab="audio" role="tab" aria-label="Audio">
+                            <span class="settings-tab-full">AUDIO</span>
+                            <span class="settings-tab-short">AUD</span>
+                        </button>
+                        <button class="settings-tab" data-tab="display" role="tab" aria-label="Display">
+                            <span class="settings-tab-full">DISPLAY</span>
+                            <span class="settings-tab-short">DSP</span>
+                        </button>
+                        <button class="settings-tab" data-tab="gameplay" role="tab" aria-label="Gameplay">
+                            <span class="settings-tab-full">GAMEPLAY</span>
+                            <span class="settings-tab-short">GAME</span>
+                        </button>
+                        <button class="settings-tab" data-tab="credits" role="tab" aria-label="Credits">
+                            <span class="settings-tab-full">CREDITS</span>
+                            <span class="settings-tab-short">CRED</span>
+                        </button>
+                        <button class="settings-tab" data-tab="dev" role="tab" aria-label="Dev">
+                            <span class="settings-tab-full">DEV</span>
+                            <span class="settings-tab-short">DEV</span>
+                        </button>
                     </div>
 
                     <div class="settings-body">

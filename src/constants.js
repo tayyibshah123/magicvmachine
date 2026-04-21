@@ -532,7 +532,32 @@ const ENEMIES = [
     // Sector 5 — expansion (5.2.1)
     { name: "Null Priest",      hp: 180, dmg: 25, sector: 5, shape: 'wisp',   kind: 'shield_break' },
     { name: "Entropy",          hp: 200, dmg: 20, sector: 5, shape: 'sniper', kind: 'chaotic' },
-    { name: "Silent Observer",  hp: 160, dmg: 35, sector: 5, shape: 'spider', kind: 'observer' }
+    { name: "Silent Observer",  hp: 160, dmg: 35, sector: 5, shape: 'spider', kind: 'observer' },
+
+    /* ==== Part 23 roster expansion — fresh enemies per sector ========
+       Reuse existing `kind` values (handled in game.js intent logic) so
+       each new enemy is mechanically unique without requiring new handler
+       code. This doubles the effective variety of each sector's draw. */
+    // Sector 1 — Downtown Glass
+    { name: "Watcher Pod",      hp: 32, dmg: 6,  sector: 1, shape: 'drone',  kind: 'observer' },
+    { name: "Paper Pusher",     hp: 36, dmg: 5,  sector: 1, shape: 'tank',   kind: 'swarm',    summonOnStart: 1 },
+    { name: "Signal Jammer",    hp: 30, dmg: 7,  sector: 1, shape: 'wisp',   kind: 'mirror' },
+    // Sector 2 — Cryo Docks
+    { name: "Cargo Hauler",     hp: 80, dmg: 10, sector: 2, shape: 'tank',   kind: 'armored' },
+    { name: "Icicle Sniper",    hp: 42, dmg: 16, sector: 2, shape: 'sniper', kind: 'frost' },
+    { name: "Freezer Drone",    hp: 48, dmg: 8,  sector: 2, shape: 'drone',  kind: 'frost' },
+    // Sector 3 — Foundry Ravine
+    { name: "Forge Welder",     hp: 110, dmg: 14, sector: 3, shape: 'tank',   kind: 'immolate' },
+    { name: "Slag Mech",        hp: 130, dmg: 16, sector: 3, shape: 'tank',   kind: 'aoe_sweep' },
+    { name: "Ember Swarm",      hp: 50,  dmg: 10, sector: 3, shape: 'drone',  kind: 'swarm',    summonOnStart: 2 },
+    // Sector 4 — Hive Vectors
+    { name: "Hive Conduit",     hp: 140, dmg: 12, sector: 4, shape: 'wisp',   kind: 'buffer' },
+    { name: "Parasite Carrier", hp: 90,  dmg: 14, sector: 4, shape: 'spider', kind: 'detonator' },
+    { name: "Queen Node",       hp: 160, dmg: 16, sector: 4, shape: 'drone',  kind: 'healer' },
+    // Sector 5 — The Source
+    { name: "Glitch Shard",     hp: 160, dmg: 28, sector: 5, shape: 'wisp',   kind: 'clone' },
+    { name: "Echo Phantom",     hp: 150, dmg: 24, sector: 5, shape: 'wisp',   kind: 'mirror' },
+    { name: "Paradox Loop",     hp: 120, dmg: 30, sector: 5, shape: 'sniper', kind: 'chaotic' }
 ];
 const BOSS_DATA = {
     1: { 

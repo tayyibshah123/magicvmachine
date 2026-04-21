@@ -1,4 +1,4 @@
-import { CONFIG, COLORS, SECTOR_CONFIG, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES } from './constants.js';
+import { CONFIG, COLORS, SECTOR_CONFIG, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS } from './constants.js';
 import { AudioMgr } from './audio.js';
 import { Entity, registerEntityClasses } from './entities/entity.js';
 import { Player } from './entities/player.js';
@@ -2500,6 +2500,9 @@ startQTE(type, x, y, callback) {
 
         // Inject (or update) the Ascension picker above the grid.
         this._renderAscensionPicker();
+        // Custom Run bar (Roadmap Part 29) — only visible at Asc 1+.
+        this._renderCustomRunBar();
+        this._wireCustomRunEvents();
 
         // Build a persistent mock Player for each class — reused by the animation loop
         // both for the grid-card canvases and the detail-overlay canvas.
@@ -2541,9 +2544,13 @@ startQTE(type, x, y, callback) {
             const div = document.createElement('div');
             div.className = 'char-card';
             div.dataset.classId = cls.id;
+            // Wrap the class name in a marquee-capable inner span. If the
+            // text overflows its box we toggle the scroll class after
+            // layout. data-name carries the text into the CSS ::after
+            // pseudo so the marquee can render a seamless second copy.
             div.innerHTML = `
                 <canvas class="char-preview" data-class-id="${cls.id}" width="240" height="240" aria-hidden="true"></canvas>
-                <div class="char-name">${cls.name}</div>
+                <div class="char-name"><span class="char-name-inner" data-name="${cls.name}">${cls.name}</span></div>
             `;
             div.onclick = () => this.openCharDetail(cls);
             grid.appendChild(div);
@@ -2554,6 +2561,42 @@ startQTE(type, x, y, callback) {
         // an offscreen cache and blit. Re-paints only on explicit invalidation.
         document.querySelectorAll('canvas.char-preview').forEach(canvas => {
             this._paintCharPreview(canvas);
+        });
+
+        // Character-name marquee — enable scroll on every card whose text
+        // doesn't fit its wrapper. Runs on multiple cadences because the
+        // char-select screen uses stagger-in transforms that may be in
+        // flight when renderCharSelect returns; if we check once too
+        // early, every card reports clientWidth = 0 (display:none during
+        // state transition) and nothing scrolls.
+        const checkNames = () => {
+            const cards = document.querySelectorAll('#screen-char-select .char-card');
+            if (!cards.length) return false;
+            let anyChecked = false;
+            cards.forEach(card => {
+                const wrap = card.querySelector('.char-name');
+                const inner = card.querySelector('.char-name-inner');
+                if (!wrap || !inner) return;
+                // Wrapper hidden — measurement useless, try again later.
+                if (wrap.clientWidth <= 0) return;
+                anyChecked = true;
+                if (inner.scrollWidth > wrap.clientWidth + 1) {
+                    inner.classList.add('char-name-inner--scroll');
+                } else {
+                    inner.classList.remove('char-name-inner--scroll');
+                }
+            });
+            return anyChecked;
+        };
+        // Retry ladder: rAF, 100 ms, 300 ms, 600 ms — catches the marquee
+        // regardless of when the screen finishes its entry transition.
+        requestAnimationFrame(() => {
+            if (checkNames()) return;
+            setTimeout(() => { if (checkNames()) return;
+                setTimeout(() => { if (checkNames()) return;
+                    setTimeout(checkNames, 300);
+                }, 200);
+            }, 100);
         });
     },
 
@@ -2931,6 +2974,11 @@ startQTE(type, x, y, callback) {
         this.player.classId = cls.id;
         this.sector = 1;
         this.bossDefeated = false;
+        // Chronicle start marker (Roadmap Part 27).
+        this.runStartedAt = Date.now();
+        // Custom run modifiers applied here so every downstream spawn
+        // (first combat, starting HP, trait overrides) sees the change.
+        this._applyCustomRunModifiers();
         // Per-run flag: first hack minigame of the run is always normal
         // difficulty so new players aren't immediately face-planted.
         this._hasHackedThisRun = false;
@@ -4898,8 +4946,7 @@ triggerSystemCrash() {
         bar.innerHTML = `
             <button class="asc-step" data-dir="-1" ${cur === 0 ? 'disabled' : ''} aria-label="Lower ascension">${ICONS.chevronDown.replace('class="game-icon"', 'class="game-icon" style="transform:rotate(90deg)"')}</button>
             <div class="asc-info">
-                <div class="asc-label">ASCENSION ${cur} / ${max}</div>
-                <div class="asc-name">${twist.name}</div>
+                <div class="asc-label">ASCENSION ${cur}</div>
                 <div class="asc-desc">${twist.desc}</div>
             </div>
             <button class="asc-step" data-dir="+1" ${cur >= max ? 'disabled' : ''} aria-label="Raise ascension">${ICONS.chevronDown.replace('class="game-icon"', 'class="game-icon" style="transform:rotate(-90deg)"')}</button>
@@ -5490,7 +5537,10 @@ triggerSystemCrash() {
         // Fresh shop → hack attempt available again, clear prior hack glow.
         this._shopHacked = false;
         this._shopHackOutcome = null;
-        const discountMult = this.hasMetaUpgrade('m_discount') ? 0.75 : 1.0;
+        // Shop price: base meta-upgrade discount multiplied by any ascension
+        // shop-price modifier (Ascension 10 Apex = x2, Ascension 11 Null Field = x1.4).
+        const discountMult = (this.hasMetaUpgrade('m_discount') ? 0.75 : 1.0)
+            * (this._ascEffects && this._ascEffects.shopPriceMult ? this._ascEffects.shopPriceMult : 1);
 
         let items = [
             {
@@ -6161,7 +6211,7 @@ triggerSystemCrash() {
             const el = document.createElement('div');
             el.className = `lore-node ${isUnlocked ? 'unlocked' : 'locked'}`;
             el.innerText = index + 1;
-            
+
             if (isUnlocked) {
                 el.onclick = (e) => {
                     AudioMgr.playSound('click');
@@ -6181,6 +6231,230 @@ triggerSystemCrash() {
             btnDecrypt.style.opacity = 0.5;
             btnDecrypt.innerText = "NO FILES";
         }
+
+        // Intel 2.0: render the bestiary (kill ledger, in-place) and
+        // chronicle (last 20 runs). Wire the tab bar once per open.
+        this._renderIntelBestiary();
+        this._renderIntelChronicle();
+        this._wireIntelTabs();
+    },
+
+    /* Intel tab bar wiring (Roadmap Part 27). Delegates show/hide to the
+       matching data-intel-pane element. Idempotent — safe to call on each
+       intel screen open. */
+    _wireIntelTabs() {
+        const d = document;
+        const tabs = d.querySelectorAll('.intel-tab');
+        if (!tabs.length) return;
+        tabs.forEach(tab => {
+            tab.onclick = () => {
+                const target = tab.dataset.intelTab;
+                tabs.forEach(t => t.classList.toggle('active', t === tab));
+                d.querySelectorAll('.intel-pane').forEach(p => {
+                    p.classList.toggle('active', p.dataset.intelPane === target);
+                });
+                AudioMgr.playSound && AudioMgr.playSound('click');
+            };
+        });
+    },
+
+    _renderIntelBestiary() {
+        const grid = document.getElementById('intel-bestiary-grid');
+        const empty = document.getElementById('intel-bestiary-empty');
+        if (!grid) return;
+        grid.innerHTML = '';
+        const kills = (typeof Intel !== 'undefined' && Intel.all) ? Intel.all() : {};
+        const names = Object.keys(kills).filter(n => kills[n] > 0);
+        if (!names.length) {
+            if (empty) empty.style.display = '';
+            return;
+        }
+        if (empty) empty.style.display = 'none';
+        names.sort((a, b) => kills[b] - kills[a]);
+        names.forEach(name => {
+            const el = document.createElement('div');
+            el.className = 'codex-entry intel-beast-entry';
+            const count = kills[name];
+            const tier = count >= 20 ? 'veteran' : count >= 10 ? 'seasoned' : count >= 5 ? 'logged' : 'new';
+            el.innerHTML = `
+                <div class="intel-beast-name">${name}</div>
+                <div class="intel-beast-count">${count} KILL${count === 1 ? '' : 'S'}</div>
+                <div class="intel-beast-tier intel-beast-tier-${tier}">${tier.toUpperCase()}</div>
+            `;
+            grid.appendChild(el);
+        });
+    },
+
+    _renderIntelChronicle() {
+        const list = document.getElementById('intel-chronicle-list');
+        const empty = document.getElementById('intel-chronicle-empty');
+        if (!list) return;
+        list.innerHTML = '';
+        let history = [];
+        try { history = JSON.parse(localStorage.getItem('mvm_run_history') || '[]'); } catch (e) {}
+        if (!Array.isArray(history) || !history.length) {
+            if (empty) empty.style.display = '';
+            return;
+        }
+        if (empty) empty.style.display = 'none';
+        // Newest first
+        history.slice().reverse().slice(0, 20).forEach(run => {
+            const row = document.createElement('div');
+            const won = run.result === 'win';
+            row.className = 'intel-chronicle-row ' + (won ? 'run-won' : 'run-lost');
+            const when = run.endedAt ? new Date(run.endedAt) : null;
+            const whenStr = when ? `${when.toLocaleDateString()}` : '—';
+            const dur = run.durationSeconds ? `${Math.floor(run.durationSeconds/60)}m ${run.durationSeconds%60}s` : '—';
+            row.innerHTML = `
+                <div class="intel-chronicle-result">${won ? 'WIN' : 'LOSS'}</div>
+                <div class="intel-chronicle-main">
+                    <div class="intel-chronicle-class">${(run.classId || 'unknown').toUpperCase()}</div>
+                    <div class="intel-chronicle-meta">Sector ${run.sector || 1} · ${run.turnCount || 0} turns · ${run.fragments || 0} frag</div>
+                    ${won ? '' : `<div class="intel-chronicle-cause">Defeated by ${run.defeatedBy || 'unknown'}</div>`}
+                </div>
+                <div class="intel-chronicle-aside">${whenStr}<br>${dur}</div>
+            `;
+            list.appendChild(row);
+        });
+    },
+
+    /* Push a run record to history (Roadmap Part 27 Chronicle tab). Keeps
+       the last 40 entries so the Intel chronicle always has enough data. */
+    _logRunHistory(result, extra) {
+        try {
+            const now = Date.now();
+            const start = this.runStartedAt || now;
+            const record = {
+                result: result,                                 // 'win' | 'loss'
+                classId: this.player ? this.player.classId : null,
+                sector: this.sector || 1,
+                turnCount: this.turnCount || 0,
+                fragments: this.techFragments || 0,
+                defeatedBy: (extra && extra.defeatedBy) || (this.enemy && this.enemy.name) || null,
+                endedAt: now,
+                durationSeconds: Math.floor((now - start) / 1000)
+            };
+            let history = [];
+            try { history = JSON.parse(localStorage.getItem('mvm_run_history') || '[]'); } catch (e) {}
+            history.push(record);
+            if (history.length > 40) history = history.slice(-40);
+            localStorage.setItem('mvm_run_history', JSON.stringify(history));
+        } catch (_) { /* non-critical */ }
+    },
+
+    /* =============================================================
+       CUSTOM RUNS (Roadmap Part 29)
+       Selection lives in this.customRunModifiers (Set of ids). Only
+       visible once Ascension 1+ unlocked. Feature flag
+       FEATURE_CUSTOM_RUNS gates the bar visibility independently so
+       balance playtesting can opt in without code edits. The effect
+       applier is minimal for now — covers the safe handful of
+       modifiers (startHpPct, disableRest, extraRerollPerTurn,
+       diceCount, shopDiscountPct). Deeper modifiers wait for
+       Milestone 4.
+       ============================================================= */
+    _renderCustomRunBar() {
+        const bar = document.getElementById('custom-run-bar');
+        if (!bar) return;
+        const gated = !FEATURE_CUSTOM_RUNS
+            || !(typeof Ascension !== 'undefined' && Ascension.getUnlocked && Ascension.getUnlocked() >= 1);
+        bar.classList.toggle('hidden', gated);
+        if (gated) return;
+        if (!this.customRunModifiers) this.customRunModifiers = new Set();
+        const count = this.customRunModifiers.size;
+        const summary = document.getElementById('custom-run-bar-summary');
+        if (summary) {
+            if (count === 0) summary.textContent = 'Standard run';
+            else summary.textContent = `${count} modifier${count === 1 ? '' : 's'} · Net ${this._computeCustomRunNetPct()}%`;
+        }
+    },
+    _computeCustomRunNetPct() {
+        if (!this.customRunModifiers) return 100;
+        let delta = 0;
+        this.customRunModifiers.forEach(id => {
+            const m = CUSTOM_RUN_MODIFIERS.find(x => x.id === id);
+            if (m) delta += (m.payoutBonus || 0);
+        });
+        return Math.max(5, 100 + delta);
+    },
+    _openCustomRunModal() {
+        const modal = document.getElementById('custom-run-modal');
+        if (!modal) return;
+        if (!this.customRunModifiers) this.customRunModifiers = new Set();
+        ['negative', 'chaotic', 'positive'].forEach(kind => {
+            const grid = modal.querySelector(`.custom-run-grid[data-kind="${kind}"]`);
+            if (!grid) return;
+            grid.innerHTML = '';
+            CUSTOM_RUN_MODIFIERS.filter(m => m.kind === kind).forEach(m => {
+                const card = document.createElement('button');
+                card.className = 'custom-run-card';
+                card.dataset.modId = m.id;
+                if (this.customRunModifiers.has(m.id)) card.classList.add('selected');
+                const bonus = m.payoutBonus > 0 ? `+${m.payoutBonus}%` : `${m.payoutBonus}%`;
+                card.innerHTML = `
+                    <div class="custom-run-card-name">${m.name}</div>
+                    <div class="custom-run-card-desc">${m.desc}</div>
+                    <div class="custom-run-card-bonus">${bonus} payout</div>
+                `;
+                card.onclick = () => {
+                    if (this.customRunModifiers.has(m.id)) this.customRunModifiers.delete(m.id);
+                    else this.customRunModifiers.add(m.id);
+                    card.classList.toggle('selected');
+                    this._refreshCustomRunNet();
+                };
+                grid.appendChild(card);
+            });
+        });
+        this._refreshCustomRunNet();
+        modal.classList.remove('hidden');
+    },
+    _closeCustomRunModal() {
+        const modal = document.getElementById('custom-run-modal');
+        if (modal) modal.classList.add('hidden');
+        this._renderCustomRunBar();
+    },
+    _refreshCustomRunNet() {
+        const netEl = document.getElementById('custom-run-net');
+        if (netEl) netEl.textContent = `${this._computeCustomRunNetPct()}%`;
+    },
+    _clearCustomRunModifiers() {
+        if (!this.customRunModifiers) this.customRunModifiers = new Set();
+        this.customRunModifiers.clear();
+        const modal = document.getElementById('custom-run-modal');
+        if (modal) modal.querySelectorAll('.custom-run-card.selected').forEach(c => c.classList.remove('selected'));
+        this._refreshCustomRunNet();
+    },
+    _wireCustomRunEvents() {
+        const btnOpen = document.getElementById('btn-custom-run');
+        if (btnOpen) btnOpen.onclick = () => this._openCustomRunModal();
+        const btnApply = document.getElementById('btn-custom-run-apply');
+        if (btnApply) btnApply.onclick = () => this._closeCustomRunModal();
+        const btnClear = document.getElementById('btn-custom-run-clear');
+        if (btnClear) btnClear.onclick = () => this._clearCustomRunModifiers();
+    },
+    /* Apply selected modifiers to the run. Called from selectClass after
+       player is constructed. Only safe modifiers are wired here — the
+       rest sit in the data model and will be wired as Milestone 4 lands. */
+    _applyCustomRunModifiers() {
+        if (!this.customRunModifiers || !this.customRunModifiers.size) return;
+        const active = Array.from(this.customRunModifiers)
+            .map(id => CUSTOM_RUN_MODIFIERS.find(m => m.id === id))
+            .filter(Boolean);
+        this._customRunActive = active;            // stored for payout calculation
+        if (!this.player) return;
+        active.forEach(m => {
+            if (m.startHpPct && this.player.maxHp) {
+                this.player.currentHp = Math.max(1, Math.floor(this.player.maxHp * m.startHpPct));
+            }
+            if (m.diceCount && this.player.traits) {
+                this.player.traits.diceCount = m.diceCount;
+            }
+            if (m.extraRerollPerTurn) {
+                this.player._customExtraRerolls = (this.player._customExtraRerolls || 0) + m.extraRerollPerTurn;
+            }
+            // Other effects (disableRest, disableReroll, dmgOutMult, etc.)
+            // are declared in data; appliers land with Milestone 4.
+        });
     },
 
     startHexBreach() {
@@ -7228,6 +7502,112 @@ async startTurn() {
         return (this.enemy && Array.isArray(this.enemy.minions)) ? this.enemy.minions : [];
     },
 
+    /* Class-fantasy summon VFX dispatcher (Roadmap Part 26.2). Call this
+       right after a player minion is added to `player.minions` with a
+       fresh spawnTimer. Defers to the next animation frame so
+       `updateMinionPositions` has already placed the minion at its slot. */
+    _triggerSummonVfx(minion) {
+        if (!minion) return;
+        const classId = this.player ? this.player.classId : null;
+        // Run after the next paint so the minion's position is final.
+        requestAnimationFrame(() => {
+            const mx = minion.x, my = minion.y;
+            if (typeof mx !== 'number' || typeof my !== 'number') return;
+            switch (classId) {
+                case 'bloodstalker': {
+                    // Blood Thrall swoops in from above — red streak + dust landing
+                    const sx = mx, sy = my - 400;
+                    this.effects.push({
+                        type: 'nature_dart',
+                        sx: sx, sy: sy, tx: mx, ty: my,
+                        x: sx, y: sy, progress: 0,
+                        speed: 0.08, amplitude: 6, frequency: 3,
+                        color: '#ff0044', empowered: false, dmgMultiplier: 1.0
+                    });
+                    setTimeout(() => {
+                        ParticleSys.createShockwave(mx, my, '#ff2244', 28);
+                        ParticleSys.createExplosion(mx, my, 32, '#ff0044');
+                        ParticleSys.createFloatingText(mx, my - 70, 'RISE', '#ff3355');
+                        AudioMgr.playSound('hit');
+                        if (this.shake) this.shake(4);
+                    }, 240);
+                    break;
+                }
+                case 'summoner': {
+                    // Spirit grows from ground — green bloom + leaves scatter
+                    for (let i = 0; i < 3; i++) {
+                        setTimeout(() => {
+                            ParticleSys.createShockwave(mx, my + 30 - i * 12, COLORS.NATURE_LIGHT, 16 + i * 4);
+                        }, i * 90);
+                    }
+                    setTimeout(() => {
+                        ParticleSys.createExplosion(mx, my, 42, COLORS.NATURE_LIGHT);
+                        ParticleSys.createSparks(mx, my - 20, '#88ffaa', 18);
+                        ParticleSys.createFloatingText(mx, my - 70, 'GROW', COLORS.NATURE_LIGHT);
+                        AudioMgr.playSound('print');
+                    }, 280);
+                    break;
+                }
+                case 'tactician': {
+                    // Pawn materializes from a hologram
+                    ParticleSys.createShockwave(mx, my, COLORS.MANA, 20);
+                    ParticleSys.createExplosion(mx, my, 24, COLORS.MANA);
+                    this.effects.push({
+                        type: 'hex_barrier',
+                        x: mx, y: my,
+                        radius: 1, maxRadius: 70,
+                        life: 26, maxLife: 26,
+                        color: COLORS.MANA
+                    });
+                    AudioMgr.playSound('mana');
+                    break;
+                }
+                case 'arcanist': {
+                    // Mana wisp spirals in on a flame trail
+                    for (let i = 0; i < 5; i++) {
+                        setTimeout(() => {
+                            const a = (i / 5) * Math.PI * 2;
+                            ParticleSys.createSparks(mx + Math.cos(a) * 30, my + Math.sin(a) * 30, COLORS.PURPLE, 6);
+                        }, i * 40);
+                    }
+                    setTimeout(() => {
+                        ParticleSys.createExplosion(mx, my, 30, COLORS.PURPLE);
+                        ParticleSys.createShockwave(mx, my, COLORS.PURPLE, 20);
+                        AudioMgr.playSound('mana');
+                    }, 220);
+                    break;
+                }
+                case 'annihilator': {
+                    // Bomb Bot drop — thud then small spark cloud
+                    ParticleSys.createShockwave(mx, my, COLORS.ORANGE, 22);
+                    ParticleSys.createExplosion(mx, my, 28, COLORS.ORANGE);
+                    ParticleSys.createExplosion(mx, my, 16, '#ffee00');
+                    ParticleSys.createFloatingText(mx, my - 70, 'DEPLOYED', COLORS.ORANGE);
+                    AudioMgr.playSound('print');
+                    if (this.shake) this.shake(4);
+                    break;
+                }
+                case 'sentinel': {
+                    // Guardian crystallizes — hex barrier plates out
+                    this.effects.push({
+                        type: 'hex_barrier',
+                        x: mx, y: my,
+                        radius: 1, maxRadius: 90,
+                        life: 36, maxLife: 36,
+                        color: '#ffffff'
+                    });
+                    ParticleSys.createSparks(mx, my, '#ffffff', 14);
+                    AudioMgr.playSound('hex_barrier');
+                    break;
+                }
+                default: {
+                    ParticleSys.createShockwave(mx, my, COLORS.NATURE_LIGHT, 20);
+                    AudioMgr.playSound('print');
+                }
+            }
+        });
+    },
+
     // Bomb Bot detonation — flies a missile from the bomb's position to the
     // boss enemy and applies AoE damage on impact. Resolves after the
     // explosion lands (or immediately if there's no valid enemy to hit).
@@ -8046,11 +8426,21 @@ async startTurn() {
                     }
                 }
 
-                if (isUpgraded) this.triggerVFX('blade_storm', this.player, finalEnemy);
-                else {
-                    this.triggerVFX('slash_heavy', this.player, finalEnemy);
-                    AudioMgr.playSound('attack');
-                }
+                // Class fantasy attack VFX (Roadmap Part 26.1).
+                // Each class gets its own signature animation; falls back to
+                // the generic slash_heavy / blade_storm for classes that
+                // haven't yet received a bespoke VFX asset.
+                const _attackVfxByClass = {
+                    tactician:    'attack_pawn_volley',
+                    arcanist:     'attack_glyph_weave',
+                    bloodstalker: 'attack_sanguine_bite',
+                    annihilator:  'attack_overdrive',
+                    sentinel:     'attack_bulwark_bash',
+                    summoner:     'attack_verdant_lash'
+                };
+                const _vfxKey = _attackVfxByClass[this.player.classId] || (isUpgraded ? 'blade_storm' : 'slash_heavy');
+                this.triggerVFX(_vfxKey, this.player, finalEnemy, null, { upgraded: isUpgraded });
+                if (!isUpgraded) AudioMgr.playSound('attack');
                 
                 // Class-aware base damage
                 let dmg;
@@ -8405,7 +8795,10 @@ async startTurn() {
                         if(this.player.hasRelic('neural_link')) { m.maxHp += 3; m.currentHp += 3; m.dmg += 3; }
                         
                         this.player.minions.push(m);
-                        this.triggerVFX('materialize', null, {x: this.player.x, y: this.player.y}); 
+                        this.triggerVFX('materialize', null, {x: this.player.x, y: this.player.y});
+                        // Class-fantasy summon VFX — fires after updateMinionPositions
+                        // so it anchors to the minion's real slot position.
+                        this._triggerSummonVfx(m);
                     } else {
                         if(this.player.minions.length > 0) {
                             const m = this.player.minions[Math.floor(Math.random() * this.player.minions.length)];
@@ -8810,7 +9203,7 @@ async startTurn() {
         return false;
     },
 
-triggerVFX(type, source, target, onHitCallback = null) {
+triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
         const x = target ? target.x : (source ? source.x : CONFIG.CANVAS_WIDTH/2);
         const y = target ? target.y : (source ? source.y : CONFIG.CANVAS_HEIGHT/2);
 
@@ -8916,6 +9309,199 @@ triggerVFX(type, source, target, onHitCallback = null) {
                 flames: []
             });
             AudioMgr.playSound('siren');
+        }
+        /* ============================================================
+           Class-fantasy attack VFX (Roadmap Part 26.1)
+           Each class attack produces a distinct animation whose effect
+           types the draw loop will render. For effects without a draw
+           handler yet, the windup + particle shower still reads as
+           "something happened at impact" so gameplay feedback works
+           even if the polish pass is still pending.
+           ============================================================ */
+        else if (type === 'attack_sanguine_bite') {
+            /* BLOODSTALKER — lunge forward, spectral fang bite, blood spray */
+            const sx = source ? source.x : x, sy = source ? source.y : y;
+            const hitX = target ? target.x : x, hitY = target ? target.y : y;
+            this.effects.push({ type: 'slash_windup', x: sx, y: sy, life: 14, maxLife: 14, heavy: true, color: '#ff0044' });
+            setTimeout(() => {
+                ParticleSys.createShockwave(hitX, hitY, '#ff0044', 26);
+                ParticleSys.createExplosion(hitX, hitY, 44, '#ff0044');
+                ParticleSys.createExplosion(hitX, hitY, 22, '#ff88a0');
+                // Upper + lower fang crescents
+                this.effects.push({
+                    type: 'slash',
+                    x: hitX, y: hitY,
+                    angle: -Math.PI / 3,
+                    life: 38, maxLife: 38,
+                    length: 260, width: 36,
+                    color: '#ff2255', heavy: true
+                });
+                this.effects.push({
+                    type: 'slash',
+                    x: hitX, y: hitY + 18,
+                    angle:  Math.PI / 3,
+                    life: 38, maxLife: 38,
+                    length: 220, width: 30,
+                    color: '#cc0033', heavy: true
+                });
+                // Blood droplets
+                for (let i = 0; i < 14; i++) {
+                    const ang = Math.random() * Math.PI * 2;
+                    const sp = 5 + Math.random() * 4;
+                    const p = ParticleSys._acquire();
+                    p.x = hitX; p.y = hitY;
+                    p.vx = Math.cos(ang) * sp;
+                    p.vy = Math.sin(ang) * sp - 2;
+                    p.life = 1.1 + Math.random() * 0.4;
+                    p.maxLife = p.life;
+                    p.size = 3 + Math.random() * 3;
+                    p.color = '#ff1a3a';
+                    p.alpha = 1;
+                    p.gravity = 0.25;
+                    p.drag = 0.94;
+                }
+                AudioMgr.playSound('hit');
+                this.shake(8);
+                if (this.haptic) this.haptic('heavy');
+                if (onHitCallback) onHitCallback();
+            }, 160);
+        }
+        else if (type === 'attack_glyph_weave') {
+            /* ARCANIST — three glyph runes spin around target, collapse, ignite */
+            const hitX = target ? target.x : x, hitY = target ? target.y : y;
+            const color = opts && opts.upgraded ? COLORS.GOLD : COLORS.PURPLE;
+            for (let i = 0; i < 3; i++) {
+                setTimeout(() => {
+                    this.effects.push({
+                        type: 'digital_sever',
+                        x: hitX + Math.cos((i / 3) * Math.PI * 2) * 70,
+                        y: hitY + Math.sin((i / 3) * Math.PI * 2) * 70,
+                        angle: (i / 3) * Math.PI * 2,
+                        life: 26, maxLife: 26,
+                        color: color
+                    });
+                }, i * 90);
+            }
+            setTimeout(() => {
+                ParticleSys.createShockwave(hitX, hitY, color, 32);
+                ParticleSys.createExplosion(hitX, hitY, 36, color);
+                ParticleSys.createSparks(hitX, hitY, '#ffffff', 18);
+                AudioMgr.playSound('digital_sever');
+                this.shake(6);
+                if (this.haptic) this.haptic('hit');
+                if (onHitCallback) onHitCallback();
+            }, 310);
+        }
+        else if (type === 'attack_pawn_volley') {
+            /* TACTICIAN — three small pawn projectiles arc out in sequence */
+            const sx = source ? source.x : x, sy = source ? source.y : y;
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            for (let i = 0; i < 3; i++) {
+                setTimeout(() => {
+                    this.effects.push({
+                        type: 'nature_dart',
+                        sx: sx, sy: sy,
+                        tx: tx + (Math.random() - 0.5) * 30,
+                        ty: ty + (Math.random() - 0.5) * 30,
+                        x: sx, y: sy,
+                        progress: 0,
+                        speed: 0.042,
+                        amplitude: 12,
+                        frequency: 5,
+                        color: COLORS.MANA,
+                        empowered: false,
+                        dmgMultiplier: 1.0
+                    });
+                    AudioMgr.playSound('dart');
+                }, i * 110);
+            }
+            setTimeout(() => {
+                ParticleSys.createShockwave(tx, ty, COLORS.MANA, 22);
+                ParticleSys.createExplosion(tx, ty, 28, COLORS.MANA);
+                if (onHitCallback) onHitCallback();
+                this.shake(4);
+            }, 340);
+        }
+        else if (type === 'attack_overdrive') {
+            /* ANNIHILATOR — red plasma charge then slam, big recoil */
+            const sx = source ? source.x : x, sy = source ? source.y : y;
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            // Charge-up pulse at player
+            this.effects.push({
+                type: 'slash_windup', x: sx, y: sy,
+                life: 22, maxLife: 22, heavy: true, color: COLORS.ORANGE
+            });
+            setTimeout(() => {
+                // Beam line
+                this.effects.push({
+                    type: 'beam',
+                    sx: sx, sy: sy,
+                    tx: tx, ty: ty,
+                    color: COLORS.ORANGE,
+                    life: 18, maxLife: 18
+                });
+                // Impact shockwave + heavy particles
+                ParticleSys.createShockwave(tx, ty, COLORS.ORANGE, 44);
+                ParticleSys.createExplosion(tx, ty, 54, '#ff8800');
+                ParticleSys.createExplosion(tx, ty, 28, '#ffee00');
+                AudioMgr.playSound('explosion');
+                this.shake(14);
+                if (this.haptic) this.haptic('warn');
+                if (onHitCallback) onHitCallback();
+            }, 260);
+        }
+        else if (type === 'attack_bulwark_bash') {
+            /* SENTINEL — shield slam, metal ring + rumble */
+            const sx = source ? source.x : x, sy = source ? source.y : y;
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            this.effects.push({
+                type: 'hex_barrier',
+                x: sx, y: sy,
+                radius: 1, maxRadius: 80,
+                life: 20, maxLife: 20,
+                color: '#ffffff'
+            });
+            setTimeout(() => {
+                // Big concentric shield ring at target
+                this.effects.push({
+                    type: 'hex_barrier',
+                    x: tx, y: ty,
+                    radius: 1, maxRadius: 140,
+                    life: 32, maxLife: 32,
+                    color: '#ffffff'
+                });
+                ParticleSys.createShockwave(tx, ty, '#ffffff', 32);
+                ParticleSys.createExplosion(tx, ty, 28, '#c0e0ff');
+                AudioMgr.playSound('hex_barrier');
+                this.shake(12);
+                if (this.haptic) this.haptic('heavy');
+                if (onHitCallback) onHitCallback();
+            }, 200);
+        }
+        else if (type === 'attack_verdant_lash') {
+            /* SUMMONER — vines erupt, whip target, retract */
+            const sx = source ? source.x : x, sy = source ? source.y : y;
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            // Two chained lashes for visual richness
+            for (let i = 0; i < 2; i++) {
+                setTimeout(() => {
+                    this.effects.push({
+                        type: 'chains',
+                        x: (sx + tx) / 2 + (Math.random() - 0.5) * 40,
+                        y: (sy + ty) / 2 + (Math.random() - 0.5) * 40,
+                        life: 30, maxLife: 30
+                    });
+                }, i * 80);
+            }
+            setTimeout(() => {
+                ParticleSys.createShockwave(tx, ty, COLORS.NATURE_LIGHT, 26);
+                ParticleSys.createExplosion(tx, ty, 38, COLORS.NATURE_LIGHT);
+                ParticleSys.createSparks(tx, ty, '#88ffaa', 16);
+                AudioMgr.playSound('chains');
+                this.shake(6);
+                if (this.haptic) this.haptic('hit');
+                if (onHitCallback) onHitCallback();
+            }, 240);
         }
         else if (type === 'slash' || type === 'slash_heavy') {
             const heavy = (type === 'slash_heavy');
@@ -10570,9 +11156,11 @@ drawEffects() {
 
         // --- UPDATED: VICTORY SEQUENCE FOR TESSERACT PRIME ---
         if (this.enemy && this.enemy.name === "TESSERACT PRIME") {
+            // Chronicle entry for the win (Roadmap Part 27).
+            this._logRunHistory('win', { defeatedBy: null });
             // 1. Cinematic Crash
             await this.triggerSystemCrash();
-            
+
             // 2. Set Data
             localStorage.setItem('mvm_gameCompleted', 'true');
             
@@ -10722,7 +11310,26 @@ drawEffects() {
             const fragLine = `<span class="highlight-frag">+${frags} FRAGMENTS</span>`;
             const fileLine = droppedFile ? ` &nbsp;·&nbsp; <span class="highlight-file">+1 ENCRYPTED FILE</span>` : '';
             const nameLine = (wasBoss && killName) ? `<div style="margin-top:8px; font-size:0.8em; opacity:0.7;">${killName} OFFLINE</div>` : '';
-            subEl.innerHTML = fragLine + fileLine + nameLine;
+            // Highlight stat (Roadmap Part 31.2) — pulls the most
+            // interesting moment from the run's combat log.
+            let highlightLine = '';
+            try {
+                const entries = (typeof CombatLog !== 'undefined' && CombatLog._entries) || [];
+                // Biggest DEALT hit this combat
+                const playerName = this.player ? this.player.name : '';
+                const dealtHits = entries.filter(e => e.type === 'damage' && e.targetName !== playerName);
+                if (dealtHits.length) {
+                    const best = dealtHits.reduce((m, e) => (!m || e.amount > m.amount) ? e : m, null);
+                    if (best && best.amount >= 20) {
+                        const tierWord = best.tier === 'catastrophic' ? 'CATASTROPHIC'
+                                       : best.tier === 'heavy'        ? 'HEAVY'
+                                       : best.tier === 'solid'        ? 'SOLID'
+                                       : 'CHIP';
+                        highlightLine = `<div class="combat-win-highlight">${tierWord} HIT · ${best.amount} DMG</div>`;
+                    }
+                }
+            } catch (_) { /* cosmetic */ }
+            subEl.innerHTML = fragLine + fileLine + nameLine + highlightLine;
         }
         this.changeState(STATE.COMBAT_WIN);
         AudioMgr.duck(0.1, wasBoss ? 2200 : 1500);
@@ -10936,6 +11543,9 @@ drawEffects() {
         localStorage.removeItem('mvm_save_v1');
         document.getElementById('btn-load-save').style.display = 'none';
 
+        // Chronicle entry (Roadmap Part 27) — every loss logs.
+        this._logRunHistory('loss', { defeatedBy: this.enemy ? this.enemy.name : 'unknown' });
+
         this.renderDeathCards();
         this.renderRunSummary('screen-gameover');
         this.changeState(STATE.GAMEOVER);
@@ -11020,6 +11630,42 @@ drawEffects() {
                 <div class="death-card-body">${c.body}</div>
             </div>
         `).join('');
+
+        // Autopsy lesson (Roadmap Part 31.3) — reads the run stats and
+        // surfaces ONE actionable takeaway. Rotates through concrete
+        // observations so different runs get different advice.
+        try {
+            let lesson = null;
+            const manaSpent = (this.runStats && this.runStats.manaSpent) || 0;
+            const turnsSurvived = this.turnCount || 0;
+            const rerollsUsed = (this.runStats && this.runStats.rerollsUsed) || 0;
+            const relicsHeld = (this.player && this.player.relics) ? this.player.relics.length : 0;
+            const bossBlow = biggest && biggest.amount >= 30;
+            const cameClose = this.player && this.player.maxHp && biggest
+                ? (biggest.amount / this.player.maxHp) > 0.6 : false;
+            if (cameClose) {
+                lesson = 'One hit did 60%+ of your HP. Bank more shield or spread damage across turns.';
+            } else if (bossBlow && turnsSurvived < 4) {
+                lesson = 'Boss crushed you in under 4 turns. A Defend die turn-one buys you the setup window.';
+            } else if (manaSpent === 0 && turnsSurvived >= 3) {
+                lesson = 'You spent 0 Mana this run. Skill dice (Meteor, Earthquake) can finish fights you\'re losing.';
+            } else if (rerollsUsed === 0 && turnsSurvived >= 3) {
+                lesson = 'You never rerolled. A bad hand isn\'t fate — reroll to chase a combo.';
+            } else if (relicsHeld === 0) {
+                lesson = 'Zero relics at time of death. Events + shops pay out more than they cost most of the time.';
+            } else if (turnsSurvived >= 12) {
+                lesson = 'Long fight — next run, try picking up damage-dealers earlier to finish faster.';
+            } else {
+                lesson = 'Every death is a read. Note which class + relics didn\'t click and try a different build.';
+            }
+            let lessonEl = screen.querySelector('.death-lesson');
+            if (!lessonEl) {
+                lessonEl = document.createElement('div');
+                lessonEl.className = 'death-lesson';
+                cards.after(lessonEl);
+            }
+            lessonEl.innerHTML = `<span class="death-lesson-label">LESSON</span><span class="death-lesson-body">${lesson}</span>`;
+        } catch (_) { /* autopsy is cosmetic, never throw into the game-over path */ }
 
         // Ensure buttons are in retry-first order.
         const retryBtn = document.getElementById('btn-retry-class');
