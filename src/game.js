@@ -205,6 +205,15 @@ const Game = {
                 AudioMgr.startMusic();
                 intro.classList.add('intro-fade');
                 setTimeout(() => intro.remove(), 750);
+                // Safety net for mobile background-restore: if the browser
+                // reloaded the page from a suspended state the main menu
+                // may still be hidden when we finish the intro. Force it
+                // visible so the tap doesn't dead-end in a black screen.
+                const startEl = document.getElementById('screen-start');
+                if (startEl) {
+                    startEl.classList.remove('hidden');
+                    startEl.classList.add('active');
+                }
 
                 // First-launch onboarding (§1.1). Skipped on subsequent launches.
                 if (!Onboarding.isComplete()) {
@@ -3384,20 +3393,58 @@ triggerPhaseGlitch() {
     },
 
     bindTabVisibility() {
+        // When returning from background on mobile the AudioContext often
+        // ends up 'suspended' (Android) or 'interrupted' (iOS Safari). Until
+        // it's resumed every SFX silently drops and WebAudio-piped music
+        // stays muted. Resuming here + re-arming a one-shot gesture covers
+        // both auto-resume-capable browsers and strict-gesture iOS.
+        const resumeAudio = () => {
+            if (AudioMgr.ctx && AudioMgr.ctx.state !== 'running') {
+                AudioMgr.ctx.resume().catch(() => {});
+            }
+        };
+        const armResumeOnNextGesture = () => {
+            if (this._audioResumeArmed) return;
+            this._audioResumeArmed = true;
+            const handler = () => {
+                this._audioResumeArmed = false;
+                resumeAudio();
+                ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(ev =>
+                    window.removeEventListener(ev, handler)
+                );
+            };
+            ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(ev =>
+                window.addEventListener(ev, handler, { passive: true })
+            );
+        };
+
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 if (AudioMgr.bgm && !AudioMgr.bgm.paused) {
                     AudioMgr._wasPlaying = true;
-                    // Fade out when the tab goes to the background so there's
-                    // no jarring cut.
                     AudioMgr.fadeMusicOut(250);
                 }
             } else {
+                resumeAudio();
+                armResumeOnNextGesture();
                 if (AudioMgr._wasPlaying && AudioMgr.musicEnabled) {
                     AudioMgr.fadeMusicIn(500);
                     AudioMgr._wasPlaying = false;
                 }
             }
+        });
+
+        // Safari restores pages from the back-forward cache without ever
+        // firing visibilitychange — the DOM/JS state is frozen and dice /
+        // audio contexts can't be resumed cleanly. Force a full reload so
+        // the intro, audio unlock, and game loop boot from a known state.
+        window.addEventListener('pageshow', (e) => {
+            if (e.persisted) {
+                try { window.location.reload(); } catch (err) {}
+                return;
+            }
+            resumeAudio();
+            armResumeOnNextGesture();
         });
     },
 
@@ -3674,62 +3721,30 @@ triggerPhaseGlitch() {
         await this.showPhaseBanner(enemy.name, subtitle, 'boss');
     },
 
-    // Pre-combat briefing (#7). Short one-liner framing the fight —
-    // enemy name, affixes, and a flavor tagline. Appears top-of-canvas for
-    // ~1.8s then fades. Tutorial combats skip this.
+    // Pre-combat Intel crawl. A short dossier line slides down from the
+    // top over a scan-line strip, lingers, then retreats. Replaces the old
+    // bordered "encounter" card — less intrusive, more cinematic.
     _showCombatBriefing(enemy) {
         if (!enemy) return;
-        const affixes = Array.isArray(enemy.affixes) ? enemy.affixes : [];
-        const affixLine = affixes.length ? ` · ${affixes.join(' · ').toUpperCase()}` : '';
-        const TAGLINES_REG = {
-            1: 'Corporate security detected.',
-            2: 'Cryo-unit hostile. Stay warm.',
-            3: 'Forge-welded. Armor-tough.',
-            4: 'Hive signal locked on.',
-            5: 'Source-aberrant. Reality unstable.'
-        };
-        const TAGLINES_BOSS = {
-            'THE PANOPTICON':  'The All-Seeing Eye has found you.',
-            'NULL_POINTER':    'The Consuming Void has awakened.',
-            'THE COMPILER':    'Industrial crusher coming online.',
-            'HIVE PROTOCOL':   'Distributed lethality engaged.',
-            'TESSERACT PRIME': 'Geometric impossibility manifesting.'
-        };
-        let line;
-        if (enemy.isBoss) {
-            line = TAGLINES_BOSS[enemy.name] || 'Elite threat detected.';
-        } else if (enemy.isElite) {
-            line = `Elite intercept${affixLine}.`;
-        } else {
-            line = TAGLINES_REG[this.sector] || 'Hostile contact.';
-        }
+        const line = this._getIntelLine(enemy);
 
-        // Reuse the existing phase-banner DOM for consistency but with a
-        // compact, auto-dismissing variant class.
         let host = document.getElementById('combat-briefing');
         if (!host) {
             host = document.createElement('div');
             host.id = 'combat-briefing';
-            host.className = 'combat-briefing hidden';
+            host.className = 'intel-crawl hidden';
             const container = document.getElementById('game-container') || document.body;
             container.appendChild(host);
+        } else {
+            host.className = 'intel-crawl hidden';
         }
-        // Surface total kill count from the Intel ledger — "Encountered X".
-        const killCount = Intel.kills(enemy.name);
-        const metaLine = killCount > 0
-            ? `Encountered ${killCount}${killCount === 1 ? ' time' : ' times'} before.`
-            : 'First encounter logged.';
-        // Prefix with the operator callsign so every briefing is personal.
-        const operator = (Onboarding.getName && Onboarding.getName()) || 'OPERATOR';
         host.innerHTML = `
-            <div class="combat-briefing-operator">// ${operator}</div>
-            <div class="combat-briefing-name">${(enemy.name || 'HOSTILE').toUpperCase()}${affixLine}</div>
-            <div class="combat-briefing-line">${line}</div>
-            <div class="combat-briefing-meta">${metaLine}</div>
+            <div class="intel-crawl-scanlines" aria-hidden="true"></div>
+            <div class="intel-crawl-label">// INTEL</div>
+            <div class="intel-crawl-line">${line}</div>
         `;
         host.classList.remove('hidden');
         requestAnimationFrame(() => host.classList.add('active'));
-        // Audio cue — heavier for bosses, lighter for regulars/elites.
         if (enemy.isBoss) {
             try { AudioMgr.playSound('siren'); } catch (e) {}
         } else if (enemy.isElite) {
@@ -3737,10 +3752,102 @@ triggerPhaseGlitch() {
         } else {
             try { AudioMgr.playSound('click'); } catch (e) {}
         }
+        // Longer dwell because the copy is now fully on-screen (no card
+        // to read around). Slow fade-out at the end matches the slide-in.
         setTimeout(() => {
             host.classList.remove('active');
-            setTimeout(() => host.classList.add('hidden'), 300);
-        }, 1800);
+            setTimeout(() => host.classList.add('hidden'), 500);
+        }, 2400);
+    },
+
+    // Map an enemy to a one-line Intel dossier. Prefers a name-specific
+    // description, falls back to the enemy `kind` tag, then to a generic
+    // sector line. Bosses get their own bespoke lines.
+    _getIntelLine(enemy) {
+        const name = enemy.name || 'Hostile';
+        if (enemy.isBoss) {
+            const BOSS = {
+                'THE PANOPTICON':  'The All-Seeing Eye. Marks your dice, punishes crits.',
+                'NULL_POINTER':    'Consuming Void. Collapses your options.',
+                'THE COMPILER':    'Industrial crusher. Heavy armor, heavier fists.',
+                'HIVE PROTOCOL':   'Distributed lethality. Kill the nodes first.',
+                'TESSERACT PRIME': 'Geometric impossibility. Attacks bend reality.'
+            };
+            return `${name}: ${BOSS[name] || 'elite threat detected.'}`;
+        }
+        const BY_NAME = {
+            'Sentry Drone':     'baseline corporate patrol. Predictable.',
+            'Heavy Loader':     'slow frame, heavy hits.',
+            'Cyber Arachnid':   'skittering assassin. Fragile but fast.',
+            'Riot Suppressor':  'sweeping AoE crowd-control.',
+            'Drone Swarmling':  'summons reinforcements on sight.',
+            'Mirror':           'has the power to reflect attacks.',
+            'Watcher Pod':      'tags a die and exposes your plan.',
+            'Paper Pusher':     'calls in backup every few turns.',
+            'Signal Jammer':    'reflects a portion of your output.',
+            'Cryo Bot':         'chill package — slows your tempo.',
+            'Data Leech':       'drains resources over time.',
+            'Firewall Sentinel':'hard shield, punishes direct attacks.',
+            'Cryo Cultivator':  'frost field. Keep moving.',
+            'Data Mite':        'burrows, resurges from elsewhere.',
+            'Echo':             'splits into weaker clones.',
+            'Cargo Hauler':     'heavy armor. Crack the plating.',
+            'Icicle Sniper':    'long-range frost bolt.',
+            'Freezer Drone':    'applies chill on hit.',
+            'Magma Construct':  'massive HP pool. Chip it down.',
+            'Core Guardian':    'retaliation specialist.',
+            'Nullifier':        'shuts down abilities.',
+            'Foundry Golem':    'industrial armor — expect to dig.',
+            'Slag Geyser':      'self-immolates for an AoE burn.',
+            'Coolant Tech':     'heals allies every turn.',
+            'Forge Welder':     'detonates on death.',
+            'Slag Mech':        'cleaves across the whole line.',
+            'Ember Swarm':      'low HP each — but there are many.',
+            'Praetorian':       'imperial guard. Shield-disciplined.',
+            'Sentinel Orb':     'high burst damage in bursts.',
+            'Phase Stalker':    'phases — half your hits miss.',
+            'Hive Warden':      'shields its allies.',
+            'Phage Pod':        'detonates, damaging nearby enemies AND you.',
+            'Keeper':           'buffs nearby hostiles.',
+            'Hive Conduit':     'amplifies the rest of the hive.',
+            'Parasite Carrier': 'explosive on death.',
+            'Queen Node':       'restores the hive every turn.',
+            'Code Fragment':    'unstable syntax. Expect glitches.',
+            'Fatal Error':      'critical signal. Lands HARD.',
+            'Null Pointer':     'dereferences to nowhere — unpredictable.',
+            'Null Priest':      'breaks shields on contact.',
+            'Entropy':          'actions scramble randomly.',
+            'Silent Observer':  'watches your dice. Punishes patterns.',
+            'Glitch Shard':     'creates a duplicate on hit.',
+            'Echo Phantom':     'mirrors damage back onto you.',
+            'Paradox Loop':     'dies, returns for one final attack.'
+        };
+        const byName = BY_NAME[name];
+        if (byName) return `${name}: ${byName}`;
+
+        const BY_KIND = {
+            mirror:       'reflects your attacks back at you.',
+            swarm:        'summons reinforcements.',
+            aoe_sweep:    'sweeping AoE — hits the whole line.',
+            frost:        'applies chill on contact.',
+            burrow:       'burrows and resurges.',
+            clone:        'splits into copies.',
+            armored:      'heavy armor plating.',
+            immolate:     'self-destructs for AoE damage.',
+            healer:       'heals allies each turn.',
+            shielder:     'shields nearby allies.',
+            detonator:    'explodes on death.',
+            buffer:       'amplifies nearby hostiles.',
+            shield_break: 'strips shields on hit.',
+            chaotic:      'random actions — never predictable.',
+            observer:     'tags a die, exposes your plan.'
+        };
+        const byKind = enemy.kind && BY_KIND[enemy.kind];
+        if (byKind) return `${name}: ${byKind}`;
+
+        const AFFIX = Array.isArray(enemy.affixes) ? enemy.affixes : [];
+        if (AFFIX.length) return `${name}: elite intercept · ${AFFIX.join(' · ').toLowerCase()}.`;
+        return `${name}: hostile contact.`;
     },
 
     // Capture the canvas to a data URL — used by dissolve screenshots so the

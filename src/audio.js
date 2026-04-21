@@ -11,11 +11,58 @@ const AudioMgr = {
     init() {
         if (!this.ctx) {
             this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            // Master SFX gain — every synth/noise path routes through it so
+            // the SFX volume slider actually scales what the player hears.
+            // Samples keep their own per-play gain (already sfxVolume-scaled).
+            try {
+                this._sfxMaster = this.ctx.createGain();
+                this._sfxMaster.gain.value = (this.sfxVolume != null ? this.sfxVolume : 0.8);
+                this._sfxMaster.connect(this.ctx.destination);
+            } catch (e) { this._sfxMaster = null; }
             // Lazy-preload every known SFX file into decoded AudioBuffers so
             // combat's first click/hit/attack is already cached. Fires once.
             this.preloadSfx();
-        } else if (this.ctx.state === 'suspended') {
-            this.ctx.resume();
+        } else if (this.ctx.state !== 'running') {
+            // Covers both 'suspended' and iOS Safari's 'interrupted' states
+            // that appear after the tab is backgrounded.
+            this.ctx.resume().catch(() => {});
+        }
+        // Re-wire the current bgm element to WebAudio if we couldn't at
+        // creation time (e.g. the Audio was made before init() was called).
+        this._attachBgmGain(this.bgm);
+    },
+
+    // Pipe an HTMLAudioElement through WebAudio so a GainNode can control
+    // output volume. Required on iOS Safari where HTMLAudioElement.volume
+    // is silently ignored (device volume rules the playback). Safe no-op if
+    // the ctx is missing or the element is already wired.
+    _attachBgmGain(audio) {
+        if (!audio || !this.ctx) return;
+        if (audio._mvm_wired) return;
+        try {
+            const source = this.ctx.createMediaElementSource(audio);
+            const gain = this.ctx.createGain();
+            gain.gain.value = this._baseVol != null ? this._baseVol : (audio.volume != null ? audio.volume : 0.3);
+            source.connect(gain);
+            gain.connect(this.ctx.destination);
+            audio._mvm_wired = true;
+            audio._mvm_gain = gain;
+            audio._mvm_source = source;
+        } catch (e) {
+            // If WebAudio wiring fails (old iOS, already-wired element),
+            // stick with HTMLAudioElement.volume. Still works on desktop.
+        }
+    },
+
+    // Write bgm volume to BOTH the audio element and the WebAudio gain
+    // node so desktop (HTMLAudioElement.volume respected) and iOS Safari
+    // (only GainNode respected) both scale to the slider value.
+    _setBgmVolume(v) {
+        const clamped = Math.max(0, Math.min(1, v));
+        if (!this.bgm) return;
+        try { this.bgm.volume = clamped; } catch (e) {}
+        if (this.bgm._mvm_gain) {
+            try { this.bgm._mvm_gain.gain.value = clamped; } catch (e) {}
         }
     },
 
@@ -41,11 +88,11 @@ const AudioMgr = {
     fadeMusicOut(durationMs = 450) {
         if (!this.bgm) return;
         this._cancelFade();
-        const startVol = this.bgm.volume;
+        const startVol = this.bgm._mvm_gain ? this.bgm._mvm_gain.gain.value : this.bgm.volume;
         const start = performance.now();
         this._fadeInterval = setInterval(() => {
             const t = Math.min(1, (performance.now() - start) / durationMs);
-            this.bgm.volume = startVol * (1 - t);
+            this._setBgmVolume(startVol * (1 - t));
             if (t >= 1) {
                 this._cancelFade();
                 if (this.bgm) this.bgm.pause();
@@ -56,12 +103,18 @@ const AudioMgr = {
         if (!this.bgm) return;
         this._cancelFade();
         const targetVol = this._baseVol ?? 0.3;
-        this.bgm.volume = 0;
+        this._setBgmVolume(0);
         this.bgm.play().catch(() => {});
+        // Some mobile browsers leave the AudioContext suspended after a
+        // background→foreground transition. WebAudio-routed music stays
+        // silent unless we resume it here.
+        if (this.ctx && this.ctx.state !== 'running') {
+            this.ctx.resume().catch(() => {});
+        }
         const start = performance.now();
         this._fadeInterval = setInterval(() => {
             const t = Math.min(1, (performance.now() - start) / durationMs);
-            this.bgm.volume = targetVol * t;
+            this._setBgmVolume(targetVol * t);
             if (t >= 1) this._cancelFade();
         }, 30);
     },
@@ -138,10 +191,13 @@ const AudioMgr = {
         if (!track || !track.sources) return;
         const nextSrc = this._pickShuffleSrc(track.sources);
         if (!nextSrc) return;
-        const currentVol = this.bgm ? this.bgm.volume : (this._baseVol ?? 0.3);
+        const currentVol = this.bgm
+            ? (this.bgm._mvm_gain ? this.bgm._mvm_gain.gain.value : this.bgm.volume)
+            : (this._baseVol ?? 0.3);
         this.bgm = new Audio(this._resolveTrackSrc(nextSrc));
         this.bgm.loop = false;
-        this.bgm.volume = currentVol;
+        this._attachBgmGain(this.bgm);
+        this._setBgmVolume(currentVol);
         this.bgm.addEventListener('ended', () => this._onShuffleTrackEnded());
         this.bgm.play().catch(() => {});
     },
@@ -168,7 +224,8 @@ const AudioMgr = {
                                      : (track.sources ? track.sources[0] : track.src);
             this.bgm = new Audio(this._resolveTrackSrc(rawSrc));
             this.bgm.loop = !isShuffle;
-            this.bgm.volume = 0;
+            this._attachBgmGain(this.bgm);
+            this._setBgmVolume(0);
             if (isShuffle) {
                 this.bgm.addEventListener('ended', () => this._onShuffleTrackEnded());
             }
@@ -211,9 +268,9 @@ const AudioMgr = {
         if (this._duckTimeout) clearTimeout(this._duckTimeout);
         const baseVol = this._baseVol ?? 0.3;
         this._baseVol = baseVol;
-        this.bgm.volume = toVolume;
+        this._setBgmVolume(toVolume);
         this._duckTimeout = setTimeout(() => {
-            if (this.bgm) this.bgm.volume = baseVol;
+            this._setBgmVolume(baseVol);
             this._duckTimeout = null;
         }, durationMs);
     },
@@ -222,10 +279,13 @@ const AudioMgr = {
     setMusicVolume(v) {
         const clamped = Math.max(0, Math.min(1, v));
         this._baseVol = clamped;
-        if (this.bgm) this.bgm.volume = clamped;
+        this._setBgmVolume(clamped);
     },
     setSFXVolume(v) {
         this.sfxVolume = Math.max(0, Math.min(1, v));
+        if (this._sfxMaster) {
+            try { this._sfxMaster.gain.value = this.sfxVolume; } catch (e) {}
+        }
     },
 
     // --- Per-sector ambient loops ---
@@ -400,8 +460,13 @@ const AudioMgr = {
         if (!this.ctx || !this.sfxEnabled) return;
         if (this.sfxVolume === 0) return;
 
-        // FIX: Do NOT force resume here. It causes lag spikes on mobile.
-        if (this.ctx.state === 'suspended') return;
+        // After the tab comes back from background on mobile, the ctx may be
+        // suspended or (iOS Safari) 'interrupted'. Fire-and-forget resume so
+        // the next sound lands. Bail for this call only if still not running.
+        if (this.ctx.state !== 'running') {
+            this.ctx.resume().catch(() => {});
+            if (this.ctx.state !== 'running') return;
+        }
 
         // Sample path: if this id has a file, prefer it. Kick off the load
         // on first request (for IDs that weren't preloaded for some reason)
@@ -429,14 +494,15 @@ const AudioMgr = {
     _playSoundSynth(type) {
         if (!this.ctx || !this.sfxEnabled) return;
         if (this.sfxVolume === 0) return;
-        if (this.ctx.state === 'suspended') return;
+        if (this.ctx.state !== 'running') return;
 
         const t = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
+        const dest = this._sfxMaster || this.ctx.destination;
 
         osc.connect(gain);
-        gain.connect(this.ctx.destination);
+        gain.connect(dest);
 
         switch (type) {
             case 'attack': 
@@ -461,12 +527,12 @@ const AudioMgr = {
                 osc.stop(t + 0.5);
                 
                 setTimeout(() => {
-                    if (!this.sfxEnabled) return; 
+                    if (!this.sfxEnabled) return;
                     const osc2 = this.ctx.createOscillator();
                     const g2 = this.ctx.createGain();
                     osc2.connect(g2);
-                    g2.connect(this.ctx.destination);
-                    
+                    g2.connect(this._sfxMaster || this.ctx.destination);
+
                     osc2.type = 'sawtooth';
                     osc2.frequency.setValueAtTime(100, t + 0.5);
                     osc2.frequency.exponentialRampToValueAtTime(10, t + 1.5);
@@ -482,7 +548,7 @@ const AudioMgr = {
                 const osc3 = this.ctx.createOscillator();
                 const g3 = this.ctx.createGain();
                 osc3.connect(g3);
-                g3.connect(this.ctx.destination);
+                g3.connect(this._sfxMaster || this.ctx.destination);
                 osc3.type = 'square';
                 osc3.frequency.setValueAtTime(50, t);
                 osc3.frequency.linearRampToValueAtTime(20, t + 2.0);
@@ -681,7 +747,7 @@ const AudioMgr = {
         gain.gain.setValueAtTime(vol, t);
         gain.gain.exponentialRampToValueAtTime(0.01, t + dur);
         osc.connect(gain);
-        gain.connect(this.ctx.destination);
+        gain.connect(this._sfxMaster || this.ctx.destination);
         osc.start(t);
         osc.stop(t + dur);
     },
@@ -693,10 +759,10 @@ const AudioMgr = {
         const buffer = this.ctx.createBuffer(1, bSize, this.ctx.sampleRate);
         const data = buffer.getChannelData(0);
         for (let i = 0; i < bSize; i++) data[i] = Math.random() * 2 - 1;
-        
+
         const noise = this.ctx.createBufferSource();
         noise.buffer = buffer;
-        
+
         const filter = this.ctx.createBiquadFilter();
         filter.type = 'lowpass';
         filter.frequency.setValueAtTime(1000, t);
@@ -705,10 +771,10 @@ const AudioMgr = {
         const nGain = this.ctx.createGain();
         nGain.gain.setValueAtTime(volume, t);
         nGain.gain.exponentialRampToValueAtTime(0.01, t + duration);
-        
+
         noise.connect(filter);
         filter.connect(nGain);
-        nGain.connect(this.ctx.destination);
+        nGain.connect(this._sfxMaster || this.ctx.destination);
         noise.start(t);
     }
 };
