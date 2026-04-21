@@ -23,51 +23,35 @@ const AudioMgr = {
             // combat's first click/hit/attack is already cached. Fires once.
             this.preloadSfx();
         }
-        // A freshly-created AudioContext starts in 'suspended' even when we
-        // built it inside a user gesture — we still have to explicitly
-        // resume(). Doing it here (same call-stack as the gesture) is what
-        // makes the first tap audible instead of requiring a second tap.
-        // Also covers iOS Safari's 'interrupted' state after backgrounding.
+        // iOS Safari / Brave-iOS unlock: ctx.resume() flips the state flag
+        // but isn't enough on its own — iOS only treats the context as
+        // truly unlocked after an AudioBufferSource has been .start()'d
+        // inside the user-gesture call stack. Fire a 1-sample silent
+        // buffer so the very next SFX / bgm doesn't drop silently. Cheap
+        // and idempotent (the if-guard skips it once the ctx is running).
         if (this.ctx.state !== 'running') {
+            try {
+                const buffer = this.ctx.createBuffer(1, 1, 22050);
+                const src = this.ctx.createBufferSource();
+                src.buffer = buffer;
+                src.connect(this._sfxMaster || this.ctx.destination);
+                src.start(0);
+            } catch (e) { /* unlock is opportunistic */ }
             this.ctx.resume().catch(() => {});
         }
-        // Re-wire the current bgm element to WebAudio if we couldn't at
-        // creation time (e.g. the Audio was made before init() was called).
-        this._attachBgmGain(this.bgm);
     },
 
-    // Pipe an HTMLAudioElement through WebAudio so a GainNode can control
-    // output volume. Required on iOS Safari where HTMLAudioElement.volume
-    // is silently ignored (device volume rules the playback). Safe no-op if
-    // the ctx is missing or the element is already wired.
-    _attachBgmGain(audio) {
-        if (!audio || !this.ctx) return;
-        if (audio._mvm_wired) return;
-        try {
-            const source = this.ctx.createMediaElementSource(audio);
-            const gain = this.ctx.createGain();
-            gain.gain.value = this._baseVol != null ? this._baseVol : (audio.volume != null ? audio.volume : 0.3);
-            source.connect(gain);
-            gain.connect(this.ctx.destination);
-            audio._mvm_wired = true;
-            audio._mvm_gain = gain;
-            audio._mvm_source = source;
-        } catch (e) {
-            // If WebAudio wiring fails (old iOS, already-wired element),
-            // stick with HTMLAudioElement.volume. Still works on desktop.
-        }
-    },
-
-    // Write bgm volume to BOTH the audio element and the WebAudio gain
-    // node so desktop (HTMLAudioElement.volume respected) and iOS Safari
-    // (only GainNode respected) both scale to the slider value.
+    // Write bgm volume straight to the audio element. We deliberately do
+    // NOT pipe bgm through WebAudio's createMediaElementSource on mobile —
+    // iOS Safari / Brave-iOS refuse to play a MediaElement-sourced graph
+    // until a separate gesture unlocks the ctx, which meant the first
+    // intro tap was silent. HTMLAudioElement.play() from a gesture is
+    // allowed on iOS and works first-tap; the volume slider then stays
+    // effective on every platform except iOS (where device volume rules).
     _setBgmVolume(v) {
         const clamped = Math.max(0, Math.min(1, v));
         if (!this.bgm) return;
         try { this.bgm.volume = clamped; } catch (e) {}
-        if (this.bgm._mvm_gain) {
-            try { this.bgm._mvm_gain.gain.value = clamped; } catch (e) {}
-        }
     },
 
     toggleMusic(enabled) {
@@ -92,7 +76,7 @@ const AudioMgr = {
     fadeMusicOut(durationMs = 450) {
         if (!this.bgm) return;
         this._cancelFade();
-        const startVol = this.bgm._mvm_gain ? this.bgm._mvm_gain.gain.value : this.bgm.volume;
+        const startVol = this.bgm.volume;
         const start = performance.now();
         this._fadeInterval = setInterval(() => {
             const t = Math.min(1, (performance.now() - start) / durationMs);
@@ -108,9 +92,9 @@ const AudioMgr = {
         this._cancelFade();
         const targetVol = this._baseVol ?? 0.3;
         this._setBgmVolume(0);
-        // Resume the context FIRST — WebAudio-piped bgm is silent on a
-        // suspended ctx even after .play() succeeds, so waiting until after
-        // play() means the first tap's audio doesn't land.
+        // Resume the SFX context in the same gesture so the next SFX is
+        // audible; bgm uses plain HTMLAudioElement so it doesn't need it,
+        // but doing it here is harmless and keeps all unlock paths together.
         if (this.ctx && this.ctx.state !== 'running') {
             this.ctx.resume().catch(() => {});
         }
@@ -195,12 +179,9 @@ const AudioMgr = {
         if (!track || !track.sources) return;
         const nextSrc = this._pickShuffleSrc(track.sources);
         if (!nextSrc) return;
-        const currentVol = this.bgm
-            ? (this.bgm._mvm_gain ? this.bgm._mvm_gain.gain.value : this.bgm.volume)
-            : (this._baseVol ?? 0.3);
+        const currentVol = this.bgm ? this.bgm.volume : (this._baseVol ?? 0.3);
         this.bgm = new Audio(this._resolveTrackSrc(nextSrc));
         this.bgm.loop = false;
-        this._attachBgmGain(this.bgm);
         this._setBgmVolume(currentVol);
         this.bgm.addEventListener('ended', () => this._onShuffleTrackEnded());
         this.bgm.play().catch(() => {});
@@ -220,11 +201,8 @@ const AudioMgr = {
         // Honor the stored preference on first play.
         if (!this._trackPrefLoaded) { this._loadTrackPreference(); this._trackPrefLoaded = true; }
 
-        // Resume in the CURRENT call-stack (user-gesture) BEFORE we touch
-        // MediaElementSource / .play(). A suspended ctx routes piped audio
-        // into a muted graph — a subsequent async resume() doesn't always
-        // revive the already-started element, which is why the first intro
-        // tap used to stay silent until a second tap came in.
+        // Resume in the CURRENT call-stack (user-gesture) so SFX routed
+        // through WebAudio aren't silent on the first interaction.
         if (this.ctx && this.ctx.state !== 'running') {
             this.ctx.resume().catch(() => {});
         }
@@ -237,7 +215,6 @@ const AudioMgr = {
                                      : (track.sources ? track.sources[0] : track.src);
             this.bgm = new Audio(this._resolveTrackSrc(rawSrc));
             this.bgm.loop = !isShuffle;
-            this._attachBgmGain(this.bgm);
             this._setBgmVolume(0);
             if (isShuffle) {
                 this.bgm.addEventListener('ended', () => this._onShuffleTrackEnded());
