@@ -65,6 +65,23 @@ class Player extends Entity {
     
     addRelic(relic) {
         this.relics.push(relic);
+        // Custom Run: Daily Dupes — relics duplicate on pickup. Guard against
+        // recursion by short-circuiting on the second entry (_dupeMarker).
+        if (Game && Game._customRelicPickDupe && !relic._dupeMarker) {
+            const dupe = Object.assign({}, relic, { _dupeMarker: true });
+            // Defer the dupe to the next tick so both relics show in the
+            // list UI and synergies can check the combined set.
+            setTimeout(() => { this.addRelic(dupe); }, 0);
+        }
+        // Custom Run: Cursed Relics — picking a relic damages the player.
+        // Fires once per real pickup (skip duplicated _dupeMarker entries so
+        // Daily Dupes doesn't double-tax).
+        if (Game && Game._customRelicPickDmg && !relic._dupeMarker) {
+            const dmg = Game._customRelicPickDmg;
+            // Bypass shield — the curse is the point of the modifier.
+            this.takeDamage(dmg, null, false, /*bypassShield*/ true);
+            ParticleSys.createFloatingText(this.x, this.y - 140, `CURSED -${dmg}`, '#ff0055');
+        }
         if (relic.id === 'gamblers_chip') {
             this.maxHp = Math.max(1, this.maxHp - 5);
             if (this.currentHp > this.maxHp) this.currentHp = this.maxHp;

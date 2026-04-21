@@ -119,9 +119,23 @@ class Entity {
             actualDmg = Math.floor(actualDmg * this.incomingDamageMult);
         }
 
+        // Custom Run: Glass Cannon-style incoming-damage modifier. Applied
+        // to the player on any external source so self-costs (blood tribute,
+        // blood reroll) aren't double-punished.
+        if (this instanceof Player && Game && Game._customDmgInMult && Game._customDmgInMult !== 1 && source) {
+            actualDmg = Math.floor(actualDmg * Game._customDmgInMult);
+        }
+
         // Expansion (5.2.1) — Foundry Golem armored plating halves incoming damage.
         if (Enemy && this instanceof Enemy && this.kind === 'armored') {
             actualDmg = Math.floor(actualDmg * 0.5);
+        }
+
+        // Elite affix: Brittle — enemy takes +50% incoming damage (paired
+        // with a +25% outgoing in enemy.js getEffectiveDamage). Net: a
+        // glass-cannon elite that rewards focused burst.
+        if (Enemy && this instanceof Enemy && this.affixes && this.affixes.includes('Brittle')) {
+            actualDmg = Math.floor(actualDmg * 1.5);
         }
 
         // PANOPTICON eye-lock (phase 2): player takes 2x damage unless a

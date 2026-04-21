@@ -305,8 +305,22 @@ body {
     letter-spacing: 0.4em;
     color: var(--neon-gold);
     text-shadow: 0 0 12px var(--neon-gold);
-    margin-bottom: 18px;
+    margin-bottom: 10px;
 }
+/* Sector signature mechanic blurb (Part 23). Sits between the sector
+   name and the sweep line so the player reads the rule before they step
+   into the next series of combats. Empty string → display:none via :empty. */
+.sector-intro-mech {
+    font-family: var(--font-main);
+    font-size: clamp(0.7rem, 2.2cqw, 0.95rem);
+    letter-spacing: 0.12em;
+    color: rgba(255, 255, 255, 0.78);
+    text-transform: uppercase;
+    max-width: 80%;
+    margin: 0 auto 18px;
+    line-height: 1.4;
+}
+.sector-intro-mech:empty { display: none; }
 .sector-intro-sweep {
     width: 320px;
     height: 4px;
@@ -769,6 +783,26 @@ body[data-transition-dir] .screen.active {
 }
 /* Default delay (overridden by JS-set inline transition-delay for visible-only cascade). */
 .screen.active > .stagger-in { transition-delay: 0ms; }
+
+/* Sector mechanic pill (Part 23 / 25) — compact badge under the sector/turn
+   readout showing which signature rule is active this fight. Empty content
+   via :empty keeps the DOM node harmless when no mechanic applies. */
+.sector-mech-pill {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 2px 8px;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #ffd76a;
+    background: rgba(255, 215, 100, 0.08);
+    border: 1px solid rgba(255, 215, 100, 0.45);
+    border-radius: 3px;
+    box-shadow: 0 0 8px rgba(255, 215, 100, 0.18);
+    opacity: 0.9;
+}
+.sector-mech-pill:empty { display: none; }
 
 /* Disabled button state (works for both .disabled class and [disabled] attr) */
 .btn.disabled,

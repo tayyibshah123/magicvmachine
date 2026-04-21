@@ -39,6 +39,28 @@ const SECTOR_CONFIG = {
     5: { type: 'source', bgTop: '#3d0015', bgMid: '#82001f', bgBot: '#0a0008', sun: ['#ff3355', '#ffd76a'],  grid: '#ff335555' }
 };
 
+// Sector signature mechanics — each sector has ONE light-touch rule that
+// colours combat without replacing the base system. Activated per-combat
+// from Game.startCombat and cleared when the fight ends.
+//   enemyShieldBonus — flat shield added to each enemy on spawn
+//   playerHeatDmg    — HP tick each turn end while in sector (ignored in
+//                      tutorial / boss silence)
+//   minionDmgMult    — damage multiplier applied to every enemy minion's
+//                      outgoing damage (stackable with existing debuffs)
+//   damageNoiseRange — on any player attack, roll a uniform ± scalar so
+//                      Source sector rolls feel unstable
+const SECTOR_MECHANICS = {
+    1: { label: 'STANDARD OPS',    desc: 'Corporate patrols. Baseline threat.' },
+    2: { label: 'FROST FIELD',     desc: 'Cryo hostiles carry +6 Shield.',
+         enemyShieldBonus: 6 },
+    3: { label: 'HEAT TILES',      desc: 'Molten ground deals 1 HP each turn end.',
+         playerHeatDmg: 1 },
+    4: { label: 'HIVE RESONANCE',  desc: 'Enemy minions hit +20% harder.',
+         minionDmgMult: 1.2 },
+    5: { label: 'REALITY GLITCH',  desc: 'Attacks roll ±15% damage each cast.',
+         damageNoiseRange: 0.15 }
+};
+
 const STATE = {
     BOOT: 0, MENU: 1, MAP: 2, COMBAT: 3, REWARD: 4, GAMEOVER: 6, TUTORIAL: 7, META: 8, SHOP: 9, CHAR_SELECT: 10, EVENT: 11,
     INTEL: 12, HEX: 13, TUTORIAL_COMBAT: 14, STORY: 15,
@@ -369,7 +391,12 @@ const UPGRADES_POOL = [
     { id: 'nano_forge',      name: "Nano Forge",      desc: "At combat start, spawn a free Minion at +50% stats.",                                icon: ICONS.minion,        rarity: 'gold' },
     { id: 'celestial_sync',  name: "Celestial Sync",  desc: "Perfect QTEs also heal 3 HP.",                                                       icon: ICONS.intentHeal },
     { id: 'dervish_mode',    name: "Dervish Mode",    desc: "After 3 attacks in a single turn, gain +2 Mana.",                                    icon: ICONS.relicBattery },
-    { id: 'iron_vault',      name: "Iron Vault",      desc: "Shield does not decay at end of turn (max 50 carry).",                               icon: ICONS.relicShield,   rarity: 'gold' }
+    { id: 'iron_vault',      name: "Iron Vault",      desc: "Shield does not decay at end of turn (max 50 carry).",                               icon: ICONS.relicShield,   rarity: 'gold' },
+
+    // --- Part 5 relic expansion ---
+    { id: 'reinforced_shell',name: "Reinforced Shell",desc: "+20 Max HP.",                                                                        icon: ICONS.relicHull,     instant: true },
+    { id: 'volt_primer',     name: "Volt Primer",     desc: "First attack each turn deals +5 flat DMG.",                                          icon: ICONS.overcharge },
+    { id: 'salvage_protocol',name: "Salvage Protocol",desc: "Gain 3 Fragments every time you kill an enemy.",                                     icon: ICONS.relicLoot }
 ];
 
 const CORRUPTED_RELICS = [
@@ -557,7 +584,27 @@ const ENEMIES = [
     // Sector 5 — The Source
     { name: "Glitch Shard",     hp: 160, dmg: 28, sector: 5, shape: 'wisp',   kind: 'clone' },
     { name: "Echo Phantom",     hp: 150, dmg: 24, sector: 5, shape: 'wisp',   kind: 'mirror' },
-    { name: "Paradox Loop",     hp: 120, dmg: 30, sector: 5, shape: 'sniper', kind: 'chaotic' }
+    { name: "Paradox Loop",     hp: 120, dmg: 30, sector: 5, shape: 'sniper', kind: 'chaotic' },
+
+    /* ==== Part 5 content expansion — drop-in variety using existing
+       enemy `kind` handlers. New names and stat spreads only; no new
+       combat behavior code required. Dossier lines are handled by the
+       _getIntelLine BY_KIND fallback in game.js. */
+    // Sector 1 — Downtown Glass
+    { name: "Security Bot",      hp: 46, dmg: 8,  sector: 1, shape: 'tank',   kind: 'aoe_sweep' },
+    { name: "Network Intruder",  hp: 28, dmg: 7,  sector: 1, shape: 'drone',  kind: 'mirror' },
+    // Sector 2 — Cryo Docks
+    { name: "Data Phantom",      hp: 58, dmg: 11, sector: 2, shape: 'wisp',   kind: 'clone' },
+    { name: "Cryo Wraith",       hp: 52, dmg: 10, sector: 2, shape: 'wisp',   kind: 'frost' },
+    // Sector 3 — Foundry Ravine
+    { name: "Furnace Knight",    hp: 130, dmg: 14, sector: 3, shape: 'tank',   kind: 'armored' },
+    { name: "Crucible Shaper",   hp: 120, dmg: 10, sector: 3, shape: 'sniper', kind: 'buffer' },
+    // Sector 4 — Hive Vectors
+    { name: "Hive Mender",       hp: 100, dmg: 8,  sector: 4, shape: 'drone',  kind: 'healer' },
+    { name: "Phage Drone",       hp: 80,  dmg: 14, sector: 4, shape: 'drone',  kind: 'detonator' },
+    // Sector 5 — The Source
+    { name: "Error Cluster",     hp: 170, dmg: 22, sector: 5, shape: 'wisp',   kind: 'shield_break' },
+    { name: "Glitch Cascade",    hp: 140, dmg: 28, sector: 5, shape: 'sniper', kind: 'chaotic' }
 ];
 const BOSS_DATA = {
     1: { 
@@ -962,12 +1009,11 @@ const EVENTS_DB = [
      - desc: 1-line effect summary
      - payoutBonus: positive number (percentage) to apply as a multiplier
        bonus on final fragment payout; negative = reduction
-     - Flags used by the applier (implement as the modifiers ship):
+     - Flags wired by Game._applyCustomRunModifiers:
          startHpPct, disableRest, dmgOutMult, dmgInMult, diceCount,
-         disableReroll, resurrectChance, fragDrainPerSector,
-         relicPickDmg, disableLore, hotHandsDmg, startRelicCount,
-         extraRerollPerTurn, bossHpMult, shopDiscountPct,
-         scrambleDiceEachCombat, hideIntentNumbers, attackCritVariance,
+         disableReroll, fragDrainPerSector, relicPickDmg, disableLore,
+         hotHandsDmg, startRelicCount, extraRerollPerTurn, bossHpMult,
+         shopDiscountPct, hideIntentNumbers, attackCritVariance,
          relicPickDupe
    ========================================= */
 const CUSTOM_RUN_MODIFIERS = [
@@ -976,7 +1022,6 @@ const CUSTOM_RUN_MODIFIERS = [
     { id: 'glass_cannon',  kind: 'negative', name: 'Glass Cannon',      desc: '+50% DMG dealt, +50% DMG taken.',                  payoutBonus: 20, dmgOutMult: 1.5, dmgInMult: 1.5 },
     { id: 'slim_dice',     kind: 'negative', name: 'Narrow Hand',       desc: 'Start with 3 dice instead of 4.',                  payoutBonus: 30, diceCount: 3 },
     { id: 'no_reroll',     kind: 'negative', name: 'Locked In',         desc: 'No rerolls available.',                            payoutBonus: 35, disableReroll: true },
-    { id: 'undead_mob',    kind: 'negative', name: 'Undead Protocol',   desc: '20% of enemies resurrect once at 50% HP.',         payoutBonus: 30, resurrectChance: 0.2 },
     { id: 'tax_man',       kind: 'negative', name: 'Tax Man',           desc: '-10% fragments at each sector transition.',        payoutBonus: 15, fragDrainPerSector: 0.10 },
     { id: 'cursed_deck',   kind: 'negative', name: 'Cursed Relics',     desc: 'Each relic picked deals 3 DMG on acquire.',        payoutBonus: 25, relicPickDmg: 3 },
     { id: 'limit_lore',    kind: 'negative', name: 'Silent Chronicle',  desc: 'No lore unlocks this run.',                        payoutBonus: 10, disableLore: true },
@@ -985,15 +1030,13 @@ const CUSTOM_RUN_MODIFIERS = [
     { id: 'extra_reroll',  kind: 'positive', name: 'Steady Hand',       desc: '+1 extra reroll per turn.',                        payoutBonus: -25, extraRerollPerTurn: 1 },
     { id: 'soft_bosses',   kind: 'positive', name: 'Soft Bosses',       desc: 'All bosses -20% HP.',                              payoutBonus: -40, bossHpMult: 0.8 },
     { id: 'free_shops',    kind: 'positive', name: 'Open Markets',      desc: 'Shop prices -30%.',                                payoutBonus: -25, shopDiscountPct: 0.3 },
-    { id: 'scrambled',     kind: 'chaotic',  name: 'Scrambled Protocol', desc: 'Dice types shuffle to random slots every combat.', payoutBonus: 10, scrambleDiceEachCombat: true },
-    { id: 'dark_visions',  kind: 'chaotic',  name: 'Dark Visions',      desc: 'Enemy intent icons hidden — must be inferred.',    payoutBonus: 20, hideIntentNumbers: true },
     { id: 'double_or_none',kind: 'chaotic',  name: 'Double or None',    desc: 'Attack dice 50%: deal 2× or 0 damage.',            payoutBonus: 15, attackCritVariance: 'double_or_none' },
     { id: 'daily_dupes',   kind: 'chaotic',  name: 'Daily Dupes',       desc: 'Each relic is duplicated on pickup.',              payoutBonus: -15, relicPickDupe: true }
 ];
 
-/* Feature flag for the Custom Runs UI — toggle to `true` when Part 29
-   UI + effect applier land. Data shape above is stable and safe to read
-   even with the flag off. */
-const FEATURE_CUSTOM_RUNS = false;
+/* Feature flag for the Custom Runs UI. Part 29 effect-applier now covers
+   every modifier in the data table above — flag flipped on. If a future
+   modifier needs wiring, disable temporarily here while the handler lands. */
+const FEATURE_CUSTOM_RUNS = true;
 
-export { CONFIG, COLORS, SECTOR_CONFIG, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS };
+export { CONFIG, COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS };

@@ -45,8 +45,11 @@ class Enemy extends Entity {
         
         this.affixes = [];
         if (this.isElite) {
-            // 8 affixes now — uniform pick. Original three retained.
-            const pool = ['Shielded', 'Second Wind', 'Jammer', 'Reflector', 'Phase', 'Multiplier', 'Anchor', 'Vampiric'];
+            // Pool of elite affixes. Each is handled as a stat mod or a
+            // small takeDamage / turn hook — see entity.js and enemy turn
+            // resolver for the handlers.
+            const pool = ['Shielded', 'Second Wind', 'Jammer', 'Reflector',
+                          'Phase', 'Multiplier', 'Anchor', 'Vampiric', 'Brittle'];
             this.affixes.push(pool[Math.floor(Math.random() * pool.length)]);
         }
         this.secondWindTriggered = false;
@@ -55,23 +58,25 @@ class Enemy extends Entity {
 
     getEffectiveDamage(baseVal) {
         let dmg = baseVal || this.baseDmg;
-        
+
         // 1. Constrict / Digital Rot (Multiplicative reduction)
         const constrict = this.hasEffect('constrict');
         if (constrict) {
             dmg = Math.floor(dmg * constrict.val);
         }
-        
+
         // 2. Weak (50% reduction)
         const weak = this.hasEffect('weak');
         if (weak) {
-            dmg = Math.floor(dmg * 0.5); 
+            dmg = Math.floor(dmg * 0.5);
         }
-        
-        // 3. Overcharge (Incoming damage mod, but sometimes affects output if specified)
-        // (Standard Overcharge affects incoming damage on target, not outgoing from caster usually, 
-        // but if you have a specific mechanic where it buffs dmg, add here. Leaving as is for now.)
-        
+
+        // 3. Elite affix: Brittle — +25% outgoing damage (paired with +50%
+        //    incoming in entity.js). Glass-cannon elite profile.
+        if (this.affixes && this.affixes.includes('Brittle')) {
+            dmg = Math.floor(dmg * 1.25);
+        }
+
         return Math.max(0, dmg);
     }
 

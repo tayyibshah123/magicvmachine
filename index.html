@@ -381,6 +381,8 @@
                         <div class="sector-turn-group">
                             <div id="sector-display" class="neon-text-purple" style="font-family: 'Orbitron'; font-size: 1.2rem;">SECTOR 1</div>
                             <div id="turn-display" class="neon-text-blue turn-display">TURN 1</div>
+                            <!-- Sector signature mechanic pill (Part 23). Empty = hidden. -->
+                            <div id="sector-mech-pill" class="sector-mech-pill" aria-hidden="true"></div>
                         </div>
                     </div>
                     <!-- Relic/Upgrade Dropdown -->
@@ -477,6 +479,7 @@
                 <div class="sector-intro-content">
                     <div class="sector-intro-num" id="sector-intro-num">SECTOR 1</div>
                     <div class="sector-intro-name" id="sector-intro-name">THE GATE</div>
+                    <div class="sector-intro-mech" id="sector-intro-mech"></div>
                     <svg class="sector-intro-sweep" viewBox="0 0 400 6" preserveAspectRatio="none">
                         <line x1="0" y1="3" x2="400" y2="3" stroke="url(#siGrad)" stroke-width="2"/>
                         <defs>

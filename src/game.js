@@ -1,4 +1,4 @@
-import { CONFIG, COLORS, SECTOR_CONFIG, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS } from './constants.js';
+import { CONFIG, COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS } from './constants.js';
 import { AudioMgr } from './audio.js';
 import { Entity, registerEntityClasses } from './entities/entity.js';
 import { Player } from './entities/player.js';
@@ -3280,10 +3280,19 @@ triggerPhaseGlitch() {
         const overlay = document.getElementById('sector-intro');
         const num = document.getElementById('sector-intro-num');
         const name = document.getElementById('sector-intro-name');
+        const mech = document.getElementById('sector-intro-mech');
         if (!overlay || !num || !name) return Promise.resolve();
         const SECTOR_NAMES = { 1: 'THE GATE', 2: 'THE VOID', 3: 'THE FORGE', 4: 'THE HIVE', 5: 'THE CORE' };
         num.textContent = `SECTOR ${sectorNum}`;
         name.textContent = SECTOR_NAMES[sectorNum] || '';
+        // Surface the sector signature mechanic (Part 23) so the player
+        // reads what rule will colour their combats here before stepping in.
+        if (mech) {
+            const mechData = SECTOR_MECHANICS[sectorNum];
+            mech.textContent = mechData
+                ? `${mechData.label} — ${mechData.desc}`
+                : '';
+        }
         overlay.classList.remove('hidden');
         // Force reflow so the transition fires.
         void overlay.offsetHeight;
@@ -5307,15 +5316,25 @@ triggerSystemCrash() {
             // FIX: Handle event here so position is already updated
             this.startEvent();
         } else if (node.type === 'rest') {
+            // Custom Run: Merciless — rest nodes do nothing. Flash a quick
+            // toast and auto-complete so the player stays on the map.
+            if (this._customDisableRest) {
+                ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
+                    'REST DENIED — MERCILESS', '#ff3355');
+                AudioMgr.playSound('defend');
+                this.completeCurrentNode();
+                this.renderMap();
+                return;
+            }
             const available = this._availableDiceUpgrades();
             const btnTinker = document.getElementById('btn-rest-tinker');
-            
+
             if (available.length === 0) {
                 btnTinker.innerHTML = "<div>🛒 ACCESS SHOP</div><div style='font-size: 0.8rem; color: #aaa;'>All Skills Maxed</div>";
             } else {
                 btnTinker.innerHTML = "<div>🔧 TINKER</div><div style='font-size: 0.8rem; color: #aaa;'>Upgrade a Random Skill</div>";
             }
-            
+
             document.getElementById('screen-rest').classList.remove('hidden');
             document.getElementById('screen-rest').classList.add('active');
         } else {
@@ -5654,8 +5673,11 @@ triggerSystemCrash() {
         this._shopHackOutcome = null;
         // Shop price: base meta-upgrade discount multiplied by any ascension
         // shop-price modifier (Ascension 10 Apex = x2, Ascension 11 Null Field = x1.4).
+        // Custom Run "Open Markets" stacks on top as an additional discount.
+        const customDiscount = 1 - (this._customShopDiscount || 0);
         const discountMult = (this.hasMetaUpgrade('m_discount') ? 0.75 : 1.0)
-            * (this._ascEffects && this._ascEffects.shopPriceMult ? this._ascEffects.shopPriceMult : 1);
+            * (this._ascEffects && this._ascEffects.shopPriceMult ? this._ascEffects.shopPriceMult : 1)
+            * customDiscount;
 
         let items = [
             {
@@ -6548,15 +6570,33 @@ triggerSystemCrash() {
         if (btnClear) btnClear.onclick = () => this._clearCustomRunModifiers();
     },
     /* Apply selected modifiers to the run. Called from selectClass after
-       player is constructed. Only safe modifiers are wired here — the
-       rest sit in the data model and will be wired as Milestone 4 lands. */
+       player is constructed. Effect flags are stored on the Game object
+       (prefixed `_custom…`) and read by the relevant systems at the
+       points where they bite (rest handler, reroll gate, damage calc,
+       shop pricing, boss spawn, relic add, turn start). Stat edits that
+       only matter at run-start are applied here directly. */
     _applyCustomRunModifiers() {
         if (!this.customRunModifiers || !this.customRunModifiers.size) return;
         const active = Array.from(this.customRunModifiers)
             .map(id => CUSTOM_RUN_MODIFIERS.find(m => m.id === id))
             .filter(Boolean);
-        this._customRunActive = active;            // stored for payout calculation
+        this._customRunActive = active;
         if (!this.player) return;
+        // Reset transient flags so replaying a run without some modifiers
+        // doesn't inherit their effects from the previous attempt.
+        this._customDisableRest = false;
+        this._customDisableReroll = false;
+        this._customDmgOutMult = 1;
+        this._customDmgInMult = 1;
+        this._customBossHpMult = 1;
+        this._customShopDiscount = 0;
+        this._customFragDrainPerSector = 0;
+        this._customRelicPickDmg = 0;
+        this._customHotHandsDmg = 0;
+        this._customHideIntentNumbers = false;
+        this._customCritVariance = null;
+        this._customDisableLore = false;
+        this._customRelicPickDupe = false;
         active.forEach(m => {
             if (m.startHpPct && this.player.maxHp) {
                 this.player.currentHp = Math.max(1, Math.floor(this.player.maxHp * m.startHpPct));
@@ -6567,9 +6607,40 @@ triggerSystemCrash() {
             if (m.extraRerollPerTurn) {
                 this.player._customExtraRerolls = (this.player._customExtraRerolls || 0) + m.extraRerollPerTurn;
             }
-            // Other effects (disableRest, disableReroll, dmgOutMult, etc.)
-            // are declared in data; appliers land with Milestone 4.
+            if (m.disableRest)          this._customDisableRest = true;
+            if (m.disableReroll)        this._customDisableReroll = true;
+            if (m.dmgOutMult)           this._customDmgOutMult *= m.dmgOutMult;
+            if (m.dmgInMult)            this._customDmgInMult *= m.dmgInMult;
+            if (m.bossHpMult)           this._customBossHpMult *= m.bossHpMult;
+            if (m.shopDiscountPct)      this._customShopDiscount = Math.max(this._customShopDiscount, m.shopDiscountPct);
+            if (m.fragDrainPerSector)   this._customFragDrainPerSector = Math.max(this._customFragDrainPerSector, m.fragDrainPerSector);
+            if (m.relicPickDmg)         this._customRelicPickDmg = Math.max(this._customRelicPickDmg, m.relicPickDmg);
+            if (m.hotHandsDmg)          this._customHotHandsDmg = Math.max(this._customHotHandsDmg, m.hotHandsDmg);
+            if (m.hideIntentNumbers)    this._customHideIntentNumbers = true;
+            if (m.attackCritVariance)   this._customCritVariance = m.attackCritVariance;
+            if (m.disableLore)          this._customDisableLore = true;
+            if (m.relicPickDupe)        this._customRelicPickDupe = true;
+            // Starter relic pack: seed N relics from the regular pool.
+            // Excludes 'instant' items (consumables that just stat-bump),
+            // corrupted-tier entries, and gold-rarity relics so the starter
+            // set stays to "common / neutral" as the modifier implies.
+            if (m.startRelicCount && typeof UPGRADES_POOL !== 'undefined') {
+                const eligible = UPGRADES_POOL.filter(r =>
+                    r && !r.instant && r.rarity !== 'gold' && r.rarity !== 'red' && r.rarity !== 'corrupted');
+                for (let i = 0; i < m.startRelicCount && eligible.length > 0; i++) {
+                    const pick = eligible[Math.floor(Math.random() * eligible.length)];
+                    if (pick && this.player.addRelic) {
+                        this.player.addRelic({ id: pick.id, name: pick.name, desc: pick.desc, icon: pick.icon });
+                    }
+                }
+            }
         });
+        if (this._customDisableReroll) this.rerolls = 0;
+        if (this._customHideIntentNumbers) {
+            document.body.classList.add('custom-hide-intents');
+        } else {
+            document.body.classList.remove('custom-hide-intents');
+        }
     },
 
     startHexBreach() {
@@ -6812,8 +6883,11 @@ updateHexBreach(dt) {
         
         const available = LORE_DATABASE.map((_, i) => i).filter(i => !this.unlockedLore.includes(i));
         let msg = "300 Fragments Acquired.";
-        
-        if (available.length > 0) {
+
+        // Custom Run: Silent Chronicle — no lore unlocks this run.
+        if (this._customDisableLore) {
+            msg += "\nDATABASE ACCESS DENIED (SILENT CHRONICLE)";
+        } else if (available.length > 0) {
             const unlockId = available[Math.floor(Math.random() * available.length)];
             this.unlockedLore.push(unlockId);
             msg += "\nNEW DATABASE ENTRY UNLOCKED.";
@@ -7000,6 +7074,35 @@ async startCombat(type) {
             try { this._showCombatBriefing(this.enemy); } catch (e) { /* swallow */ }
         }
 
+        // Custom Run: Soft Bosses — boss HP globally reduced. Applied
+        // BEFORE the assist drop so the two stack multiplicatively.
+        if (this.enemy.isBoss && this._customBossHpMult && this._customBossHpMult !== 1) {
+            this.enemy.maxHp = Math.max(1, Math.floor(this.enemy.maxHp * this._customBossHpMult));
+            this.enemy.currentHp = this.enemy.maxHp;
+        }
+
+        // Sector signature mechanic — Part 23. Cached on Game for the life
+        // of the combat; cleared on combat end so the map/menu don't get
+        // blamed for stray effects. Bosses + tutorial skip the effect so
+        // scripted moments stay clean.
+        const sectorMech = SECTOR_MECHANICS[this.sector];
+        const mechPill = document.getElementById('sector-mech-pill');
+        if (sectorMech && this.currentState !== STATE.TUTORIAL_COMBAT) {
+            this._activeSectorMech = sectorMech;
+            if (mechPill) mechPill.textContent = sectorMech.label || '';
+            if (sectorMech.enemyShieldBonus && !this.enemy.isBoss) {
+                this.enemy.shield = (this.enemy.shield || 0) + sectorMech.enemyShieldBonus;
+                if (Array.isArray(this.enemy.minions)) {
+                    this.enemy.minions.forEach(m => {
+                        if (m) m.shield = (m.shield || 0) + sectorMech.enemyShieldBonus;
+                    });
+                }
+            }
+        } else {
+            this._activeSectorMech = null;
+            if (mechPill) mechPill.textContent = '';
+        }
+
         // Dynamic difficulty assist (§3.3) — if the player has lost to this
         // sector's boss 3+ times in a row (and they're not on any Ascension)
         // silently drop boss HP 10% and flag the boss so the UI can render
@@ -7106,6 +7209,17 @@ async startCombat(type) {
                 s.spawnTimer = 1.0;
                 this.enemy.minions.push(s);
             }
+        }
+
+        // Sector 4 — Hive Resonance. Enemy minions (including any already
+        // assigned in the constructor or spawned above) hit harder here.
+        // Done after summonOnStart so newly-minted minions get the bump too.
+        if (this._activeSectorMech && this._activeSectorMech.minionDmgMult
+                && Array.isArray(this.enemy.minions)) {
+            const mult = this._activeSectorMech.minionDmgMult;
+            this.enemy.minions.forEach(m => {
+                if (m && typeof m.dmg === 'number') m.dmg = Math.max(1, Math.floor(m.dmg * mult));
+            });
         }
 
         if(this.player.traits.startMinions) {
@@ -7228,6 +7342,12 @@ async startTurn() {
       try {
         this.inputLocked = true;
         this.recycleBinCount = 0;
+        // Custom Run: reset the per-turn flag for the Hot Hands modifier
+        // (first die played each turn costs HP).
+        this._hotHandsUsedThisTurn = false;
+        // Relic: VOLT PRIMER resets each turn so the first attack gets the
+        // +5 flat DMG bonus.
+        this._voltPrimerUsedThisTurn = false;
 
         await this.showPhaseBanner("PLAYER PHASE", "COMMAND LINK ESTABLISHED", 'player');
 
@@ -7458,6 +7578,12 @@ async startTurn() {
          if (this._ascEffects && this._ascEffects.rerollPenalty < 0) {
              this.rerolls = Math.max(0, this.rerolls + this._ascEffects.rerollPenalty);
          }
+         // Custom Run: Locked In — force reroll count to 0 so the badge reflects reality.
+         if (this._customDisableReroll) this.rerolls = 0;
+         // Custom Run: Steady Hand — extra rerolls per turn.
+         if (this.player && this.player._customExtraRerolls) {
+             this.rerolls += this.player._customExtraRerolls;
+         }
         
         if (this.deadMinionsThisTurn > 0) {
             if (this.player.traits.diceCount === 6) {
@@ -7577,6 +7703,15 @@ async startTurn() {
         if (this._dieSlot(type) === 'attack' && this.enemy && this.enemy.intelDebuff > 0) {
             dmg += this.enemy.intelDebuff;
         }
+
+        // Relic: VOLT PRIMER — first attack of each turn gets +5 flat DMG.
+        // Peek path intentionally doesn't consume the flag so tooltips read
+        // consistently while the player is considering their play.
+        if (this._dieSlot(type) === 'attack' && this.player.hasRelic('volt_primer')
+                && !this._voltPrimerUsedThisTurn) {
+            dmg += 5;
+            if (!peek) this._voltPrimerUsedThisTurn = true;
+        }
         
         // --- GOD MODE: 10x DAMAGE ---
         const dData = DICE_TYPES[type];
@@ -7589,6 +7724,27 @@ async startTurn() {
 
         // Class Ability: multiplicative bonus (Annihilator OVERCLOCK)
         dmg = Math.floor(dmg * (peek ? ClassAbility.peekDamageMultiplier(type) : ClassAbility.consumeDamageMultiplier(type)));
+
+        // Custom Run: Glass Cannon / chaotic outgoing-damage modifiers. Peek
+        // uses the multiplier deterministically so the intent tooltip shows
+        // the boosted number; live attacks roll variance when requested.
+        if (this._customDmgOutMult && this._customDmgOutMult !== 1) {
+            dmg = Math.floor(dmg * this._customDmgOutMult);
+        }
+        if (!peek && this._customCritVariance === 'double_or_none' && this._dieSlot(type) === 'attack') {
+            // 50/50 variance — double the hit or whiff for zero. Flagged so
+            // the player feels the gamble they opted into.
+            dmg = Math.random() < 0.5 ? dmg * 2 : 0;
+        }
+
+        // Sector 5 — Reality Glitch. Player attacks roll ±damageNoiseRange.
+        // Peek paths skip the roll so the tooltip number doesn't flicker
+        // with each hover; the live cast is where the chaos lands.
+        if (!peek && this._activeSectorMech && this._activeSectorMech.damageNoiseRange && this._dieSlot(type) === 'attack' && dmg > 0) {
+            const r = this._activeSectorMech.damageNoiseRange;
+            const noise = 1 + ((Math.random() * 2 - 1) * r);
+            dmg = Math.max(1, Math.floor(dmg * noise));
+        }
 
         return dmg;
     },
@@ -8412,6 +8568,15 @@ async startTurn() {
         const data = DICE_TYPES[die.type];
         const isUpgraded = this.player.hasDiceUpgrade(die.type);
 
+        // Custom Run: Hot Hands — first die played each turn bites HP. Flag
+        // is reset in the turn-start routine (startTurn).
+        if (this._customHotHandsDmg && !this._hotHandsUsedThisTurn) {
+            this._hotHandsUsedThisTurn = true;
+            this.player.takeDamage(this._customHotHandsDmg, null, false, /*bypassShield*/ true);
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 140,
+                `HOT HANDS -${this._customHotHandsDmg}`, '#ff6600');
+        }
+
         if (target) {
             const isTargetEnemy = (target instanceof Enemy || (target instanceof Minion && !target.isPlayerSide));
             const isTargetPlayer = (target instanceof Player || (target instanceof Minion && target.isPlayerSide));
@@ -9052,6 +9217,132 @@ async startTurn() {
         executeAction();
     },
 
+    // Route each class's signature strike to a unique on-canvas animation.
+    // Each branch pushes effect descriptors onto this.effects; the draw
+    // loop in drawEffects picks them up and renders them. Effects are
+    // time-gated via `life`/`maxLife` and self-clean when expired.
+    triggerSignatureVFX(classId, source, target) {
+        if (!source || !target) return;
+        const sx = source.x, sy = source.y;
+        const tx = target.x, ty = target.y;
+        if (classId === 'bloodstalker') {
+            // BITE — two curved fangs converge on the target and snap shut,
+            // then a spray of blood droplets bursts outward. Windup 10 frames,
+            // snap at 18, recoil 10. The chomp is the thing the player feels.
+            this.effects.push({
+                type: 'sig_bite',
+                x: tx, y: ty, sx, sy,
+                life: 38, maxLife: 38,
+                color: '#ff0033'
+            });
+            AudioMgr.playSound('digital_sever');
+            setTimeout(() => {
+                ParticleSys.createExplosion(tx, ty, 28, '#ff0055');
+                ParticleSys.createSparks(tx, ty, '#ff3355', 14);
+                this.shake(10);
+            }, 220);
+        } else if (classId === 'tactician') {
+            // VOLLEY — five darts fired in a narrow fan, staggered arrival.
+            const arrows = 5;
+            for (let k = 0; k < arrows; k++) {
+                setTimeout(() => {
+                    const spread = (k - (arrows - 1) / 2) * 0.09; // fan angle
+                    this.effects.push({
+                        type: 'sig_volley_dart',
+                        sx, sy, tx, ty,
+                        progress: 0,
+                        spread,
+                        life: 24, maxLife: 24,
+                        color: '#00f3ff'
+                    });
+                }, k * 55);
+            }
+            AudioMgr.playSound('dart');
+            setTimeout(() => { ParticleSys.createSparks(tx, ty, '#00f3ff', 12); this.shake(6); }, 320);
+        } else if (classId === 'arcanist') {
+            // SPARK — forked lightning bolt from source to target. Flickers
+            // twice before detonating at the target.
+            this.effects.push({
+                type: 'sig_spark',
+                sx, sy, tx, ty,
+                life: 26, maxLife: 26,
+                color: '#bc13fe',
+                seed: Math.random() * 1000
+            });
+            AudioMgr.playSound('zap');
+            setTimeout(() => {
+                ParticleSys.createShockwave(tx, ty, '#bc13fe', 26);
+                ParticleSys.createExplosion(tx, ty, 20, '#bc13fe');
+                this.shake(8);
+            }, 200);
+        } else if (classId === 'annihilator') {
+            // BLAST — windup flash at source, then a concussive explosion
+            // with two expanding rings at the target.
+            this.effects.push({
+                type: 'slash_windup', x: sx, y: sy,
+                life: 14, maxLife: 14, heavy: true, color: '#ff8800'
+            });
+            setTimeout(() => {
+                for (let k = 0; k < 2; k++) {
+                    this.effects.push({
+                        type: 'earthquake_ring',
+                        x: tx, y: ty,
+                        radius: 10, maxRadius: 320 + k * 60,
+                        life: 40, maxLife: 40,
+                        color: k === 0 ? '#ff8800' : '#ffaa00'
+                    });
+                }
+                ParticleSys.createExplosion(tx, ty, 40, '#ff8800');
+                ParticleSys.createShockwave(tx, ty, '#ffaa00', 34);
+                AudioMgr.playSound('explosion');
+                this.triggerScreenFlash && this.triggerScreenFlash('rgba(255, 136, 0, 0.25)', 180);
+                this.shake(16);
+            }, 160);
+        } else if (classId === 'sentinel') {
+            // BASH — gold shield-plate slams down over the target. An
+            // octagonal impact ring expands from the landing.
+            this.effects.push({
+                type: 'sig_bash',
+                x: tx, y: ty,
+                life: 28, maxLife: 28,
+                color: '#ffd76a'
+            });
+            AudioMgr.playSound('grid_fracture');
+            setTimeout(() => {
+                ParticleSys.createShockwave(tx, ty, '#ffd76a', 30);
+                ParticleSys.createSparks(tx, ty, '#ffffff', 18);
+                this.shake(12);
+            }, 240);
+        } else if (classId === 'summoner') {
+            // CALL — summoning rune pulses at the player, then a spirit
+            // arcs to the target and lands as a leaf-burst.
+            this.effects.push({
+                type: 'sig_call_rune',
+                x: sx, y: sy,
+                life: 22, maxLife: 22,
+                color: '#00ff99'
+            });
+            setTimeout(() => {
+                this.effects.push({
+                    type: 'sig_call_spirit',
+                    sx, sy, tx, ty,
+                    progress: 0,
+                    life: 28, maxLife: 28,
+                    color: '#00ff99'
+                });
+                AudioMgr.playSound('mana');
+            }, 180);
+            setTimeout(() => {
+                ParticleSys.createExplosion(tx, ty, 26, '#00ff99');
+                ParticleSys.createSparks(tx, ty, '#7fff00', 14);
+                this.shake(8);
+            }, 420);
+        } else {
+            // Unknown class — fall back to the generic heavy slash.
+            this.triggerVFX('slash_heavy', source, target);
+        }
+    },
+
     // Resolve class signature die effects. Tier 1..3 ramps damage and side-effects.
     _resolveSignature(data, finalEnemy, finalSelf, qteMultiplier = 1, chargeMult = 1) {
         const tier = (data && data.signatureTier) || 1;
@@ -9062,7 +9353,10 @@ async startTurn() {
             if (!finalEnemy || finalEnemy.currentHp <= 0) return false;
             let dmg = this.calculateCardDamage(base, 'ATTACK');
             dmg = Math.floor(dmg * qteMultiplier * chargeMult);
-            this.triggerVFX('slash_heavy', this.player, finalEnemy);
+            // Class-unique signature animation. Each class gets a distinct
+            // visual identity — Bloodstalker chomps, Tactician volleys, etc.
+            // Falls back to the generic slash_heavy if the class is unknown.
+            this.triggerSignatureVFX(classId, this.player, finalEnemy);
             AudioMgr.playSound('attack');
             const dead = finalEnemy.takeDamage(dmg);
             ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 100, name.toUpperCase(), label);
@@ -9177,6 +9471,13 @@ async startTurn() {
 
         // STANDARD LOGIC
         const isAnnihilator = this.player.classId === 'annihilator';
+
+        // Custom Run: Locked In — no rerolls at all.
+        if (this._customDisableReroll) {
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 80, 'LOCKED IN', '#ff3355');
+            AudioMgr.playSound('defend');
+            return;
+        }
 
         // Allow if rerolls > 0 OR (rerolls <= 0 AND is Annihilator)
         if (this.rerolls <= 0 && !isAnnihilator) return;
@@ -9294,13 +9595,38 @@ async startTurn() {
     },
     
     performAttackEffect(source, target) {
-        const color = (source.isPlayerSide || source instanceof Player) ? COLORS.MANA : COLORS.MECH_LIGHT;
+        // Class-fantasy flourish colour (Part 26). Each class attack is
+        // tinted by its signature hue so a tactician volley reads cyan,
+        // an arcanist bolt reads purple, etc. Falls back to the generic
+        // mana colour for non-class sources (minions, enemies).
+        const CLASS_ACCENT = {
+            tactician:    '#00f3ff',
+            arcanist:     '#bc13fe',
+            bloodstalker: '#ff0055',
+            annihilator:  '#ff8800',
+            sentinel:     '#ffd76a',
+            summoner:     '#7fff00'
+        };
+        let color;
+        if (source instanceof Player && source.classId && CLASS_ACCENT[source.classId]) {
+            color = CLASS_ACCENT[source.classId];
+        } else if (source.isPlayerSide || source instanceof Player) {
+            color = COLORS.MANA;
+        } else {
+            color = COLORS.MECH_LIGHT;
+        }
         this.effects.push({
             sx: source.x, sy: source.y,
             tx: target.x, ty: target.y,
             color: color,
             life: 15, maxLife: 15
         });
+        // Short spark burst at the source so the attack reads as "class X
+        // firing" rather than an anonymous line. Tight count — just enough
+        // to colour the moment without flooding the canvas.
+        if (source instanceof Player && CLASS_ACCENT[source.classId]) {
+            ParticleSys.createSparks(source.x, source.y - 10, color, 6);
+        }
     },
 
     // Sector-themed color used for ENEMY projectiles only (player projectiles
@@ -10583,11 +10909,330 @@ drawEffects() {
                 ctx.beginPath();
                 ctx.moveTo(8, 0);
                 ctx.lineTo(0, 6);
-                ctx.lineTo(-15, 0); 
+                ctx.lineTo(-15, 0);
                 ctx.lineTo(0, -6);
                 ctx.closePath();
                 ctx.fill();
-                
+
+                ctx.restore();
+                continue;
+            }
+
+            /* ============================================================
+               CLASS-UNIQUE SIGNATURE VFX (Part 26 extension)
+               Each class's signature die triggers one of these so the
+               attack has a visual identity the player recognises.
+               ============================================================ */
+
+            // --- BLOODSTALKER BITE — two curved fangs chomp on the target ---
+            if (e.type === 'sig_bite') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = 1 - (e.life / e.maxLife);           // 0 → 1 over lifetime
+                // Phase A (0-0.45): fangs open wide and accelerate inward.
+                // Phase B (0.45-0.65): fangs closed — impact frame.
+                // Phase C (0.65-1): fangs retract + fade.
+                const openA  = Math.min(1, p / 0.45);          // 0..1 during opening
+                const closed = p >= 0.45 && p <= 0.65;
+                const recoil = Math.max(0, (p - 0.65) / 0.35); // 0..1 during retract
+                const spread = 90 * (1 - openA) + 4;           // px apart at full open → closed
+                const openRad = 1.2 - 0.6 * openA;             // fang rotation
+                const alpha = p < 0.85 ? 1 : (1 - (p - 0.85) / 0.15);
+                ctx.save();
+                ctx.translate(e.x, e.y);
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 20;
+                ctx.fillStyle = '#ffffff';
+                ctx.strokeStyle = e.color;
+                ctx.lineWidth = 4;
+                ctx.globalAlpha = alpha;
+                // Upper fang (arc crescent pointing down + inward).
+                const drawFang = (side) => {
+                    ctx.save();
+                    ctx.translate(0, side * (-60 + spread * 0.5));
+                    ctx.rotate(side * openRad);
+                    ctx.beginPath();
+                    ctx.moveTo(-44, 0);
+                    ctx.quadraticCurveTo(0, side * -28, 44, 0);
+                    ctx.quadraticCurveTo(0, side * -10, -44, 0);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                    // Tooth tip highlight
+                    ctx.fillStyle = e.color;
+                    ctx.beginPath();
+                    ctx.arc(0, side * -18, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#ffffff';
+                    ctx.restore();
+                };
+                drawFang(-1); // top
+                drawFang(1);  // bottom
+                // Impact flash on the closed frame
+                if (closed) {
+                    ctx.globalAlpha = 0.9;
+                    ctx.fillStyle = '#ff0055';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 34, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                // Trailing blood droplets during recoil
+                if (recoil > 0) {
+                    ctx.globalAlpha = 1 - recoil;
+                    ctx.fillStyle = '#ff3355';
+                    for (let k = 0; k < 6; k++) {
+                        const ang = (k / 6) * Math.PI * 2;
+                        const dist = 30 + recoil * 70;
+                        ctx.beginPath();
+                        ctx.arc(Math.cos(ang) * dist, Math.sin(ang) * dist, 3 + 2 * (1 - recoil), 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+                ctx.restore();
+                continue;
+            }
+
+            // --- TACTICIAN VOLLEY DART — small arrow travelling in fan ---
+            if (e.type === 'sig_volley_dart') {
+                e.life--;
+                e.progress = Math.min(1, e.progress + 0.06);
+                if (e.life <= 0 || e.progress >= 1) { this.effects.splice(i, 1); continue; }
+                const dx = e.tx - e.sx;
+                const dy = e.ty - e.sy;
+                const baseAng = Math.atan2(dy, dx);
+                const ang = baseAng + (e.spread || 0) * (1 - e.progress); // fan converges at target
+                const dist = Math.hypot(dx, dy) * e.progress;
+                const px = e.sx + Math.cos(ang) * dist;
+                const py = e.sy + Math.sin(ang) * dist;
+                ctx.save();
+                ctx.translate(px, py);
+                ctx.rotate(ang);
+                ctx.strokeStyle = e.color;
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 16;
+                ctx.lineWidth = 3;
+                // Dart body: short line with arrowhead
+                ctx.beginPath();
+                ctx.moveTo(-18, 0);
+                ctx.lineTo(6, 0);
+                ctx.stroke();
+                ctx.fillStyle = e.color;
+                ctx.beginPath();
+                ctx.moveTo(10, 0);
+                ctx.lineTo(0, -5);
+                ctx.lineTo(0, 5);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+                continue;
+            }
+
+            // --- ARCANIST SPARK — forked lightning bolt ---
+            if (e.type === 'sig_spark') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = 1 - (e.life / e.maxLife);
+                const reveal = Math.min(1, p * 2.5);
+                const fade = p > 0.6 ? 1 - (p - 0.6) / 0.4 : 1;
+                // Deterministic jitter from e.seed so the bolt doesn't twitch frame-to-frame.
+                const rand = (n) => {
+                    const x = Math.sin((e.seed + n) * 12.9898) * 43758.5453;
+                    return x - Math.floor(x);
+                };
+                const dx = e.tx - e.sx;
+                const dy = e.ty - e.sy;
+                const segs = 10;
+                ctx.save();
+                ctx.strokeStyle = '#ffffff';
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 24;
+                ctx.lineWidth = 4;
+                ctx.globalAlpha = fade;
+                // Main bolt path
+                ctx.beginPath();
+                ctx.moveTo(e.sx, e.sy);
+                let px = e.sx, py = e.sy;
+                const pts = [];
+                for (let k = 1; k <= segs; k++) {
+                    const t = k / segs * reveal;
+                    const cx = e.sx + dx * t + (rand(k) - 0.5) * 60;
+                    const cy = e.sy + dy * t + (rand(k + 7) - 0.5) * 60;
+                    ctx.lineTo(cx, cy);
+                    pts.push({ x: cx, y: cy });
+                    px = cx; py = cy;
+                }
+                ctx.stroke();
+                // Fork branches — two short arcs off the midpoint
+                if (pts.length >= 6 && reveal >= 0.5) {
+                    ctx.lineWidth = 2;
+                    ctx.globalAlpha = fade * 0.7;
+                    ctx.strokeStyle = e.color;
+                    const mid = pts[Math.floor(pts.length / 2)];
+                    for (let f = 0; f < 2; f++) {
+                        ctx.beginPath();
+                        ctx.moveTo(mid.x, mid.y);
+                        let fx = mid.x, fy = mid.y;
+                        for (let k = 1; k <= 3; k++) {
+                            fx += (rand(f * 5 + k) - 0.5) * 60;
+                            fy += (rand(f * 5 + k + 2) - 0.5) * 60;
+                            ctx.lineTo(fx, fy);
+                        }
+                        ctx.stroke();
+                    }
+                }
+                ctx.restore();
+                continue;
+            }
+
+            // --- SENTINEL BASH — giant shield-plate slam + octagon ring ---
+            if (e.type === 'sig_bash') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = 1 - (e.life / e.maxLife);
+                // Windup (0-0.5): plate falls from above.
+                // Impact (0.5-0.7): flash at target.
+                // Ring (0.7-1): expanding octagon ring.
+                const fall = Math.min(1, p / 0.5);
+                const impact = p >= 0.5 && p <= 0.7;
+                const ring = Math.max(0, (p - 0.7) / 0.3);
+                const plateY = e.y - 260 * (1 - fall);
+                ctx.save();
+                ctx.translate(e.x, plateY);
+                // Plate silhouette (octagon)
+                ctx.fillStyle = '#2a1f08';
+                ctx.strokeStyle = e.color;
+                ctx.lineWidth = 5;
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 26;
+                ctx.globalAlpha = p < 0.7 ? 1 : 1 - ring;
+                ctx.beginPath();
+                for (let k = 0; k < 8; k++) {
+                    const a = (Math.PI * 2 / 8) * k;
+                    const r = 90;
+                    const x = Math.cos(a) * r;
+                    const y = Math.sin(a) * r * 0.5; // flattened for perspective
+                    if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+                // Impact flash at target
+                if (impact) {
+                    ctx.save();
+                    ctx.globalAlpha = 0.8;
+                    const grad = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, 140);
+                    grad.addColorStop(0, e.color);
+                    grad.addColorStop(1, 'transparent');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(e.x - 140, e.y - 140, 280, 280);
+                    ctx.restore();
+                }
+                // Expanding octagon ring
+                if (ring > 0) {
+                    ctx.save();
+                    ctx.translate(e.x, e.y);
+                    ctx.strokeStyle = e.color;
+                    ctx.shadowColor = e.color;
+                    ctx.shadowBlur = 24;
+                    ctx.lineWidth = 4 * (1 - ring);
+                    ctx.globalAlpha = 1 - ring;
+                    const rr = 40 + ring * 200;
+                    ctx.beginPath();
+                    for (let k = 0; k < 8; k++) {
+                        const a = (Math.PI * 2 / 8) * k;
+                        const x = Math.cos(a) * rr;
+                        const y = Math.sin(a) * rr * 0.55;
+                        if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                    ctx.stroke();
+                    ctx.restore();
+                }
+                continue;
+            }
+
+            // --- SUMMONER CALL RUNE — pulsing summoning circle at source ---
+            if (e.type === 'sig_call_rune') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = 1 - (e.life / e.maxLife);
+                const scale = 0.6 + p * 0.8;
+                const alpha = p < 0.7 ? 1 : 1 - (p - 0.7) / 0.3;
+                ctx.save();
+                ctx.translate(e.x, e.y + 30);
+                ctx.rotate(p * Math.PI); // slow turn
+                ctx.scale(1, 0.4);       // flattened ground rune
+                ctx.strokeStyle = e.color;
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 18;
+                ctx.lineWidth = 3;
+                ctx.globalAlpha = alpha;
+                // Outer ring
+                ctx.beginPath();
+                ctx.arc(0, 0, 80 * scale, 0, Math.PI * 2);
+                ctx.stroke();
+                // Inner triangle rune
+                ctx.beginPath();
+                for (let k = 0; k < 3; k++) {
+                    const a = (k / 3) * Math.PI * 2 - Math.PI / 2;
+                    const x = Math.cos(a) * 46 * scale;
+                    const y = Math.sin(a) * 46 * scale;
+                    if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.stroke();
+                // Tick marks on the ring
+                for (let k = 0; k < 8; k++) {
+                    const a = (k / 8) * Math.PI * 2;
+                    const x1 = Math.cos(a) * 72 * scale;
+                    const y1 = Math.sin(a) * 72 * scale;
+                    const x2 = Math.cos(a) * 88 * scale;
+                    const y2 = Math.sin(a) * 88 * scale;
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.stroke();
+                }
+                ctx.restore();
+                continue;
+            }
+
+            // --- SUMMONER CALL SPIRIT — ethereal projectile arcing to target ---
+            if (e.type === 'sig_call_spirit') {
+                e.life--;
+                e.progress = Math.min(1, e.progress + 0.055);
+                if (e.life <= 0 || e.progress >= 1) { this.effects.splice(i, 1); continue; }
+                const dx = e.tx - e.sx;
+                const dy = e.ty - e.sy;
+                const arcY = -180 * Math.sin(e.progress * Math.PI); // arc trajectory
+                const px = e.sx + dx * e.progress;
+                const py = e.sy + dy * e.progress + arcY;
+                ctx.save();
+                ctx.translate(px, py);
+                ctx.strokeStyle = e.color;
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 22;
+                ctx.lineWidth = 3;
+                // Spirit wisp: three concentric eroded circles
+                for (let k = 0; k < 3; k++) {
+                    const r = 22 - k * 6;
+                    ctx.globalAlpha = 0.35 + 0.25 * k;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, r, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                // Trailing fade motes behind it
+                ctx.globalAlpha = 0.5;
+                ctx.fillStyle = e.color;
+                for (let k = 1; k <= 4; k++) {
+                    const t = Math.max(0, e.progress - k * 0.04);
+                    const trailX = e.sx + dx * t - px;
+                    const trailY = e.sy + dy * t - 180 * Math.sin(t * Math.PI) - py;
+                    ctx.beginPath();
+                    ctx.arc(trailX, trailY, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
                 ctx.restore();
                 continue;
             }
@@ -10600,6 +11245,14 @@ drawEffects() {
         // Relic: TEMPO LOOP — count unused dice for next-turn shield bonus.
         if (this.player && this.player.hasRelic && this.player.hasRelic('tempo_loop')) {
             this._carriedUnusedDice = (this.dicePool || []).filter(d => !d.used).length;
+        }
+        // Sector 3 — Heat Tiles. Molten ground burns the player each turn
+        // end. Ignores the shield (it's environmental, not an attack) so
+        // shield-stack runs still have to respect the sector tempo.
+        if (this._activeSectorMech && this._activeSectorMech.playerHeatDmg && this.player && this.player.currentHp > 0) {
+            const burn = this._activeSectorMech.playerHeatDmg;
+            this.player.takeDamage(burn, null, true, /*bypassShield*/ true);
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 120, `HEAT -${burn}`, '#ff6600');
         }
         // Show end-of-turn summary if any meaningful stats this turn
         this.showTurnSummary();
@@ -11149,6 +11802,11 @@ drawEffects() {
         }
         ClassAbility.endCombat();
         AudioMgr.stopSectorAmbient && AudioMgr.stopSectorAmbient();
+        // Clear the sector signature mechanic so post-combat states don't
+        // inherit it (noise on shop previews, map draws, etc.).
+        this._activeSectorMech = null;
+        const mechPillEnd = document.getElementById('sector-mech-pill');
+        if (mechPillEnd) mechPillEnd.textContent = '';
         // Track the kill so the next time the player meets this enemy the
         // briefing shows "Encountered N times" and achievements can fire.
         if (this.enemy && this.enemy.name && this.currentState !== STATE.TUTORIAL_COMBAT) {
@@ -11372,6 +12030,17 @@ drawEffects() {
         if (leylineStacks > 0) {
             frags = Math.floor(frags * Math.pow(1.5, leylineStacks));
         }
+        // Relic: SALVAGE PROTOCOL — +3 Fragments per enemy-minion kill this
+        // combat, plus the boss/regular kill that just ended combat. Works
+        // as a steady passive trickle for run-sustain builds.
+        if (this.player.hasRelic('salvage_protocol')) {
+            const minionKills = Array.isArray(this.enemy.minions)
+                ? this.enemy.minions.filter(m => m && m.currentHp <= 0).length
+                : 0;
+            const salvageBonus = 3 * (1 + minionKills);
+            frags += salvageBonus;
+            ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, `SALVAGE +${salvageBonus}`, COLORS.GOLD);
+        }
         // Relic: SALVAGE ARM — elite kills drop +15 Fragments per stack.
         if (this.enemy && this.enemy.isElite && this.player.hasRelic('salvage_arm')) {
             const salvageStacks = this.stackCount('salvage_arm');
@@ -11586,6 +12255,7 @@ drawEffects() {
                         this.player.heal(amt);
                     }
                     if(item.id === 'hull_plating') { this.player.maxHp += 10; this.player.currentHp += 10; }
+                    if(item.id === 'reinforced_shell') { this.player.maxHp += 20; this.player.currentHp += 20; }
                     if(item.id === 'mana_battery') this.player.baseMana += 1;
                 } else {
                     this.player.addRelic(item);
@@ -11599,6 +12269,18 @@ drawEffects() {
                     this.bossDefeated = false;
                     this.sector++;
                     this.generateMap();
+
+                    // Custom Run: Tax Man — drain a fixed percentage of the
+                    // player's fragments at each sector transition. Drives
+                    // the "expensive decisions get more expensive" fantasy.
+                    if (this._customFragDrainPerSector && this.techFragments > 0) {
+                        const drained = Math.floor(this.techFragments * this._customFragDrainPerSector);
+                        if (drained > 0) {
+                            this.techFragments -= drained;
+                            ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
+                                `TAX MAN -${drained}`, '#ffaa00');
+                        }
+                    }
 
                     const sectorDisplay = document.getElementById('sector-display');
                     if(sectorDisplay) sectorDisplay.innerText = `SECTOR ${this.sector}`;
@@ -11619,6 +12301,9 @@ drawEffects() {
 
     gameOver() {
         AudioMgr.stopSectorAmbient && AudioMgr.stopSectorAmbient();
+        this._activeSectorMech = null;
+        const mechPillGO = document.getElementById('sector-mech-pill');
+        if (mechPillGO) mechPillGO.textContent = '';
         Hints.trigger('first_death');
         Unlocks.grant('daily', 'first_run_ended');
         // Record loss for the sector the run ended in — feeds dynamic assist.
@@ -12060,56 +12745,78 @@ drawEffects() {
             ctx.restore();
         }
 
-        // --- EFFECTS BAR (UPDATED) ---
-        if (entity.effects.length > 0) {
-            // Configuration for the bar
-            const iconWidth = 30; // Width allocated per icon
-            const barHeight = 28; // Height of the black bar
-            const padding = 0;    // Extra padding on sides if desired
-            
-            // Calculate total width dynamically
-            const totalBarWidth = (entity.effects.length * iconWidth) + (padding * 2);
-            
-            // Position: Centered horizontally relative to entity, placed BELOW the HP bar
-            const barX = entity.x - (totalBarWidth / 2);
-            const barY = y + height + 6; // 6px gap below HP bar
+        // --- STATUS BAR (UNIFIED: effects + derived flags + affixes) ---
+        // Builds a virtual effects list per frame that includes the entity's
+        // real .effects array PLUS synthesized entries for persistent states
+        // that otherwise only flash as floating text (enemy elite affixes,
+        // Reckless Charge / Overclock, armor plating, Sentinel thorns, etc.).
+        // The downstream renderer doesn't care where the entry came from —
+        // all it needs is { id, val, duration, _permanent, _hideCount }.
+        const statusList = this._collectStatusDisplay(entity);
+        if (statusList.length > 0) {
+            const iconWidth = 30;
+            const barHeight = 28;
+            const padding = 0;
 
-            // Draw Translucent Black Background
+            const totalBarWidth = (statusList.length * iconWidth) + (padding * 2);
+            const barX = entity.x - (totalBarWidth / 2);
+            const barY = y + height + 6;
+
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(barX, barY, totalBarWidth, barHeight);
-            
-            // Draw Icons
+
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.font = '20px Arial';
             ctx.fillStyle = '#fff';
 
-            // Per-effect colour tints
+            // Per-effect colour tints. Entries fall back to white if not in
+            // the table so a new effect never renders as an invisible icon.
             const effectColor = {
-                weak:       '#d97bff',
-                frail:      '#ff8800',
-                vulnerable: '#ff3355',
-                overcharge: '#ffaa33',
-                constrict:  '#ff0055',
-                voodoo:     '#bc13fe',
-                bleed:      '#ff3333',
-                poison:     '#88ff00'
+                // Existing status effects
+                weak:        '#d97bff',
+                frail:       '#ff8800',
+                vulnerable:  '#ff3355',
+                overcharge:  '#ffaa33',
+                constrict:   '#ff0055',
+                voodoo:      '#bc13fe',
+                bleed:       '#ff3333',
+                poison:      '#88ff00',
+                // Enemy elite affixes (persistent)
+                brittle:     '#ff6600',
+                shielded:    '#00f3ff',
+                second_wind: '#00ff99',
+                jammer:      '#d97bff',
+                reflector:   '#ff0055',
+                phase:       '#bc13fe',
+                multiplier:  '#ffd76a',
+                anchor:      '#88ff00',
+                vampiric:    '#ff3333',
+                // Player derived states
+                charged:     '#ffd76a',   // nextAttackMult > 1 (Reckless Charge etc.)
+                armor:       '#ffaa00',   // armorPlating
+                overclock:   '#ff8800',   // Annihilator Overclock vent
+                sig_thorns:  '#ffffff',   // Sentinel signature thorns
+                firewall:    '#00f3ff',   // Firewall relic armed this turn
+                blood_tier:  '#ff0033',   // Bloodstalker kill tier
+                // Incoming damage multipliers (Reckless Charge self-debuff etc.)
+                exposed:     '#ff3355'
             };
 
-            entity.effects.forEach((eff, i) => {
-                // Center icon within its allocated slot
+            statusList.forEach((eff, i) => {
                 const ix = barX + padding + (iconWidth / 2) + (i * iconWidth);
                 const iy = barY + (barHeight / 2);
-
-                // Canvas-native icon (no Image loading — guaranteed to render)
                 drawEffectIcon(ctx, eff.id, ix, iy, 22, effectColor[eff.id] || '#ffffff');
 
-                // Stack-count badge (Phase 4a): show duration or value whichever is the "stack".
-                // Duration is the turns remaining; val is the magnitude (e.g. poison 3).
-                // For DoT effects (bleed/poison) prefer the stack count when >1.
-                // Pick the larger of the two as the "count" to display.
-                let count;
-                if ((eff.id === 'bleed' || eff.id === 'poison') && (eff.stacks || 1) > 1) {
+                // Count badge: show the most meaningful number.
+                //   stacked DoT (bleed/poison) → stack count
+                //   permanent affix            → hidden (infinite)
+                //   duration >= 2              → turns remaining
+                //   val >= 2                   → magnitude (for +DMG x2 etc.)
+                let count = 0;
+                if (eff._hideCount || eff._permanent) {
+                    count = 0;
+                } else if ((eff.id === 'bleed' || eff.id === 'poison') && (eff.stacks || 1) > 1) {
                     count = eff.stacks;
                 } else {
                     count = Math.max(eff.duration || 0, (eff.val && eff.val > 1) ? eff.val : 0);
@@ -12119,7 +12826,6 @@ drawEffects() {
                     ctx.font = 'bold 11px "Orbitron"';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    // Badge circle in the bottom-right corner of the icon slot
                     const bx = ix + 9;
                     const by = iy + 9;
                     ctx.fillStyle = '#000';
@@ -12133,6 +12839,72 @@ drawEffects() {
                 }
             });
         }
+    },
+
+    // Collect the full status display list for an entity. Combines real
+    // effects (from entity.effects) with synthesized entries derived from
+    // persistent state flags that wouldn't otherwise render as icons.
+    // Keeps the rendering path blind to the source so future additions
+    // (new affixes, new class resources) just need one entry here.
+    _collectStatusDisplay(entity) {
+        if (!entity) return [];
+        const out = [];
+        // 1. Real on-duration effects (the existing system).
+        if (Array.isArray(entity.effects)) {
+            for (const eff of entity.effects) {
+                if (eff) out.push(eff);
+            }
+        }
+        // 2. Enemy-side elite affixes (permanent for the fight).
+        if (entity instanceof Enemy && Array.isArray(entity.affixes)) {
+            for (const affix of entity.affixes) {
+                const id = String(affix).toLowerCase().replace(/\s+/g, '_');
+                out.push({ id, val: 0, duration: 0, _permanent: true, _hideCount: true });
+            }
+        }
+        // 3. Enemy-side persistent state flags that players need to read.
+        if (entity instanceof Enemy) {
+            if (entity.invincibleTurns > 0) {
+                out.push({ id: 'shielded', val: 0, duration: entity.invincibleTurns });
+            }
+            if (entity.armorPlating > 0) {
+                out.push({ id: 'armor', val: entity.armorPlating, duration: 0, _hideCount: false });
+            }
+        }
+        // 4. Player-side derived states — surface every "invisibly-ticking"
+        //    buff/debuff so the player knows what's live. Entries fold into
+        //    the same pill bar as real effects so the visual language stays
+        //    consistent.
+        if (entity instanceof Player) {
+            if (entity.nextAttackMult && entity.nextAttackMult > 1) {
+                out.push({ id: 'charged', val: entity.nextAttackMult, duration: 0 });
+            }
+            if (entity.incomingDamageMult && entity.incomingDamageMult > 1) {
+                out.push({ id: 'exposed', val: entity.incomingDamageMult, duration: 0 });
+            }
+            if (entity.armorPlating > 0) {
+                out.push({ id: 'armor', val: entity.armorPlating, duration: 0 });
+            }
+            if (entity.bloodTier && entity.bloodTier > 0) {
+                out.push({ id: 'blood_tier', val: entity.bloodTier, duration: 0 });
+            }
+            if (this._sigThornsActive) {
+                out.push({ id: 'sig_thorns', val: 0, duration: 0, _permanent: true, _hideCount: true });
+            }
+            if (entity.hasRelic && entity.hasRelic('firewall') && !entity.firewallTriggered) {
+                out.push({ id: 'firewall', val: 0, duration: 0, _permanent: true, _hideCount: true });
+            }
+            // Annihilator Overclock — ClassAbility tracks the live multiplier
+            // that calculateCardDamage consumes next attack. Badge it so the
+            // vent state is visible without opening the reactor widget.
+            const overclockMult = (typeof ClassAbility !== 'undefined' && ClassAbility.peekDamageMultiplier)
+                ? ClassAbility.peekDamageMultiplier('ATTACK')
+                : 1;
+            if (overclockMult && overclockMult > 1) {
+                out.push({ id: 'overclock', val: overclockMult, duration: 0 });
+            }
+        }
+        return out;
     },
 
     // --- NEW: Background Initialization ---
@@ -17311,7 +18083,9 @@ drawEntity(entity) {
                     drawIntentIcon(ctx, drawIntentType, ix, iy + 26, 36, iconColor);
 
                     const displayVal = (intent.effectiveVal !== undefined) ? intent.effectiveVal : intent.val;
-                    if(displayVal !== undefined && displayVal > 0) {
+                    // Custom Run: Dark Visions — hide the damage number so
+                    // the player has to read the icon + their own HP math.
+                    if(displayVal !== undefined && displayVal > 0 && !this._customHideIntentNumbers) {
                         ctx.font = 'bold 24px "Orbitron"';
                         ctx.fillStyle = (intent.type === 'heal') ? '#0f0' : '#fff';
                         ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
@@ -17327,7 +18101,8 @@ drawEntity(entity) {
                 else if (entity.nextIntent.type === 'summon') { iconName = 'intentSummon'; iconColor = '#00f3ff'; }
                 drawIntentIcon(ctx, entity.nextIntent.type, 0, -entity.radius - 88 + hover, 44, iconColor);
                 const val = (entity.nextIntent.effectiveVal !== undefined) ? entity.nextIntent.effectiveVal : entity.nextIntent.val;
-                if(val > 0) {
+                // Custom Run: Dark Visions hides the intent damage number.
+                if(val > 0 && !this._customHideIntentNumbers) {
                     // Embossed HP-style: black outline + white fill (green fill if heal).
                     ctx.font = 'bold 30px "Orbitron"';
                     ctx.textBaseline = 'middle';

@@ -438,6 +438,277 @@ export function drawEffectIcon(ctx, effectId, cx, cy, size, color) {
                 c.fill();
             });
             break;
+
+        // ---- Enemy elite affixes (persistent, no duration) ----
+        case 'brittle':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // Cracked shard — lightning-bolt fracture through a triangle.
+                c.globalAlpha = 0.22;
+                c.beginPath();
+                c.moveTo(0, -9); c.lineTo(8, 8); c.lineTo(-8, 8);
+                c.closePath(); c.fill();
+                c.globalAlpha = 1;
+                c.lineWidth = 2.2;
+                c.beginPath();
+                c.moveTo(-3, -6); c.lineTo(1, 0); c.lineTo(-2, 1); c.lineTo(3, 7);
+                c.stroke();
+            });
+            break;
+        case 'shielded':
+            _wrap(ctx, cx, cy, size, color, c => {
+                c.globalAlpha = 0.3;
+                c.beginPath();
+                c.moveTo(0, -9); c.lineTo(8, -5); c.lineTo(8, 2);
+                c.quadraticCurveTo(8, 8, 0, 10);
+                c.quadraticCurveTo(-8, 8, -8, 2); c.lineTo(-8, -5);
+                c.closePath(); c.fill();
+                c.globalAlpha = 1;
+                c.lineWidth = 2;
+                c.stroke();
+                c.beginPath(); c.arc(0, 0, 2, 0, Math.PI * 2); c.fill();
+            });
+            break;
+        case 'second_wind':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // Upward chevron over a heart — "revive" vibe.
+                c.globalAlpha = 0.3;
+                c.beginPath();
+                c.moveTo(0, 9);
+                c.bezierCurveTo(-9, 2, -9, -5, -4, -5);
+                c.bezierCurveTo(-1, -5, 0, -3, 0, -1);
+                c.bezierCurveTo(0, -3, 1, -5, 4, -5);
+                c.bezierCurveTo(9, -5, 9, 2, 0, 9);
+                c.closePath(); c.fill();
+                c.globalAlpha = 1;
+                c.lineWidth = 2;
+                c.beginPath();
+                c.moveTo(-4, -7); c.lineTo(0, -10); c.lineTo(4, -7);
+                c.stroke();
+            });
+            break;
+        case 'jammer':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // Broken signal bars.
+                c.lineWidth = 2;
+                for (let k = 0; k < 4; k++) {
+                    c.beginPath();
+                    c.moveTo(-6 + k * 4, 7);
+                    c.lineTo(-6 + k * 4, 7 - (k + 1) * 3.5);
+                    c.stroke();
+                }
+                c.lineWidth = 1.8;
+                c.globalAlpha = 0.8;
+                c.beginPath();
+                c.moveTo(-8, -8); c.lineTo(8, 8);
+                c.stroke();
+            });
+            break;
+        case 'reflector':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // Bouncing arrow — incoming arrow reflects off a mirror line.
+                c.lineWidth = 2;
+                c.beginPath();
+                c.moveTo(-8, 6); c.lineTo(0, -2); c.lineTo(8, 6);
+                c.stroke();
+                // Mirror line
+                c.globalAlpha = 0.6;
+                c.beginPath();
+                c.moveTo(-9, -2); c.lineTo(9, -2);
+                c.stroke();
+                // Arrow head tips
+                c.globalAlpha = 1;
+                c.beginPath();
+                c.moveTo(6, 4); c.lineTo(8, 6); c.lineTo(6, 8);
+                c.stroke();
+            });
+            break;
+        case 'phase':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // Two overlapping circles — phase variants.
+                c.lineWidth = 2;
+                c.globalAlpha = 0.5;
+                c.beginPath(); c.arc(-3, 0, 6, 0, Math.PI * 2); c.stroke();
+                c.beginPath(); c.arc(3, 0, 6, 0, Math.PI * 2); c.stroke();
+                c.globalAlpha = 1;
+                c.beginPath(); c.arc(0, 0, 1.5, 0, Math.PI * 2); c.fill();
+            });
+            break;
+        case 'multiplier':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // ×2 sigil.
+                c.lineWidth = 2.2;
+                c.beginPath();
+                c.moveTo(-6, -5); c.lineTo(0, 1);
+                c.moveTo(0, -5); c.lineTo(-6, 1);
+                c.stroke();
+                c.font = 'bold 10px Orbitron';
+                c.textAlign = 'center';
+                c.textBaseline = 'middle';
+                c.fillText('2', 4, 3);
+            });
+            break;
+        case 'anchor':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // Anchor silhouette.
+                c.lineWidth = 2;
+                c.beginPath();
+                c.moveTo(0, -8); c.lineTo(0, 7);
+                c.stroke();
+                c.beginPath();
+                c.moveTo(-4, -5); c.lineTo(4, -5);
+                c.stroke();
+                c.beginPath();
+                c.arc(0, -8, 2, 0, Math.PI * 2);
+                c.stroke();
+                c.beginPath();
+                c.moveTo(-6, 3);
+                c.quadraticCurveTo(0, 10, 6, 3);
+                c.stroke();
+            });
+            break;
+        case 'vampiric':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // Heart with droplet — lifesteal.
+                c.globalAlpha = 0.28;
+                c.beginPath();
+                c.moveTo(0, 5);
+                c.bezierCurveTo(-8, 0, -8, -6, -3, -6);
+                c.bezierCurveTo(-1, -6, 0, -4, 0, -3);
+                c.bezierCurveTo(0, -4, 1, -6, 3, -6);
+                c.bezierCurveTo(8, -6, 8, 0, 0, 5);
+                c.closePath(); c.fill();
+                c.globalAlpha = 1;
+                c.lineWidth = 1.6;
+                c.stroke();
+                // Droplet
+                c.beginPath();
+                c.moveTo(0, 5);
+                c.quadraticCurveTo(3, 7, 1.5, 9);
+                c.quadraticCurveTo(0, 10, -1.5, 9);
+                c.quadraticCurveTo(-3, 7, 0, 5);
+                c.closePath(); c.fill();
+            });
+            break;
+
+        // ---- Player derived states ----
+        case 'charged':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // Up-arrow with spark.
+                c.lineWidth = 2;
+                c.beginPath();
+                c.moveTo(0, 7); c.lineTo(0, -5);
+                c.moveTo(-5, 0); c.lineTo(0, -5); c.lineTo(5, 0);
+                c.stroke();
+                // Crackling dots
+                c.globalAlpha = 0.7;
+                c.beginPath(); c.arc(-5, -6, 1, 0, Math.PI * 2); c.fill();
+                c.beginPath(); c.arc(5, -6, 1, 0, Math.PI * 2); c.fill();
+                c.beginPath(); c.arc(0, -9, 1.2, 0, Math.PI * 2); c.fill();
+            });
+            break;
+        case 'armor':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // Hex plate with inner center.
+                c.globalAlpha = 0.28;
+                c.beginPath();
+                for (let k = 0; k < 6; k++) {
+                    const a = (Math.PI / 3) * k + Math.PI / 6;
+                    const x = Math.cos(a) * 8;
+                    const y = Math.sin(a) * 8;
+                    if (k === 0) c.moveTo(x, y); else c.lineTo(x, y);
+                }
+                c.closePath(); c.fill();
+                c.globalAlpha = 1;
+                c.lineWidth = 2;
+                c.stroke();
+                c.beginPath(); c.arc(0, 0, 1.8, 0, Math.PI * 2); c.fill();
+            });
+            break;
+        case 'overclock':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // Radiation-style reactor glyph.
+                c.globalAlpha = 0.3;
+                c.beginPath(); c.arc(0, 0, 8, 0, Math.PI * 2); c.fill();
+                c.globalAlpha = 1;
+                for (let k = 0; k < 3; k++) {
+                    c.save();
+                    c.rotate((k * Math.PI * 2) / 3);
+                    c.beginPath();
+                    c.moveTo(0, -3);
+                    c.lineTo(-4, -8); c.lineTo(4, -8);
+                    c.closePath(); c.fill();
+                    c.restore();
+                }
+                c.beginPath(); c.arc(0, 0, 1.8, 0, Math.PI * 2); c.fill();
+            });
+            break;
+        case 'sig_thorns':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // Spiked ring — thorns.
+                c.lineWidth = 2;
+                c.beginPath(); c.arc(0, 0, 5, 0, Math.PI * 2); c.stroke();
+                for (let k = 0; k < 8; k++) {
+                    const a = (k * Math.PI * 2) / 8;
+                    c.beginPath();
+                    c.moveTo(Math.cos(a) * 5, Math.sin(a) * 5);
+                    c.lineTo(Math.cos(a) * 9, Math.sin(a) * 9);
+                    c.stroke();
+                }
+            });
+            break;
+        case 'firewall':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // Shield with circuit lines — firewall ready.
+                c.globalAlpha = 0.25;
+                c.beginPath();
+                c.moveTo(0, -9); c.lineTo(8, -5); c.lineTo(8, 2);
+                c.quadraticCurveTo(8, 8, 0, 10);
+                c.quadraticCurveTo(-8, 8, -8, 2); c.lineTo(-8, -5);
+                c.closePath(); c.fill();
+                c.globalAlpha = 1;
+                c.lineWidth = 2;
+                c.stroke();
+                c.lineWidth = 1.4;
+                c.beginPath();
+                c.moveTo(-4, 0); c.lineTo(0, 0);
+                c.moveTo(0, -3); c.lineTo(0, 0); c.lineTo(3, 0); c.lineTo(3, 4);
+                c.stroke();
+            });
+            break;
+        case 'blood_tier':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // Blood droplet with notch.
+                c.globalAlpha = 0.3;
+                c.beginPath();
+                c.moveTo(0, -9);
+                c.quadraticCurveTo(7, -1, 6, 5);
+                c.quadraticCurveTo(3, 10, 0, 10);
+                c.quadraticCurveTo(-3, 10, -6, 5);
+                c.quadraticCurveTo(-7, -1, 0, -9);
+                c.closePath(); c.fill();
+                c.globalAlpha = 1;
+                c.lineWidth = 1.6;
+                c.stroke();
+                c.globalAlpha = 0.85;
+                c.beginPath(); c.arc(-1.5, 2, 1.5, 0, Math.PI * 2); c.fill();
+            });
+            break;
+        case 'exposed':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // Inward arrows — taking more damage.
+                c.lineWidth = 2;
+                c.beginPath();
+                c.moveTo(-9, 0); c.lineTo(-3, 0);
+                c.moveTo(-6, -3); c.lineTo(-3, 0); c.lineTo(-6, 3);
+                c.moveTo(9, 0); c.lineTo(3, 0);
+                c.moveTo(6, -3); c.lineTo(3, 0); c.lineTo(6, 3);
+                c.stroke();
+                // Central burst
+                c.globalAlpha = 0.7;
+                c.beginPath(); c.arc(0, 0, 1.8, 0, Math.PI * 2); c.fill();
+            });
+            break;
+
         default:
             _wrap(ctx, cx, cy, size, color, c => {
                 c.lineWidth = 1.5;
