@@ -18195,15 +18195,33 @@ drawEntity(entity) {
         const storyEl = document.getElementById('tutorial-narration-story');
         const actionEl = document.getElementById('tutorial-narration-action');
         if (narrPane && typeof TUTORIAL_NARRATION !== 'undefined') {
+            const wasHidden = narrPane.classList.contains('hidden');
             narrPane.classList.remove('hidden');
             const entry = TUTORIAL_NARRATION[this.tutorialStep];
-            if (entry) {
-                if (storyEl) storyEl.textContent = typeof entry === 'string' ? '' : (entry.story || '');
-                if (actionEl) actionEl.textContent = typeof entry === 'string' ? entry : (entry.action || '');
+            const storyText = (entry && typeof entry !== 'string') ? (entry.story || '') : (typeof entry === 'string' ? '' : '');
+            const actionText = (entry && typeof entry !== 'string') ? (entry.action || '') : (typeof entry === 'string' ? entry : '');
+            // Smooth fade-through on text swap so stage changes don't snap.
+            // Skip the fade on the first show (wasHidden) — the pane itself
+            // is already running the fadeInUp entrance animation.
+            if (!wasHidden && entry) {
+                narrPane.classList.add('narration-switching');
+                // Debounce rapid advances so the last-scheduled swap wins.
+                if (this._narrSwapTimer) clearTimeout(this._narrSwapTimer);
+                this._narrSwapTimer = setTimeout(() => {
+                    if (storyEl) storyEl.textContent = storyText;
+                    if (actionEl) actionEl.textContent = actionText;
+                    narrPane.classList.remove('narration-switching');
+                    this._narrSwapTimer = null;
+                }, 160);
+            } else if (entry) {
+                if (storyEl) storyEl.textContent = storyText;
+                if (actionEl) actionEl.textContent = actionText;
             }
             // Pane sits in the OPPOSITE half-screen from the action it's
             // teaching, so it never overlaps the element the player needs
-            // to see or interact with.
+            // to see or interact with. top/bottom changes are animated via
+            // CSS transitions on .tutorial-narration so the pane glides
+            // between safe zones instead of teleporting.
             narrPane.classList.remove('anchor-top', 'anchor-bottom');
             // Steps whose action lives in the bottom half (dice, reroll,
             // end-turn, player QTE) → pane goes to top safe zone.

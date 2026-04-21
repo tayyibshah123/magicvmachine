@@ -5243,6 +5243,8 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     text-align: center;
     margin-bottom: 4px;
     text-shadow: 0 0 8px rgba(0, 243, 255, 0.45);
+    /* Paired with .narration-switching for the fade-through on stage change. */
+    transition: opacity 150ms ease-out, transform 220ms var(--ease-out-smart);
 }
 .tutorial-narration-action {
     font-family: var(--font-main);
@@ -5252,6 +5254,25 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     color: var(--text-primary);
     text-align: center;
     letter-spacing: 0.02em;
+    transition: opacity 150ms ease-out, transform 220ms var(--ease-out-smart);
+}
+/* Stage-change fade: when updateTutorialStep fires, the pane's text
+   nudges up + fades out, the script swaps the strings, then the text
+   eases back in. Replaces the previous instant text swap for a smoother
+   walkthrough. */
+.tutorial-narration.narration-switching .tutorial-narration-story,
+.tutorial-narration.narration-switching .tutorial-narration-action {
+    opacity: 0;
+    transform: translateY(-6px);
+}
+body.reduced-motion .tutorial-narration-story,
+body.reduced-motion .tutorial-narration-action {
+    transition: none;
+}
+body.reduced-motion .tutorial-narration.narration-switching .tutorial-narration-story,
+body.reduced-motion .tutorial-narration.narration-switching .tutorial-narration-action {
+    opacity: 1;
+    transform: none;
 }
 .tutorial-skip-btn {
     /* Pinned to the bottom-right of the pane in the reserved 44px band
@@ -5695,8 +5716,20 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
     box-shadow: 0 0 18px var(--neon-gold), 0 0 36px rgba(255, 215, 0, 0.6), inset 0 0 12px rgba(255, 215, 0, 0.4);
     z-index: 4500;
     pointer-events: none;
-    transition: all 0.3s ease;
+    transition: top 300ms var(--ease-out-smart),
+                left 300ms var(--ease-out-smart),
+                width 300ms var(--ease-out-smart),
+                height 300ms var(--ease-out-smart),
+                opacity 220ms ease-out;
     animation: tutorial-spotlight-pulse 1.6s ease-in-out infinite;
+}
+/* Use opacity to hide the spotlight instead of display:none so the ring
+   glides into its next target position instead of teleporting. Higher
+   specificity than the global .hidden { display:none } rule so it wins. */
+#tutorial-spotlight.hidden {
+    display: block;
+    opacity: 0;
+    pointer-events: none;
 }
 @keyframes tutorial-spotlight-pulse {
     0%, 100% { box-shadow: 0 0 18px var(--neon-gold), 0 0 36px rgba(255, 215, 0, 0.6), inset 0 0 12px rgba(255, 215, 0, 0.4); }
