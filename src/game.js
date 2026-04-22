@@ -13064,6 +13064,23 @@ drawEffects() {
     // Epic, theme-specific backdrops that only render during boss fights.
     // Replaces the default sector celestial layer. Kept mobile-friendly (no huge
     // shadow blurs, bounded loop counts) so the sector 2 perf work still holds.
+    // Memoise a gradient by key. Rebuilt only when canvas dimensions change
+    // (device rotate / resize). Most boss/sector gradients are static in shape
+    // and colour — the runtime just needs to read them back, not recreate them.
+    _cachedGradient(key, buildFn) {
+        const w = CONFIG.CANVAS_WIDTH, h = CONFIG.CANVAS_HEIGHT;
+        let cache = this._gradCache;
+        if (!cache || cache.w !== w || cache.h !== h) {
+            cache = this._gradCache = { w, h, map: new Map() };
+        }
+        let g = cache.map.get(key);
+        if (!g) {
+            g = buildFn();
+            cache.map.set(key, g);
+        }
+        return g;
+    },
+
     drawBossBackdrop(ctx, boss, w, h, time) {
         const horizon = h * 0.45;
         const sector = this.sector;
@@ -13164,21 +13181,23 @@ drawEffects() {
                 { ox: w * 0.12, oy: horizon * 0.08, phase: 0, dir: 1 },
                 { ox: w * 0.88, oy: horizon * 0.08, phase: Math.PI, dir: -1 }
             ];
+            const beamGrad = this._cachedGradient('s1_beam', () => {
+                const g = ctx.createLinearGradient(0, 0, 0, 1100);
+                g.addColorStop(0, 'rgba(180, 240, 255, 0.45)');
+                g.addColorStop(1, 'rgba(0, 120, 200, 0)');
+                return g;
+            });
             for (const b of beams) {
                 const sweep = Math.sin(time * 0.5 + b.phase) * 0.55 * b.dir;
                 const baseAng = Math.PI / 2 + sweep;
-                const len = 1100;
                 ctx.save();
                 ctx.translate(b.ox, b.oy);
                 ctx.rotate(baseAng);
-                const beamGrad = ctx.createLinearGradient(0, 0, 0, len);
-                beamGrad.addColorStop(0, 'rgba(180, 240, 255, 0.45)');
-                beamGrad.addColorStop(1, 'rgba(0, 120, 200, 0)');
                 ctx.fillStyle = beamGrad;
                 ctx.beginPath();
                 ctx.moveTo(0, 0);
-                ctx.lineTo(-110, len);
-                ctx.lineTo(110, len);
+                ctx.lineTo(-110, 1100);
+                ctx.lineTo(110, 1100);
                 ctx.closePath();
                 ctx.fill();
                 ctx.restore();
@@ -13229,11 +13248,13 @@ drawEffects() {
             // pops. This is the KEY fix: nothing bright directly behind the boss.
             const spotX = cx, spotY = horizon * 0.55;
             const spotR = 340;
-            const spot = ctx.createRadialGradient(spotX, spotY, 40, spotX, spotY, spotR);
-            spot.addColorStop(0, 'rgba(0, 0, 0, 0)');
-            spot.addColorStop(0.6, 'rgba(0, 0, 0, 0.35)');
-            spot.addColorStop(1, 'rgba(0, 0, 0, 0.75)');
-            ctx.fillStyle = spot;
+            ctx.fillStyle = this._cachedGradient('s1_spot', () => {
+                const g = ctx.createRadialGradient(spotX, spotY, 40, spotX, spotY, spotR);
+                g.addColorStop(0, 'rgba(0, 0, 0, 0)');
+                g.addColorStop(0.6, 'rgba(0, 0, 0, 0.35)');
+                g.addColorStop(1, 'rgba(0, 0, 0, 0.75)');
+                return g;
+            });
             ctx.fillRect(0, 0, w, horizon);
 
             // Soft cyan rim around the spotlight — "you are being watched".
@@ -13273,20 +13294,25 @@ drawEffects() {
             // --- NULL_POINTER: THE CONSUMING VOID ---
             ctx.save();
             // Deep void-purple wash
-            const sky = ctx.createLinearGradient(0, 0, 0, horizon);
-            sky.addColorStop(0, 'rgba(40, 0, 60, 0.55)');
-            sky.addColorStop(1, 'rgba(10, 0, 30, 0.2)');
-            ctx.fillStyle = sky; ctx.fillRect(0, 0, w, horizon);
+            ctx.fillStyle = this._cachedGradient('s2_sky', () => {
+                const g = ctx.createLinearGradient(0, 0, 0, horizon);
+                g.addColorStop(0, 'rgba(40, 0, 60, 0.55)');
+                g.addColorStop(1, 'rgba(10, 0, 30, 0.2)');
+                return g;
+            });
+            ctx.fillRect(0, 0, w, horizon);
 
             // Massive vortex behind boss — swirling layered arms
             const vx = w * 0.5, vy = horizon * 0.55;
             const vR = 380;
             // Dark core
-            const core = ctx.createRadialGradient(vx, vy, 20, vx, vy, vR);
-            core.addColorStop(0, '#000');
-            core.addColorStop(0.5, 'rgba(30, 0, 50, 0.85)');
-            core.addColorStop(1, 'rgba(255, 0, 255, 0)');
-            ctx.fillStyle = core;
+            ctx.fillStyle = this._cachedGradient('s2_core', () => {
+                const g = ctx.createRadialGradient(vx, vy, 20, vx, vy, vR);
+                g.addColorStop(0, '#000');
+                g.addColorStop(0.5, 'rgba(30, 0, 50, 0.85)');
+                g.addColorStop(1, 'rgba(255, 0, 255, 0)');
+                return g;
+            });
             ctx.beginPath(); ctx.arc(vx, vy, vR, 0, Math.PI * 2); ctx.fill();
             // Spiral arms (magenta/cyan)
             ctx.shadowColor = '#ff00ff'; ctx.shadowBlur = 16;
@@ -13331,11 +13357,13 @@ drawEffects() {
             ctx.globalCompositeOperation = 'lighter';
             for (let i = 0; i < 3; i++) {
                 const ay = horizon * (0.18 + i * 0.1);
-                const aGrad = ctx.createLinearGradient(0, ay - 40, 0, ay + 40);
-                aGrad.addColorStop(0, 'rgba(255, 0, 255, 0)');
-                aGrad.addColorStop(0.5, `rgba(255, 0, 255, ${0.18 - i * 0.04})`);
-                aGrad.addColorStop(1, 'rgba(255, 0, 255, 0)');
-                ctx.fillStyle = aGrad;
+                ctx.fillStyle = this._cachedGradient('s2_aurora_' + i, () => {
+                    const g = ctx.createLinearGradient(0, ay - 40, 0, ay + 40);
+                    g.addColorStop(0, 'rgba(255, 0, 255, 0)');
+                    g.addColorStop(0.5, `rgba(255, 0, 255, ${0.18 - i * 0.04})`);
+                    g.addColorStop(1, 'rgba(255, 0, 255, 0)');
+                    return g;
+                });
                 ctx.beginPath();
                 ctx.moveTo(0, ay);
                 for (let x = 0; x <= w; x += 60) {
@@ -13353,10 +13381,13 @@ drawEffects() {
             // --- THE COMPILER: THE FORGE ---
             ctx.save();
             // Hot ember-red sky wash
-            const sky = ctx.createLinearGradient(0, 0, 0, horizon);
-            sky.addColorStop(0, 'rgba(80, 10, 0, 0.55)');
-            sky.addColorStop(1, 'rgba(255, 80, 0, 0.35)');
-            ctx.fillStyle = sky; ctx.fillRect(0, 0, w, horizon);
+            ctx.fillStyle = this._cachedGradient('s3_sky', () => {
+                const g = ctx.createLinearGradient(0, 0, 0, horizon);
+                g.addColorStop(0, 'rgba(80, 10, 0, 0.55)');
+                g.addColorStop(1, 'rgba(255, 80, 0, 0.35)');
+                return g;
+            });
+            ctx.fillRect(0, 0, w, horizon);
 
             // Giant forge gate silhouette at horizon — arched foundry
             ctx.fillStyle = '#0b0500';
@@ -13367,11 +13398,13 @@ drawEffects() {
             ctx.lineTo(w * 0.9, horizon);
             ctx.closePath(); ctx.fill();
             // Inner molten glow
-            const mouth = ctx.createRadialGradient(w * 0.5, horizon - 180, 40, w * 0.5, horizon - 180, 360);
-            mouth.addColorStop(0, '#fff0aa');
-            mouth.addColorStop(0.4, '#ff6600');
-            mouth.addColorStop(1, 'rgba(80, 0, 0, 0)');
-            ctx.fillStyle = mouth;
+            ctx.fillStyle = this._cachedGradient('s3_mouth', () => {
+                const g = ctx.createRadialGradient(w * 0.5, horizon - 180, 40, w * 0.5, horizon - 180, 360);
+                g.addColorStop(0, '#fff0aa');
+                g.addColorStop(0.4, '#ff6600');
+                g.addColorStop(1, 'rgba(80, 0, 0, 0)');
+                return g;
+            });
             ctx.beginPath();
             ctx.moveTo(w * 0.18, horizon);
             ctx.lineTo(w * 0.18, horizon - 320);
@@ -13426,10 +13459,13 @@ drawEffects() {
             // --- HIVE PROTOCOL: THE HIVE CATHEDRAL ---
             ctx.save();
             // Acid-green sky wash
-            const sky = ctx.createLinearGradient(0, 0, 0, horizon);
-            sky.addColorStop(0, 'rgba(10, 40, 10, 0.55)');
-            sky.addColorStop(1, 'rgba(0, 80, 20, 0.2)');
-            ctx.fillStyle = sky; ctx.fillRect(0, 0, w, horizon);
+            ctx.fillStyle = this._cachedGradient('s4_sky', () => {
+                const g = ctx.createLinearGradient(0, 0, 0, horizon);
+                g.addColorStop(0, 'rgba(10, 40, 10, 0.55)');
+                g.addColorStop(1, 'rgba(0, 80, 20, 0.2)');
+                return g;
+            });
+            ctx.fillRect(0, 0, w, horizon);
 
             // Monolithic hive tower at the horizon — stacked hexagonal cells
             const towerX = w * 0.5;
@@ -13515,10 +13551,13 @@ drawEffects() {
             // --- TESSERACT PRIME: GEOMETRIC IMPOSSIBILITY ---
             ctx.save();
             // Prismatic white-pink wash
-            const sky = ctx.createLinearGradient(0, 0, 0, horizon);
-            sky.addColorStop(0, 'rgba(60, 0, 30, 0.5)');
-            sky.addColorStop(1, 'rgba(130, 0, 50, 0.25)');
-            ctx.fillStyle = sky; ctx.fillRect(0, 0, w, horizon);
+            ctx.fillStyle = this._cachedGradient('s5_sky', () => {
+                const g = ctx.createLinearGradient(0, 0, 0, horizon);
+                g.addColorStop(0, 'rgba(60, 0, 30, 0.5)');
+                g.addColorStop(1, 'rgba(130, 0, 50, 0.25)');
+                return g;
+            });
+            ctx.fillRect(0, 0, w, horizon);
 
             // Prismatic rays fanning from center
             const cx = w * 0.5, cy = horizon * 0.55;
@@ -13660,10 +13699,12 @@ drawEffects() {
 
         if (type === 'city') {
             // Distant glow haze above horizon
-            const hazeGrad = ctx.createLinearGradient(0, horizon - 120, 0, horizon);
-            hazeGrad.addColorStop(0, 'transparent');
-            hazeGrad.addColorStop(1, 'rgba(188,19,254,0.15)');
-            ctx.fillStyle = hazeGrad;
+            ctx.fillStyle = this._cachedGradient('atm_city_haze', () => {
+                const g = ctx.createLinearGradient(0, horizon - 120, 0, horizon);
+                g.addColorStop(0, 'transparent');
+                g.addColorStop(1, 'rgba(188,19,254,0.15)');
+                return g;
+            });
             ctx.fillRect(0, horizon - 120, w, 120);
             // Holographic billboards, flickering
             atm.billboards.forEach(b => {
@@ -13697,15 +13738,17 @@ drawEffects() {
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
             for (let k = 0; k < 3; k++) {
-                const auroraGrad = ctx.createLinearGradient(0, 0, 0, h * 0.4);
-                const colors = [['rgba(0,243,255,0.12)', 'rgba(0,255,153,0.08)'],
-                                ['rgba(188,19,254,0.1)', 'rgba(255,0,85,0.06)'],
-                                ['rgba(0,255,153,0.1)', 'rgba(0,243,255,0.05)']][k];
-                auroraGrad.addColorStop(0, 'transparent');
-                auroraGrad.addColorStop(0.4, colors[0]);
-                auroraGrad.addColorStop(0.8, colors[1]);
-                auroraGrad.addColorStop(1, 'transparent');
-                ctx.fillStyle = auroraGrad;
+                ctx.fillStyle = this._cachedGradient('atm_ice_aurora_' + k, () => {
+                    const g = ctx.createLinearGradient(0, 0, 0, h * 0.4);
+                    const colors = [['rgba(0,243,255,0.12)', 'rgba(0,255,153,0.08)'],
+                                    ['rgba(188,19,254,0.1)', 'rgba(255,0,85,0.06)'],
+                                    ['rgba(0,255,153,0.1)', 'rgba(0,243,255,0.05)']][k];
+                    g.addColorStop(0, 'transparent');
+                    g.addColorStop(0.4, colors[0]);
+                    g.addColorStop(0.8, colors[1]);
+                    g.addColorStop(1, 'transparent');
+                    return g;
+                });
                 ctx.beginPath();
                 ctx.moveTo(0, h * 0.1);
                 for (let x = 0; x <= w; x += 20) {
@@ -13818,11 +13861,13 @@ drawEffects() {
             // 1. Neon moon with concentric rings
             const moonX = w * 0.72, moonY = horizon * 0.55;
             const moonR = isBoss ? 160 : 120;
-            const moonGrad = ctx.createRadialGradient(moonX - 30, moonY - 30, 10, moonX, moonY, moonR);
-            moonGrad.addColorStop(0, '#fff');
-            moonGrad.addColorStop(0.3, conf.sun[0]);
-            moonGrad.addColorStop(1, 'rgba(255, 94, 185, 0.05)');
-            ctx.fillStyle = moonGrad;
+            ctx.fillStyle = this._cachedGradient('celestial_moon_' + (isBoss ? 'b' : 'n') + '_' + (conf.sun && conf.sun[0]), () => {
+                const g = ctx.createRadialGradient(moonX - 30, moonY - 30, 10, moonX, moonY, moonR);
+                g.addColorStop(0, '#fff');
+                g.addColorStop(0.3, conf.sun[0]);
+                g.addColorStop(1, 'rgba(255, 94, 185, 0.05)');
+                return g;
+            });
             ctx.beginPath(); ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2); ctx.fill();
             // Rings around moon
             ctx.strokeStyle = 'rgba(255, 94, 185, 0.35)'; ctx.lineWidth = 2;
@@ -13840,10 +13885,12 @@ drawEffects() {
                 ctx.fillRect(sx, sy, 1.5, 1.5);
             }
             // 3. Holographic city haze (bright magenta glow over horizon)
-            const hazeGrad = ctx.createLinearGradient(0, horizon - 80, 0, horizon);
-            hazeGrad.addColorStop(0, 'transparent');
-            hazeGrad.addColorStop(1, 'rgba(255, 94, 185, 0.25)');
-            ctx.fillStyle = hazeGrad;
+            ctx.fillStyle = this._cachedGradient('celestial_city_haze', () => {
+                const g = ctx.createLinearGradient(0, horizon - 80, 0, horizon);
+                g.addColorStop(0, 'transparent');
+                g.addColorStop(1, 'rgba(255, 94, 185, 0.25)');
+                return g;
+            });
             ctx.fillRect(0, horizon - 80, w, 80);
             // 4. Boss-only lightning over moon
             if (isBoss && Math.random() < 0.02) {
@@ -13876,11 +13923,13 @@ drawEffects() {
             // 2. Frozen sun — pale disc with halo
             const sunX = w * 0.3, sunY = horizon * 0.45;
             const sunR = isBoss ? 140 : 100;
-            const sunGrad = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, sunR);
-            sunGrad.addColorStop(0, '#fff');
-            sunGrad.addColorStop(0.4, '#c4f1ff');
-            sunGrad.addColorStop(1, 'rgba(180, 230, 255, 0.02)');
-            ctx.fillStyle = sunGrad;
+            ctx.fillStyle = this._cachedGradient('celestial_ice_sun_' + (isBoss ? 'b' : 'n'), () => {
+                const g = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, sunR);
+                g.addColorStop(0, '#fff');
+                g.addColorStop(0.4, '#c4f1ff');
+                g.addColorStop(1, 'rgba(180, 230, 255, 0.02)');
+                return g;
+            });
             ctx.beginPath(); ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2); ctx.fill();
             // 3. Falling snow specks (cheap loop)
             ctx.fillStyle = 'rgba(255,255,255,0.6)';
@@ -13942,12 +13991,14 @@ drawEffects() {
             // 1. Massive gas-giant planet with orbital rings
             const planetX = w * 0.7, planetY = horizon * 0.5;
             const planetR = isBoss ? 200 : 150;
-            const planetGrad = ctx.createRadialGradient(planetX - 50, planetY - 50, 20, planetX, planetY, planetR);
-            planetGrad.addColorStop(0, '#e0b0ff');
-            planetGrad.addColorStop(0.35, '#bc13fe');
-            planetGrad.addColorStop(0.8, '#4a0080');
-            planetGrad.addColorStop(1, '#1a0033');
-            ctx.fillStyle = planetGrad;
+            ctx.fillStyle = this._cachedGradient('celestial_tech_planet_' + (isBoss ? 'b' : 'n'), () => {
+                const g = ctx.createRadialGradient(planetX - 50, planetY - 50, 20, planetX, planetY, planetR);
+                g.addColorStop(0, '#e0b0ff');
+                g.addColorStop(0.35, '#bc13fe');
+                g.addColorStop(0.8, '#4a0080');
+                g.addColorStop(1, '#1a0033');
+                return g;
+            });
             ctx.beginPath(); ctx.arc(planetX, planetY, planetR, 0, Math.PI * 2); ctx.fill();
             // Cloud bands
             ctx.save();
@@ -13991,12 +14042,14 @@ drawEffects() {
             // 1. Central void fracture — fracturing sphere at top
             const vx = w * 0.5, vy = horizon * 0.4;
             const vr = isBoss ? 180 : 130;
-            const voidGrad = ctx.createRadialGradient(vx, vy, 10, vx, vy, vr);
-            voidGrad.addColorStop(0, '#000');
-            voidGrad.addColorStop(0.5, '#4a0010');
-            voidGrad.addColorStop(0.9, 'rgba(255, 0, 68, 0.3)');
-            voidGrad.addColorStop(1, 'transparent');
-            ctx.fillStyle = voidGrad;
+            ctx.fillStyle = this._cachedGradient('celestial_source_void_' + (isBoss ? 'b' : 'n'), () => {
+                const g = ctx.createRadialGradient(vx, vy, 10, vx, vy, vr);
+                g.addColorStop(0, '#000');
+                g.addColorStop(0.5, '#4a0010');
+                g.addColorStop(0.9, 'rgba(255, 0, 68, 0.3)');
+                g.addColorStop(1, 'transparent');
+                return g;
+            });
             ctx.beginPath(); ctx.arc(vx, vy, vr + 40, 0, Math.PI * 2); ctx.fill();
             // Jagged glyph ring around void
             ctx.save();
@@ -14204,10 +14257,12 @@ drawEffects() {
         ctx.rect(0, horizon, w, h - horizon);
         ctx.clip();
 
-        const floorGrad = ctx.createLinearGradient(0, horizon, 0, h);
-        floorGrad.addColorStop(0, conf.grid.substring(0,7) + '1A'); 
-        floorGrad.addColorStop(1, conf.grid.substring(0,7) + '00');
-        ctx.fillStyle = floorGrad;
+        ctx.fillStyle = this._cachedGradient('floor_' + conf.grid, () => {
+            const g = ctx.createLinearGradient(0, horizon, 0, h);
+            g.addColorStop(0, conf.grid.substring(0,7) + '1A');
+            g.addColorStop(1, conf.grid.substring(0,7) + '00');
+            return g;
+        });
         ctx.fillRect(0, horizon, w, h-horizon);
 
         ctx.strokeStyle = conf.grid;

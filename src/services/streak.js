@@ -23,7 +23,10 @@ const MILESTONES = [
 const TAIL_DAILY_BONUS = 15;
 
 function todayStr() {
-    const d = new Date();
+    // Use Date.now() explicitly so tests that mock the clock via
+    // `Date.now = ...` see the mocked time — `new Date()` without args
+    // reads the native clock on some engines and bypasses the override.
+    const d = new Date(Date.now());
     const y = d.getUTCFullYear();
     const m = String(d.getUTCMonth() + 1).padStart(2, '0');
     const dd = String(d.getUTCDate()).padStart(2, '0');
