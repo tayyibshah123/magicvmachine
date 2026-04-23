@@ -1754,22 +1754,16 @@ startQTE(type, x, y, callback) {
                 break;
             case STATE.REWARD: {
                 activate('screen-reward');
-                // Echo the boss-death dissolve as the reward-screen backdrop
-                // when we have a snapshot for this sector. Adds a sense-of-place
-                // beat with no extra assets.
+                // The boss-dissolve screenshot used to serve as a sense-of-place
+                // backdrop here, but the overlapping canvas imagery made the
+                // augmentation text (rarity chips, card descriptions, synergy
+                // hints) unreadable on mobile. Strip any stale backdrop and
+                // let the solid panel carry the moment — the "{BOSS}
+                // DESTROYED" banner below is now the anchor instead.
                 const rewardScreen = document.getElementById('screen-reward');
                 if (rewardScreen) {
-                    const snap = sessionStorage.getItem(`mvm_dissolve_snap_s${this.sector}`);
-                    // Only apply the snapshot if it's a legitimate data-URL
-                    // (defence against tampered imports breaking the CSS).
-                    const valid = snap && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(snap);
-                    if (valid) {
-                        rewardScreen.style.setProperty('background-image', `url("${snap}")`);
-                        rewardScreen.classList.add('reward-has-snap');
-                    } else {
-                        rewardScreen.style.backgroundImage = '';
-                        rewardScreen.classList.remove('reward-has-snap');
-                    }
+                    rewardScreen.style.backgroundImage = '';
+                    rewardScreen.classList.remove('reward-has-snap');
                 }
                 const bannerEl = document.getElementById('reward-boss-destroyed');
                 if (bannerEl) {

@@ -1854,48 +1854,60 @@ body.reduced-motion .intel-crawl-scanlines {
 }
 
 /* =========================================
-   REWARD SCREEN — sector backdrop from boss-death snapshot
+   REWARD SCREEN — glowing "SECTOR CLEARED" title and pulsing
+   "{BOSS} DESTROYED" banner. The boss-dissolve screenshot backdrop
+   was removed (it overlapped augmentation text on mobile); the title
+   pair now carries the beat on its own.
    ========================================= */
-#screen-reward.reward-has-snap {
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
+#screen-reward h2.neon-text-gold {
+    animation: rewardSectorClearedPulse 2s ease-in-out infinite;
 }
-#screen-reward.reward-has-snap::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background:
-        radial-gradient(ellipse at center, rgba(5, 0, 17, 0.82) 0%, rgba(5, 0, 17, 0.94) 60%, rgba(5, 0, 17, 0.99) 100%);
-    backdrop-filter: blur(6px);
-    pointer-events: none;
-    z-index: 0;
-}
-#screen-reward.reward-has-snap > * {
-    position: relative;
-    z-index: 1;
+@keyframes rewardSectorClearedPulse {
+    0%, 100% {
+        text-shadow:
+            0 0 8px rgba(255, 215, 0, 0.85),
+            0 0 18px rgba(255, 215, 0, 0.55),
+            0 0 30px rgba(255, 215, 0, 0.25);
+    }
+    50% {
+        text-shadow:
+            0 0 14px rgba(255, 215, 0, 1),
+            0 0 28px rgba(255, 215, 0, 0.95),
+            0 0 46px rgba(255, 170, 0, 0.7);
+    }
 }
 
 .reward-boss-destroyed {
     font-family: 'Orbitron', sans-serif;
-    font-weight: 700;
-    letter-spacing: 0.18em;
+    font-weight: 900;
+    letter-spacing: 0.22em;
     text-align: center;
     color: #ff3355;
-    text-shadow: 0 0 10px rgba(255, 51, 85, 0.85), 0 0 22px rgba(255, 51, 85, 0.55);
-    font-size: clamp(1rem, 3.2vw, 1.6rem);
-    padding: 6px 14px;
-    margin: -4px auto 14px;
-    border-top: 1px solid rgba(255, 51, 85, 0.45);
-    border-bottom: 1px solid rgba(255, 51, 85, 0.45);
-    max-width: 90%;
-    background: linear-gradient(90deg, transparent 0%, rgba(255, 51, 85, 0.12) 50%, transparent 100%);
-    animation: rewardBossDestroyedPulse 2.2s ease-in-out infinite;
+    font-size: clamp(1.1rem, 3.6vw, 1.8rem);
+    margin: 8px auto 18px;
+    max-width: 92%;
+    line-height: 1.15;
+    text-transform: uppercase;
+    animation: rewardBossDestroyedPulse 1.8s ease-in-out infinite;
 }
 .reward-boss-destroyed.hidden { display: none; }
 @keyframes rewardBossDestroyedPulse {
-    0%, 100% { text-shadow: 0 0 10px rgba(255, 51, 85, 0.85), 0 0 22px rgba(255, 51, 85, 0.55); }
-    50%      { text-shadow: 0 0 16px rgba(255, 51, 85, 1),    0 0 34px rgba(255, 51, 85, 0.9);  }
+    0%, 100% {
+        color: #ff3355;
+        text-shadow:
+            0 0 8px rgba(255, 51, 85, 0.85),
+            0 0 20px rgba(255, 51, 85, 0.6),
+            0 0 38px rgba(255, 51, 85, 0.3);
+        transform: scale(1);
+    }
+    50% {
+        color: #ff6680;
+        text-shadow:
+            0 0 14px rgba(255, 51, 85, 1),
+            0 0 32px rgba(255, 51, 85, 0.95),
+            0 0 56px rgba(255, 51, 85, 0.65);
+        transform: scale(1.03);
+    }
 }
 
 /* =========================================
