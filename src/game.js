@@ -17462,7 +17462,132 @@ drawEntity(entity) {
                 this.drawSectorEnemyUnderlayer(ctx, entity, time);
 
                 const shape = entity.shape || (entity.name.includes("Drone") ? 'drone' : entity.name.includes("Loader") ? 'tank' : entity.name.includes("Arachnid") ? 'spider' : 'drone');
-                if (shape === 'drone' || entity.name.includes("Drone")) {
+                // COOLANT TECH — dedicated healer-drone design. Previously shared
+                // the generic drone renderer, which drew wide-rotating gimbal
+                // ellipses (±60px) that read as jagged half-finished orange
+                // scanlines on the sector-3 backdrop. This self-contained branch
+                // draws a compact coolant canister with twin radiator fins and
+                // a contained coolant coil — no stray geometry past the chassis.
+                if (entity.name === 'Coolant Tech') {
+                    // Heal-coded cyan accent so the healer reads distinct from
+                    // damage dealers at a glance, even while the sector palette
+                    // tints the chassis orange.
+                    const coolantColor = '#66ffd8';
+                    const coolantGlow  = '#33ffcc';
+                    const hover = Math.sin(time * 2.2) * 6;
+                    ctx.translate(0, hover);
+
+                    // Healing aura — soft radial pulse under the chassis.
+                    ctx.save();
+                    const auraPulse = 0.45 + Math.sin(time * 3) * 0.2;
+                    const auraR = 78;
+                    const aura = ctx.createRadialGradient(0, 0, 10, 0, 0, auraR);
+                    aura.addColorStop(0, coolantColor);
+                    aura.addColorStop(0.6, 'rgba(51, 255, 204, 0.12)');
+                    aura.addColorStop(1, 'transparent');
+                    ctx.globalAlpha = auraPulse;
+                    ctx.fillStyle = aura;
+                    ctx.beginPath(); ctx.arc(0, 4, auraR, 0, Math.PI * 2); ctx.fill();
+                    ctx.restore();
+
+                    // Coolant canister chassis — vertical rounded hexagon.
+                    ctx.save();
+                    ctx.fillStyle = '#0c1818';
+                    ctx.strokeStyle = mColor;
+                    ctx.lineWidth = 3;
+                    ctx.shadowColor = mGlow;
+                    ctx.shadowBlur = 14;
+                    ctx.beginPath();
+                    ctx.moveTo(0, -46);
+                    ctx.lineTo(32, -28);
+                    ctx.lineTo(32,  28);
+                    ctx.lineTo(0,  46);
+                    ctx.lineTo(-32, 28);
+                    ctx.lineTo(-32, -28);
+                    ctx.closePath();
+                    ctx.fill(); ctx.stroke();
+                    ctx.restore();
+
+                    // Radiator fin panels — stacked blades on each side, cyan-tipped.
+                    ctx.save();
+                    ctx.shadowColor = coolantGlow;
+                    ctx.shadowBlur = 6;
+                    for (const side of [-1, 1]) {
+                        ctx.strokeStyle = 'rgba(200, 230, 240, 0.55)';
+                        ctx.lineWidth = 1.5;
+                        for (let f = -18; f <= 18; f += 9) {
+                            ctx.beginPath();
+                            ctx.moveTo(side * 32, f);
+                            ctx.lineTo(side * 50, f);
+                            ctx.stroke();
+                        }
+                        // Outer fin rail
+                        ctx.strokeStyle = coolantColor;
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(side * 50, -22);
+                        ctx.lineTo(side * 50,  22);
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+
+                    // Coolant coil — tight compact orbital ring INSIDE chassis
+                    // bounds (22px radius, well within the 32px chassis half-width).
+                    // One ring only, so rotation never produces stray cross-lines.
+                    ctx.save();
+                    ctx.strokeStyle = coolantColor;
+                    ctx.lineWidth = 1.8;
+                    ctx.shadowColor = coolantGlow;
+                    ctx.shadowBlur = 10;
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, 22, 8, time * 0.6, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+
+                    // Central coolant core — cyan drop with breathing glow.
+                    ctx.save();
+                    const core = 6 + Math.sin(time * 3.2) * 1.8;
+                    ctx.fillStyle = '#082020';
+                    ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = 'rgba(102, 255, 216, 0.6)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    ctx.fillStyle = coolantColor;
+                    ctx.shadowColor = coolantGlow;
+                    ctx.shadowBlur = 22;
+                    ctx.beginPath(); ctx.arc(0, 0, core, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = '#ffffff';
+                    ctx.shadowBlur = 4;
+                    ctx.beginPath(); ctx.arc(0, 0, core * 0.45, 0, Math.PI * 2); ctx.fill();
+                    ctx.restore();
+
+                    // Coolant vapour — three small drifting puffs rising from
+                    // the top valve. Cheap: 3 arcs per frame.
+                    ctx.save();
+                    ctx.fillStyle = coolantColor;
+                    for (let p = 0; p < 3; p++) {
+                        const t = ((time * 0.7) + p * 0.33) % 1;
+                        const py = -46 - t * 32;
+                        const px = Math.sin((time + p) * 2) * 6;
+                        const pa = (1 - t) * 0.55;
+                        const pr = 3 + t * 3;
+                        ctx.globalAlpha = pa;
+                        ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.fill();
+                    }
+                    ctx.restore();
+
+                    // Top valve cap (coolant outlet) — thin capped rectangle.
+                    ctx.save();
+                    ctx.fillStyle = '#222';
+                    ctx.strokeStyle = coolantColor;
+                    ctx.lineWidth = 1.5;
+                    ctx.shadowColor = coolantGlow;
+                    ctx.shadowBlur = 6;
+                    ctx.fillRect(-6, -52, 12, 8);
+                    ctx.strokeRect(-6, -52, 12, 8);
+                    ctx.restore();
+                }
+                else if (shape === 'drone' || entity.name.includes("Drone")) {
                     // SENTRY DRONE — gyroscopic chassis, orbiting targeting nodes, pulsing thrusters
                     const hover = Math.sin(time * 2.5) * 10;
                     const bank = Math.sin(time * 1.1) * 0.08;
