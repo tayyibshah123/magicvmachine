@@ -279,8 +279,19 @@ class Enemy extends Entity {
     }
 
     updateIntentValues() {
+        // Every intent type that resolves as outgoing damage routes through
+        // getEffectiveDamage so Constrict / Digital Rot / Weak all stack.
+        // Previous version only listed attack/multi_attack/debuff/purge_attack,
+        // which left Slag Geyser's IMMOLATE and the sector-4 AoE sweeps dealing
+        // full damage even while the enemy was debuffed.
+        const DAMAGE_INTENTS = new Set([
+            'attack', 'multi_attack', 'debuff', 'purge_attack',
+            'aoe_sweep', 'frost_aoe', 'immolate',
+            'shield_strip_attack', 'chaotic_act',
+            'mirror_attack', 'observer_strike', 'burrow_resurge'
+        ]);
         this.nextIntents.forEach(intent => {
-            if (intent.type === 'attack' || intent.type === 'multi_attack' || intent.type === 'debuff' || intent.type === 'purge_attack') {
+            if (DAMAGE_INTENTS.has(intent.type)) {
                 intent.effectiveVal = this.getEffectiveDamage(intent.val);
             } else if (intent.type === 'heal') {
                 let heal = intent.val;
