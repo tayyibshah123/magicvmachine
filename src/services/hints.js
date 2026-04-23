@@ -96,7 +96,12 @@ export const Hints = {
                     <button class="btn primary hint-dismiss">GOT IT</button>
                 </div>
             `;
-            document.body.appendChild(this._root);
+            // Anchor to the game container so the hint card stays inside
+            // the 432px mobile-shaped canvas. document.body made the
+            // overlay fill the viewport, leaving the card drifting
+            // off-canvas on wide devices.
+            const parent = document.getElementById('game-container') || document.body;
+            parent.appendChild(this._root);
             this._root.addEventListener('click', (e) => {
                 if (e.target === this._root || e.target.classList.contains('hint-dismiss')) {
                     this._dismiss();

@@ -552,9 +552,23 @@ class Entity {
         return this.currentHp <= 0;
     }
 
+    // Apply outgoing-damage debuffs (Constrict/Digital Rot, Weak) to a base
+    // attack value. Shared between enemy-side minions (direct attacks),
+    // player-side minions (dart VFX resolves their hits), and the hover
+    // tooltip so the displayed Atk always matches what the minion will
+    // actually deal. Overridden on Enemy to stack the Brittle affix.
+    getEffectiveDamage(baseVal) {
+        let dmg = (baseVal !== undefined) ? baseVal : (this.dmg || 0);
+        const constrict = this.hasEffect('constrict');
+        if (constrict) dmg = Math.floor(dmg * (constrict.val ?? 1));
+        const weak = this.hasEffect('weak');
+        if (weak) dmg = Math.floor(dmg * 0.5);
+        return Math.max(0, dmg);
+    }
+
     heal(amount) {
         let actualHeal = amount;
-        
+
         const constrict = this.hasEffect('constrict');
         if (constrict) {
             actualHeal = Math.floor(actualHeal * constrict.val);
@@ -577,6 +591,19 @@ class Entity {
         // the player cannot gain further shield from cards/relics during the run.
         if (!force && this instanceof Player && this.hasRelic('c_void_shell')) {
             ParticleSys.createFloatingText(this.x, this.y - 80, "SHIELD BLOCKED", "#555");
+            return;
+        }
+        // Bloodstalker thralls don't wear armour — the class fantasy is flesh
+        // paying the cost, not metal. Any would-be shield (Bulwark augments,
+        // Sentinel shield-on-defend bonuses, relic payouts, forced startup
+        // shields, etc.) feeds the minion's HP pool instead so the thrall
+        // ends up larger rather than over-shielded.
+        if (amount > 0 && Minion && this instanceof Minion && this.isPlayerSide
+            && Game && Game.player && Game.player.classId === 'bloodstalker') {
+            this.maxHp += amount;
+            this.currentHp += amount;
+            this.playAnim('pulse');
+            ParticleSys.createFloatingText(this.x, this.y - 60, `+${amount} HP`, '#ff2244');
             return;
         }
         this.shield += amount;

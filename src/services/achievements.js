@@ -113,7 +113,13 @@ function _showToast(name, desc) {
         host = document.createElement('div');
         host.id = 'achievement-toast';
         host.className = 'achievement-toast hidden';
-        document.body.appendChild(host);
+        // Anchor to the game container so the toast stays inside the
+        // 432px mobile-shaped canvas. Appending to document.body made the
+        // toast fly in from the viewport's top-right edge, which lands
+        // off-canvas on tablets/desktops where the game container is
+        // narrower than the window.
+        const parent = document.getElementById('game-container') || document.body;
+        parent.appendChild(host);
     }
     host.innerHTML = `
         <div class="ach-toast-line">ACHIEVEMENT UNLOCKED</div>

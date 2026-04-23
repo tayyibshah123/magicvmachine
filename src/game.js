@@ -934,21 +934,26 @@ const Game = {
 
         // Effect icon hit-test — mirrors the drawHealthBar effect bar geometry
         // (iconWidth 30, barHeight 28, barY = y + height + 6 = entity.y - radius - 14).
+        // Use the same synthesized list the renderer uses (_collectStatusDisplay)
+        // so derived buffs/debuffs (overclock, charged, exposed, armor, sig_thorns,
+        // firewall, blood_tier, elite affixes) are hoverable, not just real effects.
         {
             const ICON_W = 30, BAR_H = 28, PAD = 4;
             const effectEntities = [];
             if (this.enemy) { effectEntities.push(this.enemy); effectEntities.push(...this.enemy.minions); }
             if (this.player) { effectEntities.push(this.player); effectEntities.push(...this.player.minions); }
             for (const ent of effectEntities) {
-                if (!ent || ent.currentHp <= 0 || !ent.effects || ent.effects.length === 0) continue;
+                if (!ent || ent.currentHp <= 0) continue;
+                const statusList = this._collectStatusDisplay(ent);
+                if (!statusList || statusList.length === 0) continue;
                 const barY = ent.y - ent.radius - 14;
-                const totalW = ent.effects.length * ICON_W;
+                const totalW = statusList.length * ICON_W;
                 const barX = ent.x - totalW / 2;
                 if (this.mouseY < barY - PAD || this.mouseY > barY + BAR_H + PAD) continue;
-                for (let i = 0; i < ent.effects.length; i++) {
+                for (let i = 0; i < statusList.length; i++) {
                     const iconX = barX + i * ICON_W;
                     if (this.mouseX >= iconX - PAD && this.mouseX <= iconX + ICON_W + PAD) {
-                        TooltipMgr.show(this.describeEffect(ent.effects[i], ent), screenX, screenY);
+                        TooltipMgr.show(this.describeEffect(statusList[i], ent), screenX, screenY);
                         if (this.currentHoverEntity !== 'effect:' + i) {
                             this.currentHoverEntity = 'effect:' + i;
                             AudioMgr.playSound('click');
@@ -1044,7 +1049,15 @@ const Game = {
                 }
                 
                 if(ent instanceof Minion) {
-                    txt += `\nAtk: ${ent.dmg}`;
+                    const rawAtk = ent.dmg || 0;
+                    const effAtk = (typeof ent.getEffectiveDamage === 'function')
+                        ? ent.getEffectiveDamage()
+                        : rawAtk;
+                    if (effAtk !== rawAtk) {
+                        txt += `\nAtk: ${effAtk} <span style="color:#888; text-decoration:line-through;">${rawAtk}</span>`;
+                    } else {
+                        txt += `\nAtk: ${rawAtk}`;
+                    }
                     if (ent.name.includes("Glitch")) txt += `\n(Gains +10% DMG per turn)`;
                     if (ent.isPlayerSide && Game.player.traits.minionTrait) txt += `\n${Game.player.traits.minionTrait}`;
                 }
@@ -1756,6 +1769,17 @@ startQTE(type, x, y, callback) {
                     } else {
                         rewardScreen.style.backgroundImage = '';
                         rewardScreen.classList.remove('reward-has-snap');
+                    }
+                }
+                const bannerEl = document.getElementById('reward-boss-destroyed');
+                if (bannerEl) {
+                    const bossName = this._lastBossKillName || '';
+                    if (bossName) {
+                        bannerEl.textContent = `${bossName.toUpperCase()} DESTROYED`;
+                        bannerEl.classList.remove('hidden');
+                    } else {
+                        bannerEl.textContent = '';
+                        bannerEl.classList.add('hidden');
                     }
                 }
                 this.generateRewards();
@@ -4408,9 +4432,13 @@ triggerSystemCrash() {
 
     describeEffect(eff, entity) {
         if (!eff) return '';
-        const displayName = eff.name || (eff.id ? eff.id.toUpperCase() : 'EFFECT');
+        const displayName = eff.name || (eff.id ? eff.id.toUpperCase().replace(/_/g, ' ') : 'EFFECT');
         const header = `<strong>${eff.icon || ''} ${displayName}</strong>`;
-        const turnsLine = `<span style="color:#888;">${eff.duration} turn${eff.duration === 1 ? '' : 's'} remaining</span>`;
+        // Permanent / synthesized entries (elite affixes, reactor heat, firewall
+        // readiness) don't tick down — skip the misleading "0 turns remaining".
+        const turnsLine = (eff._permanent || !eff.duration)
+            ? ''
+            : `<span style="color:#888;">${eff.duration} turn${eff.duration === 1 ? '' : 's'} remaining</span>`;
 
         let body = '';
         switch (eff.id) {
@@ -4448,13 +4476,57 @@ triggerSystemCrash() {
                 body = `Takes <strong>${eff.val * s} poison damage</strong> at the end of each turn.${stacksLine} Stacks up to <strong>3×</strong>.`;
                 break;
             }
+            // --- Synthesized player/enemy status entries from _collectStatusDisplay.
+            // These don't live on entity.effects so they have no `desc` — describe
+            // them here so hovering the icon actually tells the player what it means.
+            case 'overclock':
+                body = `Annihilator reactor primed: next damage die deals <strong>×${(eff.val || 1.4).toFixed(1)}</strong>. Consumed on the next attack.`;
+                break;
+            case 'charged':
+                body = `Next attack deals <strong>×${(eff.val || 2).toFixed(1)}</strong> damage. Consumed on the next ATTACK die.`;
+                break;
+            case 'exposed': {
+                const pct = Math.round(((eff.val || 1.5) - 1) * 100);
+                body = `Incoming damage increased by <strong>+${pct}%</strong> while this buff is active.`;
+                break;
+            }
+            case 'armor': {
+                const hits = Math.max(0, Math.round(eff.val || 0));
+                body = `<strong>Armor Plated</strong> — takes 90% less damage. Breaks after <strong>${hits}</strong> more hit${hits === 1 ? '' : 's'}.`;
+                break;
+            }
+            case 'sig_thorns':
+                body = `Sentinel thorns active — reflects damage back to attackers this turn.`;
+                break;
+            case 'firewall':
+                body = `<strong>Firewall</strong>: the first unblocked hit this turn is capped at 20 damage.`;
+                break;
+            case 'blood_tier':
+                body = `<strong>Bloodstalker Hunt tier ${eff.val || 1}</strong> — recent kills have empowered your next strike.`;
+                break;
+            case 'shielded':
+                body = `<strong>Invincible</strong> — all damage blocked while shields are active (${eff.duration} turn${eff.duration === 1 ? '' : 's'} left).`;
+                break;
+            // Elite affix synthesized entries — quick read of the affix behaviour.
+            case 'brittle':       body = `<strong>Brittle</strong>: deals +25% damage but takes +50% damage.`; break;
+            case 'second_wind':   body = `<strong>Second Wind</strong>: revives once at 50% HP.`; break;
+            case 'jammer':        body = `<strong>Jammer</strong>: steals one of your dice each turn.`; break;
+            case 'reflector':     body = `<strong>Reflector</strong>: reflects a portion of damage back at you.`; break;
+            case 'phase':         body = `<strong>Phase</strong>: alternates between HP and shield as the damage target.`; break;
+            case 'multiplier':    body = `<strong>Multiplier</strong>: amplifies outgoing damage.`; break;
+            case 'anchor':        body = `<strong>Anchor</strong>: immune to displacement / disable effects.`; break;
+            case 'vampiric':      body = `<strong>Vampiric</strong>: heals for a share of damage it deals.`; break;
+            case 'chaotic':       body = `<strong>Chaotic</strong>: actions randomize each turn.`; break;
+            case 'buffer':        body = `<strong>Buffer</strong>: amplifies nearby hostiles.`; break;
+            case 'observer':      body = `<strong>Observer</strong>: tags one of your dice and exposes your plan.`; break;
+            case 'shield_break':  body = `<strong>Shield Break</strong>: strips shields on hit.`; break;
             default:
                 body = eff.desc ? eff.desc : 'No additional info.';
         }
 
         const ownerName = entity ? entity.name : '';
         const footer = ownerName ? `<span style="color:#888;">on ${ownerName}</span>` : '';
-        return `${header}\n${turnsLine}\n${body}${footer ? '\n' + footer : ''}`;
+        return [header, turnsLine, body, footer].filter(Boolean).join('\n');
     },
 
     playIntro() {
@@ -11391,7 +11463,11 @@ drawEffects() {
                             const stacks = this.player.relics.filter(r => r.id === 'swarm_beacon').length;
                             swarmBonus = aliveCount * stacks;
                         }
-                        const dmg = Math.floor((m.dmg + swarmBonus) * multiplier);
+                        // Apply the minion's own Constrict/Weak before the swarm bonus
+                        // and QTE multiplier so debuffs scale the base attack, not the
+                        // boosted total (keeps swarm stacking predictable).
+                        const effBase = (typeof m.getEffectiveDamage === 'function') ? m.getEffectiveDamage(m.dmg) : m.dmg;
+                        const dmg = Math.floor((effBase + swarmBonus) * multiplier);
                         if (t.takeDamage(dmg, m) && t === this.enemy) { this.winCombat(); return; }
                         if (t !== this.enemy && t.currentHp <= 0) {
                              // Blood Thrall kills no longer heal the player — the
@@ -11776,7 +11852,8 @@ drawEffects() {
                     AudioMgr.playSound('mana');
                 } else {
                     this.triggerVFX('micro_laser', min, this.player, () => {
-                        if (this.player.takeDamage(min.dmg, min) && this.player.currentHp <= 0) { this.gameOver(); return; }
+                        const dmgOut = (typeof min.getEffectiveDamage === 'function') ? min.getEffectiveDamage(min.dmg) : min.dmg;
+                        if (this.player.takeDamage(dmgOut, min) && this.player.currentHp <= 0) { this.gameOver(); return; }
                         if (this.player.mana > 0) {
                             this.player.mana = Math.max(0, this.player.mana - 1);
                             ParticleSys.createFloatingText(this.player.x, this.player.y - 80, "MANA DRAIN -1", "#bc13fe");
@@ -11797,7 +11874,8 @@ drawEffects() {
                         this.enemy.heal(2);
                         ParticleSys.createFloatingText(this.enemy.x, this.enemy.y, "LEECH", "#00ff00");
                     }
-                    if (t.takeDamage(min.dmg, min) && t === this.player) { this.gameOver(); return; }
+                    const dmgOut = (typeof min.getEffectiveDamage === 'function') ? min.getEffectiveDamage(min.dmg) : min.dmg;
+                    if (t.takeDamage(dmgOut, min) && t === this.player) { this.gameOver(); return; }
                     if (t !== this.player && t.currentHp <= 0) {
                          if (this.player.traits.maxMinions === 3 && Math.random() < 0.3) { 
                              t.currentHp = Math.floor(t.maxHp / 2);
@@ -12139,6 +12217,11 @@ drawEffects() {
         const wasBoss = !!this.enemy.isBoss;
         const wasElite = !!this.enemy.isElite;
         const killName = this.enemy.name || '';
+
+        // Persist only the boss name for the reward screen's "DESTROYED"
+        // banner — non-boss kills go straight back to the map and don't
+        // need the banner, so clear it.
+        this._lastBossKillName = wasBoss ? killName : '';
 
         this.enemy = null;
         this.player.minions = [];

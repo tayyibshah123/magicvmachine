@@ -136,6 +136,13 @@ export const ClassAbility = {
     },
 
     onTurnStart() {
+        // If state was lost mid-combat (hot-reload, stray endCombat on a UI
+        // overlay), rebuild from the current player class so the widget is
+        // back by the time the player acts this turn.
+        if (!state && Game && Game.player && Game.player.classId && Game.enemy) {
+            this.startCombat();
+            return;
+        }
         if (!state) return;
         if (classId === 'arcanist') state.usedThisTurn = false;
         // Sentinel: plates + buffer persist across turns (slow-build combat tool).
@@ -759,9 +766,23 @@ export const ClassAbility = {
     },
 
     render() {
+        // Recover if combat is live but the widget was never mounted for this
+        // class — e.g. a state-reset wiped `state` mid-combat, or the DOM was
+        // rebuilt without re-running startCombat(). The widget is critical
+        // for Bloodstalker's Blood Pool, so it must never be silently blank.
+        if ((!state || !classId) && Game && Game.player && Game.player.classId && Game.enemy) {
+            classId = Game.player.classId;
+            state = _defaultState(classId);
+            if (state) this._build();
+        }
         if (!state || !classId) return;
         const el = $w();
         if (!el) return;
+        // Defensive: if the `hidden` class snuck on (third-party close, tutorial
+        // overlay clean-up, etc.) while combat is live, peel it back off.
+        if (el.classList.contains('hidden') && Game && Game.enemy) {
+            el.classList.remove('hidden');
+        }
         if (!el.innerHTML) this._build();
         switch (classId) {
             case 'tactician':    this._renderTactician(); break;
