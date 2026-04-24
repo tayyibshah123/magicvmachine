@@ -67,6 +67,28 @@ const ParticleSys = {
     quality: 1.0, // 0.4 = low, 0.7 = medium, 1.0 = high; trims spawn counts
     maxParticles: POOL_SIZE,
 
+    // Cached --text-scale-multiplier so createDamageText doesn't force
+    // a getComputedStyle reflow per damage hit. Refreshed via
+    // refreshTextScaleCache() when the setting slider fires.
+    _textScaleCache: undefined,
+    _refreshTextScaleCache() {
+        let scale = 1;
+        try {
+            if (typeof document !== 'undefined' && document.documentElement) {
+                const raw = getComputedStyle(document.documentElement).getPropertyValue('--text-scale-multiplier');
+                const parsed = parseFloat(raw);
+                if (!isNaN(parsed) && parsed > 0) scale = Math.max(0.5, Math.min(2.5, parsed));
+            }
+        } catch (_) { /* canvas-only env — leave scale at 1 */ }
+        this._textScaleCache = scale;
+    },
+
+    // Flush the per-color tint cache. Called when Palette.setMode flips
+    // so stale adapted-color canvases don't linger in memory forever.
+    clearTintCache() {
+        this._tintCache = {};
+    },
+
     // Backwards-compat: code that iterates `particles` still works (returns active subset).
     // Also supports `ParticleSys.particles = []` (legacy "clear everything") by
     // releasing all pool slots — avoids "property has only a getter" errors.
@@ -360,14 +382,16 @@ const ParticleSys = {
             else if (sourceKind === 'enemy') color = tier === 'chip' ? '#ff7777' : '#ff3333';
         }
         // Respect the Accessibility text-scale slider so players with
-        // larger-text preference also get larger damage numbers. Read
-        // once per call; the CSS var stays in sync with the slider.
-        let scale = 1;
-        try {
-            const raw = getComputedStyle(document.documentElement).getPropertyValue('--text-scale-multiplier');
-            const parsed = parseFloat(raw);
-            if (!isNaN(parsed) && parsed > 0) scale = Math.max(0.5, Math.min(2.5, parsed));
-        } catch (_) { /* canvas-only env — leave scale at 1 */ }
+        // larger-text preference also get larger damage numbers. The
+        // multiplier is cached on ParticleSys (refreshed by the setting
+        // hook) so burst combat doesn't force a getComputedStyle reflow
+        // per hit — that was showing up as 15–50ms hitches on 3-hit multis
+        // and Blade Storm AoEs.
+        let scale = this._textScaleCache;
+        if (scale === undefined) {
+            this._refreshTextScaleCache();
+            scale = this._textScaleCache;
+        }
         // Per-setting damage-text size override (small / medium / large) —
         // lets players tune damage floaters independently of the global UI
         // text scale (e.g. big UI + small damage numbers for cleaner feel).

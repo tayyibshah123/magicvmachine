@@ -68,7 +68,17 @@ export const Palette = {
     mode: 'none',
 
     setMode(mode) {
-        this.mode = (mode && MAPS[mode]) ? mode : 'none';
+        const next = (mode && MAPS[mode]) ? mode : 'none';
+        if (next === this.mode) return;
+        this.mode = next;
+        // Flush the particle tint cache so stale pre-swap canvases don't
+        // linger for the duration of the run. Lazy import via global —
+        // avoids a palette ↔ particles circular require.
+        try {
+            if (typeof window !== 'undefined' && window.ParticleSys && window.ParticleSys.clearTintCache) {
+                window.ParticleSys.clearTintCache();
+            }
+        } catch (_) { /* ignore */ }
     },
 
     // Initialise from the already-applied body class. Safe to call before
@@ -84,9 +94,11 @@ export const Palette = {
 
     // Transform a single color. Non-strings and unmapped hex values pass
     // through; only documented game palette colors get swapped.
+    // Mode === 'none' is the hot path (most players), so it's checked
+    // first with zero additional cost — no string work, no map lookup.
     adapt(color) {
-        if (this.mode === 'none' || !color) return color;
-        if (typeof color !== 'string') return color;
+        if (this.mode === 'none') return color;
+        if (!color || typeof color !== 'string') return color;
         const map = MAPS[this.mode];
         if (!map) return color;
         return map[color.toLowerCase()] || color;

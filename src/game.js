@@ -557,6 +557,9 @@ const Game = {
         hookSetting('sld-text-scale', (el) => {
             const scale = Number(el.value) / 100;
             document.documentElement.style.setProperty('--text-scale-multiplier', scale);
+            // Refresh the cached scale so damage-number text picks up the
+            // new value without a per-hit getComputedStyle reflow.
+            if (ParticleSys && ParticleSys._refreshTextScaleCache) ParticleSys._refreshTextScaleCache();
             const v = d.querySelector('.setting-value[data-for="sld-text-scale"]');
             if (v) v.textContent = el.value + '%';
         });
@@ -5698,7 +5701,10 @@ triggerSystemCrash() {
             if (s.sfx === false) AudioMgr.toggleSFX(false);
             if (typeof s.musicVol === 'number') AudioMgr.setMusicVolume(s.musicVol / 100);
             if (typeof s.sfxVol === 'number') AudioMgr.setSFXVolume(s.sfxVol / 100);
-            if (typeof s.textScale === 'number') document.documentElement.style.setProperty('--text-scale-multiplier', s.textScale / 100);
+            if (typeof s.textScale === 'number') {
+                document.documentElement.style.setProperty('--text-scale-multiplier', s.textScale / 100);
+                if (ParticleSys && ParticleSys._refreshTextScaleCache) ParticleSys._refreshTextScaleCache();
+            }
             document.body.classList.toggle('reduced-motion', !!s.reducedMotion);
             document.body.classList.toggle('high-contrast', !!s.highContrast);
             document.body.classList.toggle('dyslexic-font', !!s.dyslexicFont);
@@ -18928,16 +18934,20 @@ drawEntity(entity) {
             if (auras.length) {
                 ctx.save();
                 const pulse = 0.65 + Math.sin(time * 3.6) * 0.25;
+                const bleedPulse = 0.55 + Math.sin(time * 7) * 0.25;
+                // Shadow blur is the same for every ring — set once to
+                // avoid per-ring GPU state flips (those were showing up
+                // as a measurable FPS hit on bosses with 4+ debuffs).
+                ctx.shadowBlur = 14;
                 ctx.lineWidth = 2;
+                const baseR = entity.radius + 22;
                 for (let ai = 0; ai < auras.length; ai++) {
                     const a = auras[ai];
-                    const ringR = entity.radius + 22 + ai * 7;
-                    ctx.globalAlpha = a.label === 'bleed' ? (0.55 + Math.sin(time * 7) * 0.25) : pulse * 0.7;
+                    ctx.globalAlpha = a.label === 'bleed' ? bleedPulse : pulse * 0.7;
                     ctx.shadowColor = a.color;
-                    ctx.shadowBlur = 14;
                     ctx.strokeStyle = a.color;
                     ctx.beginPath();
-                    ctx.arc(0, 0, ringR, 0, Math.PI * 2);
+                    ctx.arc(0, 0, baseR + ai * 7, 0, Math.PI * 2);
                     ctx.stroke();
                 }
                 ctx.restore();
