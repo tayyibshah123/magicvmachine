@@ -469,7 +469,6 @@ const Game = {
             this.renderDiceUI();
             this.endTurn();
         });
-        attachButtonEvent('btn-undo-die', () => this.undoLastDie());
         const handleSettings = () => {
             if (this.currentState === STATE.TUTORIAL_COMBAT) {
                 ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2, "COMPLETE TUTORIAL FIRST!", "#ff0000");
@@ -7247,7 +7246,6 @@ async startCombat(type) {
         CombatLog.clear();
         this.player.minions = [];
         this._ensureDailyChip();
-        this._clearUndoSnapshot && this._clearUndoSnapshot();
         // Per-combat trackers used by new relics and combos.
         this.firstAttackDealt = false;
         this.firstDefendUsedThisTurn = false;
@@ -8949,147 +8947,6 @@ async startTurn() {
             btnEnd.classList.toggle('no-moves-pulse', !playable && !enemyTurnActive);
         }
 
-        // Undo-last-die button — visible only while a snapshot is live
-        // (one per turn, cleared on end-of-turn / combat end / after use).
-        this._updateUndoBtn && this._updateUndoBtn();
-    },
-
-    // --- UNDO LAST DIE (Tier 2 QoL) ---
-    //
-    // One-shot undo of the most recent die play. Captures the core game
-    // state the die might have touched (player/enemy HP, shield, effects,
-    // minion rosters + stats, dice flags, turn counters) before `useDie`
-    // applies its mutations. Restoring sets all those fields back.
-    //
-    // Known limitations — document, don't fight:
-    //   * VFX particles already in flight stay on screen (cosmetic only).
-    //   * Class-ability side effects (Annihilator Heat fill, Tactician
-    //     pip fill, Summoner Grove plots) are NOT reverted — those fire
-    //     via ClassAbility.onEvent and don't round-trip cleanly.
-    //   * Relic proc counters (e.g. Relentless attack count) partially
-    //     revert via `attacksThisTurn`, but any floating "RELIC!" popups
-    //     stay visible until they fade naturally.
-    // These are acceptable trade-offs: the important resources (mana, HP,
-    // shield, dice, enemy state) all revert, which covers ~95% of
-    // misclick scenarios.
-    _undoSnapshot: null,
-    _captureUndoSnapshot(die) {
-        if (!this.player || !this.enemy) { this._undoSnapshot = null; return; }
-        const cloneEffects = (arr) => Array.isArray(arr) ? arr.map(ef => ({ ...ef })) : [];
-        const snapMinion = (m) => ({
-            ref: m,
-            currentHp: m.currentHp,
-            shield: m.shield,
-            effects: cloneEffects(m.effects),
-            charges: m.charges
-        });
-        this._undoSnapshot = {
-            dieId: die && die.id,
-            player: {
-                mana: this.player.mana,
-                shield: this.player.shield,
-                currentHp: this.player.currentHp,
-                effects: cloneEffects(this.player.effects),
-                minionRefs: this.player.minions.slice(),
-                minionStates: this.player.minions.map(snapMinion),
-                nextAttackMult: this.player.nextAttackMult,
-                nextAttackFlatBonus: this.player.nextAttackFlatBonus,
-                tempThorns: this.player.tempThorns,
-            },
-            enemy: {
-                currentHp: this.enemy.currentHp,
-                shield: this.enemy.shield,
-                effects: cloneEffects(this.enemy.effects),
-                minionRefs: (this.enemy.minions || []).slice(),
-                minionStates: (this.enemy.minions || []).map(snapMinion),
-            },
-            dicePool: this.dicePool.map(d => ({ ...d })),
-            rerolls: this.rerolls,
-            diceUsedThisTurn: this.diceUsedThisTurn || 0,
-            attacksThisTurn: this.attacksThisTurn || 0,
-            firstAttackDealt: !!this.firstAttackDealt,
-            firstDefendUsedThisTurn: !!this.firstDefendUsedThisTurn,
-            comboFlurry: !!this.comboFlurry,
-            comboDoubleStrike: !!this.comboDoubleStrike,
-            echoChamberUsedThisCombat: !!this._echoChamberUsedThisCombat,
-            hotHandsUsedThisTurn: !!this._hotHandsUsedThisTurn,
-            voltPrimerUsedThisTurn: !!this._voltPrimerUsedThisTurn,
-        };
-    },
-
-    _clearUndoSnapshot() {
-        this._undoSnapshot = null;
-        this._updateUndoBtn();
-    },
-
-    _updateUndoBtn() {
-        const btn = document.getElementById('btn-undo-die');
-        if (!btn) return;
-        const inCombat = (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT);
-        const show = inCombat && !!this._undoSnapshot;
-        btn.classList.toggle('hidden', !show);
-    },
-
-    undoLastDie() {
-        const snap = this._undoSnapshot;
-        if (!snap) return false;
-        if (!this.player || !this.enemy) return false;
-        if (this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT) return false;
-
-        // Player restore
-        this.player.mana = snap.player.mana;
-        this.player.shield = snap.player.shield;
-        this.player.currentHp = snap.player.currentHp;
-        this.player.effects = snap.player.effects;
-        this.player.nextAttackMult = snap.player.nextAttackMult;
-        this.player.nextAttackFlatBonus = snap.player.nextAttackFlatBonus;
-        this.player.tempThorns = snap.player.tempThorns;
-        // Minions: restore the exact array of living refs, then roll each
-        // minion's stats back. New summons drop out because they weren't
-        // in minionRefs; kills come back because the ref survived.
-        this.player.minions = snap.player.minionRefs.slice();
-        snap.player.minionStates.forEach(ms => {
-            ms.ref.currentHp = ms.currentHp;
-            ms.ref.shield = ms.shield;
-            ms.ref.effects = ms.effects;
-            if (typeof ms.charges !== 'undefined') ms.ref.charges = ms.charges;
-        });
-
-        // Enemy restore
-        this.enemy.currentHp = snap.enemy.currentHp;
-        this.enemy.shield = snap.enemy.shield;
-        this.enemy.effects = snap.enemy.effects;
-        this.enemy.minions = snap.enemy.minionRefs.slice();
-        snap.enemy.minionStates.forEach(ms => {
-            ms.ref.currentHp = ms.currentHp;
-            ms.ref.shield = ms.shield;
-            ms.ref.effects = ms.effects;
-            if (typeof ms.charges !== 'undefined') ms.ref.charges = ms.charges;
-        });
-
-        // Dice / turn counters
-        snap.dicePool.forEach((saved, i) => {
-            if (this.dicePool[i]) {
-                this.dicePool[i].used = saved.used;
-                this.dicePool[i].selected = saved.selected;
-            }
-        });
-        this.rerolls = snap.rerolls;
-        this.diceUsedThisTurn = snap.diceUsedThisTurn;
-        this.attacksThisTurn = snap.attacksThisTurn;
-        this.firstAttackDealt = snap.firstAttackDealt;
-        this.firstDefendUsedThisTurn = snap.firstDefendUsedThisTurn;
-        this.comboFlurry = snap.comboFlurry;
-        this.comboDoubleStrike = snap.comboDoubleStrike;
-        this._echoChamberUsedThisCombat = snap.echoChamberUsedThisCombat;
-        this._hotHandsUsedThisTurn = snap.hotHandsUsedThisTurn;
-        this._voltPrimerUsedThisTurn = snap.voltPrimerUsedThisTurn;
-
-        ParticleSys.createFloatingText(this.player.x, this.player.y - 150, 'UNDO', '#6fe8ff');
-        AudioMgr.playSound('click');
-        this._undoSnapshot = null;
-        this.renderDiceUI();
-        return true;
     },
 
     // Die-use burst (Tier 8/#33) — spawns a class-tinted radial pulse at the
@@ -9128,12 +8985,6 @@ async startTurn() {
         const data = DICE_TYPES[die.type];
         const isUpgraded = this.player.hasDiceUpgrade(die.type);
 
-        // Snapshot for Undo (one per turn) BEFORE any mutation happens —
-        // even invalid uses (no-mana, invalid target) early-return below,
-        // so we capture up here and just discard the snapshot if nothing
-        // actually changed. Cheaper than trying to roll back.
-        this._captureUndoSnapshot(die);
-
         // Custom Run: Hot Hands — first die played each turn bites HP. Flag
         // is reset in the turn-start routine (startTurn).
         if (this._customHotHandsDmg && !this._hotHandsUsedThisTurn) {
@@ -9149,12 +9000,10 @@ async startTurn() {
             
             if (data.target === 'enemy' && !isTargetEnemy) {
                  ParticleSys.createFloatingText(target.x, target.y - 120, "INVALID TARGET", "#888");
-                 this._undoSnapshot = null; // nothing committed
                  return;
             }
             if ((data.target === 'self') && !isTargetPlayer) {
                  ParticleSys.createFloatingText(target.x, target.y - 120, "TARGET SELF/ALLY", "#888");
-                 this._undoSnapshot = null; // nothing committed
                  return;
             }
         }
@@ -9170,9 +9019,6 @@ async startTurn() {
             AudioMgr.playSound('hex_barrier');
             this.shake(6);
             Hints.trigger && Hints.trigger('first_nullified_die');
-            // Undo-proof the Panopticon penalty — if the player could undo
-            // the nullify, they'd dodge the Analyse tempo tax entirely.
-            this._undoSnapshot = null;
             return;
         }
 
@@ -9210,7 +9056,6 @@ async startTurn() {
             el.style.transform = 'translateX(5px)';
             setTimeout(() => el.style.transform = 'translateX(-5px)', 50);
             setTimeout(() => el.style.transform = '', 100);
-            this._undoSnapshot = null; // nothing committed
             return;
         }
 
@@ -11890,10 +11735,6 @@ drawEffects() {
       if (this._combatStartedAt && (Date.now() - this._combatStartedAt) < 500) return;
       if (this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT) return;
       this._endTurnRunning = true;
-      // Undo is a per-turn one-shot — the window closes the moment the
-      // player ends their turn, so snap-clear the snapshot before enemy
-      // phase mutates state we can't cleanly revert.
-      this._clearUndoSnapshot && this._clearUndoSnapshot();
       try {
         ClassAbility.onTurnEnd();
         // Relic: TEMPO LOOP — count unused dice for next-turn shield bonus.
