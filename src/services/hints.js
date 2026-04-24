@@ -36,7 +36,17 @@ const HINTS = {
     sector_rule_2:    { title: "FROST FIELD",      body: "Cryo hostiles carry +6 Shield." },
     sector_rule_3:    { title: "HEAT TILES",       body: "Molten ground burns you 1 HP each turn end." },
     sector_rule_4:    { title: "HIVE RESONANCE",   body: "Enemy minions hit 20% harder." },
-    sector_rule_5:    { title: "REALITY GLITCH",   body: "Every attack rolls ±15% damage." }
+    sector_rule_5:    { title: "REALITY GLITCH",   body: "Every attack rolls ±15% damage." },
+
+    // Class-ability tutorial stubs — fire the first time each class's widget
+    // becomes actionable so players learn the beat without reading a wiki.
+    first_tactic_ready:    { title: "TACTIC READY",   body: "Tap the widget. Pick a bonus." },
+    first_overheat_yellow: { title: "YELLOW ZONE",    body: "Tap to vent for ×1.4 damage." },
+    first_overheat_red:    { title: "RED ZONE",       body: "Tap to blast 20 DMG + 5 self." },
+    first_blood_pool:      { title: "BLOOD POOL",     body: "Tribute blood for a bonus." },
+    first_shield_wall:     { title: "SHIELD WALL",    body: "Next enemy attack is nullified." },
+    first_grove_bloom:     { title: "GROVE BLOOM",    body: "Tap a bloomed plot for a spirit." },
+    first_arcanist_glyph:  { title: "GLYPH CYCLE",    body: "Play a die on the active glyph." }
 };
 
 function readSeen() {

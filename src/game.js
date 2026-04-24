@@ -14,6 +14,7 @@ import { Dailies, mulberry32 } from './services/dailies.js';
 import { Achievements, ACHIEVEMENTS } from './services/achievements.js';
 import { Streak } from './services/streak.js';
 import { Hints } from './services/hints.js';
+import { Palette } from './services/palette.js';
 import { Analytics } from './services/analytics.js';
 import { CombatLog } from './services/combat-log.js';
 import { Unlocks } from './services/unlocks.js';
@@ -70,6 +71,10 @@ const Game = {
     init() {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d', { alpha: false });
+
+        // Pick up any colorblind class the settings loader already painted
+        // onto <body> so canvas VFX match DOM UI on the first frame.
+        Palette.syncFromBody();
 
         // --- Performance tier detection (must run before renderScale) ---
         Perf.detect();
@@ -568,6 +573,9 @@ const Game = {
         hookSetting('sel-colorblind', (el) => {
             document.body.classList.remove('cb-deuteranopia', 'cb-protanopia', 'cb-tritanopia');
             if (el.value !== 'none') document.body.classList.add('cb-' + el.value);
+            // Keep the canvas palette adaptor in sync — without this, particle
+            // VFX stay on the default palette even after the DOM swaps.
+            Palette.setMode(el.value === 'none' ? 'none' : el.value);
         });
         hookSetting('sel-dmg-size', (el) => {
             this.damageNumberSize = el.value; // read in ParticleSys if needed
@@ -5675,6 +5683,7 @@ triggerSystemCrash() {
             document.body.classList.toggle('dyslexic-font', !!s.dyslexicFont);
             document.body.classList.remove('cb-deuteranopia', 'cb-protanopia', 'cb-tritanopia');
             if (s.colorblind && s.colorblind !== 'none') document.body.classList.add('cb-' + s.colorblind);
+            Palette.setMode(s.colorblind || 'none');
             this.damageNumberSize = s.dmgSize || 'medium';
             this.tutorialHintsEnabled = s.tutorialHints !== false;
             this.hapticsEnabled = s.haptics !== false;
@@ -7191,6 +7200,10 @@ async startCombat(type) {
         this.firstAttackDealt = false;
         this.firstDefendUsedThisTurn = false;
         this.freeRerollUsedThisTurn = false;
+        // Silent-relic popup gates (Tier deferred #27) — let each relic pop
+        // exactly once per combat / turn so the player sees the activation
+        // without drowning in every-attack noise.
+        this._titanPopThisCombat = false;
         this._echoChamberUsedThisCombat = false;
 
         Analytics.emit('combat_start', { sector: this.sector, type: type || 'normal' });
@@ -7447,6 +7460,7 @@ async startCombat(type) {
             bait.maxHp = 1; bait.currentHp = 1; bait.dmg = 0;
             bait.isDecoy = true;
             this.player.minions.push(bait);
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "BAIT DRONE", COLORS.MECH_LIGHT);
         }
         // Relic: NANO FORGE — spawn free class-minion at +50% stats.
         // Name keeps the class minionName so the renderer (which dispatches
@@ -7458,6 +7472,7 @@ async startCombat(type) {
             forge.maxHp = Math.floor(forge.maxHp * 1.5); forge.currentHp = forge.maxHp;
             forge.dmg = Math.floor(forge.dmg * 1.5);
             this.player.minions.push(forge);
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "NANO FORGE", COLORS.GOLD);
         }
 
         // Setup Minions
@@ -7675,12 +7690,17 @@ async startTurn() {
         this.attacksThisTurn = 0;
         this.diceUsedThisTurn = 0; // Paradox Loop + future per-turn counters
         this.firstDefendUsedThisTurn = false;
+        this._duskPopThisTurn = false;
         this._tickSealedDie();
         // Per-turn stats for end-of-turn summary popup
         this.turnStats = { dmgDealt: 0, dmgTaken: 0, rerollsUsed: 0, healed: 0 };
         // Relic: IRON VAULT — carry up to 50 shield into the next turn.
         if (this.player.hasRelic && this.player.hasRelic('iron_vault')) {
-            this.player.shield = Math.min(50, this.player.shield || 0);
+            const carried = Math.min(50, this.player.shield || 0);
+            if (carried > 0) {
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `IRON VAULT +${carried}`, COLORS.SHIELD);
+            }
+            this.player.shield = carried;
         } else {
             this.player.shield = 0;
         }
@@ -7725,13 +7745,22 @@ async startTurn() {
         }
 
         const shieldStacks = this.player.relics.filter(r => r.id === 'nano_shield').length;
-        if(shieldStacks > 0 && this.turnCount === 1) this.player.addShield(5 * shieldStacks); 
-        
+        if(shieldStacks > 0 && this.turnCount === 1) {
+            this.player.addShield(5 * shieldStacks);
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `NANO +${5 * shieldStacks}`, COLORS.SHIELD);
+        }
+
         const shieldGen = this.player.relics.filter(r => r.id === 'shield_gen').length;
-        if(shieldGen > 0) this.player.addShield(5 * shieldGen); 
-        
+        if(shieldGen > 0) {
+            this.player.addShield(5 * shieldGen);
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `SHIELD GEN +${5 * shieldGen}`, COLORS.SHIELD);
+        }
+
         const manaStacks = this.player.relics.filter(r => r.id === 'mana_syphon').length;
-        if(manaStacks > 0) this.player.mana += manaStacks;
+        if(manaStacks > 0) {
+            this.player.mana += manaStacks;
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 120, `SYPHON +${manaStacks}`, COLORS.MANA);
+        }
 
         // Relic: STATIC CAPACITOR — zap random enemy for 10 DMG if holding 3+ Mana.
         if (this.player.hasRelic('static_capacitor') && this.player.mana >= 3 && this.enemy) {
@@ -7934,6 +7963,12 @@ async startTurn() {
         if(this.player.hasRelic('titan_module')) {
             const stacks = this.stackCount('titan_module');
             dmg = Math.floor(dmg * Math.pow(1.25, stacks));
+            // Pop once per combat so the player sees what's boosting every
+            // hit. Flag lives on Game so it resets with each combat start.
+            if (!peek && !this._titanPopThisCombat && stacks > 0) {
+                this._titanPopThisCombat = true;
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 160, `TITAN ×${stacks}`, COLORS.GOLD);
+            }
         }
         
         if ((this._dieSlot(type) === 'attack' || type === 'METEOR') && this.player.nextAttackMult > 1) {
@@ -8963,6 +8998,26 @@ async startTurn() {
         return true;
     },
 
+    // Die-use burst (Tier 8/#33) — spawns a class-tinted radial pulse at the
+    // die's on-screen rect center. Self-cleans on animation end so the
+    // overlay container stays empty between fires.
+    _spawnDieUseBurst(el, color) {
+        if (!el || !el.getBoundingClientRect) return;
+        const host = document.getElementById('game-container') || document.body;
+        const rect = el.getBoundingClientRect();
+        const burst = document.createElement('div');
+        burst.className = 'die-use-burst';
+        burst.style.left = `${rect.left + rect.width / 2}px`;
+        burst.style.top = `${rect.top + rect.height / 2}px`;
+        burst.style.setProperty('--burst-color', color || '#ffffff');
+        host.appendChild(burst);
+        const done = () => { if (burst.parentNode) burst.parentNode.removeChild(burst); };
+        burst.addEventListener('animationend', done, { once: true });
+        // Safety net — if the animationend event is missed (visibility change,
+        // etc.), force a cleanup after the CSS keyframe's max duration.
+        setTimeout(done, 480);
+    },
+
 	gainMana(amount) {
         this.player.mana += amount;
         if (this.player.hasRelic('recycle_bin')) {
@@ -9032,6 +9087,9 @@ async startTurn() {
             const usedThisTurn = this.diceUsedThisTurn || 0;
             if (usedThisTurn === 0) {
                 effectiveCost = 0;
+                if (data.cost > 0) {
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "PARADOX FREE", COLORS.PURPLE);
+                }
             } else {
                 effectiveCost = data.cost + 1;
             }
@@ -9039,7 +9097,11 @@ async startTurn() {
         // Relic: HEX FRAGMENT — Skill dice cost -1 Mana per stack (min 0).
         if (data.isSkill && this.player.hasRelic('hex_fragment')) {
             const stacks = this.player.relics.filter(r => r.id === 'hex_fragment').length;
+            const before = effectiveCost;
             effectiveCost = Math.max(0, effectiveCost - stacks);
+            if (before !== effectiveCost) {
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 120, `HEX -${before - effectiveCost}`, COLORS.PURPLE);
+            }
         }
         // Relic: ECHO CHAMBER — first skill die each combat costs 0 Mana.
         if (data.isSkill && this.player.hasRelic('echo_chamber') && !this._echoChamberUsedThisCombat) {
@@ -9064,6 +9126,10 @@ async startTurn() {
         die.used = true;
         this.haptic('die_use');
         this._onDieConsumed(die);
+        // Unified-die burst (Tier 8/#33) — fire a class-tinted radial pulse at
+        // the die's on-screen position BEFORE renderDiceUI rebuilds the DOM,
+        // so the impact flash lingers visually even as the die dims out.
+        this._spawnDieUseBurst(el, DICE_TYPES[die.type] && DICE_TYPES[die.type].color);
         this.renderDiceUI();
 
         // Class-ability: broadcast dice use (fills Tactician pips, Annihilator heat)
@@ -9104,11 +9170,20 @@ async startTurn() {
                 // Combo: DOUBLE STRIKE — first ATTACK of a double-strike roll hits twice.
                 const doubleActive = !!this.comboDoubleStrike;
                 // Relic: DAWN PROTOCOL — first attack of combat deals +100%.
-                const dawnBonus = (!this.firstAttackDealt && this.player.hasRelic('dawn_protocol')) ? 2.0 : 1.0;
+                const dawnActive = !this.firstAttackDealt && this.player.hasRelic('dawn_protocol');
+                const dawnBonus = dawnActive ? 2.0 : 1.0;
+                if (dawnActive) {
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 140, "DAWN 2×", COLORS.GOLD);
+                }
                 this.firstAttackDealt = true;
                 // Relic: DUSK PROTOCOL — after turn 5, +10% damage per turn beyond.
-                const duskBonus = this.player.hasRelic('dusk_protocol') && this.turnCount > 5
-                    ? 1 + Math.min(1.5, (this.turnCount - 5) * 0.1) : 1.0;
+                const duskActive = this.player.hasRelic('dusk_protocol') && this.turnCount > 5;
+                const duskBonus = duskActive ? 1 + Math.min(1.5, (this.turnCount - 5) * 0.1) : 1.0;
+                if (duskActive && duskBonus > 1 && !this._duskPopThisTurn) {
+                    this._duskPopThisTurn = true;
+                    const pct = Math.round((duskBonus - 1) * 100);
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 140, `DUSK +${pct}%`, COLORS.ORANGE);
+                }
                 if (this._dieSlot(type) === 'attack') {
                     this.attacksThisTurn++;
                     const rStacks = this.player.relics.filter(r => r.id === 'relentless').length;

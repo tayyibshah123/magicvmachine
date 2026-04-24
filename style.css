@@ -1410,17 +1410,30 @@ h2 {
     80%  { opacity: 1; }
     100% { transform: translateY(100%); opacity: 0.2; }
 }
-/* Dice - Data Cubes */
+/* Dice - Data Cubes
+   Unified visual language (Tier 8/#33): richer background with subtle
+   radial highlight so the cube reads as a machined data slab, plus a
+   conic scan-glow pattern that matches the canvas-entity tone. The
+   JS-set `color` (class-tinted) drives a softer outer halo via
+   box-shadow so the HUD no longer feels like a floating checkbox grid.
+   (Inner neon frame lives on .die-slot ::before instead of .die::after
+   because combo + slot-tag styles already claim the die's pseudo
+   elements.) */
 .die {
     width: 68px; height: 68px;
-    background: linear-gradient(135deg, rgba(20, 30, 40, 0.9), rgba(10, 10, 20, 0.95));
+    background:
+        radial-gradient(ellipse at 50% 8%, rgba(255,255,255,0.10) 0%, transparent 55%),
+        linear-gradient(135deg, rgba(20, 30, 40, 0.92), rgba(8, 8, 18, 0.98));
     border: 1px solid #444;
-    border-radius: 8px;
+    border-radius: 10px;
     display: flex; flex-direction: column;
     justify-content: center; align-items: center;
     /* Bumped font-size drives the inner SVG icon size (.game-icon is 1em). */
     font-size: 2.2rem; cursor: pointer;
-    box-shadow: 0 6px 14px rgba(0,0,0,0.55), inset 0 0 10px rgba(255,255,255,0.06);
+    box-shadow:
+        0 6px 14px rgba(0,0,0,0.55),
+        inset 0 0 12px rgba(255,255,255,0.07),
+        inset 0 0 0 1px rgba(255,255,255,0.04);
     /* Transition-based entrance so state classes (.used, .rerolling, .selected) aren't
        clobbered by a retained animation. Initial state set via .die-entering class. */
     transition:
@@ -1440,9 +1453,51 @@ h2 {
     transform: translateY(24px) scale(0.88);
 }
 
-/* Glowing border for dice based on type (JS sets border-color) */
+/* Die-use burst — radial pulse anchored at the die's screen position when
+   it transitions to "used". Lives in an overlay container so the burst
+   persists after the die DOM is rebuilt by renderDiceUI. */
+.die-use-burst {
+    position: fixed;
+    width: 80px;
+    height: 80px;
+    pointer-events: none;
+    z-index: 1500;
+    transform: translate(-50%, -50%);
+    /* Fallback for browsers without color-mix (Firefox <113, Safari <16.1).
+       Rendered as a simple tinted radial — less pretty but never invisible. */
+    background: radial-gradient(circle at center,
+        var(--burst-color, #ffffff) 0%,
+        rgba(255, 255, 255, 0.25) 35%,
+        transparent 70%);
+    border-radius: 50%;
+    animation: die-use-burst 320ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+@supports (background: color-mix(in srgb, red 40%, transparent)) {
+    .die-use-burst {
+        background: radial-gradient(circle at center,
+            var(--burst-color, #ffffff) 0%,
+            color-mix(in srgb, var(--burst-color, #ffffff) 40%, transparent) 35%,
+            transparent 70%);
+    }
+}
+@keyframes die-use-burst {
+    0%   { opacity: 0.85; transform: translate(-50%, -50%) scale(0.25); }
+    60%  { opacity: 0.55; transform: translate(-50%, -50%) scale(1.35); }
+    100% { opacity: 0;    transform: translate(-50%, -50%) scale(1.6); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .die-use-burst { animation-duration: 180ms; }
+}
+
+/* Class-tinted outer halo — currentColor is set inline by JS (the die
+   type's theme color). Layered with the base shadow above so the die
+   picks up its class accent without losing the data-slab depth. */
 .die {
-    box-shadow: 0 0 5px currentColor; /* Uses the inline color set by JS */
+    box-shadow:
+        0 0 10px currentColor,
+        0 6px 14px rgba(0,0,0,0.55),
+        inset 0 0 12px rgba(255,255,255,0.07),
+        inset 0 0 0 1px currentColor;
 }
 
 .die:not(.used):hover {

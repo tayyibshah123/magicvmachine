@@ -18,6 +18,7 @@
 import { AudioMgr } from '../audio.js';
 import { ParticleSys } from '../effects/particles.js';
 import { ICONS } from './icons.js';
+import { Hints } from '../services/hints.js';
 
 // Balance constants in one place so they can be re-tuned without touching render code.
 const CFG = {
@@ -126,6 +127,11 @@ export const ClassAbility = {
         this._build();
         this.render();
         show();
+        // Arcanist's glyph cycle is always active — no "ready" trigger to
+        // hook, so fire the tutorial hint on first combat start.
+        if (classId === 'arcanist') {
+            Hints.trigger && Hints.trigger('first_arcanist_glyph');
+        }
     },
 
     endCombat() {
@@ -174,7 +180,12 @@ export const ClassAbility = {
             const traits = (Game && Game.player && Game.player.traits) || {};
             const isTacAttack = payload && payload.type === 'TAC_ATTACK';
             const gain = (isTacAttack && traits.pipPerAttack > 0) ? traits.pipPerAttack : 1;
+            const before = state.pips;
             state.pips = Math.min(CFG.tactician.pipMax, state.pips + gain);
+            // First time the Command Track fills, surface what the widget does.
+            if (before < CFG.tactician.pipMax && state.pips >= CFG.tactician.pipMax) {
+                Hints.trigger && Hints.trigger('first_tactic_ready');
+            }
         }
         // Summoner: player-minion SUMMON or UPGRADE (from any source — MINION
         // die, signature die, event, relic, class ability, starting spawn,
@@ -198,10 +209,19 @@ export const ClassAbility = {
                     ParticleSys.createFloatingText(Game.player.x - 60, Game.player.y - 40,
                         'BLOOM!', '#00ff99');
                 }
+                Hints.trigger && Hints.trigger('first_grove_bloom');
             }
         }
         if (classId === 'annihilator' && type === 'dice_used') {
+            const beforeHeat = state.heat;
             state.heat = Math.min(100, state.heat + CFG.annihilator.heatPerDie);
+            // Zone-entry hints — yellow at 50, red at 80. One-time per install.
+            if (beforeHeat < 50 && state.heat >= 50 && state.heat < 80) {
+                Hints.trigger && Hints.trigger('first_overheat_yellow');
+            }
+            if (beforeHeat < 80 && state.heat >= 80) {
+                Hints.trigger && Hints.trigger('first_overheat_red');
+            }
         }
         if (classId === 'bloodstalker' && type === 'damage_taken') {
             // Blood Pool fills as the player loses HP. Once it tops up,
@@ -215,6 +235,7 @@ export const ClassAbility = {
                         ParticleSys.createFloatingText(Game.player.x, Game.player.y - 140, "BLOOD POOL READY", "#ff2244");
                     }
                     AudioMgr.playSound('heartbeat');
+                    Hints.trigger && Hints.trigger('first_blood_pool');
                 }
             }
         }
@@ -232,6 +253,7 @@ export const ClassAbility = {
                 if (Game.player) {
                     ParticleSys.createFloatingText(Game.player.x, Game.player.y - 120, "WALL READY", "#ffffff");
                 }
+                Hints.trigger && Hints.trigger('first_shield_wall');
             }
         }
         this.render();

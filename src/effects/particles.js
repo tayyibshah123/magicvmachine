@@ -1,3 +1,5 @@
+import { Palette } from '../services/palette.js';
+
 // Particle system with object pool + adaptive quality.
 // Pool eliminates per-frame allocations (and the GC pauses they cause on
 // mid-tier Android). Quality factor (set externally via ParticleSys.quality)
@@ -153,11 +155,14 @@ const ParticleSys = {
                 const p = this.pool[i];
                 if (!p.active || p.text || !p.glow) continue;
                 ctx.globalAlpha = p.alpha;
-                if (p.color !== lastColor) {
-                    ctx.fillStyle = p.color;
-                    lastColor = p.color;
+                // Adapt at draw time so CB mode changes mid-combat are
+                // respected without having to re-spawn particles.
+                const c = Palette.adapt(p.color);
+                if (c !== lastColor) {
+                    ctx.fillStyle = c;
+                    lastColor = c;
                 }
-                this._drawSoftDot(ctx, p);
+                this._drawSoftDot(ctx, p, c);
             }
         }
 
@@ -169,13 +174,14 @@ const ParticleSys = {
             const p = this.pool[i];
             if (!p.active || p.text || p.glow) continue;
             ctx.globalAlpha = p.alpha;
-            if (p.color !== lastColor) {
-                ctx.fillStyle = p.color;
-                lastColor = p.color;
+            const c = Palette.adapt(p.color);
+            if (c !== lastColor) {
+                ctx.fillStyle = c;
+                lastColor = c;
             }
             // Still use the soft sprite — even non-glow particles look better
             // with anti-aliased falloff than a hard arc.
-            this._drawSoftDot(ctx, p);
+            this._drawSoftDot(ctx, p, c);
         }
 
         // Pass 3 — text particles. Shared state (textAlign, strokeStyle,
@@ -203,9 +209,10 @@ const ParticleSys = {
             const lw = Math.max(4, fs / 6);
             if (lw !== lastLineWidth) { ctx.lineWidth = lw; lastLineWidth = lw; }
             ctx.strokeText(p.text, p.x, p.y);
-            ctx.fillStyle = p.color;
+            const adapted = Palette.adapt(p.color);
+            ctx.fillStyle = adapted;
             if (useShadow) {
-                ctx.shadowColor = p.color;
+                ctx.shadowColor = adapted;
                 ctx.shadowBlur = fs >= 56 ? 18 : fs >= 40 ? 12 : 8;
             }
             ctx.fillText(p.text, p.x, p.y);
@@ -213,11 +220,11 @@ const ParticleSys = {
         ctx.restore();
     },
 
-    // Soft-edge dot via the pre-baked sprite, tinted to p.color. Uses a
-    // cached offscreen canvas per color so the per-frame work is just
-    // drawImage (cheap even on mid-range Android).
-    _drawSoftDot(ctx, p) {
-        const tint = this._getTintedSprite(p.color);
+    // Soft-edge dot via the pre-baked sprite, tinted to the (possibly
+    // CB-adapted) color. Callers may pass the adapted color as the 3rd arg
+    // so we don't redo the Palette.adapt lookup per-particle in draw().
+    _drawSoftDot(ctx, p, adaptedColor) {
+        const tint = this._getTintedSprite(adaptedColor || Palette.adapt(p.color));
         const s = p.size * 4; // sprite is the "soft halo"; size ≈ dot radius
         if (p.rotation) {
             ctx.save();
