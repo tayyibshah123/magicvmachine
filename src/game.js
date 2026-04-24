@@ -5201,8 +5201,30 @@ triggerSystemCrash() {
                 dailyEl.textContent = '· READY';
                 dailyBtn.style.opacity = '1';
             } else {
-                dailyEl.textContent = `· NEW IN ${Dailies.formatCountdown(Dailies.msUntilReset())}`;
+                // Today already played — surface the player's run score so
+                // they can see what they set.
+                const today = Dailies.todayScore && Dailies.todayScore();
+                if (today) {
+                    dailyEl.textContent = `· DONE · ${today.fragments || 0} FRAG · ${today.turns || 0}T · ${Dailies.formatCountdown(Dailies.msUntilReset())}`;
+                } else {
+                    dailyEl.textContent = `· NEW IN ${Dailies.formatCountdown(Dailies.msUntilReset())}`;
+                }
                 dailyBtn.style.opacity = '0.6';
+            }
+        }
+        // Personal-best line (local leaderboard) — drop below the daily
+        // chip so returning players see their peak to beat.
+        const pb = Dailies.personalBest && Dailies.personalBest();
+        let pbEl = document.getElementById('daily-personal-best');
+        if (pb) {
+            if (!pbEl && dailyBtn && dailyBtn.parentNode) {
+                pbEl = document.createElement('div');
+                pbEl.id = 'daily-personal-best';
+                pbEl.style.cssText = 'font-size:0.65rem; letter-spacing:0.12em; color:#ff9e00; opacity:0.85; margin-top:4px; text-align:center;';
+                dailyBtn.parentNode.insertBefore(pbEl, dailyBtn.nextSibling);
+            }
+            if (pbEl) {
+                pbEl.textContent = `BEST: ${pb.fragments || 0} FRAG · ${pb.turns || 0}T · A${pb.ascension || 0}`;
             }
         }
         // Login streak chip
@@ -5730,6 +5752,10 @@ triggerSystemCrash() {
             map: this.map,
             currentIdx: this.map.currentIdx,
             bossDefeated: this.bossDefeated,
+            // Persist per-run rolling stats so the victory/death screen's
+            // breakdown (biggest hit, rerolls used, perfect QTEs, HP lost)
+            // survives a browser reload or mid-run resume.
+            runStats: this.runStats || null,
             player: {
                 classId: this.player.classId,
                 hp: this.player.currentHp,
@@ -5801,6 +5827,16 @@ triggerSystemCrash() {
 
             this.player.minions = [];
 
+            // Rehydrate runStats from save. Defensive merge — missing fields
+            // default to 0 so older saves without the new counters still load.
+            if (data.runStats && typeof data.runStats === 'object') {
+                this.runStats = {
+                    turns: 0, totalDamage: 0, highestHit: 0, kills: 0,
+                    rerollsUsed: 0, perfectQTEs: 0, damageTaken: 0, synergies: [],
+                    ...data.runStats
+                };
+            }
+
             AudioMgr.startMusic();
             this.renderRelics();
 
@@ -5837,14 +5873,30 @@ triggerSystemCrash() {
             btn.className = 'btn secondary';
             btn.innerText = opt.text;
             btn.onclick = () => {
+                const beforeFrags = this.techFragments || 0;
                 const msg = opt.effect(this);
-                
+
                 if (msg === "COMBAT_STARTED") return;
 
+                // Ascension reward scaling — positive fragment gains scale
+                // with the selected ascension so A20 events don't feel like
+                // A0 events. +5% per level, capped at +100% at A20.
+                const ascLevel = (typeof Ascension !== 'undefined' && Ascension.getSelected)
+                    ? Ascension.getSelected() : 0;
+                const ascScale = 1 + Math.min(1, ascLevel * 0.05);
+                const fragDelta = (this.techFragments || 0) - beforeFrags;
+                if (fragDelta > 0 && ascScale > 1) {
+                    const bonus = Math.floor(fragDelta * (ascScale - 1));
+                    if (bonus > 0) {
+                        this.techFragments += bonus;
+                        ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2 + 40, `+${bonus} ASC BONUS`, '#ff9e00');
+                    }
+                }
+
                 ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH/2, CONFIG.CANVAS_HEIGHT/2, msg, COLORS.GOLD);
-                
+
                 this.completeCurrentNode();
-                
+
                 setTimeout(() => this.changeState(STATE.MAP), 1000);
             };
             opts.appendChild(btn);
@@ -7221,6 +7273,7 @@ async startCombat(type) {
         this.deadMinionsThisTurn = 0;
         this.player.emergencyKitUsed = false;
         this.player.firewallTriggered = false;
+        this.player._firewallTriggersUsed = 0;
         this.player._panopticonNullifyFirst = false;
         
         const isBoss = type === 'boss';
@@ -7453,14 +7506,17 @@ async startCombat(type) {
             this.player.minions.push(m);
         }
 
-        // Relic: BAIT DRONE — fragile decoy (1 HP) redirects first attack.
+        // Relic: BAIT DRONE — decoy whose HP scales with sector so it stays
+        // viable past Sector 1. Stacks add flat HP per drone deployed.
         if (this.player.hasRelic('bait_drone')) {
+            const stacks = this.player.relics.filter(r => r.id === 'bait_drone').length;
+            const scaledHp = 10 + (this.sector || 1) * 5 + (stacks - 1) * 4;
             const bait = new Minion(0, 0, this.player.minions.length + 1, true);
             bait.name = "Bait Drone";
-            bait.maxHp = 1; bait.currentHp = 1; bait.dmg = 0;
+            bait.maxHp = scaledHp; bait.currentHp = scaledHp; bait.dmg = 0;
             bait.isDecoy = true;
             this.player.minions.push(bait);
-            ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "BAIT DRONE", COLORS.MECH_LIGHT);
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `BAIT DRONE (${scaledHp} HP)`, COLORS.MECH_LIGHT);
         }
         // Relic: NANO FORGE — spawn free class-minion at +50% stats.
         // Name keeps the class minionName so the renderer (which dispatches
@@ -7675,6 +7731,32 @@ async startTurn() {
             }
         }
 
+        // --- HIVE PROTOCOL: Assimilate (phase 3) ---
+        // 20% chance each turn to convert one of the player's lowest-HP
+        // minions to the enemy side. Carries the original minion reference
+        // so its stats (dmg, shield, effects) follow the conversion.
+        if (this.enemy && this.enemy.name === 'HIVE PROTOCOL' && this.enemy.assimilateActive
+            && this.enemy.currentHp > 0 && Array.isArray(this.player.minions) && this.player.minions.length > 0) {
+            if (Math.random() < 0.2) {
+                // Pick the lowest-HP player minion so Assimilate eats stragglers.
+                let target = this.player.minions[0];
+                for (let i = 1; i < this.player.minions.length; i++) {
+                    if (this.player.minions[i].currentHp < target.currentHp) target = this.player.minions[i];
+                }
+                // Flip sides — remove from player, push to enemy. The renderer
+                // branches on isPlayerSide for positioning + color.
+                target.isPlayerSide = false;
+                target.name = 'Assimilated ' + (target.name || 'Drone');
+                this.player.minions = this.player.minions.filter(m => m !== target);
+                this.enemy.minions = (this.enemy.minions || []);
+                this.enemy.minions.push(target);
+                this.triggerVFX && this.triggerVFX('beam', this.enemy, target);
+                ParticleSys.createFloatingText(target.x, target.y - 80, "ASSIMILATED", "#32cd32");
+                ParticleSys.createExplosion(target.x, target.y, 24, '#32cd32');
+                AudioMgr.playSound('grid_fracture', { playbackRate: 1.2 });
+            }
+        }
+
         if (this.enemy && this.enemy.invincibleTurns > 0) {
             this.enemy.invincibleTurns--;
             if (this.enemy.invincibleTurns <= 0) {
@@ -7702,6 +7784,11 @@ async startTurn() {
             }
             this.player.shield = carried;
         } else {
+            // Teach shield-decay the first time a player loses shield at
+            // turn start so they understand why their barrier just vanished.
+            if ((this.player.shield || 0) > 0) {
+                Hints.trigger && Hints.trigger('first_shield_decay');
+            }
             this.player.shield = 0;
         }
         this.player.nextAttackMult = 1;
@@ -7905,6 +7992,11 @@ async startTurn() {
         if (this.enemy && this.enemy.affixes && this.enemy.affixes.includes('Jammer')) {
             diceToRoll = Math.max(3, diceToRoll - 1);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 150, "JAMMED!", "#ff0000");
+        }
+        // Ascension 13 (Sparse Hand): one fewer die every combat start.
+        // Floor at 3 so the player always has a playable hand.
+        if (this._ascEffects && this._ascEffects.diceCountPenalty) {
+            diceToRoll = Math.max(3, diceToRoll + this._ascEffects.diceCountPenalty);
         }
         // Tactician Command Track: 3-pip spend queues a bonus die for the next
         // hand (reroll + draw synergy).
@@ -9077,6 +9169,7 @@ async startTurn() {
             if (this.enemy) ParticleSys.createFloatingText(this.enemy.x, this.enemy.y + 80, "MOVE ANALYSED", "#00ffff");
             AudioMgr.playSound('hex_barrier');
             this.shake(6);
+            Hints.trigger && Hints.trigger('first_nullified_die');
             // Undo-proof the Panopticon penalty — if the player could undo
             // the nullify, they'd dodge the Analyse tempo tax entirely.
             this._undoSnapshot = null;
@@ -9121,7 +9214,10 @@ async startTurn() {
             return;
         }
 
-        if(effectiveCost > 0) this.player.mana -= effectiveCost;
+        if(effectiveCost > 0) {
+            this.player.mana -= effectiveCost;
+            Hints.trigger && Hints.trigger('first_mana_spent');
+        }
         this.diceUsedThisTurn = (this.diceUsedThisTurn || 0) + 1;
 
         TooltipMgr.hide();
@@ -12162,11 +12258,34 @@ drawEffects() {
 
             // 3. Attack Handling (Normal, Multi, Purge)
             if (intent.type === 'attack' || intent.type === 'multi_attack' || intent.type === 'purge_attack') {
-                const target = intent.target || this.player;
+                let target = intent.target || this.player;
+
+                // Tesseract Prime P2 — `dimensionActive`: 30% chance an attack
+                // mis-targets to a random player-side entity (player or minion).
+                // Makes the boss feel genuinely 4-dimensional; sometimes the
+                // hit lands on a minion instead of the telegraphed target.
+                if (this.enemy && this.enemy.dimensionActive && Math.random() < 0.3) {
+                    const pool = [this.player, ...(this.player.minions || [])]
+                        .filter(e => e && e.currentHp > 0);
+                    if (pool.length > 1) {
+                        const rerolled = pool[Math.floor(Math.random() * pool.length)];
+                        if (rerolled !== target) {
+                            target = rerolled;
+                            ParticleSys.createFloatingText(target.x, target.y - 140, "4D SHIFT", "#ff3355");
+                        }
+                    }
+                }
+
                 const validTarget = (target.currentHp > 0) ? target : this.player;
 
                 // Determine Hit Count (Multi-attack support)
-                const hits = (intent.type === 'multi_attack' && intent.hits) ? intent.hits : 1;
+                let hits = (intent.type === 'multi_attack' && intent.hits) ? intent.hits : 1;
+                // Tesseract Prime P3 — `realitySplit`: every attack resolves
+                // twice. Doubles multi_attack counts as well.
+                if (this.enemy && this.enemy.realitySplit) {
+                    hits = hits * 2;
+                    ParticleSys.createFloatingText(validTarget.x, validTarget.y - 160, "REALITY SPLIT", "#bc13fe");
+                }
 
                 // Purge gets a signature descending earthquake-pitched siren
                 // on top of orbital_strike's own VFX sound so it lands with
@@ -12855,18 +12974,42 @@ drawEffects() {
             else if (isGold)  { rarityLabel = 'RARE';      rarityIcon = '★'; rarityClass = 'rarity-gold'; }
             else if (isRed)   { rarityLabel = 'EPIC';      rarityIcon = '✦'; rarityClass = 'rarity-red'; }
 
-            // Synergy / stack hint (Phase 4h)
+            // Synergy / stack hint (Phase 4h) + unique/stack tag
             let synergyHint = '';
-            if (currentCount > 0) {
+            // Stack caps — hardcoded to match the reward-pool filters above.
+            // Anything not listed is uniquely owned (unique tag) or
+            // freely stackable (no cap). Keeping this table tiny avoids a
+            // separate metadata field on every relic entry.
+            const STACK_CAPS = { minion_core: 2, titan_module: 3, relentless: 3, crit_lens: 5, gamblers_chip: 3, hologram: 3, firewall: 3 };
+            const UNIQUE_IDS = new Set(['second_life', 'manifestor', 'voodoo_doll', 'overcharge_chip', 'reckless_drive']);
+            if (UNIQUE_IDS.has(item.id)) {
+                synergyHint += `<div class="reward-stack-hint">◇ Unique</div>`;
+            } else if (STACK_CAPS[item.id]) {
+                synergyHint += `<div class="reward-stack-hint">⎘ ${currentCount}/${STACK_CAPS[item.id]} stacks</div>`;
+            } else if (currentCount > 0) {
                 synergyHint += `<div class="reward-stack-hint">⎘ Owned: ${currentCount}</div>`;
             }
             if (typeof SYNERGIES !== 'undefined' && this.player && this.player.relics) {
                 const ownedIds = new Set(this.player.relics.map(r => r.id));
-                ownedIds.add(item.id);
-                const completed = SYNERGIES.find(s => s.ids.includes(item.id) && s.ids.every(id => ownedIds.has(id)) && !(this.synergiesTriggered && this.synergiesTriggered.has(s.id)));
+                const withPick = new Set(ownedIds);
+                withPick.add(item.id);
+                // Completed-by-this-pick (full synergy).
+                const completed = SYNERGIES.find(s => s.ids.includes(item.id) && s.ids.every(id => withPick.has(id)) && !(this.synergiesTriggered && this.synergiesTriggered.has(s.id)));
                 if (completed) {
                     synergyHint += `<div class="reward-synergy-hint">⚡ SYNERGY: ${completed.name}</div>`;
                     card.classList.add('synergy-ready');
+                } else {
+                    // Progress hint — relic contributes to an unfinished synergy.
+                    // Shows "needs X more" so the player has a reason to chase
+                    // the missing pieces.
+                    const progress = SYNERGIES.find(s => s.ids.includes(item.id)
+                        && !(this.synergiesTriggered && this.synergiesTriggered.has(s.id)));
+                    if (progress) {
+                        const missing = progress.ids.filter(id => !withPick.has(id)).length;
+                        if (missing > 0) {
+                            synergyHint += `<div class="reward-synergy-hint" style="opacity:0.7">◇ ${progress.name} — needs ${missing} more</div>`;
+                        }
+                    }
                 }
             }
 
@@ -12900,6 +13043,12 @@ drawEffects() {
                 } else {
                     this.player.addRelic(item);
                 }
+                // Ascension 11 (Hungry Relics): pay HP per pickup.
+                if (this._ascEffects && this._ascEffects.relicHpCost > 0 && this.player) {
+                    const cost = this._ascEffects.relicHpCost;
+                    this.player.takeDamage(cost, null, false, /*bypassShield*/ true);
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 130, `HUNGRY RELIC -${cost} HP`, '#ff0055');
+                }
                 Analytics.emit('relic_picked', { id: item.id, rarity: item.rarity || 'common' });
                 Hints.trigger('first_relic');
 
@@ -12909,6 +13058,14 @@ drawEffects() {
                     this.bossDefeated = false;
                     this.sector++;
                     this.generateMap();
+                    // Ascension 12 (Heat Debt): crossing a sector boundary
+                    // burns flat true damage. Bypasses shield so the cost
+                    // is inescapable.
+                    if (this._ascEffects && this._ascEffects.sectorCrossDamage > 0 && this.player) {
+                        const cost = this._ascEffects.sectorCrossDamage;
+                        this.player.takeDamage(cost, null, false, /*bypassShield*/ true);
+                        ParticleSys.createFloatingText(this.player.x, this.player.y - 130, `HEAT DEBT -${cost}`, '#ff6600');
+                    }
 
                     // Custom Run: Tax Man — drain a fixed percentage of the
                     // player's fragments at each sector transition. Drives
@@ -13559,8 +13716,12 @@ drawEffects() {
             if (this._sigThornsActive) {
                 out.push({ id: 'sig_thorns', val: 0, duration: 0, _permanent: true, _hideCount: true });
             }
-            if (entity.hasRelic && entity.hasRelic('firewall') && !entity.firewallTriggered) {
-                out.push({ id: 'firewall', val: 0, duration: 0, _permanent: true, _hideCount: true });
+            if (entity.hasRelic && entity.hasRelic('firewall')) {
+                const stacks = entity.relics.filter(r => r.id === 'firewall').length;
+                const used = entity._firewallTriggersUsed || 0;
+                if (used < stacks) {
+                    out.push({ id: 'firewall', val: stacks - used, duration: 0, _permanent: true });
+                }
             }
             // Annihilator Overclock — ClassAbility tracks the live multiplier
             // that calculateCardDamage consumes next attack. Badge it so the
@@ -14936,10 +15097,31 @@ drawEffects() {
         
         const drawLine = (target) => {
             if (!target || target.currentHp <= 0) return;
-            
+
+            // Minion focus-fire telegraph — when the attacker has picked a
+            // specific player-side minion (not the player itself), draw a
+            // pulsing red halo around that minion so the player sees the
+            // focus-fire and can react (shield it, intercept, etc.).
+            if (target !== this.player && target instanceof Minion && target.isPlayerSide) {
+                ctx.save();
+                const pulse = 0.55 + Math.sin(time * 6) * 0.35;
+                ctx.globalAlpha = pulse;
+                ctx.strokeStyle = '#ff2244';
+                ctx.shadowColor = '#ff2244';
+                ctx.shadowBlur = 18;
+                ctx.lineWidth = 3;
+                ctx.setLineDash([12, 8]);
+                ctx.lineDashOffset = -time * 40;
+                ctx.beginPath();
+                ctx.arc(target.x, target.y, target.radius + 10, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+            }
+
             ctx.save();
             // Improved Visuals: Thicker, glowing, animated
-            ctx.lineWidth = 4; 
+            ctx.lineWidth = 4;
             ctx.lineCap = 'round';
             ctx.shadowColor = "#ff0000";
             ctx.shadowBlur = 15;

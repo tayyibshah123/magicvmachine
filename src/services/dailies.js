@@ -66,6 +66,25 @@ export const Dailies = {
         catch { return []; }
     },
 
+    // Personal-best leaderboard — since the app ships without a server,
+    // the "leaderboard" is the player's own history. Picks the best run by
+    // composite score (ascension × fragments / (turns + 1)) so climbing an
+    // ascension matters more than grinding a low-tier run for raw frags.
+    personalBest() {
+        const h = this.getHistory();
+        if (!h.length) return null;
+        const score = (e) => ((e.ascension || 0) + 1) * (e.fragments || 0) / ((e.turns || 0) + 1);
+        return h.reduce((best, cur) => (score(cur) > score(best) ? cur : best), h[0]);
+    },
+
+    // Today's recorded score (if any), used to show "You scored X today"
+    // before the reset timer ticks over.
+    todayScore() {
+        const today = this.todayString();
+        const h = this.getHistory();
+        return h.find(e => e.date === today) || null;
+    },
+
     // Time until midnight UTC (ms) — useful for the menu countdown
     msUntilReset() {
         const now = new Date();

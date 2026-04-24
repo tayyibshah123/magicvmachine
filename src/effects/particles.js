@@ -335,9 +335,11 @@ const ParticleSys = {
         p.fontSize = (opts && opts.fontSize) || 48;
     },
 
-    // Tiered damage text. Picks font size/colour by damage magnitude.
+    // Tiered damage text. Picks font size by damage magnitude and color by
+    // source attribution. `sourceKind` is one of 'player' | 'minion' | 'enemy'
+    // (undefined falls back to the legacy tier palette).
     // Returns the tier key so callers can pair it with shake/haptic/sound.
-    createDamageText(x, y, amount, isPlayerTarget) {
+    createDamageText(x, y, amount, isPlayerTarget, sourceKind) {
         let tier = 'solid';
         let color = '#ff3333';
         let fontSize = 48;
@@ -348,6 +350,15 @@ const ParticleSys = {
         else if (amount < 100){ tier = 'heavy';        color = '#ff1100'; fontSize = 64; vy = -2.0; }
         else                  { tier = 'catastrophic'; color = '#ffdd33'; fontSize = 84; vy = -2.4; }
         if (isPlayerTarget && tier === 'solid') color = '#ff5566';
+
+        // Source attribution — legibility in 3-enemy combat. Catastrophic
+        // keeps its gold flash because that's a readable "big moment"
+        // regardless of source.
+        if (sourceKind && tier !== 'catastrophic') {
+            if (sourceKind === 'player') color = '#ffffff';        // your hits: neutral white
+            else if (sourceKind === 'minion') color = '#6fe8ff';    // ally hits: cyan
+            else if (sourceKind === 'enemy') color = tier === 'chip' ? '#ff7777' : '#ff3333';
+        }
         // Respect the Accessibility text-scale slider so players with
         // larger-text preference also get larger damage numbers. Read
         // once per call; the CSS var stays in sync with the slider.

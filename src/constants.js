@@ -255,7 +255,7 @@ const PLAYER_CLASSES = [
     },
     {
         id: 'annihilator', name: 'Annihilator', icon: ICONS.classAnnihilator, color: '#ff8800',
-        desc: 'Deal +50% DMG.\nStarts with 6 Dice.\nNo rerolls — but every QTE Crit earns a single reroll token.\nMinion: Bomb Bot (Deals 10 DMG to enemies on death)',
+        desc: 'Deal +50% DMG.\nStarts with 6 Dice.\nEarn rerolls by landing QTE Crits — reward skilled timing.\nMinion: Bomb Bot (Deals 10 DMG to enemies on death).',
         traits: { dmgMultiplier: 1.5, diceCount: 6, noRerolls: true, qteCritRerolls: 1, minionName: "Bomb Bot", minionTrait: "Death: 10 DMG to Enemies." },
         classDice: { attack: 'ANH_ATTACK', defend: 'ANH_DEFEND', mana: 'ANH_MANA', minion: 'ANH_MINION' }
     },
@@ -267,8 +267,10 @@ const PLAYER_CLASSES = [
     },
     {
         id: 'summoner', name: 'Summoner', icon: ICONS.classSummoner, color: '#00ff99',
-        desc: 'Starts with 1 Minion at +20% HP/DMG.\nMax 3 Minions.\nMinion: Spirit (30% Revive chance)',
-        traits: { startMinions: 1, startMinionBuff: 1.2, maxMinions: 3, minionName: "Spirit", minionTrait: "Death: 30% Revive." },
+        desc: 'Starts with 2 Spirits at +40% HP/DMG.\nMax 3 Minions.\nMinion: Spirit (30% Revive chance)',
+        // Opening buff: 2 minions at +40% so the Summoner's opener survives
+        // Sector 1 pressure — single +20% Spirit used to die turn 1 to AoEs.
+        traits: { startMinions: 2, startMinionBuff: 1.4, maxMinions: 3, minionName: "Spirit", minionTrait: "Death: 30% Revive." },
         classDice: { attack: 'SUM_ATTACK', defend: 'SUM_DEFEND', mana: 'SUM_MANA', minion: 'SUM_MINION' }
     }
 ];
@@ -361,7 +363,7 @@ const UPGRADES_POOL = [
     { id: 'solar_battery',   name: "Solar Battery",   desc: "Every 2nd turn, gain +1 Mana.",                                                      icon: ICONS.metaSolar },
     { id: 'neural_link',     name: "Neural Link",     desc: "Minions gain +3 HP and +3 DMG.",                                                     icon: ICONS.constrict },
     { id: 'recycle_bin',     name: "Recycle Bin",     desc: "Gaining Mana heals 1 HP (Max 5/turn).",                                              icon: ICONS.metaRecycler },
-    { id: 'firewall',        name: "Firewall",        desc: "First unblocked damage capped at 20.",                                               icon: ICONS.defend },
+    { id: 'firewall',        name: "Firewall",        desc: "First hit of 30+ DMG each combat: soften by 15 and gain 15 Shield.",                  icon: ICONS.defend },
     { id: 'thorn_mail',      name: "Thorn Mail",      desc: "Gain 2 Block whenever you deal damage.",                                             icon: ICONS.thorns },
     { id: 'data_miner',      name: "Data Miner",      desc: "Gain 20 Fragments if you end combat with full HP.",                                  icon: ICONS.relicMiner },
     { id: 'med_dispenser',   name: "Med Dispenser",   desc: "Heal 3 HP whenever you defeat an enemy.",                                            icon: ICONS.relicStim },
@@ -373,7 +375,7 @@ const UPGRADES_POOL = [
     { id: 'shard_reactor',   name: "Shard Reactor",   desc: "Gain +1 Mana whenever a minion dies (yours or enemy's).",                            icon: ICONS.relicBattery },
     { id: 'swarm_beacon',    name: "Swarm Beacon",    desc: "Your minions deal +1 DMG for each minion alive.",                                   icon: ICONS.minion },
     { id: 'leyline_cache',   name: "Leyline Cache",   desc: "Gain +50% Fragments from combat rewards.",                                           icon: ICONS.relicManifest },
-    { id: 'bait_drone',      name: "Bait Drone",      desc: "Summon a fragile decoy minion each combat (1 HP, redirects first attack).",          icon: ICONS.minion },
+    { id: 'bait_drone',      name: "Bait Drone",      desc: "Summon a decoy minion each combat. HP scales with sector (so late-game drones actually survive a round).", icon: ICONS.minion },
     { id: 'retaliator',      name: "Retaliator",      desc: "After taking 20+ damage in a single hit, deal 10 DMG back.",                         icon: ICONS.thorns },
     { id: 'dice_cache',      name: "Dice Cache",      desc: "Your first reroll each turn is free (doesn't consume a reroll).",                  icon: ICONS.metaReroll },
     { id: 'hex_fragment',    name: "Hex Fragment",    desc: "Skill dice cost -1 Mana (minimum 0).",                                               icon: ICONS.classArcanist },

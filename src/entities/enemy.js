@@ -116,6 +116,22 @@ class Enemy extends Entity {
             return minions[Math.floor(Math.random() * minions.length)];
         };
 
+        // Ascension 15 — Mirror World. Every enemy has a 28% chance per
+        // action to echo the player's last damage dealt as a mirror_attack.
+        // Scales the threat to the player's own output, so burst builds get
+        // punished by burst echoes. Falls back to baseDmg if the player
+        // hasn't dealt damage yet this combat.
+        const cbMirrored = Game && Game._ascEffects && Game._ascEffects.enemyCopiesLastDie;
+        if (cbMirrored && Math.random() < 0.28) {
+            const mirroredBase = (Game.player && Game.player._lastDamageDealt)
+                ? Game.player._lastDamageDealt : this.baseDmg;
+            return {
+                type: 'mirror_attack',
+                val: Math.max(4, Math.floor(mirroredBase * 0.85)),
+                target: Game.player
+            };
+        }
+
         if (this.isBoss) {
             // --- THE SOURCE SPECIAL LOGIC ---
             if (this.name === "THE SOURCE") {

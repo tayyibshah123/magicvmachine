@@ -15,10 +15,12 @@ export const ASCENSION_TWISTS = [
     { level: 8,  name: 'Ablative Foes',   desc: 'All non-boss enemies start with 5 shield.',       effect: { enemyShieldStart: 5 } },
     { level: 9,  name: 'No Mercy',        desc: 'Elites become as strong as bosses.',              effect: { elitesAsBosses: true } },
     { level: 10, name: 'Apex',            desc: 'All prior twists active; relic prices doubled.',  effect: { apex: true, shopPriceMult: 2 } },
-    // ---- Ascension 2.0 extension (Roadmap Part 28) ------------------
-    { level: 11, name: 'Null Field',      desc: 'Relic costs +40% fragments.',                     effect: { shopPriceMult: 1.4 } },
-    { level: 12, name: 'Unmaking Strike', desc: 'Every 5 turns a random relic loses a stack.',     effect: { relicDecayEveryN: 5 } },
-    { level: 13, name: 'Entropy Drift',   desc: 'Lose 5% max HP every sector transition.',         effect: { maxHpLossPerSector: 0.05 } },
+    // ---- Ascension 2.0 extension — mechanical twists (not number tweaks).
+    // Each L11-L13 twist changes how the player plans a run, not just the
+    // numbers the game prints at you.
+    { level: 11, name: 'Hungry Relics',   desc: 'Each relic pickup costs 8 HP.',                    effect: { relicHpCost: 8 } },
+    { level: 12, name: 'Heat Debt',       desc: 'Crossing a sector boundary deals 12 true damage.', effect: { sectorCrossDamage: 12 } },
+    { level: 13, name: 'Sparse Hand',     desc: 'Every combat starts with 1 fewer die in hand.',    effect: { diceCountPenalty: -1 } },
     { level: 14, name: 'Conservation Law',desc: 'Overheal becomes damage over time.',              effect: { overhealBecomesDot: true } },
     { level: 15, name: 'Mirror World',    desc: 'Enemies copy the player\'s last-played die.',     effect: { enemyCopiesLastDie: true } },
     { level: 16, name: 'Endless Loop',    desc: 'Boss Phase 3 lasts two extra turns.',             effect: { bossPhase3Bonus: 2 } },
@@ -68,6 +70,10 @@ export const Ascension = {
             shopPriceMult: 1,
             relicDecayEveryN: 0,
             maxHpLossPerSector: 0,
+            // Tier-41 rewrites
+            relicHpCost: 0,
+            sectorCrossDamage: 0,
+            diceCountPenalty: 0,
             overhealBecomesDot: false,
             enemyCopiesLastDie: false,
             bossPhase3Bonus: 0,
@@ -88,6 +94,9 @@ export const Ascension = {
             if (t.rerollPenalty)      eff.rerollPenalty    += t.rerollPenalty;
             if (t.shopPriceMult)      eff.shopPriceMult    *= t.shopPriceMult;
             if (t.maxHpLossPerSector) eff.maxHpLossPerSector = Math.max(eff.maxHpLossPerSector, t.maxHpLossPerSector);
+            if (t.relicHpCost)        eff.relicHpCost       = Math.max(eff.relicHpCost, t.relicHpCost);
+            if (t.sectorCrossDamage)  eff.sectorCrossDamage = Math.max(eff.sectorCrossDamage, t.sectorCrossDamage);
+            if (t.diceCountPenalty)   eff.diceCountPenalty  += t.diceCountPenalty;
             if (t.bossPhase3Bonus)    eff.bossPhase3Bonus  += t.bossPhase3Bonus;
             if (t.relicDecayEveryN)   eff.relicDecayEveryN = t.relicDecayEveryN; // latest wins
             // Max-taking

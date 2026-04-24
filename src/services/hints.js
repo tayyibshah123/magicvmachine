@@ -46,7 +46,14 @@ const HINTS = {
     first_blood_pool:      { title: "BLOOD POOL",     body: "Tribute blood for a bonus." },
     first_shield_wall:     { title: "SHIELD WALL",    body: "Next enemy attack is nullified." },
     first_grove_bloom:     { title: "GROVE BLOOM",    body: "Tap a bloomed plot for a spirit." },
-    first_arcanist_glyph:  { title: "GLYPH CYCLE",    body: "Play a die on the active glyph." }
+    first_arcanist_glyph:  { title: "GLYPH CYCLE",    body: "Play a die on the active glyph." },
+
+    // Jargon stubs — first time each mechanic hits the player so the
+    // vocabulary is taught at point of use, not via wiki or death.
+    // (first_boss + combo_double already exist above — don't duplicate.)
+    first_nullified_die:   { title: "NULLIFIED",      body: "The boss analysed your first die. It's gone." },
+    first_mana_spent:      { title: "MANA",           body: "Spend it on powerful dice. Refills each turn." },
+    first_shield_decay:    { title: "SHIELD DECAYS",  body: "Shield fades each turn. Renew with Defend." }
 };
 
 function readSeen() {

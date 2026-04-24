@@ -192,12 +192,23 @@ class Entity {
 
         if (this.shield > 0 && !bypassShield) {
             const shieldWas = this.shield;
-            if (this.shield >= actualDmg) {
-                this.shield -= actualDmg;
+            // Compiler phase 3 — armor-projectile mode: attacks from the
+            // Compiler in its shrapnel phase pierce half of the victim's
+            // shield. Halve the effective shield for this absorption pass
+            // then put the untouched half back after resolve.
+            let effShield = this.shield;
+            let pierced = 0;
+            if (source && source.armorProjectileMode && source.name === 'THE COMPILER') {
+                pierced = Math.floor(this.shield * 0.5);
+                effShield = this.shield - pierced;
+                if (pierced > 0) ParticleSys.createFloatingText(this.x, this.y - 140, "SHELL PIERCED", '#ff4500');
+            }
+            if (effShield >= actualDmg) {
+                this.shield = pierced + (effShield - actualDmg);
                 actualDmg = 0;
             } else {
-                actualDmg -= this.shield;
-                this.shield = 0;
+                actualDmg -= effShield;
+                this.shield = pierced;
             }
             // Shield just broke this hit — pop a glass-shatter VFX/SFX
             // so the collapse reads, and shake for impact.
@@ -226,16 +237,23 @@ class Entity {
             }
         }
 
-        if (this instanceof Player && this.hasRelic('firewall') && !this.firewallTriggered && actualDmg > 0) {
+        // Firewall — reactive softening: when you take a 30+ damage hit,
+        // block 15 of it and gain 15 Shield back. Once per combat per stack
+        // (stacks raise both the block and the shield refund, and allow
+        // re-triggering within the same fight).
+        if (this instanceof Player && this.hasRelic('firewall') && actualDmg >= 30) {
             const stacks = this.relics.filter(r => r.id === 'firewall').length;
-            let cap = 20; 
-            if (stacks === 2) cap = 10;
-            if (stacks >= 3) cap = 0;
-            if (actualDmg > cap) {
-                actualDmg = cap;
-                ParticleSys.createFloatingText(this.x, this.y - 140, "FIREWALL (" + cap + ")", COLORS.SHIELD);
+            const triggersUsed = this._firewallTriggersUsed || 0;
+            if (triggersUsed < stacks) {
+                const block = 15 + (stacks - 1) * 5;
+                const shieldGain = 15 + (stacks - 1) * 5;
+                actualDmg = Math.max(0, actualDmg - block);
+                this.addShield && this.addShield(shieldGain, { silent: true });
+                this._firewallTriggersUsed = triggersUsed + 1;
+                ParticleSys.createFloatingText(this.x, this.y - 140, `FIREWALL -${block}`, COLORS.SHIELD);
+                ParticleSys.createFloatingText(this.x, this.y - 170, `+${shieldGain} SHIELD`, COLORS.SHIELD);
+                AudioMgr.playSound('defend');
             }
-            this.firewallTriggered = true; 
         }
         
         if (this instanceof Player && this.traits.vulnerable && actualDmg > 0) {
@@ -360,7 +378,14 @@ class Entity {
                  Game.hitStop(hs);
              }
              // Tiered damage text — chip / solid / heavy / catastrophic.
-             const dmgTier = ParticleSys.createDamageText(this.x, this.y, actualDmg, this instanceof Player);
+             // Pass source attribution so multi-target combat stays legible:
+             // white for the player's hits, cyan for their minions, red for
+             // enemy hits landing on the player side.
+             let sourceKind;
+             if (source instanceof Player) sourceKind = 'player';
+             else if (Minion && source instanceof Minion && source.isPlayerSide) sourceKind = 'minion';
+             else if ((Enemy && source instanceof Enemy) || (Minion && source instanceof Minion && !source.isPlayerSide)) sourceKind = 'enemy';
+             const dmgTier = ParticleSys.createDamageText(this.x, this.y, actualDmg, this instanceof Player, sourceKind);
              // Pitch-shifted + gain-scaled hit sample per tier so chip pings
              // and catastrophic crunches feel audibly distinct.
              AudioMgr.playHit(dmgTier);
