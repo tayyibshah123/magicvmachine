@@ -2547,7 +2547,13 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     left: 50%;
     transform: translateX(-50%);
     bottom: 12px;
-    width: clamp(320px, 94cqw, 620px);
+    /* Reserve ~86px each side for the reroll + end-turn corner buttons
+       (70px button + 8px edge margin + 8px breathing) so the widget's
+       translucent edge never floats over them. Fixed earlier: players
+       saw the reroll arrow bleeding through the BLOOD widget on narrow
+       viewports and the click landing on the widget instead of the
+       button. */
+    width: clamp(240px, calc(100cqw - 172px), 620px);
     height: 88px;
     z-index: 2;
     pointer-events: auto;
@@ -3703,9 +3709,12 @@ body[data-hand="left"] .control-bar #btn-end-turn {
    so this applies on every device. Nudges the asymmetric layouts tighter so
    every element fits at 300px bar width without clipping off-screen. */
 /* Class-ability widget sizing — applied universally so the 540px
-   game-container looks identical on mobile and PC. */
+   game-container looks identical on mobile and PC. Width formula reserves
+   ~86px each side for the corner reroll + end-turn buttons so the
+   widget's translucent edge never floats over them (previously the
+   reroll arrow bled through the BLOOD widget on narrow viewports). */
 .class-ability {
-    width: clamp(300px, 94cqw, 520px);
+    width: clamp(240px, calc(100cqw - 172px), 520px);
     height: 80px;
     bottom: 10px;
 }
