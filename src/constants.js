@@ -614,7 +614,7 @@ const BOSS_DATA = {
         dmg: 20, 
         actionsPerTurn: 2,
         color: '#00ffff', // Electric Cyan
-        moves: ['attack', 'debuff', 'multi_attack'], 
+        moves: ['attack', 'debuff', 'multi_attack', 'analyse'],
         shieldVal: 30
     },
     2: {

@@ -801,6 +801,12 @@ body[data-transition-dir] .screen.active {
     border-radius: 3px;
     box-shadow: 0 0 8px rgba(255, 215, 100, 0.18);
     opacity: 0.9;
+    cursor: help;
+    transition: opacity 0.15s ease, box-shadow 0.15s ease;
+}
+.sector-mech-pill:hover {
+    opacity: 1;
+    box-shadow: 0 0 12px rgba(255, 215, 100, 0.35);
 }
 .sector-mech-pill:empty { display: none; }
 
@@ -1495,7 +1501,8 @@ h2 {
     50%      { transform: translateX(-50%) translateY(-3px); }
 }
 
-/* Sealed dice — pinned by an event/relic. Magenta aura + pin badge.
+/* Sealed dice — pinned by an event/relic. Magenta aura + pin badge +
+   breathing pulse so the locked state reads even in a fast-scrolling hand.
    overflow:visible matches .die.selected so the ::before pin escapes the
    die's slot-reel mask. */
 .die.die-sealed {
@@ -1503,6 +1510,22 @@ h2 {
     box-shadow: 0 0 18px var(--neon-pink), inset 0 0 10px rgba(255, 0, 128, 0.25) !important;
     position: relative;
     overflow: visible !important;
+    animation: die-sealed-pulse 1.6s ease-in-out infinite;
+}
+@keyframes die-sealed-pulse {
+    0%, 100% {
+        box-shadow: 0 0 12px var(--neon-pink), inset 0 0 8px rgba(255, 0, 128, 0.2) !important;
+        filter: saturate(0.9);
+    }
+    50% {
+        box-shadow: 0 0 24px 4px var(--neon-pink), inset 0 0 14px rgba(255, 0, 128, 0.35) !important;
+        filter: saturate(1.25);
+    }
+}
+/* Accessibility: players with reduced-motion preference get the static glow
+   without the breathing so it stays visible but doesn't animate. */
+@media (prefers-reduced-motion: reduce) {
+    .die.die-sealed { animation: none; }
 }
 .die.die-sealed::before {
     content: '';
@@ -2317,6 +2340,135 @@ body.reduced-motion .intel-crawl-scanlines {
     align-items: center;
     z-index: 2;
     letter-spacing: 0;
+}
+
+/* Dyslexic-friendly body font — accessibility toggle. Substitutes a rounded
+   sans-serif with generous apertures and counter shapes in place of the
+   default Rajdhani. Orbitron (cyber-display) stays on titles so the theme
+   survives; only reading surfaces swap. */
+body.dyslexic-font {
+    --font-main: "Comic Sans MS", "Trebuchet MS", Verdana, sans-serif;
+    letter-spacing: 0.02em;
+}
+body.dyslexic-font p,
+body.dyslexic-font .reward-desc,
+body.dyslexic-font .event-body,
+body.dyslexic-font .hint-body,
+body.dyslexic-font .settings-pane,
+body.dyslexic-font .combat-win-sub,
+body.dyslexic-font .tooltip {
+    font-family: var(--font-main);
+    letter-spacing: 0.02em;
+    line-height: 1.45;
+}
+
+/* Ascension twist preview list — shown below the current ascension desc
+   so players see the full cumulative modifier stack before locking in. */
+.asc-twist-list {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    max-height: 112px;
+    overflow-y: auto;
+    text-align: left;
+}
+.asc-twist-list li {
+    display: flex;
+    gap: 6px;
+    font-family: var(--font-cyber, 'Orbitron');
+    font-size: 0.6rem;
+    letter-spacing: 0.05em;
+    padding: 2px 0;
+    color: #bbd;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.asc-twist-list li:last-child { border-bottom: none; }
+.asc-twist-lvl {
+    color: #ff6b6b;
+    min-width: 28px;
+    font-weight: 700;
+}
+.asc-twist-name {
+    color: var(--neon-gold, #ffd700);
+    min-width: 96px;
+}
+.asc-twist-desc {
+    flex: 1;
+    color: #ccd;
+    opacity: 0.85;
+}
+
+/* Undo-last-die — small cyan chip between the class-ability widget and the
+   end-turn button. Hidden unless a one-shot undo snapshot is live. */
+.btn-undo-die {
+    background: rgba(15, 25, 40, 0.7);
+    border: 1px solid var(--neon-blue, #00f3ff);
+    color: var(--neon-blue, #00f3ff);
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    margin: 0 8px;
+    box-shadow: 0 0 10px rgba(0, 243, 255, 0.35);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    animation: undo-die-in 260ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+.btn-undo-die:hover {
+    transform: scale(1.08);
+    box-shadow: 0 0 18px rgba(0, 243, 255, 0.6);
+}
+.btn-undo-die.hidden { display: none; }
+.btn-undo-die .game-icon { width: 22px; height: 22px; }
+@keyframes undo-die-in {
+    from { opacity: 0; transform: scale(0.6); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+/* No-moves-available pulse — applied to #btn-end-turn when every die in the
+   player's hand is either used or unaffordable. Gold breathing glow + a tiny
+   "NO MOVES" tag on hover/always, so the player reads "time to end turn"
+   instead of mashing a dead die. */
+.control-bar #btn-end-turn.no-moves-pulse:not(:disabled):not(.disabled) {
+    animation: end-turn-no-moves 1.4s ease-in-out infinite;
+    box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.65),
+                0 0 18px rgba(255, 215, 0, 0.45);
+}
+.control-bar #btn-end-turn.no-moves-pulse:not(:disabled):not(.disabled)::after {
+    content: 'NO MOVES';
+    position: absolute;
+    top: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-cyber, 'Orbitron');
+    font-size: 0.6rem;
+    letter-spacing: 0.22em;
+    color: var(--neon-gold, #ffd700);
+    text-shadow: 0 0 6px rgba(255, 215, 0, 0.6);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0.95;
+}
+@keyframes end-turn-no-moves {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.6),
+                    0 0 14px rgba(255, 215, 0, 0.35);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(255, 215, 0, 0),
+                    0 0 28px rgba(255, 215, 0, 0.55);
+        transform: scale(1.06);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .control-bar #btn-end-turn.no-moves-pulse {
+        animation: none;
+        box-shadow: 0 0 22px 4px rgba(255, 215, 0, 0.5);
+    }
 }
 
 /* Left-handed mirror: swap reroll (primary hand) and end-turn positions so
@@ -4911,16 +5063,49 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 /* Reward Cards */
 .card-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; width: 100%; }
 .reward-card {
-    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%);
-    border: 1px solid rgba(255,255,255,0.1); padding: 20px; border-radius: 10px; width: 100%; cursor: pointer;
+    /* Tier 8 — neon-edge card: rarity-tinted gradient + soft inner frame,
+       closer in tone to the shop cards. Background reads as "a data slab
+       pulled from the grid" instead of a flat white panel. */
+    background:
+        linear-gradient(135deg, rgba(0, 243, 255, 0.08) 0%, rgba(255,0,85,0.04) 100%),
+        radial-gradient(circle at 50% 0%, rgba(255,255,255,0.06) 0%, transparent 70%),
+        rgba(8, 12, 24, 0.72);
+    border: 1px solid rgba(0, 243, 255, 0.35);
+    padding: 20px; border-radius: 10px; width: 100%; cursor: pointer;
     transition: transform 220ms var(--ease-out-smart), box-shadow 220ms, border-color 220ms;
     display: flex; flex-direction: column; align-items: center; text-align: center;
-    animation: fadeInUp 480ms var(--ease-out-smart) both;
+    box-shadow: inset 0 0 18px rgba(0, 243, 255, 0.08),
+                0 0 12px rgba(0, 243, 255, 0.18);
+    /* Tier 5 — 3D flip-in on draw so the reward read feels like a card
+       turn rather than a fade. Stagger per-card keeps the beat rhythmic. */
+    transform-style: preserve-3d;
+    perspective: 900px;
+    animation: rewardCardFlipIn 520ms cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+}
+.reward-card.gold-border {
+    border-color: var(--neon-gold);
+    box-shadow: inset 0 0 22px rgba(255, 215, 0, 0.12),
+                0 0 18px rgba(255, 215, 0, 0.28);
+}
+.reward-card.red-border {
+    border-color: var(--neon-pink, #ff3355);
+    box-shadow: inset 0 0 22px rgba(255, 0, 85, 0.14),
+                0 0 18px rgba(255, 0, 85, 0.28);
 }
 .reward-card:nth-child(1) { animation-delay: 80ms; }
-.reward-card:nth-child(2) { animation-delay: 180ms; }
-.reward-card:nth-child(3) { animation-delay: 280ms; }
-.reward-card:nth-child(4) { animation-delay: 380ms; }
+.reward-card:nth-child(2) { animation-delay: 200ms; }
+.reward-card:nth-child(3) { animation-delay: 320ms; }
+.reward-card:nth-child(4) { animation-delay: 440ms; }
+@keyframes rewardCardFlipIn {
+    0%   { opacity: 0; transform: perspective(900px) rotateY(-90deg) translateY(12px) scale(0.9); }
+    60%  { opacity: 1; transform: perspective(900px) rotateY(10deg) translateY(0) scale(1.02); }
+    100% { opacity: 1; transform: perspective(900px) rotateY(0deg) translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .reward-card {
+        animation: fadeInUp 320ms var(--ease-out-smart) both;
+    }
+}
 .reward-card:hover { border-color: var(--neon-green); box-shadow: 0 0 24px rgba(0, 255, 153, 0.28); transform: translateY(-3px) scale(1.01); }
 .reward-icon { font-size: 2.5rem; margin-bottom: 10px; }
 .reward-name { font-family: var(--font-cyber); color: var(--neon-green); font-size: var(--text-lg); margin-bottom: 5px; }
@@ -6760,16 +6945,19 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
     font-family: var(--font-cyber);
     font-weight: 900;
     /* Sized to fit "TARGET NEUTRALIZED" on the narrowest mobile widths
-       without clipping. Previous 13cqw / 1.8rem minimum overflowed a
-       ~420px container; this ceiling keeps the callout inside. */
-    font-size: clamp(1.05rem, 8cqw, 2.4rem);
+       without clipping. cqw middle term kept conservative so the title
+       scales with the callout width; normal wrap lets two-word titles
+       like "SECTOR CLEARED" stack on mobile rather than overflow. */
+    font-size: clamp(1.05rem, 7cqw, 2.1rem);
     letter-spacing: 0.08em;
     color: var(--neon-gold);
     text-shadow: 0 0 20px rgba(255, 215, 0, 0.7), 0 0 40px rgba(255, 215, 0, 0.35);
     margin-bottom: 14px;
+    line-height: 1.05;
+    /* Break at word boundaries only — don't split "SECTOR" mid-character. */
     word-break: keep-all;
     overflow-wrap: normal;
-    white-space: nowrap;
+    white-space: normal;
 }
 .combat-win-title.boss-kill {
     color: var(--neon-pink);
@@ -6794,11 +6982,18 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
     border-radius: 14px;
     font-family: var(--font-cyber);
     font-weight: 900;
-    font-size: 0.78rem;
-    letter-spacing: 0.22em;
+    font-size: clamp(0.68rem, 3.2cqw, 0.82rem);
+    letter-spacing: 0.18em;
     color: var(--neon-gold);
     text-shadow: 0 0 8px rgba(255, 215, 0, 0.45);
     animation: combat-win-highlight-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) 300ms both;
+    /* Keep the chip inside the callout on narrow viewports — the tier
+       label + damage string can run long (e.g. "CATASTROPHIC HIT · 1120 DMG"). */
+    max-width: 92cqw;
+    box-sizing: border-box;
+    line-height: 1.25;
+    word-break: keep-all;
+    overflow-wrap: normal;
 }
 @keyframes combat-win-highlight-in {
     from { opacity: 0; transform: translateY(10px) scale(0.92); }

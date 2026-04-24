@@ -464,6 +464,7 @@ const Game = {
             this.renderDiceUI();
             this.endTurn();
         });
+        attachButtonEvent('btn-undo-die', () => this.undoLastDie());
         const handleSettings = () => {
             if (this.currentState === STATE.TUTORIAL_COMBAT) {
                 ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2, "COMPLETE TUTORIAL FIRST!", "#ff0000");
@@ -560,6 +561,9 @@ const Game = {
         });
         hookSetting('chk-high-contrast', (el) => {
             document.body.classList.toggle('high-contrast', el.checked);
+        });
+        hookSetting('chk-dyslexic-font', (el) => {
+            document.body.classList.toggle('dyslexic-font', el.checked);
         });
         hookSetting('sel-colorblind', (el) => {
             document.body.classList.remove('cb-deuteranopia', 'cb-protanopia', 'cb-tritanopia');
@@ -1023,6 +1027,7 @@ const Game = {
                             if (intent.type === 'summon' || intent.type === 'summon_glitch') typeName = "REINFORCE";
                             if (intent.type === 'summon_void') typeName = "VOID SPAWN";
                             if (intent.type === 'dispel') typeName = "CLEANSE";
+                            if (intent.type === 'analyse') { typeName = "ANALYSE"; desc = " (Nullifies next turn's first die)"; }
                             if (intent.type === 'reality_overwrite') { typeName = "REALITY SHIFT"; desc = " (Alters physics)"; }
                             if (intent.type === 'purge_attack') { typeName = "THE PURGE"; desc = " (Massive Dmg)"; }
                             if (intent.type === 'charge') { typeName = "CHARGING"; desc = " (Preparing Ult)"; }
@@ -1059,6 +1064,9 @@ const Game = {
                         txt += `\nAtk: ${rawAtk}`;
                     }
                     if (ent.name.includes("Glitch")) txt += `\n(Gains +10% DMG per turn)`;
+                    if (ent.name.includes("Bomb") && typeof ent.charges === 'number') {
+                        txt += `\nCharges: ${ent.charges}`;
+                    }
                     if (ent.isPlayerSide && Game.player.traits.minionTrait) txt += `\n${Game.player.traits.minionTrait}`;
                 }
                 TooltipMgr.show(txt, screenX, screenY);
@@ -1219,11 +1227,32 @@ startDrag(e, die, el) {
             this.dragState.dieElement = null;
 
             if (target || this._dieSlot(dieToUse.type) === 'minion') {
-                // Valid drop — fade ghost out instantly (it'll be replaced by the impact VFX).
-                if (this.dragState.ghostElement) {
-                    this.dragState.ghostElement.remove();
+                // Valid drop — animate the ghost into the target with a brief
+                // scale bounce so the drop has a satisfying "snap" before the
+                // hit VFX takes over. Empty target (MINION summon to any slot)
+                // aims at the player's spawn center.
+                const ghost = this.dragState.ghostElement;
+                if (ghost) {
+                    const cRect = this.canvas.getBoundingClientRect();
+                    const sx = CONFIG.CANVAS_WIDTH / cRect.width;
+                    const sy = CONFIG.CANVAS_HEIGHT / cRect.height;
+                    const aimEntity = target || this.player;
+                    const aimClientX = (aimEntity ? aimEntity.x : CONFIG.CANVAS_WIDTH / 2) / sx + cRect.left;
+                    const aimClientY = (aimEntity ? aimEntity.y : CONFIG.CANVAS_HEIGHT * 0.75) / sy + cRect.top;
+                    ghost.style.transition = 'transform 140ms cubic-bezier(0.2, 0.9, 0.3, 1.4), opacity 160ms ease-out';
+                    ghost.style.transform = `translate(${aimClientX - 32}px, ${aimClientY - 32}px) scale(0.45) rotate(0deg)`;
+                    ghost.style.opacity = '0';
+                    setTimeout(() => { if (ghost && ghost.parentNode) ghost.remove(); }, 180);
                     this.dragState.ghostElement = null;
                 }
+                // Pulse the drop target so a hit-landing is felt even before
+                // the class-attack VFX fires. Self-targets (DEFEND / MANA /
+                // MINION) pulse the player so the die feels received.
+                const pulseTarget = target || this.player;
+                if (pulseTarget && typeof pulseTarget.playAnim === 'function') {
+                    pulseTarget.playAnim('pulse');
+                }
+                if (this.haptic) this.haptic('tap');
                 this.useDie(dieToUse, elToUse, target);
             } else {
                 // Invalid drop — snap the ghost back, buzz haptic, wiggle
@@ -1534,6 +1563,7 @@ startQTE(type, x, y, callback) {
                      this.haptic('crit');
                      Hints.trigger('first_crit');
                      AudioMgr.playSound('mana');
+                     if (this.runStats) this.runStats.perfectQTEs = (this.runStats.perfectQTEs || 0) + 1;
                      // Annihilator class rework: QTE crits grant a reroll token that
                      // bypasses the no-rerolls trait on the next reroll. Refresh
                      // the dice UI immediately so the reroll badge reflects the
@@ -3055,7 +3085,7 @@ startQTE(type, x, y, callback) {
         });
 
         // Run stats reset
-        this.runStats = { turns: 0, totalDamage: 0, highestHit: 0, kills: 0, synergies: [] };
+        this.runStats = { turns: 0, totalDamage: 0, highestHit: 0, kills: 0, rerollsUsed: 0, perfectQTEs: 0, damageTaken: 0, synergies: [] };
         this.synergiesTriggered = new Set();
         this.firstSynergyAwardedRun = false;
         
@@ -3333,6 +3363,12 @@ triggerPhaseGlitch() {
             mech.textContent = hasRealMech
                 ? `${mechData.label} — ${mechData.desc}`
                 : '';
+            // First-time-per-sector hint card explaining the rule. Hints
+            // is install-scoped, so this fires once per player across all
+            // runs (matches other first-X hints in the game).
+            if (hasRealMech && typeof Hints !== 'undefined' && Hints.trigger) {
+                Hints.trigger(`sector_rule_${sectorNum}`);
+            }
         }
         overlay.classList.remove('hidden');
         // Force reflow so the transition fires.
@@ -3756,12 +3792,18 @@ triggerPhaseGlitch() {
             }
         };
         const lines = PHASE_LINES[phase] || PHASE_LINES[2];
-        const subtitle = lines[enemy.name] || (phase === 3 ? 'FINAL PHASE ENGAGED' : 'CORRUPTION PROTOCOL ENGAGED');
+        const flavor = lines[enemy.name] || (phase === 3 ? 'FINAL PHASE ENGAGED' : 'CORRUPTION PROTOCOL ENGAGED');
+        // Lead with the phase number so the player reads the state change
+        // instantly — the boss name is already prominent on the health bar.
+        const subtitle = `PHASE ${phase} · ${flavor}`;
         // Apply phase-specific boss mechanics before the cinematic so the
         // player sees the change coming in-world (e.g. muted relics).
         this._applyBossPhaseMechanic(enemy, phase);
         this.haptic('boss');
         AudioMgr.playSound('explosion');
+        // Phase-transition sting — layered over the explosion so the beat
+        // lands heavier than a normal boss action. Pitched down for weight.
+        AudioMgr.playSound('grid_fracture', { playbackRate: 0.75, volume: 1.1 });
         if (ParticleSys.createShockwave) {
             ParticleSys.createShockwave(enemy.x, enemy.y, '#ff0055');
         }
@@ -4100,6 +4142,10 @@ triggerPhaseGlitch() {
             if (phase === 2) {
                 enemy.voidCrushTriggered = true;
                 enemy.voidCrushTurns = enemy.voidCrushTurns || 5;
+                // Tier 3: voidlings now share a linked HP pool — damaging
+                // one bleeds 50% of that damage into its siblings. Forces
+                // players to pick off a single target or commit to AoE.
+                enemy.voidShared = true;
                 // Magenta telegraph — matches the vortex aesthetic; all void
                 // crush charging visuals tint the screen this color.
                 enemy.phaseTelegraphColor = '#ff00ff';
@@ -4107,6 +4153,10 @@ triggerPhaseGlitch() {
                 ParticleSys.createShockwave(enemy.x, enemy.y, '#ff00ff', 42);
             } else if (phase === 3) {
                 enemy.realityShatterActive = true;
+                // Tier 3: boss consumes one own-side minion per turn, gaining
+                // +4 permanent baseDmg. If no minions, no-op. Forces the
+                // player to either kill minions fast OR let the boss scale.
+                enemy.voidConsumesMinions = true;
                 // Phase 3 shifts to deep purple — relics "muting".
                 enemy.phaseTelegraphColor = '#bc13fe';
                 this.triggerScreenFlash && this.triggerScreenFlash('rgba(188, 19, 254, 0.35)', 400);
@@ -4254,6 +4304,28 @@ triggerSystemCrash() {
     // NOTE: `checkFirstTime` removed — first-run debriefing popups interrupted game flow.
     // Context is now conveyed via the interactive tutorial (first run) and the
     // `showHintOnce` toast banners (subsequent runs).
+
+    // Intent types that actually threaten the player's HP. `shield_strip_attack`
+    // is excluded — it eats shield rather than HP, so the split UI would mislead.
+    _HP_THREATENING_INTENTS: new Set([
+        'attack', 'multi_attack', 'debuff', 'purge_attack',
+        'aoe_sweep', 'frost_aoe', 'immolate',
+        'chaotic_act', 'mirror_attack', 'observer_strike', 'burrow_resurge'
+    ]),
+
+    // Given a damage-type intent and its displayed value, return how much the
+    // player's current shield absorbs vs. what bleeds into HP. Returns null
+    // when the intent isn't a direct HP threat, so callers can skip the split
+    // render and fall back to the plain number.
+    _intentShieldSplit(intent, displayVal) {
+        if (!intent || !this.player) return null;
+        if (!this._HP_THREATENING_INTENTS.has(intent.type)) return null;
+        const shield = Math.max(0, this.player.shield || 0);
+        if (displayVal <= 0) return null;
+        const blocked = Math.min(shield, displayVal);
+        const bleed = Math.max(0, displayVal - blocked);
+        return { blocked, bleed };
+    },
 
     // Build a clear, hover-friendly description of what a single enemy intent will do.
     // Used by the canvas-hover tooltip for the intent badges floating above enemies.
@@ -5156,11 +5228,23 @@ triggerSystemCrash() {
         const max = Ascension.getUnlocked();
         const cur = Ascension.getSelected();
         const twist = Ascension.twist(cur);
+        // Tier 6 — preview diff: list every twist active at the chosen
+        // ascension so the player reads the cumulative difficulty before
+        // locking in. Ascension 0 shows nothing extra.
+        const activeTwists = [];
+        for (let lvl = 1; lvl <= cur; lvl++) {
+            const t = Ascension.twist(lvl);
+            if (t && t.desc && t.name) activeTwists.push({ lvl, name: t.name, desc: t.desc });
+        }
+        const twistList = activeTwists.length
+            ? `<ul class="asc-twist-list">${activeTwists.map(t => `<li><span class="asc-twist-lvl">A${t.lvl}</span><span class="asc-twist-name">${t.name}</span><span class="asc-twist-desc">${t.desc}</span></li>`).join('')}</ul>`
+            : '';
         bar.innerHTML = `
             <button class="asc-step" data-dir="-1" ${cur === 0 ? 'disabled' : ''} aria-label="Lower ascension">${ICONS.chevronDown.replace('class="game-icon"', 'class="game-icon" style="transform:rotate(90deg)"')}</button>
             <div class="asc-info">
                 <div class="asc-label">ASCENSION ${cur}</div>
                 <div class="asc-desc">${twist.desc}</div>
+                ${twistList}
             </div>
             <button class="asc-step" data-dir="+1" ${cur >= max ? 'disabled' : ''} aria-label="Raise ascension">${ICONS.chevronDown.replace('class="game-icon"', 'class="game-icon" style="transform:rotate(-90deg)"')}</button>
         `;
@@ -5511,6 +5595,7 @@ triggerSystemCrash() {
                 textScale: Number(get('sld-text-scale', 'value')) || 100,
                 reducedMotion: get('chk-reduced-motion'),
                 highContrast: get('chk-high-contrast'),
+                dyslexicFont: get('chk-dyslexic-font'),
                 colorblind: get('sel-colorblind', 'value') || 'none',
                 dmgSize: get('sel-dmg-size', 'value') || 'medium',
                 tutorialHints: get('chk-tutorial-hints'),
@@ -5549,6 +5634,7 @@ triggerSystemCrash() {
             setCheck('chk-godmode', s.godMode);
             setCheck('chk-reduced-motion', s.reducedMotion);
             setCheck('chk-high-contrast', s.highContrast);
+            setCheck('chk-dyslexic-font', !!s.dyslexicFont);
             setCheck('chk-tutorial-hints', s.tutorialHints !== false);
             setCheck('chk-haptics', s.haptics !== false);
             setCheck('chk-assist', s.assistOn !== false);
@@ -5586,6 +5672,7 @@ triggerSystemCrash() {
             if (typeof s.textScale === 'number') document.documentElement.style.setProperty('--text-scale-multiplier', s.textScale / 100);
             document.body.classList.toggle('reduced-motion', !!s.reducedMotion);
             document.body.classList.toggle('high-contrast', !!s.highContrast);
+            document.body.classList.toggle('dyslexic-font', !!s.dyslexicFont);
             document.body.classList.remove('cb-deuteranopia', 'cb-protanopia', 'cb-tritanopia');
             if (s.colorblind && s.colorblind !== 'none') document.body.classList.add('cb-' + s.colorblind);
             this.damageNumberSize = s.dmgSize || 'medium';
@@ -7099,6 +7186,7 @@ async startCombat(type) {
         CombatLog.clear();
         this.player.minions = [];
         this._ensureDailyChip();
+        this._clearUndoSnapshot && this._clearUndoSnapshot();
         // Per-combat trackers used by new relics and combos.
         this.firstAttackDealt = false;
         this.firstDefendUsedThisTurn = false;
@@ -7185,7 +7273,22 @@ async startCombat(type) {
         ));
         if (sectorMech && this.currentState !== STATE.TUTORIAL_COMBAT) {
             this._activeSectorMech = sectorMech;
-            if (mechPill) mechPill.textContent = hasRealMech ? (sectorMech.label || '') : '';
+            if (mechPill) {
+                mechPill.textContent = hasRealMech ? (sectorMech.label || '') : '';
+                if (hasRealMech && sectorMech.desc) {
+                    const tipText = `${sectorMech.label}\n${sectorMech.desc}`;
+                    mechPill.title = `${sectorMech.label} — ${sectorMech.desc}`;
+                    mechPill.onmouseenter = (e) => TooltipMgr.show(tipText, e.clientX, e.clientY);
+                    mechPill.onmouseleave = () => TooltipMgr.hide();
+                    mechPill.ontouchstart = (e) => {
+                        const t = e.touches && e.touches[0];
+                        if (t) TooltipMgr.show(tipText, t.clientX, t.clientY - 80);
+                    };
+                } else {
+                    mechPill.removeAttribute('title');
+                    mechPill.onmouseenter = mechPill.onmouseleave = mechPill.ontouchstart = null;
+                }
+            }
             if (sectorMech.enemyShieldBonus && !this.enemy.isBoss) {
                 this.enemy.shield = (this.enemy.shield || 0) + sectorMech.enemyShieldBonus;
                 if (Array.isArray(this.enemy.minions)) {
@@ -7196,7 +7299,11 @@ async startCombat(type) {
             }
         } else {
             this._activeSectorMech = null;
-            if (mechPill) mechPill.textContent = '';
+            if (mechPill) {
+                mechPill.textContent = '';
+                mechPill.removeAttribute('title');
+                mechPill.onmouseenter = mechPill.onmouseleave = mechPill.ontouchstart = null;
+            }
         }
 
         // Dynamic difficulty assist (§3.3) — if the player has lost to this
@@ -7454,19 +7561,14 @@ async startTurn() {
         await this.showPhaseBanner("PLAYER PHASE", "COMMAND LINK ESTABLISHED", 'player');
 
         // --- PANOPTICON ANALYSE ---
-        if (this.enemy && this.enemy.name === "THE PANOPTICON" && this.enemy.currentHp > 0) {
-            if (!this.enemy.analyzing) {
-                this.enemy.analyzeCooldown = (this.enemy.analyzeCooldown ?? 0) - 1;
-                if (this.enemy.analyzeCooldown <= 0) {
-                    this.enemy.analyzing = true;
-                    this.player._panopticonNullifyFirst = true;
-                    this.enemy.analyzeCooldown = 2 + Math.floor(Math.random() * 4);
-                }
-            }
-            if (this.enemy.analyzing) {
-                AudioMgr.playSound('hex_barrier');
-                await this.showPhaseBanner("THE PANOPTICON IS ANALYSING YOUR NEXT MOVE...", "FIRST ACTION WILL BE NULLIFIED", 'warning');
-            }
+        // The cooldown-driven analyse used to fire here invisibly; the
+        // mechanic is now telegraphed as an 'analyse' intent in the enemy
+        // phase (see generateSingleIntent + enemy-intent switch). When the
+        // flag is set from that intent, surface a short warning so the
+        // player reads the incoming tempo tax.
+        if (this.player && this.player._panopticonNullifyFirst) {
+            AudioMgr.playSound('hex_barrier');
+            await this.showPhaseBanner("ANALYSED", "FIRST ACTION WILL BE NULLIFIED", 'warning');
         }
 
         // --- NULL_POINTER: Void mechanics ---
@@ -7506,10 +7608,58 @@ async startTurn() {
                 this.player.minions.forEach(m => m.takeDamage(pullDmg, this.enemy));
                 this.player.minions = this.player.minions.filter(m => m.currentHp > 0);
             }
+
+            // 4) Phase 3 — boss consumes its own lowest-HP voidling at turn
+            // start and gains +4 baseDmg permanently. If no minions, no-op.
+            if (this.enemy.voidConsumesMinions && Array.isArray(this.enemy.minions) && this.enemy.minions.length > 0) {
+                let victim = this.enemy.minions[0];
+                for (let i = 1; i < this.enemy.minions.length; i++) {
+                    if (this.enemy.minions[i].currentHp < victim.currentHp) victim = this.enemy.minions[i];
+                }
+                const bonus = 4;
+                this.enemy.baseDmg = (this.enemy.baseDmg || 0) + bonus;
+                this.triggerVFX && this.triggerVFX('beam', victim, this.enemy);
+                ParticleSys.createExplosion(victim.x, victim.y, 32, '#bc13fe');
+                ParticleSys.createFloatingText(victim.x, victim.y - 60, "DEVOURED", '#bc13fe');
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 160, `+${bonus} DMG`, '#bc13fe');
+                victim.currentHp = 0;
+                this.enemy.minions = this.enemy.minions.filter(m => m.currentHp > 0);
+                AudioMgr.playSound('grid_fracture');
+            }
         }
 
         this.turnCount++;
-        
+
+        // --- THE COMPILER: Recompile (every 3 turns, debuffs → buffs) ---
+        // Converts any debuff effects on the boss into an attack buff of
+        // equal magnitude. Teaches players that pressure must be sustained,
+        // not stacked and left alone. Only fires while Compiler is alive.
+        if (this.enemy && this.enemy.name === 'THE COMPILER' && this.enemy.currentHp > 0) {
+            this.enemy._recompileTick = (this.enemy._recompileTick || 0) + 1;
+            if (this.enemy._recompileTick % 3 === 0 && Array.isArray(this.enemy.effects) && this.enemy.effects.length > 0) {
+                // Sum the magnitude of debuff-shaped effects and clear them.
+                let mag = 0;
+                const DEBUFFS = new Set(['weak', 'frail', 'vulnerable', 'constrict', 'bleed', 'poison', 'voodoo']);
+                this.enemy.effects = this.enemy.effects.filter(ef => {
+                    if (DEBUFFS.has(ef.id)) {
+                        const delta = (typeof ef.val === 'number' && ef.val > 0) ? ef.val : 1;
+                        mag += delta * Math.max(1, ef.turns || 1);
+                        return false;
+                    }
+                    return true;
+                });
+                if (mag > 0) {
+                    const bonus = Math.max(2, Math.floor(mag / 2));
+                    this.enemy.baseDmg = (this.enemy.baseDmg || 0) + bonus;
+                    ParticleSys.createExplosion(this.enemy.x, this.enemy.y, 40, '#ff4500');
+                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 180, `RECOMPILE +${bonus} DMG`, '#ff4500');
+                    AudioMgr.playSound('explosion');
+                    this.shake(10);
+                    this.showPhaseBanner && this.showPhaseBanner("RECOMPILE", `DEBUFFS FORGED INTO +${bonus} DMG`, 'warning');
+                }
+            }
+        }
+
         if (this.enemy && this.enemy.invincibleTurns > 0) {
             this.enemy.invincibleTurns--;
             if (this.enemy.invincibleTurns <= 0) {
@@ -8656,6 +8806,161 @@ async startTurn() {
             badge.dataset.reroll = willReroll;
             badge.classList.toggle('has-qte-token', qteTokens > 0);
         }
+
+        // No-moves-available signal — if every remaining die is either used
+        // or unaffordable, pulse the end-turn button so the player doesn't
+        // poke a dead die and wonder why nothing happens.
+        const btnEnd = document.getElementById('btn-end-turn');
+        if (btnEnd && this.player) {
+            const mana = this.player.mana || 0;
+            const playable = this.dicePool.some(d => {
+                if (d.used) return false;
+                const cost = (DICE_TYPES[d.type] && DICE_TYPES[d.type].cost) || 0;
+                return mana >= cost;
+            });
+            const enemyTurnActive = btnEnd.disabled;
+            btnEnd.classList.toggle('no-moves-pulse', !playable && !enemyTurnActive);
+        }
+
+        // Undo-last-die button — visible only while a snapshot is live
+        // (one per turn, cleared on end-of-turn / combat end / after use).
+        this._updateUndoBtn && this._updateUndoBtn();
+    },
+
+    // --- UNDO LAST DIE (Tier 2 QoL) ---
+    //
+    // One-shot undo of the most recent die play. Captures the core game
+    // state the die might have touched (player/enemy HP, shield, effects,
+    // minion rosters + stats, dice flags, turn counters) before `useDie`
+    // applies its mutations. Restoring sets all those fields back.
+    //
+    // Known limitations — document, don't fight:
+    //   * VFX particles already in flight stay on screen (cosmetic only).
+    //   * Class-ability side effects (Annihilator Heat fill, Tactician
+    //     pip fill, Summoner Grove plots) are NOT reverted — those fire
+    //     via ClassAbility.onEvent and don't round-trip cleanly.
+    //   * Relic proc counters (e.g. Relentless attack count) partially
+    //     revert via `attacksThisTurn`, but any floating "RELIC!" popups
+    //     stay visible until they fade naturally.
+    // These are acceptable trade-offs: the important resources (mana, HP,
+    // shield, dice, enemy state) all revert, which covers ~95% of
+    // misclick scenarios.
+    _undoSnapshot: null,
+    _captureUndoSnapshot(die) {
+        if (!this.player || !this.enemy) { this._undoSnapshot = null; return; }
+        const cloneEffects = (arr) => Array.isArray(arr) ? arr.map(ef => ({ ...ef })) : [];
+        const snapMinion = (m) => ({
+            ref: m,
+            currentHp: m.currentHp,
+            shield: m.shield,
+            effects: cloneEffects(m.effects),
+            charges: m.charges
+        });
+        this._undoSnapshot = {
+            dieId: die && die.id,
+            player: {
+                mana: this.player.mana,
+                shield: this.player.shield,
+                currentHp: this.player.currentHp,
+                effects: cloneEffects(this.player.effects),
+                minionRefs: this.player.minions.slice(),
+                minionStates: this.player.minions.map(snapMinion),
+                nextAttackMult: this.player.nextAttackMult,
+                nextAttackFlatBonus: this.player.nextAttackFlatBonus,
+                tempThorns: this.player.tempThorns,
+            },
+            enemy: {
+                currentHp: this.enemy.currentHp,
+                shield: this.enemy.shield,
+                effects: cloneEffects(this.enemy.effects),
+                minionRefs: (this.enemy.minions || []).slice(),
+                minionStates: (this.enemy.minions || []).map(snapMinion),
+            },
+            dicePool: this.dicePool.map(d => ({ ...d })),
+            rerolls: this.rerolls,
+            diceUsedThisTurn: this.diceUsedThisTurn || 0,
+            attacksThisTurn: this.attacksThisTurn || 0,
+            firstAttackDealt: !!this.firstAttackDealt,
+            firstDefendUsedThisTurn: !!this.firstDefendUsedThisTurn,
+            comboFlurry: !!this.comboFlurry,
+            comboDoubleStrike: !!this.comboDoubleStrike,
+            echoChamberUsedThisCombat: !!this._echoChamberUsedThisCombat,
+            hotHandsUsedThisTurn: !!this._hotHandsUsedThisTurn,
+        };
+    },
+
+    _clearUndoSnapshot() {
+        this._undoSnapshot = null;
+        this._updateUndoBtn();
+    },
+
+    _updateUndoBtn() {
+        const btn = document.getElementById('btn-undo-die');
+        if (!btn) return;
+        const inCombat = (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT);
+        const show = inCombat && !!this._undoSnapshot;
+        btn.classList.toggle('hidden', !show);
+    },
+
+    undoLastDie() {
+        const snap = this._undoSnapshot;
+        if (!snap) return false;
+        if (!this.player || !this.enemy) return false;
+        if (this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT) return false;
+
+        // Player restore
+        this.player.mana = snap.player.mana;
+        this.player.shield = snap.player.shield;
+        this.player.currentHp = snap.player.currentHp;
+        this.player.effects = snap.player.effects;
+        this.player.nextAttackMult = snap.player.nextAttackMult;
+        this.player.nextAttackFlatBonus = snap.player.nextAttackFlatBonus;
+        this.player.tempThorns = snap.player.tempThorns;
+        // Minions: restore the exact array of living refs, then roll each
+        // minion's stats back. New summons drop out because they weren't
+        // in minionRefs; kills come back because the ref survived.
+        this.player.minions = snap.player.minionRefs.slice();
+        snap.player.minionStates.forEach(ms => {
+            ms.ref.currentHp = ms.currentHp;
+            ms.ref.shield = ms.shield;
+            ms.ref.effects = ms.effects;
+            if (typeof ms.charges !== 'undefined') ms.ref.charges = ms.charges;
+        });
+
+        // Enemy restore
+        this.enemy.currentHp = snap.enemy.currentHp;
+        this.enemy.shield = snap.enemy.shield;
+        this.enemy.effects = snap.enemy.effects;
+        this.enemy.minions = snap.enemy.minionRefs.slice();
+        snap.enemy.minionStates.forEach(ms => {
+            ms.ref.currentHp = ms.currentHp;
+            ms.ref.shield = ms.shield;
+            ms.ref.effects = ms.effects;
+            if (typeof ms.charges !== 'undefined') ms.ref.charges = ms.charges;
+        });
+
+        // Dice / turn counters
+        snap.dicePool.forEach((saved, i) => {
+            if (this.dicePool[i]) {
+                this.dicePool[i].used = saved.used;
+                this.dicePool[i].selected = saved.selected;
+            }
+        });
+        this.rerolls = snap.rerolls;
+        this.diceUsedThisTurn = snap.diceUsedThisTurn;
+        this.attacksThisTurn = snap.attacksThisTurn;
+        this.firstAttackDealt = snap.firstAttackDealt;
+        this.firstDefendUsedThisTurn = snap.firstDefendUsedThisTurn;
+        this.comboFlurry = snap.comboFlurry;
+        this.comboDoubleStrike = snap.comboDoubleStrike;
+        this._echoChamberUsedThisCombat = snap.echoChamberUsedThisCombat;
+        this._hotHandsUsedThisTurn = snap.hotHandsUsedThisTurn;
+
+        ParticleSys.createFloatingText(this.player.x, this.player.y - 150, 'UNDO', '#6fe8ff');
+        AudioMgr.playSound('click');
+        this._undoSnapshot = null;
+        this.renderDiceUI();
+        return true;
     },
 
 	gainMana(amount) {
@@ -8674,6 +8979,12 @@ async startTurn() {
         const data = DICE_TYPES[die.type];
         const isUpgraded = this.player.hasDiceUpgrade(die.type);
 
+        // Snapshot for Undo (one per turn) BEFORE any mutation happens —
+        // even invalid uses (no-mana, invalid target) early-return below,
+        // so we capture up here and just discard the snapshot if nothing
+        // actually changed. Cheaper than trying to roll back.
+        this._captureUndoSnapshot(die);
+
         // Custom Run: Hot Hands — first die played each turn bites HP. Flag
         // is reset in the turn-start routine (startTurn).
         if (this._customHotHandsDmg && !this._hotHandsUsedThisTurn) {
@@ -8689,10 +9000,12 @@ async startTurn() {
             
             if (data.target === 'enemy' && !isTargetEnemy) {
                  ParticleSys.createFloatingText(target.x, target.y - 120, "INVALID TARGET", "#888");
+                 this._undoSnapshot = null; // nothing committed
                  return;
             }
             if ((data.target === 'self') && !isTargetPlayer) {
                  ParticleSys.createFloatingText(target.x, target.y - 120, "TARGET SELF/ALLY", "#888");
+                 this._undoSnapshot = null; // nothing committed
                  return;
             }
         }
@@ -8707,6 +9020,9 @@ async startTurn() {
             if (this.enemy) ParticleSys.createFloatingText(this.enemy.x, this.enemy.y + 80, "MOVE ANALYSED", "#00ffff");
             AudioMgr.playSound('hex_barrier');
             this.shake(6);
+            // Undo-proof the Panopticon penalty — if the player could undo
+            // the nullify, they'd dodge the Analyse tempo tax entirely.
+            this._undoSnapshot = null;
             return;
         }
 
@@ -8737,6 +9053,7 @@ async startTurn() {
             el.style.transform = 'translateX(5px)';
             setTimeout(() => el.style.transform = 'translateX(-5px)', 50);
             setTimeout(() => el.style.transform = '', 100);
+            this._undoSnapshot = null; // nothing committed
             return;
         }
 
@@ -8879,6 +9196,25 @@ async startTurn() {
                         dmg *= 2;
                         ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 80, "LENS CRIT!", COLORS.ORANGE);
                     }
+                }
+
+                // Base crit — independent of QTE timing and Crit Lens. Gives
+                // every attack a background chance to spike, so there's always
+                // a chase in every die. Traits can push either the chance or
+                // the multiplier; values default to 15% / 1.5× when absent.
+                const critChance = (this.player.traits && typeof this.player.traits.critChance === 'number')
+                    ? this.player.traits.critChance : 0.15;
+                const critMult = (this.player.traits && typeof this.player.traits.critMult === 'number')
+                    ? this.player.traits.critMult : 1.5;
+                if (critChance > 0 && Math.random() < critChance) {
+                    dmg = Math.floor(dmg * critMult);
+                    ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 100, "CRIT!", COLORS.GOLD);
+                    ParticleSys.createSparks && ParticleSys.createSparks(finalEnemy.x, finalEnemy.y, COLORS.GOLD, 12);
+                    if (this.triggerScreenFlash) this.triggerScreenFlash('rgba(255,220,80,0.22)', 140);
+                    if (this.hitStop) this.hitStop(40);
+                    if (this.shake) this.shake(5);
+                    this.haptic && this.haptic('crit');
+                    AudioMgr.playSound('click', { playbackRate: 1.4, volume: 1.1 });
                 }
 
                 // Prevent runaway multiplier stacking (titan × lens × relentless × charge × crit).
@@ -9697,6 +10033,7 @@ async startTurn() {
         // Reroll feel: haptic tick + richer sound + gold sparks from player,
         // plus a short pulse on the reroll button itself so the input reads.
         AudioMgr.playSound('mana');
+        if (this.runStats) this.runStats.rerollsUsed = (this.runStats.rerollsUsed || 0) + 1;
         if (this.haptic) this.haptic('die_use');
         if (this.player) ParticleSys.createSparks(this.player.x, this.player.y - 30, COLORS.GOLD, 12);
         const rerollBtn = document.getElementById('btn-reroll');
@@ -10226,7 +10563,10 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
                 rotation: 0,
                 onHit: onHitCallback
             });
-            AudioMgr.playSound('siren');
+            // Bomb-bot flight cue — cap sample playback short and fade out
+            // fast so the missile's ~22-frame arc doesn't drag a full siren
+            // wail across the explosion.
+            AudioMgr.playSound('siren', { duration: 0.5, fadeOut: 0.25 });
         }
     },
 
@@ -11377,6 +11717,10 @@ drawEffects() {
       if (this._combatStartedAt && (Date.now() - this._combatStartedAt) < 500) return;
       if (this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT) return;
       this._endTurnRunning = true;
+      // Undo is a per-turn one-shot — the window closes the moment the
+      // player ends their turn, so snap-clear the snapshot before enemy
+      // phase mutates state we can't cleanly revert.
+      this._clearUndoSnapshot && this._clearUndoSnapshot();
       try {
         ClassAbility.onTurnEnd();
         // Relic: TEMPO LOOP — count unused dice for next-turn shield bonus.
@@ -11423,8 +11767,17 @@ drawEffects() {
         await this.showPhaseBanner("ENEMY PHASE", "INCOMING DATA STREAM", 'enemy');
 
         // --- PLAYER MINION PHASE ---
-        for (const m of this.player.minions) {
+        // Iterate right-to-left by screen x, and off a snapshot of the array.
+        // Why: mutating `player.minions` mid-iteration (Bomb Bot detonations
+        // splice the exploding bomb out) previously caused a `for...of` to
+        // skip the following minion — the surviving right-minion would then
+        // appear to "teleport" into the left slot on the next render and fire
+        // from the wrong position. Right-to-left order + snapshot makes
+        // removal order match the rendered layout and avoids the skip.
+        const minionOrder = this.player.minions.slice().sort((a, b) => b.x - a.x);
+        for (const m of minionOrder) {
             if(!this.enemy || this.enemy.currentHp <= 0) break;
+            if (!this.player.minions.includes(m) || m.currentHp <= 0) continue;
             m.playAnim('lunge');
             const targets = [this.enemy, ...this._enemyMinions()];
             const t = targets[Math.floor(Math.random() * targets.length)];
@@ -11545,16 +11898,32 @@ drawEffects() {
                 AudioMgr.playSound('defend');
             }
             else if (intent.type === 'dispel') {
-                this.enemy.effects = []; 
+                this.enemy.effects = [];
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "CLEANSED", "#ffffff");
                 AudioMgr.playSound('upgrade');
+            }
+            else if (intent.type === 'analyse') {
+                // Panopticon's signature — marks the player's NEXT first die
+                // as nullified. Visible through the intent preview so the
+                // threat is telegraphed a turn ahead; the actual null fires
+                // when the player plays their first die next turn (see useDie).
+                this.player._panopticonNullifyFirst = true;
+                if (this.enemy) this.enemy.analyzing = true;
+                this.triggerVFX && this.triggerVFX('beam', this.enemy, this.player);
+                ParticleSys.createShockwave(this.player.x, this.player.y, '#00f3ff', 26);
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 140, "ANALYSED", "#00f3ff");
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y + 80, "MOVE CATALOGUED", "#00f3ff");
+                AudioMgr.playSound('hex_barrier');
+                this.shake(5);
             }
             else if (intent.type === 'consume') {
                 if (this.player.minions.length > 0) {
                     const snack = this.player.minions[0];
+                    // Consume sting — low, wet gulp (chains pitched down).
+                    AudioMgr.playSound('chains', { playbackRate: 0.55, volume: 1.0 });
                     this.triggerVFX('beam', this.enemy, snack);
                     await this.sleep(300);
-                    this.player.minions.shift(); 
+                    this.player.minions.shift();
                     
                     // UPDATED: Restore 30% HP, bypassing modifiers (Constrict/Rot)
                     const healAmt = Math.floor(this.enemy.maxHp * 0.3);
@@ -11580,7 +11949,11 @@ drawEffects() {
                 this.enemy.realityOverwritten = true;
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 150, "REALITY OVERWRITE", "#bc13fe");
                 Game.shake(20);
+                // Signature purple sting — grid_fracture at low rate layered
+                // with a siren so the move sounds unlike any other boss beat.
                 AudioMgr.playSound('grid_fracture');
+                AudioMgr.playSound('siren', { playbackRate: 0.55, volume: 0.9, duration: 0.7, fadeOut: 0.3 });
+                if (AudioMgr.duck) AudioMgr.duck(0.2, 600);
             }
             else if (intent.type === 'summon_glitch') {
                 const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false, 3);
@@ -11714,11 +12087,20 @@ drawEffects() {
             if (intent.type === 'attack' || intent.type === 'multi_attack' || intent.type === 'purge_attack') {
                 const target = intent.target || this.player;
                 const validTarget = (target.currentHp > 0) ? target : this.player;
-                
+
                 // Determine Hit Count (Multi-attack support)
                 const hits = (intent.type === 'multi_attack' && intent.hits) ? intent.hits : 1;
-                
-                await this.sleep(400); 
+
+                // Purge gets a signature descending earthquake-pitched siren
+                // on top of orbital_strike's own VFX sound so it lands with
+                // the dread it deserves.
+                if (intent.type === 'purge_attack') {
+                    AudioMgr.playSound('earthquake', { volume: 0.9 });
+                    AudioMgr.playSound('siren', { playbackRate: 0.5, volume: 1.0, duration: 0.9, fadeOut: 0.4 });
+                    if (AudioMgr.duck) AudioMgr.duck(0.15, 900);
+                }
+
+                await this.sleep(400);
 
                 for(let h=0; h<hits; h++) {
                     // Slight delay between multi-hits
@@ -11942,6 +12324,28 @@ drawEffects() {
             AudioMgr.playSound('upgrade');
             this.shake(this.enemy.isBoss ? 18 : this.enemy.isElite ? 12 : 8);
             this.triggerScreenFlash && this.triggerScreenFlash('rgba(255,215,0,0.18)', 260);
+
+            // Tier 8 — boss death cinematic. Layered shatter: three
+            // staggered explosions + a white overflash + low-rate grid
+            // fracture sting for a heavier goodbye than a normal mook.
+            if (this.enemy.isBoss) {
+                for (let i = 0; i < 3; i++) {
+                    setTimeout(() => {
+                        if (!ParticleSys || !ParticleSys.createExplosion) return;
+                        const jx = fx + (Math.random() - 0.5) * 160;
+                        const jy = fy + (Math.random() - 0.5) * 160;
+                        ParticleSys.createExplosion(jx, jy, 36, i === 0 ? '#ff0055' : (i === 1 ? '#ffd700' : '#ffffff'));
+                        ParticleSys.createShockwave && ParticleSys.createShockwave(jx, jy, '#ffffff', 24);
+                        if (this.shake) this.shake(10 - i * 2);
+                    }, 120 + i * 180);
+                }
+                setTimeout(() => {
+                    if (this.triggerScreenFlash) this.triggerScreenFlash('rgba(255,255,255,0.55)', 320);
+                }, 600);
+                AudioMgr.playSound('grid_fracture', { playbackRate: 0.7 });
+                AudioMgr.playSound('explosion', { playbackRate: 0.8, volume: 1.1 });
+                this.triggerSlowMo && this.triggerSlowMo(0.25, 0.45);
+            }
         }
         ClassAbility.endCombat();
         AudioMgr.stopSectorAmbient && AudioMgr.stopSectorAmbient();
@@ -11949,7 +12353,11 @@ drawEffects() {
         // inherit it (noise on shop previews, map draws, etc.).
         this._activeSectorMech = null;
         const mechPillEnd = document.getElementById('sector-mech-pill');
-        if (mechPillEnd) mechPillEnd.textContent = '';
+        if (mechPillEnd) {
+            mechPillEnd.textContent = '';
+            mechPillEnd.removeAttribute('title');
+            mechPillEnd.onmouseenter = mechPillEnd.onmouseleave = mechPillEnd.ontouchstart = null;
+        }
         // Track the kill so the next time the player meets this enemy the
         // briefing shows "Encountered N times" and achievements can fire.
         if (this.enemy && this.enemy.name && this.currentState !== STATE.TUTORIAL_COMBAT) {
@@ -12268,8 +12676,11 @@ drawEffects() {
             subEl.innerHTML = fragLine + fileLine + nameLine + highlightLine;
         }
         this.changeState(STATE.COMBAT_WIN);
-        AudioMgr.duck(0.1, wasBoss ? 2200 : 1500);
-        const dwell = wasBoss ? 2500 : (wasElite ? 2000 : 1800);
+        AudioMgr.duck(0.1, wasBoss ? 2200 : 900);
+        // Tier 5 — trim non-boss dwell by ~40% so standard kills don't
+        // stall the pacing. Bosses keep the long beat because the clear
+        // is the emotional moment of the sector.
+        const dwell = wasBoss ? 2500 : (wasElite ? 1300 : 1100);
         setTimeout(() => {
             if (this.currentState === STATE.COMBAT_WIN) {
                 this.changeState(STATE.REWARD);
@@ -12392,6 +12803,10 @@ drawEffects() {
             
             card.onclick = () => {
                 AudioMgr.playSound('click');
+                // Tier 5 acquired sting — upgrade chime layered on the click so
+                // the pick feels like adding something to your deck, not just
+                // dismissing a dialog. Volume trimmed so it doesn't shout.
+                AudioMgr.playSound('upgrade', { volume: 0.75 });
 
                 // Optimistic UI (P10): the picked card flies toward the relic strip
                 // before the actual state mutation happens. Visual feedback feels instant.
@@ -12451,7 +12866,11 @@ drawEffects() {
         AudioMgr.stopSectorAmbient && AudioMgr.stopSectorAmbient();
         this._activeSectorMech = null;
         const mechPillGO = document.getElementById('sector-mech-pill');
-        if (mechPillGO) mechPillGO.textContent = '';
+        if (mechPillGO) {
+            mechPillGO.textContent = '';
+            mechPillGO.removeAttribute('title');
+            mechPillGO.onmouseenter = mechPillGO.onmouseleave = mechPillGO.ontouchstart = null;
+        }
         Hints.trigger('first_death');
         Unlocks.grant('daily', 'first_run_ended');
         // Record loss for the sector the run ended in — feeds dynamic assist.
@@ -12684,15 +13103,26 @@ drawEffects() {
             if (gradeEl) { gradeEl.style.color = colors[grade]; gradeEl.style.textShadow = `0 0 20px ${colors[grade]}`; }
         }
 
+        // Tier 5 — richer end-of-run breakdown. Pulls from both runStats
+        // (per-run rolling counters) and CombatLog (final-boss combat log).
+        const biggestHit = s.highestHit || 0;
+        const rerollsUsed = s.rerollsUsed || 0;
+        const perfectQTEs = s.perfectQTEs || 0;
+        const dmgTaken = s.damageTaken || 0;
+
         const container = document.getElementById('victory-stats');
         if (container) {
             container.innerHTML = [
-                { label: 'CLASS',    value: cls },
-                { label: 'TURNS',    value: turns },
-                { label: 'DAMAGE',   value: dmg.toLocaleString() },
-                { label: 'KILLS',    value: kills },
-                { label: 'RELICS',   value: relics },
-                { label: 'FRAGMENTS', value: frags }
+                { label: 'CLASS',      value: cls },
+                { label: 'TURNS',      value: turns },
+                { label: 'DAMAGE',     value: dmg.toLocaleString() },
+                { label: 'KILLS',      value: kills },
+                { label: 'BIGGEST HIT', value: biggestHit.toLocaleString() },
+                { label: 'REROLLS',    value: rerollsUsed },
+                { label: 'PERFECT QTE', value: perfectQTEs },
+                { label: 'HP LOST',    value: dmgTaken.toLocaleString() },
+                { label: 'RELICS',     value: relics },
+                { label: 'FRAGMENTS',  value: frags }
             ].map(s => `
                 <div class="victory-stat">
                     <div class="victory-stat-label">${s.label}</div>
@@ -12856,6 +13286,23 @@ drawEffects() {
             ctx.textBaseline = 'middle';
             ctx.fillStyle = '#fff';
             ctx.fillText(entity.shield, sx + 45, sy);
+        }
+
+        // --- CHARGES DISPLAY (Bomb Bot only) ---
+        // Surfaces how many detonations the bomb has left so the player can
+        // plan around the death payload instead of discovering it post-boom.
+        if (entity instanceof Minion && entity.name && entity.name.includes('Bomb')
+            && typeof entity.charges === 'number' && entity.charges > 0) {
+            const cx = x - 20;
+            const cy = y + height/2;
+            ctx.font = 'bold 33px "Orbitron"';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 4;
+            ctx.strokeText(`×${entity.charges}`, cx, cy);
+            ctx.fillStyle = COLORS.ORANGE;
+            ctx.fillText(`×${entity.charges}`, cx, cy);
         }
 
         // --- MANA DISPLAY ---
@@ -15262,8 +15709,18 @@ drawEntity(entity) {
 
         // --- SPAWN ANIMATION (Opacity Only - No Clip) ---
         if (isSpawning) {
-            entity.spawnTimer -= 0.02; 
+            entity.spawnTimer -= 0.02;
             ctx.globalAlpha = 1.0 - Math.max(0, entity.spawnTimer);
+            // One-shot summon VFX — fires on the minion's first render pass
+            // so shockwave + sparks anchor at its real slot position (the
+            // constructor can't do this because updateMinionPositions hasn't
+            // run yet at construction time).
+            if (entity instanceof Minion && !entity._spawnVfxFired && entity.x && entity.y) {
+                entity._spawnVfxFired = true;
+                const color = entity.isPlayerSide ? '#00f3ff' : '#ff00ff';
+                if (ParticleSys.createShockwave) ParticleSys.createShockwave(entity.x, entity.y, color, 24);
+                if (ParticleSys.createSparks) ParticleSys.createSparks(entity.x, entity.y, color, 10);
+            }
         }
 
         // --- ANIMATION HANDLING ---
@@ -18356,6 +18813,74 @@ drawEntity(entity) {
         if (entity.hasEffect('frail')) { ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; ctx.lineWidth = 1; ctx.beginPath(); const seed = entity.name.length; for(let k=0; k<3; k++) { ctx.moveTo(Math.sin(seed+k)*20, Math.cos(seed+k)*20); ctx.lineTo(Math.sin(seed+k+1)*40, Math.cos(seed+k+1)*40); } ctx.stroke(); }
         if ((entity instanceof Player && entity.traits.vulnerable) || entity.hasEffect('vulnerable')) { ctx.rotate(time); ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 2; ctx.setLineDash([10, 10]); ctx.beginPath(); ctx.arc(0, 0, entity.radius + 15, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]); }
 
+        // --- EFFECT AURAS — one colored ring per active debuff so the player
+        // reads status at a glance even when multiple effects stack. Drawn at
+        // staggered radii so rings don't fight for the same pixels.
+        {
+            const auras = [];
+            if (entity.hasEffect('weak'))       auras.push({ color: '#6fe8ff', label: 'weak' });
+            if (entity.hasEffect('frail'))      auras.push({ color: '#ff9cf2', label: 'frail' });
+            if (entity.hasEffect('constrict'))  auras.push({ color: '#bc13fe', label: 'constrict' });
+            if (entity.hasEffect('bleed'))      auras.push({ color: '#ff3344', label: 'bleed' });
+            if (entity.hasEffect('poison'))     auras.push({ color: '#6aff6a', label: 'poison' });
+            if (entity.hasEffect('overcharge')) auras.push({ color: '#ffaa22', label: 'overcharge' });
+            if (entity.hasEffect('voodoo'))     auras.push({ color: '#ff00aa', label: 'voodoo' });
+            if (auras.length) {
+                ctx.save();
+                const pulse = 0.65 + Math.sin(time * 3.6) * 0.25;
+                ctx.lineWidth = 2;
+                for (let ai = 0; ai < auras.length; ai++) {
+                    const a = auras[ai];
+                    const ringR = entity.radius + 22 + ai * 7;
+                    ctx.globalAlpha = a.label === 'bleed' ? (0.55 + Math.sin(time * 7) * 0.25) : pulse * 0.7;
+                    ctx.shadowColor = a.color;
+                    ctx.shadowBlur = 14;
+                    ctx.strokeStyle = a.color;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, ringR, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+        }
+
+        // --- WIND-UP TELEGRAPH — enemies queued to drop a heavy attack this
+        // turn get a red pulsing aura so "big hit incoming" reads visually,
+        // not just via the intent number. Fires for: purge/immolate/reality
+        // moves + any attack/multi value meaningfully above the enemy's
+        // baseline so the telegraph scales with how bad the move is.
+        if (entity instanceof Enemy && entity.nextIntents && entity.nextIntents.length) {
+            const HEAVY_TYPES = new Set(['purge_attack', 'immolate', 'charging_immolate', 'reality_overwrite']);
+            const SCALABLE = new Set(['attack', 'multi_attack', 'mirror_attack', 'observer_strike', 'burrow_resurge', 'aoe_sweep']);
+            const baseDmg = entity.baseDmg || 0;
+            const isHeavy = entity.nextIntents.some(i => {
+                if (!i) return false;
+                if (HEAVY_TYPES.has(i.type)) return true;
+                if (!SCALABLE.has(i.type)) return false;
+                const v = (i.effectiveVal !== undefined) ? i.effectiveVal : i.val;
+                return (v || 0) > baseDmg * 1.4 && v >= 10;
+            });
+            if (isHeavy) {
+                ctx.save();
+                const heavyPulse = 0.55 + Math.sin(time * 7) * 0.35;
+                ctx.globalAlpha = heavyPulse;
+                ctx.strokeStyle = '#ff2244';
+                ctx.shadowColor = '#ff2244';
+                ctx.shadowBlur = 18;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0, 0, entity.radius + 14, 0, Math.PI * 2);
+                ctx.stroke();
+                // Inner hair-line ring for the "charging" reading
+                ctx.globalAlpha = heavyPulse * 0.5;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(0, 0, entity.radius + 6, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
         // --- ENEMY INTENT ICON ---
         if (entity instanceof Enemy && ((entity.nextIntents && entity.nextIntents.length > 0) || entity.nextIntent)) {
             ctx.restore(); 
@@ -18365,7 +18890,13 @@ drawEntity(entity) {
             if (entity.nextIntents && entity.nextIntents.length > 0) {
                 const count = entity.nextIntents.length;
                 const spacing = 60;
-                const startX = -((count - 1) * spacing) / 2;
+                // Bosses with 3+ actions (Panopticon 2, Tesseract 3, Hive 4)
+                // get a 2-row grid so icons don't crush together on phones.
+                // ≤2 intents keep the original single-row layout.
+                const useGrid = count >= 3;
+                const cols = useGrid ? Math.ceil(count / 2) : count;
+                const rowGap = 56;
+                const gridStartX = -((cols - 1) * spacing) / 2;
 
                 // Ping envelope: 0..1 in the first ~450ms after refresh,
                 // drives a scale pulse + halo so the player notices the change.
@@ -18374,8 +18905,23 @@ drawEntity(entity) {
 
                 for(let i=0; i<count; i++) {
                     const intent = entity.nextIntents[i];
-                    const ix = startX + (i * spacing);
-                    const iy = -entity.radius - 130 + (Math.cos(time * 5 + i) * 5);
+                    let ix, iy;
+                    if (useGrid) {
+                        const col = i % cols;
+                        const row = Math.floor(i / cols);
+                        // Center the trailing row if it's shorter than the top
+                        // (e.g. 3 intents: 2 on top, 1 centered below).
+                        const itemsInRow = (row === 1) ? (count - cols) : cols;
+                        const rowStartX = -((itemsInRow - 1) * spacing) / 2;
+                        ix = rowStartX + (col * spacing);
+                        // Top row sits a bit higher than the old single-row Y,
+                        // bottom row drops by rowGap so they clear each other.
+                        const baseY = -entity.radius - 150;
+                        iy = baseY + row * rowGap + (Math.cos(time * 5 + i) * 5);
+                    } else {
+                        ix = gridStartX + (i * spacing);
+                        iy = -entity.radius - 130 + (Math.cos(time * 5 + i) * 5);
+                    }
 
                     // Apply ping scale around each icon's center
                     const pingScale = 1 + pingT * 0.35;
@@ -18409,6 +18955,7 @@ drawEntity(entity) {
                     else if (intent.type === 'charge' || intent.type === 'purge_attack') iconColor = '#ff3355';
                     else if (intent.type === 'reality_overwrite') iconColor = '#bc13fe';
                     else if (intent.type === 'dispel')            iconColor = '#ffd76a';
+                    else if (intent.type === 'analyse')           iconColor = '#00f3ff';
                     else if (intent.type === 'summon' || intent.type === 'summon_glitch') iconColor = '#00f3ff';
                     else if (intent.type === 'summon_void')       iconColor = '#ff00ff';
                     // Expansion (5.2.1) intent types — colored per gameplay role.
@@ -18431,6 +18978,7 @@ drawEntity(entity) {
                     // `drawIntentIcon` doesn't render a question-mark placeholder.
                     const INTENT_ICON_ALIAS = {
                         summon_void:           'intentSummon',
+                        analyse:               'debuff',
                         aoe_sweep:             'multi_attack',
                         mirror_attack:         'attack',
                         frost_aoe:             'multi_attack',
@@ -18453,10 +19001,27 @@ drawEntity(entity) {
                     // Custom Run: Dark Visions — hide the damage number so
                     // the player has to read the icon + their own HP math.
                     if(displayVal !== undefined && displayVal > 0 && !this._customHideIntentNumbers) {
+                        const split = this._intentShieldSplit(intent, displayVal);
                         ctx.font = 'bold 24px "Orbitron"';
-                        ctx.fillStyle = (intent.type === 'heal') ? '#0f0' : '#fff';
                         ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
-                        ctx.fillText(displayVal, ix, iy - 5);
+                        if (intent.type === 'heal') {
+                            ctx.fillStyle = '#0f0';
+                            ctx.fillText(displayVal, ix, iy - 5);
+                        } else if (split && split.blocked >= displayVal) {
+                            // Fully absorbed — tint cyan so the player reads "safe."
+                            ctx.fillStyle = '#6fe8ff';
+                            ctx.fillText(displayVal, ix, iy - 5);
+                        } else {
+                            ctx.fillStyle = '#fff';
+                            ctx.fillText(displayVal, ix, iy - 5);
+                            if (split && split.bleed > 0 && split.blocked > 0) {
+                                // Show bleed-through below the main number.
+                                ctx.font = 'bold 13px "Orbitron"';
+                                ctx.fillStyle = '#ff6677';
+                                ctx.shadowBlur = 3;
+                                ctx.fillText(`+${split.bleed}`, ix, iy + 12);
+                            }
+                        }
                     }
                     ctx.restore(); // close ping-scale transform
                 }
@@ -18470,14 +19035,30 @@ drawEntity(entity) {
                 const val = (entity.nextIntent.effectiveVal !== undefined) ? entity.nextIntent.effectiveVal : entity.nextIntent.val;
                 // Custom Run: Dark Visions hides the intent damage number.
                 if(val > 0 && !this._customHideIntentNumbers) {
+                    const split = this._intentShieldSplit(entity.nextIntent, val);
                     // Embossed HP-style: black outline + white fill (green fill if heal).
                     ctx.font = 'bold 30px "Orbitron"';
                     ctx.textBaseline = 'middle';
                     ctx.lineWidth = 4;
                     ctx.strokeStyle = '#000';
-                    ctx.strokeText(val, 0, -entity.radius - 60 + hover);
-                    ctx.fillStyle = (entity.nextIntent.type === 'heal') ? '#0f0' : '#fff';
-                    ctx.fillText(val, 0, -entity.radius - 60 + hover);
+                    const yTop = -entity.radius - 60 + hover;
+                    ctx.strokeText(val, 0, yTop);
+                    if (entity.nextIntent.type === 'heal') {
+                        ctx.fillStyle = '#0f0';
+                    } else if (split && split.blocked >= val) {
+                        ctx.fillStyle = '#6fe8ff';
+                    } else {
+                        ctx.fillStyle = '#fff';
+                    }
+                    ctx.fillText(val, 0, yTop);
+                    if (entity.nextIntent.type !== 'heal' && split && split.bleed > 0 && split.blocked > 0) {
+                        ctx.font = 'bold 16px "Orbitron"';
+                        ctx.lineWidth = 3;
+                        ctx.strokeStyle = '#000';
+                        ctx.strokeText(`+${split.bleed}`, 0, yTop + 22);
+                        ctx.fillStyle = '#ff6677';
+                        ctx.fillText(`+${split.bleed}`, 0, yTop + 22);
+                    }
                 }
             }
             ctx.restore();

@@ -145,6 +145,11 @@ class Enemy extends Entity {
                 return { type: 'shield', val: this.bossData.shieldVal || 20 };
             }
             if (roll === 'reality_overwrite') return { type: 'reality_overwrite', val: 0 };
+            // Analyse — telegraphs the Panopticon's nullify beat on this
+            // turn's intent preview instead of firing from an invisible
+            // startTurn cooldown. Resolution sets the player's
+            // _panopticonNullifyFirst flag for next turn.
+            if (roll === 'analyse') return { type: 'analyse', val: 0 };
             
             // FIX: Dispel Logic - Only if debuffed
             if (roll === 'dispel') {

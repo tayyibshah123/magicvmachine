@@ -9,10 +9,29 @@ import { ClassAbility } from '../ui/class-ability.js';
 class Minion extends Entity {
     constructor(x, y, id, isPlayerSide, tier = 1) {
         let name = isPlayerSide ? "Wisp Lv." + id : "Bot Unit " + id;
-        
+
         if (isPlayerSide && Game.player) {
-             name = Game.player.traits.minionName + " " + id;
-             if (Game.player.traits.minionName === "Bug") {
+             // Tier 8 — flavor pool per class so summons read as distinct
+             // individuals (SAGE, EMBER, …) instead of "Wisp 1, Wisp 2, Wisp 3".
+             // Falls back to the legacy "<MinionName> N" for classes without a
+             // pool or when the traits object is absent.
+             const FLAVOR = {
+                 'Pawn':     ['ROOK', 'BISHOP', 'KNIGHT', 'CASTLE', 'SENTRY'],
+                 'Wisp':     ['SAGE', 'SPARK', 'DRIFT', 'EMBER', 'CINDER'],
+                 'Thrall':   ['RUST', 'SCREAM', 'HOWL', 'MAW', 'FANG'],
+                 'Bomb Bot': ['FUSE', 'SPITFIRE', 'TNT', 'KABOOM', 'CRACKLE'],
+                 'Glyph':    ['AEGIS', 'WARD', 'OATH', 'BULWARK', 'KEEPER'],
+                 'Spirit':   ['OAK', 'FERN', 'BLOOM', 'MOSS', 'IVY'],
+             };
+             const base = Game.player.traits && Game.player.traits.minionName;
+             const pool = FLAVOR[base];
+             if (pool && pool.length) {
+                 const pick = pool[(id - 1) % pool.length];
+                 name = `${base} · ${pick}`;
+             } else if (base) {
+                 name = `${base} ${id}`;
+             }
+             if (Game.player.traits && Game.player.traits.minionName === "Bug") {
                  this.dmg = 99;
                  this.maxHp = 1;
                  this.currentHp = 1;

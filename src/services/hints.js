@@ -30,7 +30,13 @@ const HINTS = {
     combo_double:     { title: "COMBO",       body: "Two of a kind grants a bonus." },
     first_heal:       { title: "HEAL",        body: "Restores HP up to your maximum." },
     first_shield_break:{ title: "SHIELD DOWN",body: "Barrier collapsed. Raw damage next." },
-    first_crit:       { title: "CRITICAL",    body: "Perfect timing doubles damage." }
+    first_crit:       { title: "CRITICAL",    body: "Perfect timing doubles damage." },
+    // Sector signature rules — fires once per install on first entry to each
+    // affected sector so the player isn't surprised by a silent mechanic.
+    sector_rule_2:    { title: "FROST FIELD",      body: "Cryo hostiles carry +6 Shield." },
+    sector_rule_3:    { title: "HEAT TILES",       body: "Molten ground burns you 1 HP each turn end." },
+    sector_rule_4:    { title: "HIVE RESONANCE",   body: "Enemy minions hit 20% harder." },
+    sector_rule_5:    { title: "REALITY GLITCH",   body: "Every attack rolls ±15% damage." }
 };
 
 function readSeen() {

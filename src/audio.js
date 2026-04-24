@@ -414,18 +414,58 @@ const AudioMgr = {
     // plays are allowed (each .start spawns its own node chain). Respects
     // the live `sfxVolume` slider. Returns true on success; false lets
     // `playSound` fall back to the synth version.
-    _playSfxSample(id) {
+    // Per-sound gain trims. Lets us dial back specific samples that ship hot
+    // without re-encoding the ogg or editing every call site.
+    _sfxGainTrim: {
+        mana: 0.49,  // mana.ogg fires on reroll, end-turn banner, and every
+                     //   mana-die use. Two successive 30% cuts (1 → 0.7 → 0.49)
+                     //   put it at a background level below attack/defend cues.
+    },
+
+    _playSfxSample(id, opts = {}) {
         const buf = this._sfxBuffers[id];
         if (!buf || !this.ctx) return false;
         try {
             const src = this.ctx.createBufferSource();
             src.buffer = buf;
+            // Optional pitch / speed shift — lets a single sample cover a
+            // range of severities (e.g. hit.ogg played at 0.7× for heavy
+            // thuds, 1.3× for chip pings). Clamped to a safe band.
+            if (typeof opts.playbackRate === 'number') {
+                const rate = Math.max(0.25, Math.min(4, opts.playbackRate));
+                src.playbackRate.value = rate;
+            }
             const gain = this.ctx.createGain();
+            const now = this.ctx.currentTime;
+            const callScale = (typeof opts.volume === 'number') ? opts.volume : 1;
+            const trim = this._sfxGainTrim[id] ?? 1;
+            const volScale = callScale * trim;
             // Slight headroom so samples don't clip when played at full volume.
-            gain.gain.value = Math.max(0, Math.min(1, this.sfxVolume ?? 0.8)) * 0.9;
+            const baseVol = Math.max(0, Math.min(1, this.sfxVolume ?? 0.8)) * 0.9 * volScale;
+
+            // Effective buffer duration after playbackRate is applied — the
+            // sample finishes faster when sped up, slower when slowed.
+            const rate = src.playbackRate.value || 1;
+            const effectiveBufDur = buf.duration / rate;
+            const capDur = (typeof opts.duration === 'number')
+                ? Math.min(opts.duration, effectiveBufDur)
+                : effectiveBufDur;
+            const fadeSec = (typeof opts.fadeOut === 'number') ? Math.min(opts.fadeOut, capDur) : 0;
+
+            gain.gain.setValueAtTime(baseVol, now);
+            if (fadeSec > 0) {
+                const fadeStart = now + Math.max(0, capDur - fadeSec);
+                gain.gain.setValueAtTime(baseVol, fadeStart);
+                // linearRamp to near-zero; exact 0 can NaN on some engines.
+                gain.gain.linearRampToValueAtTime(0.0001, now + capDur);
+            }
+
             src.connect(gain);
             gain.connect(this.ctx.destination);
             src.start(0);
+            if (typeof opts.duration === 'number') {
+                try { src.stop(now + capDur); } catch (_) {}
+            }
             // Disconnect on end to release nodes.
             src.onended = () => {
                 try { src.disconnect(); gain.disconnect(); } catch (e) {}
@@ -437,6 +477,26 @@ const AudioMgr = {
         }
     },
 
+    // Hit-sound dispatcher — maps a damage tier from ParticleSys.createDamageText
+    // to a distinct pitch + volume mix of hit.ogg. Keeps chip hits a light
+    // ping and catastrophic hits a deep crunch without needing separate files.
+    //   chip         → higher-pitched, quieter ping
+    //   solid        → neutral (existing default)
+    //   heavy        → slower / lower-pitched, a touch louder
+    //   catastrophic → deepest / loudest crunch
+    playHit(tier) {
+        const t = tier || 'solid';
+        const mix = this._HIT_TIER_MIX[t] || this._HIT_TIER_MIX.solid;
+        return this.playSound('hit', mix);
+    },
+
+    _HIT_TIER_MIX: {
+        chip:         { playbackRate: 1.35, volume: 0.65 },
+        solid:        { playbackRate: 1.00, volume: 1.00 },
+        heavy:        { playbackRate: 0.85, volume: 1.15 },
+        catastrophic: { playbackRate: 0.70, volume: 1.30 },
+    },
+
     // Eager preload — called from AudioMgr.init so the first time each sound
     // fires in combat it's already decoded. 26 small ogg files (< 2 MB total
     // typical) — cheap and keeps the first-tap-after-boot feeling instant.
@@ -445,10 +505,42 @@ const AudioMgr = {
         this.SFX_IDS.forEach(id => this._loadSfxSample(id));
     },
 
-    playSound(type) {
+    // opts:
+    //   volume  — gain multiplier (0..1). Caller scales a specific SFX down
+    //             without touching the global sfxVolume slider.
+    //   duration — cap the sample playback length (seconds).
+    //   fadeOut  — length of a linear fade-to-silence tail (seconds) applied
+    //              at the end of `duration`. Lets long samples (bomb missile
+    //              siren) tail off quickly without re-encoding the file.
+    // Per-id last-played timestamps for polyphony dedupe. When combat bursts
+    // layer 6+ hit cues in the same frame, the output turns to mush on
+    // mobile. A short per-id lockout keeps the attack feeling punchy.
+    _lastSfxAt: {},
+    _POLYPHONY_MS: {
+        hit: 30,        // most frequent offender
+        attack: 25,
+        dart: 25,
+        defend: 25,
+        click: 20,
+    },
+
+    playSound(type, opts = {}) {
         // Check SFX flag specifically (Phase 6: sfxVolume of 0 acts as mute)
         if (!this.ctx || !this.sfxEnabled) return;
         if (this.sfxVolume === 0) return;
+
+        // Polyphony dedupe — skip if this id fired within its lockout window,
+        // UNLESS the caller explicitly bypasses it (e.g. scripted sequences
+        // that need back-to-back plays).
+        if (!opts.bypassDedupe) {
+            const lockout = this._POLYPHONY_MS[type];
+            if (lockout) {
+                const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                const last = this._lastSfxAt[type] || 0;
+                if (now - last < lockout) return;
+                this._lastSfxAt[type] = now;
+            }
+        }
 
         // After the tab comes back from background on mobile, the ctx may be
         // suspended or (iOS Safari) 'interrupted'. Fire-and-forget resume so
@@ -464,7 +556,7 @@ const AudioMgr = {
         if (this.SFX_IDS.has(type)) {
             const status = this._sfxStatus[type];
             if (status === 'loaded') {
-                if (this._playSfxSample(type)) return;
+                if (this._playSfxSample(type, opts)) return;
             } else if (status === undefined) {
                 this._loadSfxSample(type);
                 // First-ever play: fall through to synth so the player hears
@@ -476,12 +568,12 @@ const AudioMgr = {
             }
         }
 
-        return this._playSoundSynth(type);
+        return this._playSoundSynth(type, opts);
     },
 
     // Original WebAudio-synth implementation — kept as a fallback for any
     // sound-id missing from /sfx/ and as a safety net while samples load.
-    _playSoundSynth(type) {
+    _playSoundSynth(type, opts = {}) {
         if (!this.ctx || !this.sfxEnabled) return;
         if (this.sfxVolume === 0) return;
         if (this.ctx.state !== 'running') return;
@@ -489,10 +581,19 @@ const AudioMgr = {
         const t = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
+        // Per-call volume scaler — routed via a trailing gain node so each
+        // case's per-step gain ramps stay intact. Only the final amplitude
+        // is multiplied by opts.volume * per-sound trim.
+        const callScale = (typeof opts.volume === 'number') ? opts.volume : 1;
+        const trim = this._sfxGainTrim[type] ?? 1;
+        const volScale = callScale * trim;
+        const scaleNode = (volScale !== 1) ? this.ctx.createGain() : null;
+        if (scaleNode) scaleNode.gain.value = volScale;
         const dest = this._sfxMaster || this.ctx.destination;
 
         osc.connect(gain);
-        gain.connect(dest);
+        if (scaleNode) { gain.connect(scaleNode); scaleNode.connect(dest); }
+        else { gain.connect(dest); }
 
         switch (type) {
             case 'attack': 

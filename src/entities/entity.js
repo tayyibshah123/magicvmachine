@@ -361,10 +361,14 @@ class Entity {
              }
              // Tiered damage text — chip / solid / heavy / catastrophic.
              const dmgTier = ParticleSys.createDamageText(this.x, this.y, actualDmg, this instanceof Player);
-             AudioMgr.playSound('hit');
+             // Pitch-shifted + gain-scaled hit sample per tier so chip pings
+             // and catastrophic crunches feel audibly distinct.
+             AudioMgr.playHit(dmgTier);
              // Heavy hits earn a screen flash even on enemies for the pop.
              if (dmgTier === 'catastrophic' && Game.triggerScreenFlash) {
                  Game.triggerScreenFlash('rgba(255,220,80,0.35)', 200);
+                 // Side-chain the music a notch so the impact cuts through.
+                 if (AudioMgr.duck) AudioMgr.duck(0.3, 220);
              }
              if (Game.logCombatEvent) {
                  Game.logCombatEvent({
@@ -379,6 +383,25 @@ class Entity {
              if (this instanceof Enemy && this.glitchMod && this.glitchMod.id === 'thorns' && source instanceof Player) {
                  source.takeDamage(2);
                  ParticleSys.createFloatingText(source.x, source.y - 80, "GLITCH REFLECT", "#ff00ff");
+             }
+
+             // Null Pointer phase 2 — voidling shared HP. Damage to one
+             // splashes 50% to each sibling. Siblings take raw damage (no
+             // shield recurse) so the splash feels like a linked pool, not
+             // a chain of discrete hits. Suppress if this IS the splash
+             // (via _voidSplashing flag on source) to prevent recursion.
+             if (this instanceof Minion && !this.isPlayerSide && actualDmg > 0
+                 && Game.enemy && Game.enemy.name === 'NULL_POINTER'
+                 && Game.enemy.voidShared && !source?._voidSplashing) {
+                 const splash = Math.floor(actualDmg * 0.5);
+                 if (splash > 0 && Array.isArray(Game.enemy.minions)) {
+                     Game.enemy.minions.forEach(sib => {
+                         if (sib !== this && sib.currentHp > 0) {
+                             sib.currentHp = Math.max(0, sib.currentHp - splash);
+                             ParticleSys.createFloatingText(sib.x, sib.y - 60, `VOID LINK -${splash}`, '#ff00ff');
+                         }
+                     });
+                 }
              }
         } else {
              if (amount > 0 && !suppressBlockText) ParticleSys.createFloatingText(this.x, this.y - 60, "BLOCKED", COLORS.SHIELD);
@@ -524,6 +547,12 @@ class Entity {
             ParticleSys.createFloatingText(Game.player.x, Game.player.y - 100, "MED +" + (3 * stacks), COLORS.NATURE_LIGHT);
         }
 
+        // Run stats tracking — damage taken (player side) for the victory
+        // breakdown. Counts only actual HP hits, not blocked damage.
+        if (Game.runStats && this instanceof Player && actualDmg > 0) {
+            Game.runStats.damageTaken = (Game.runStats.damageTaken || 0) + actualDmg;
+        }
+
         // Run stats tracking (player-dealt damage + kills)
         if (Game.runStats && source instanceof Player && killedTargetIsHostile) {
             Game.runStats.totalDamage = (Game.runStats.totalDamage || 0) + actualDmg;
@@ -608,6 +637,12 @@ class Entity {
         }
         this.shield += amount;
         this.playAnim('pulse');
+        // Shield-gain chime — a pitched "click" reads as the metallic plate
+        // clicking into place. Silent flag suppresses it for inherent combat-
+        // start shields so we don't double-cue with the combat boot sound.
+        if (!silent && amount > 0) {
+            AudioMgr.playSound('click', { playbackRate: 0.7, volume: 0.8 });
+        }
         // Class-ability: broadcast to Sentinel SHIELD WALL when the player gains shield.
         // `silent` suppresses the broadcast so inherent class-start shield (Sentinel's
         // startShield trait) doesn't pre-charge the glyph widget on combat open.

@@ -341,6 +341,16 @@ const ParticleSys = {
         else if (amount < 100){ tier = 'heavy';        color = '#ff1100'; fontSize = 64; vy = -2.0; }
         else                  { tier = 'catastrophic'; color = '#ffdd33'; fontSize = 84; vy = -2.4; }
         if (isPlayerTarget && tier === 'solid') color = '#ff5566';
+        // Respect the Accessibility text-scale slider so players with
+        // larger-text preference also get larger damage numbers. Read
+        // once per call; the CSS var stays in sync with the slider.
+        let scale = 1;
+        try {
+            const raw = getComputedStyle(document.documentElement).getPropertyValue('--text-scale-multiplier');
+            const parsed = parseFloat(raw);
+            if (!isNaN(parsed) && parsed > 0) scale = Math.max(0.5, Math.min(2.5, parsed));
+        } catch (_) { /* canvas-only env — leave scale at 1 */ }
+        fontSize = Math.round(fontSize * scale);
         // Damage numbers must land on the same frame as the hit VFX —
         // bypass the status-text stagger queue so they stay tied to impact.
         this.createFloatingText(x, y - 60, "-" + amount, color, { fontSize, vy, life: 1.6, immediate: true });
