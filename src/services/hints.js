@@ -77,6 +77,17 @@ export const Hints = {
     // Call this from game code when a condition is first met.
     trigger(id) {
         if (!this._seen) this.init();
+        // Respect the Accessibility "Tutorial hints" toggle — when off, we
+        // still mark the hint as seen so it doesn't queue up for later, but
+        // we skip the overlay render. Without this check the `chk-tutorial-hints`
+        // setting only gated showHintOnce, not the dedicated Hints service.
+        if (typeof window !== 'undefined' && window.Game && window.Game.tutorialHintsEnabled === false) {
+            if (!this._seen.has(id)) {
+                this._seen.add(id);
+                writeSeen(this._seen);
+            }
+            return;
+        }
         if (this._seen.has(id)) return;
         if (!HINTS[id]) return;
         // Mark seen immediately so re-triggers don't queue duplicates.

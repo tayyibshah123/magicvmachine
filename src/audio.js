@@ -90,7 +90,6 @@ const AudioMgr = {
     fadeMusicIn(durationMs = 600) {
         if (!this.bgm) return;
         this._cancelFade();
-        const targetVol = this._baseVol ?? 0.3;
         this._setBgmVolume(0);
         // Resume the SFX context in the same gesture so the next SFX is
         // audible; bgm uses plain HTMLAudioElement so it doesn't need it,
@@ -102,7 +101,11 @@ const AudioMgr = {
         const start = performance.now();
         this._fadeInterval = setInterval(() => {
             const t = Math.min(1, (performance.now() - start) / durationMs);
-            this._setBgmVolume(targetVol * t);
+            // Re-read target each tick so a slider drag during the fade
+            // retunes the in-flight fade to the new volume instead of
+            // continuing toward the captured-at-start target.
+            const target = this._baseVol ?? 0.3;
+            this._setBgmVolume(target * t);
             if (t >= 1) this._cancelFade();
         }, 30);
     },
@@ -256,11 +259,12 @@ const AudioMgr = {
     duck(toVolume = 0.12, durationMs = 1500) {
         if (!this.bgm || !this.musicEnabled) return;
         if (this._duckTimeout) clearTimeout(this._duckTimeout);
-        const baseVol = this._baseVol ?? 0.3;
-        this._baseVol = baseVol;
         this._setBgmVolume(toVolume);
         this._duckTimeout = setTimeout(() => {
-            this._setBgmVolume(baseVol);
+            // Read _baseVol FRESH so a slider drag during the duck window
+            // doesn't get clobbered by a closure-captured stale value.
+            const restore = this._baseVol ?? 0.3;
+            this._setBgmVolume(restore);
             this._duckTimeout = null;
         }, durationMs);
     },

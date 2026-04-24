@@ -368,6 +368,14 @@ const ParticleSys = {
             const parsed = parseFloat(raw);
             if (!isNaN(parsed) && parsed > 0) scale = Math.max(0.5, Math.min(2.5, parsed));
         } catch (_) { /* canvas-only env — leave scale at 1 */ }
+        // Per-setting damage-text size override (small / medium / large) —
+        // lets players tune damage floaters independently of the global UI
+        // text scale (e.g. big UI + small damage numbers for cleaner feel).
+        if (typeof window !== 'undefined' && window.Game) {
+            const size = window.Game.damageNumberSize;
+            if (size === 'small')      scale *= 0.72;
+            else if (size === 'large') scale *= 1.3;
+        }
         fontSize = Math.round(fontSize * scale);
         // Damage numbers must land on the same frame as the hit VFX —
         // bypass the status-text stagger queue so they stay tied to impact.
