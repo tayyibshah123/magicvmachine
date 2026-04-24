@@ -8921,6 +8921,7 @@ async startTurn() {
             comboDoubleStrike: !!this.comboDoubleStrike,
             echoChamberUsedThisCombat: !!this._echoChamberUsedThisCombat,
             hotHandsUsedThisTurn: !!this._hotHandsUsedThisTurn,
+            voltPrimerUsedThisTurn: !!this._voltPrimerUsedThisTurn,
         };
     },
 
@@ -8990,6 +8991,7 @@ async startTurn() {
         this.comboDoubleStrike = snap.comboDoubleStrike;
         this._echoChamberUsedThisCombat = snap.echoChamberUsedThisCombat;
         this._hotHandsUsedThisTurn = snap.hotHandsUsedThisTurn;
+        this._voltPrimerUsedThisTurn = snap.voltPrimerUsedThisTurn;
 
         ParticleSys.createFloatingText(this.player.x, this.player.y - 150, 'UNDO', '#6fe8ff');
         AudioMgr.playSound('click');
