@@ -8303,21 +8303,32 @@ async startTurn() {
         if (!bomb) return Promise.resolve();
         const enemy = this.enemy;
         if (!enemy || enemy.currentHp <= 0) return Promise.resolve();
+        // Capture the combat generation at launch. If the player closes
+        // this combat (winCombat / gameOver) before the missile lands,
+        // the callback aborts cleanly instead of splashing damage onto
+        // whatever enemy loaded in the next combat.
+        const gen = this._combatGen || 0;
         const launchX = (typeof sx === 'number') ? sx : bomb.x;
         const launchY = (typeof sy === 'number') ? sy : bomb.y;
         const launchSource = { x: launchX, y: launchY };
         return new Promise(resolve => {
             this.triggerVFX('bomb_missile', launchSource, enemy, () => {
-                if (this.enemy && this.enemy.currentHp > 0) {
-                    const dead = this.enemy.takeDamage(10);
-                    if (dead && this.enemy.currentHp <= 0) {
+                if (this._combatGen !== gen) { resolve(); return; }
+                // Use the captured `enemy` reference, not `this.enemy`,
+                // so we never hit the new combat's boss even if the gen
+                // guard was bumped in the same frame.
+                if (enemy === this.enemy && enemy.currentHp > 0) {
+                    const dead = enemy.takeDamage(10);
+                    if (dead && enemy.currentHp <= 0) {
                         this.winCombat();
                         resolve();
                         return;
                     }
                 }
-                this._enemyMinions().forEach(em => { if (em && em.currentHp > 0) em.takeDamage(10); });
-                if (this.enemy) this.enemy.minions = this.enemy.minions.filter(em => em.currentHp > 0);
+                if (enemy === this.enemy) {
+                    this._enemyMinions().forEach(em => { if (em && em.currentHp > 0) em.takeDamage(10); });
+                    if (this.enemy) this.enemy.minions = this.enemy.minions.filter(em => em.currentHp > 0);
+                }
                 resolve();
             });
         });
@@ -11835,6 +11846,7 @@ drawEffects() {
         // removal order match the rendered layout and avoids the skip.
         const minionOrder = this.player.minions.slice().sort((a, b) => b.x - a.x);
         for (const m of minionOrder) {
+            if (!stillLive()) return; // new combat started — abandon this phase
             if(!this.enemy || this.enemy.currentHp <= 0) break;
             if (!this.player.minions.includes(m) || m.currentHp <= 0) continue;
             m.playAnim('lunge');
@@ -11861,7 +11873,12 @@ drawEffects() {
                     }
                     await this._detonateBombBot(m, launchX, launchY);
                 } else {
+                    // Capture combat generation in the VFX callback so a
+                    // dart in flight when the combat ends can't damage the
+                    // next combat's enemy when its onHit fires.
+                    const callbackGen = this._combatGen || 0;
                     this.triggerVFX('nature_dart', m, t, (multiplier = 1.0) => {
+                        if (this._combatGen !== callbackGen) return;
                         // Relic: SWARM BEACON — player minions deal +1 DMG per alive minion.
                         let swarmBonus = 0;
                         if (this.player.hasRelic('swarm_beacon')) {
@@ -12050,9 +12067,13 @@ drawEffects() {
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, "SWEEP ARC", "#ff3355");
                 const mult = await this.startQTE('DEFEND', this.player.x, this.player.y);
                 const finalDmg = Math.floor(dmg * mult);
-                this.triggerVFX('glitch_spike', this.enemy, this.player, () => {
-                    if (this.player.takeDamage(finalDmg, this.enemy, true) && this.player.currentHp <= 0) { this.gameOver(); return; }
-                });
+                {
+                    const sweepGen = this._combatGen || 0;
+                    this.triggerVFX('glitch_spike', this.enemy, this.player, () => {
+                        if (this._combatGen !== sweepGen) return;
+                        if (this.player.takeDamage(finalDmg, this.enemy, true) && this.player.currentHp <= 0) { this.gameOver(); return; }
+                    });
+                }
                 this.player.minions.forEach(m => m.takeDamage(finalDmg, this.enemy));
                 this.player.minions = this.player.minions.filter(m => m.currentHp > 0);
                 AudioMgr.playSound('explosion');
@@ -12199,8 +12220,12 @@ drawEffects() {
                         }
 
                         const vfxType = intent.type === 'purge_attack' ? 'orbital_strike' : 'glitch_spike';
-                        
+                        // Capture combat generation so an in-flight enemy
+                        // attack VFX can't damage the player when they
+                        // open the next combat from the map screen.
+                        const cbGen = this._combatGen || 0;
                         this.triggerVFX(vfxType, this.enemy, validTarget, () => {
+                            if (this._combatGen !== cbGen) return;
                             // Ensure using effectiveVal (includes Weak/Constrict)
                             let dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
                             dmg = Math.floor(dmg * multiplier);
@@ -12230,7 +12255,9 @@ drawEffects() {
                         });
                     } else {
                         // Minion Target
+                        const minCbGen = this._combatGen || 0;
                         this.triggerVFX('glitch_spike', this.enemy, validTarget, () => {
+                            if (this._combatGen !== minCbGen) return;
                             let dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
                             if (validTarget.takeDamage(dmg, this.enemy)) {
                                  if (this.player.traits.maxMinions === 3 && Math.random() < 0.3) { 
