@@ -508,7 +508,10 @@ export const ClassAbility = {
                 const isApex = !!(atMax && bloomCount >= 3);
                 if (isApex) {
                     const color = '#ffd76a';
-                    const mult = 3;
+                    // Apex multiplier: 2× across every stat on every living
+                    // minion. Previously 3×, which made Summoner roll over
+                    // any boss that didn't clear the grove first turn.
+                    const mult = 2;
                     let buffed = 0;
                     p.minions.forEach(m => {
                         if (!m) return;
@@ -517,13 +520,13 @@ export const ClassAbility = {
                         m.dmg = Math.floor((m.dmg || 1) * mult);
                         if (typeof m.playAnim === 'function') m.playAnim('pulse');
                         ParticleSys.createShockwave(m.x, m.y, color, 30);
-                        ParticleSys.createFloatingText(m.x, m.y - 50, 'APEX ×3', color);
+                        ParticleSys.createFloatingText(m.x, m.y - 50, 'APEX ×2', color);
                         buffed++;
                     });
                     // APEX consumes the entire canopy — every plot drains
                     // back to seed stage regardless of its current growth.
                     for (let i = 0; i < state.plots.length; i++) state.plots[i] = 0;
-                    ParticleSys.createFloatingText(p.x, p.y - 100, `GROVE APEX — ×3 EMPOWERS ${buffed} ALLIES`, color);
+                    ParticleSys.createFloatingText(p.x, p.y - 100, `GROVE APEX — ×2 EMPOWERS ${buffed} ALLIES`, color);
                     ParticleSys.createShockwave(p.x, p.y, color, 48);
                     if (Game.shake) Game.shake(16);
                     if (Game.haptic) Game.haptic('heavy');

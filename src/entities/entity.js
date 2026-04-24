@@ -307,7 +307,34 @@ class Entity {
             ParticleSys.createFloatingText(this.x, this.y - 150, "ECHO SPLIT", "#88eaff");
         }
 
-        this.currentHp = Math.max(0, this.currentHp - actualDmg);
+        // Boss phase clamp — a boss can only be killed once it's in its
+        // FINAL phase. Attacks that would drop a Phase 1 boss past the
+        // 50% threshold get clamped so Phase 2 always triggers; same for
+        // Phase 2 → Phase 3 at the 20% line. Keeps the fantasy honest:
+        // every boss gets all three phases on-screen, and a lucky 1-shot
+        // can't skip a phase.
+        if (Enemy && this instanceof Enemy && this.isBoss && actualDmg > 0) {
+            const nextHp = this.currentHp - actualDmg;
+            const p2Floor = Math.ceil(this.maxHp * 0.5) - 1;
+            const p3Floor = Math.ceil(this.maxHp * 0.2) - 1;
+            if (this.phase === 1 && nextHp < this.maxHp * 0.5) {
+                // Drop exactly INTO phase 2 range; checkPhase runs below.
+                this.currentHp = Math.max(0, p2Floor);
+            } else if (this.phase === 2 && nextHp < this.maxHp * 0.2) {
+                this.currentHp = Math.max(0, p3Floor);
+            } else {
+                this.currentHp = Math.max(0, nextHp);
+            }
+        } else {
+            this.currentHp = Math.max(0, this.currentHp - actualDmg);
+        }
+
+        // Immediately check for phase transition so a big hit that drops
+        // the boss through a threshold plays the cinematic on the same
+        // damage tick — no waiting for the player's next die use.
+        if (Enemy && this instanceof Enemy && this.isBoss && typeof this.checkPhase === 'function') {
+            this.checkPhase();
+        }
 
         // Track the player's highest damage dealt so Mirror enemies can
         // reflect it on their next intent.

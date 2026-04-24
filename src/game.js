@@ -6157,8 +6157,8 @@ triggerSystemCrash() {
             resultEl.textContent = '';
             resultEl.className = 'hack-result';
             if (subEl) subEl.textContent = hard
-                ? 'FIREWALL HARDENED — larger maze, same window.'
-                : 'Escape the data maze — reach the exit before the timer expires.';
+                ? 'FIREWALL HARDENED — larger maze, one touch = lockout.'
+                : 'Reach the exit before the timer expires. One wall touch = lockout.';
             if (statusEl) { statusEl.textContent = 'RUN'; statusEl.className = 'hack-status is-play'; }
             if (timerWrap) timerWrap.classList.remove('is-danger');
 
@@ -6273,10 +6273,17 @@ triggerSystemCrash() {
             const tryMove = (dr, dc) => {
                 if (cancelled) return;
                 const nr = player.r + dr, nc = player.c + dc;
-                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) return;
-                if (grid[nr][nc] === 0) {
-                    // Bonk wall — quick red flash + haptic
+                // Attempting to leave the maze bounds = touching the
+                // outer firewall. Instant fail.
+                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) {
                     AudioMgr.playSound && AudioMgr.playSound('hit');
+                    cleanup(false);
+                    return;
+                }
+                if (grid[nr][nc] === 0) {
+                    // Touched a wall — instant lockout (no bonk-and-stay).
+                    AudioMgr.playSound && AudioMgr.playSound('hit');
+                    cleanup(false);
                     return;
                 }
                 player.r = nr; player.c = nc;
@@ -7246,6 +7253,17 @@ updateHexBreach(dt) {
 
 async startCombat(type) {
         // --- CLEANUP PHASE ---
+        // Combat-generation counter — incremented every time a new combat
+        // starts. Any async work still in flight from the previous combat
+        // (endTurn awaiting sleep, minion attack callback, etc.) can check
+        // this counter against the one it captured and bail cleanly when
+        // it no longer matches. Prevents "enemy takes a turn immediately
+        // on combat start" when the prior combat ended mid-attack.
+        this._combatGen = (this._combatGen || 0) + 1;
+        // Reset the endTurn single-flight gate — if the previous combat
+        // ended through an early-return path (enemy died mid-phase via
+        // reflect/thorns/bomb), the flag might still be stuck `true`.
+        this._endTurnRunning = false;
         this.enemy = null;
         this.effects = [];
         ParticleSys.clear();
@@ -7520,7 +7538,15 @@ async startCombat(type) {
             bait.maxHp = scaledHp; bait.currentHp = scaledHp; bait.dmg = 0;
             bait.isDecoy = true;
             this.player.minions.push(bait);
-            ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `BAIT DRONE (${scaledHp} HP)`, COLORS.MECH_LIGHT);
+            // Defer the label so updateMinionPositions has placed the drone
+            // at its slot; otherwise the text spawns at (0,0). Use cyan
+            // (shield color) so players read it as a defensive summon,
+            // not a red damage pop.
+            requestAnimationFrame(() => {
+                if (bait && bait.currentHp > 0) {
+                    ParticleSys.createFloatingText(bait.x, bait.y - 60, `BAIT DRONE`, COLORS.SHIELD);
+                }
+            });
         }
         // Relic: NANO FORGE — spawn free class-minion at +50% stats.
         // Name keeps the class minionName so the renderer (which dispatches
@@ -9501,6 +9527,13 @@ async startTurn() {
                                     ParticleSys.createFloatingText(m.x, m.y - 50, `+${healAmt} HP`, '#00ff66');
                                 }
                             });
+                        }
+                        // Grove Tap also progresses the sacred grove — broadcasts
+                        // as a summon-like event so the youngest plot blooms to
+                        // stage 2. Keeps the mana die relevant into mid-late
+                        // runs when the player's minions already cap at 3.
+                        if (ClassAbility && typeof ClassAbility.onEvent === 'function') {
+                            ClassAbility.onEvent('minion_summoned', { minion: null });
                         }
                     }
                 }
@@ -11741,6 +11774,12 @@ drawEffects() {
       if (this._combatStartedAt && (Date.now() - this._combatStartedAt) < 500) return;
       if (this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT) return;
       this._endTurnRunning = true;
+      // Capture the generation at entry. If a new combat starts while this
+      // endTurn is still suspended on an await (sleep / VFX callback), the
+      // loops below will check `_combatGen !== gen` and bail — keeps the
+      // prior combat's leftover intents from firing into the new combat.
+      const gen = this._combatGen || 0;
+      const stillLive = () => (this._combatGen === gen);
       try {
         ClassAbility.onTurnEnd();
         // Relic: TEMPO LOOP — count unused dice for next-turn shield bonus.
@@ -11857,6 +11896,7 @@ drawEffects() {
 
         // --- ENEMY INTENT PHASE ---
         for (const intent of this.enemy.nextIntents) {
+            if (!stillLive()) return; // new combat started — abandon this phase
             if (this.enemy.currentHp <= 0) break;
             // Stop resolving further intents once the player has died (e.g.
             // a reflected-damage kill, Phage Pod detonation, or prior intent's
@@ -12245,6 +12285,7 @@ drawEffects() {
 
         // --- MINION ATTACKS ---
         for (const min of this._enemyMinions()) {
+            if (!stillLive()) return; // new combat started — abandon this phase
             // Bail if the player died on a prior minion's attack callback (or
             // via thorns/reflect). Prevents cascading gameOver calls and the
             // minion queue chewing on a corpse.
@@ -12315,6 +12356,7 @@ drawEffects() {
         }
 
         // Combat may have ended inside a minion callback (kill via lifesteal/brutalize/etc).
+        if (!stillLive()) return; // new combat — don't spill into it
         if (!this.enemy || this.enemy.currentHp <= 0) return;
         // Or the player died on a reflect / thorns / minion-attack path — don't
         // start another turn on a dead player.
@@ -12324,9 +12366,11 @@ drawEffects() {
         if (this.enemy) this.enemy.minions = this.enemy.minions.filter(m => m.currentHp > 0);
 
         while (this.effects.some(e => e.type === 'micro_laser' && !e.parried)) {
+            if (!stillLive()) return;
             await this.sleep(100);
         }
 
+        if (!stillLive()) return;
         this.updateHUD();
         this.startTurn();
       } catch (err) {
@@ -13260,35 +13304,41 @@ drawEffects() {
     updateHUD() {},
 
     updateMinionPositions() {
-        const spacing = 280; // FIX: Increased spacing (was 180) to move minions further out
-        if (this.player) {
-            const pm = this.player.minions;
-            const px = this.player.x, py = this.player.y;
-            if (pm[0]) { pm[0].x = px - spacing;  pm[0].y = py; }
-            if (pm[1]) { pm[1].x = px + spacing;  pm[1].y = py; }
-            if (pm[2]) { pm[2].x = px;            pm[2].y = py + spacing; }
-        }
-        if (this.enemy) {
-            // Slots 0/1 flank the enemy; extras (Multiplier clone, HIVE drones
-            // phase 2, etc.) stack in a second row behind so they don't render
-            // at stale spawn coordinates off-canvas.
-            const ROW2_DX = Math.floor(spacing * 0.55);
-            const ROW2_DY = -160;
-            const em = this.enemy.minions;
-            const ex = this.enemy.x, ey = this.enemy.y;
-            for (let i = 0, n = em.length; i < n; i++) {
-                const m = em[i];
+        const spacing = 280;
+        const ROW2_DX = Math.floor(spacing * 0.55);
+        const ROW2_DY = 160; // magnitude; sign set per-side so layouts mirror
+        // Shared positioner — layouts 0/1 flank the owner, extras stack on
+        // a second row offset toward the owner's side of the battlefield.
+        //   enemy side: second row is ABOVE the first (dy = -160, behind)
+        //   player side: second row is BELOW (dy = +160, front)
+        // Caps at 5 positions; any extras beyond that collide onto slot 4.
+        const placeMinions = (list, ownerX, ownerY, dyDir) => {
+            if (!list || !list.length) return;
+            for (let i = 0, n = list.length; i < n; i++) {
+                const m = list[i];
                 if (!m) continue;
-                if (i === 0)      { m.x = ex - spacing; m.y = ey; }
-                else if (i === 1) { m.x = ex + spacing; m.y = ey; }
+                if (i === 0)      { m.x = ownerX - spacing;       m.y = ownerY; }
+                else if (i === 1) { m.x = ownerX + spacing;       m.y = ownerY; }
                 else {
                     const j = i - 2;
                     const side = (j % 2 === 0) ? -1 : 1;
                     const tier = (j >>> 1);
-                    m.x = ex + side * ROW2_DX;
-                    m.y = ey + ROW2_DY - tier * 140;
+                    m.x = ownerX + side * ROW2_DX;
+                    m.y = ownerY + dyDir * (ROW2_DY + tier * 140);
                 }
             }
+        };
+        if (this.player) {
+            // Player-side row 2 drops BELOW the player (dy positive) so
+            // the 4th and 5th minions sit in the bottom half of the
+            // battlefield instead of getting stuck at (0, 0) or
+            // overlapping the dice tray.
+            placeMinions(this.player.minions, this.player.x, this.player.y, 1);
+        }
+        if (this.enemy) {
+            // Enemy-side row 2 sits behind the enemy (dy negative) so
+            // summoned drones don't clip into the enemy health bar.
+            placeMinions(this.enemy.minions, this.enemy.x, this.enemy.y, -1);
         }
     },
 

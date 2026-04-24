@@ -3573,9 +3573,14 @@ body[data-hand="left"] .control-bar #btn-end-turn {
        cleanest visual fit is slightly above each peak on the sprout vertex. */
     transform: translate(-50%, -50%);
 }
-.ca-summoner .ca-plot[data-idx="0"] { left: 23%; top: 45%; }
-.ca-summoner .ca-plot[data-idx="1"] { left: 60%; top: 55%; }
-.ca-summoner .ca-plot[data-idx="2"] { left: 90%; top: 36%; }
+/* Plot positions are symmetric around the widget centerline so the
+   grove reads as centered, not right-weighted. Previously 23/60/90%
+   which anchored to the asymmetric vine peaks — that made the
+   whole bar look shifted right on-screen. The vine still flows
+   behind them as decoration. */
+.ca-summoner .ca-plot[data-idx="0"] { left: 18%; top: 48%; }
+.ca-summoner .ca-plot[data-idx="1"] { left: 50%; top: 48%; }
+.ca-summoner .ca-plot[data-idx="2"] { left: 82%; top: 48%; }
 
 /* Right-anchored title variant for Summoner (top-left corner is reserved
    for the vine trunk). Reuses the base ca-title styling but mirrors
@@ -4254,12 +4259,16 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 .hack-panel {
     width: 100%;
     max-width: 480px;
-    max-height: 92vh;
-    padding: 18px 18px 14px;
+    /* Panel can grow to full viewport height so the d-pad's down arrow
+       doesn't clip off the bottom on short screens. Overflow-y: auto
+       lets the whole modal scroll if an extreme aspect ratio squeezes
+       every child to its min size. */
+    max-height: 100vh;
+    padding: 14px 18px 14px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    overflow: hidden;
+    gap: 8px;
+    overflow-y: auto;
     border-color: var(--neon-pink) !important;
     background:
         radial-gradient(circle at 50% 0%, rgba(255, 0, 85, 0.12) 0%, transparent 60%),
@@ -4306,7 +4315,9 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     width: 100%;
     height: auto;
     aspect-ratio: 1 / 1;
-    max-height: 50vh;
+    /* Dropped from 50vh → 42vh so the d-pad below always has room on
+       short-height screens (iPhone SE, address-bar visible, etc.). */
+    max-height: 42vh;
     background: rgba(0, 0, 0, 0.55);
     border: 1px solid rgba(255, 0, 85, 0.35);
     border-radius: 8px;
