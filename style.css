@@ -3341,8 +3341,10 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     80%  { opacity: 0.5; }
     100% { bottom: 30px; opacity: 0; transform: scale(1.3); }
 }
-/* Label sits INSIDE the bar, yellow with a black outline so it's legible
-   over any gradient position. */
+/* Label sits INSIDE the bar. The zone-cool default is muted so the
+   label reads as "not actionable yet" — when the heat crosses into
+   yellow / red the label brightens and pulses to advertise that VENT
+   is now an actual button you can press. */
 .ca-annihilator .ca-heat-label {
     position: relative;
     z-index: 3;
@@ -3350,7 +3352,7 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     font-size: 0.95rem;
     font-weight: 900;
     letter-spacing: 0.22em;
-    color: #ffdd33;
+    color: rgba(255, 221, 51, 0.55);
     text-transform: uppercase;
     text-shadow:
         -1.5px -1.5px 0 #000,
@@ -3360,9 +3362,121 @@ body[data-hand="left"] .control-bar #btn-end-turn {
          0 0 6px rgba(0, 0, 0, 0.9);
     line-height: 1;
     pointer-events: none;
+    transition: color 200ms ease, transform 200ms ease, text-shadow 200ms ease;
 }
-.ca-annihilator.zone-yellow { border-color: #ffcc33; box-shadow: 0 0 14px rgba(255, 200, 50, 0.55), inset 0 0 18px rgba(0,0,0,0.5); }
-.ca-annihilator.zone-red    { border-color: #ff2200; box-shadow: 0 0 18px #ff2200, inset 0 0 18px rgba(0,0,0,0.5); animation: ca-pulse-fast 0.7s ease-in-out infinite; }
+/* COOL — label is dim-amber, no glow. Reads as "warming up". */
+.ca-annihilator.zone-cool .ca-heat-label {
+    opacity: 0.5;
+}
+/* YELLOW — label brightens, breathes, gains a soft yellow halo. */
+.ca-annihilator.zone-yellow .ca-heat-label {
+    color: #fff7a0;
+    text-shadow:
+        -1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000,
+        -1.5px  1.5px 0 #000, 1.5px  1.5px 0 #000,
+         0 0 12px rgba(255, 230, 80, 0.95),
+         0 0 20px rgba(255, 200, 0, 0.7);
+    animation: ca-vent-breathe 1.05s ease-in-out infinite;
+}
+/* RED — label is bright crimson and pulses faster + larger. */
+.ca-annihilator.zone-red .ca-heat-label {
+    color: #ffd0c0;
+    text-shadow:
+        -1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000,
+        -1.5px  1.5px 0 #000, 1.5px  1.5px 0 #000,
+         0 0 14px rgba(255, 80, 40, 1),
+         0 0 28px rgba(255, 0, 0, 0.85);
+    animation: ca-vent-flash 0.55s ease-in-out infinite;
+}
+@keyframes ca-vent-breathe {
+    0%, 100% { transform: scale(1);    filter: brightness(1); }
+    50%      { transform: scale(1.08); filter: brightness(1.25); }
+}
+@keyframes ca-vent-flash {
+    0%, 100% { transform: scale(1);    filter: brightness(1.05); }
+    50%      { transform: scale(1.18); filter: brightness(1.5); }
+}
+
+/* Bar border + chassis frame pick up the zone color too — gives the
+   whole reactor a "live circuit" read, not just an outer halo. */
+.ca-annihilator.zone-yellow .ca-heat-bar {
+    border-color: #ffcc33;
+    box-shadow: inset 0 0 8px rgba(255, 200, 50, 0.4),
+                0 0 10px rgba(255, 200, 50, 0.45);
+}
+.ca-annihilator.zone-yellow .ca-reactor-frame {
+    border-color: #ffcc33;
+    box-shadow: inset 0 0 12px rgba(255, 200, 50, 0.18),
+                0 0 14px rgba(255, 200, 50, 0.5);
+}
+.ca-annihilator.zone-red .ca-heat-bar {
+    border-color: #ff4422;
+    box-shadow: inset 0 0 12px rgba(255, 80, 40, 0.55),
+                0 0 14px rgba(255, 40, 20, 0.7);
+    animation: ca-pulse-fast 0.55s ease-in-out infinite;
+}
+.ca-annihilator.zone-red .ca-reactor-frame {
+    border-color: #ff2200;
+    box-shadow: inset 0 0 14px rgba(255, 60, 30, 0.3),
+                0 0 18px rgba(255, 40, 20, 0.85);
+}
+
+/* Outer widget halo retained — same colour family as the bar/frame,
+   gives the eye an additional cue at peripheral vision. */
+.ca-annihilator.zone-yellow {
+    border-color: #ffcc33;
+    box-shadow: 0 0 14px rgba(255, 200, 50, 0.55), inset 0 0 18px rgba(0,0,0,0.5);
+}
+.ca-annihilator.zone-red {
+    border-color: #ff2200;
+    box-shadow: 0 0 22px rgba(255, 40, 20, 0.85), inset 0 0 18px rgba(0,0,0,0.5);
+    animation: ca-pulse-fast 0.55s ease-in-out infinite;
+}
+
+/* Tap affordance — bar lifts/scales on hover when actionable. Cool
+   zone gets a "not allowed" cursor so players don't waste a tap. */
+.ca-annihilator.zone-cool .ca-heat { cursor: not-allowed; }
+.ca-annihilator.zone-yellow .ca-heat,
+.ca-annihilator.zone-red .ca-heat { cursor: pointer; }
+.ca-annihilator.zone-yellow .ca-heat:hover,
+.ca-annihilator.zone-red .ca-heat:hover {
+    transform: translateY(-50%) scale(1.03);
+}
+.ca-annihilator.zone-yellow .ca-heat:active,
+.ca-annihilator.zone-red .ca-heat:active {
+    transform: translateY(-50%) scale(0.97);
+}
+/* Status banner above the bar when vent is actionable — explicit
+   "TAP TO VENT" text so the player can't miss the call to action. */
+.ca-annihilator .ca-heat::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-cyber);
+    font-size: 0.5rem;
+    letter-spacing: 0.28em;
+    font-weight: 900;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 200ms ease;
+    white-space: nowrap;
+}
+.ca-annihilator.zone-yellow .ca-heat::before {
+    content: 'TAP TO VENT ▾';
+    color: #fff7a0;
+    text-shadow: 0 0 8px rgba(255, 230, 80, 0.9);
+    opacity: 0.95;
+    animation: ca-vent-breathe 1.05s ease-in-out infinite;
+}
+.ca-annihilator.zone-red .ca-heat::before {
+    content: '⚠ TAP TO VENT ⚠';
+    color: #ffd0c0;
+    text-shadow: 0 0 10px rgba(255, 60, 30, 1);
+    opacity: 1;
+    animation: ca-vent-flash 0.55s ease-in-out infinite;
+}
 
 /* ============================================================
    SENTINEL — AEGIS PROTOCOL
