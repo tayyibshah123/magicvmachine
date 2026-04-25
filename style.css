@@ -3708,12 +3708,16 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     transform: translate(-50%, -50%);
 }
 /* Plot positions inside the now-wide widget. Sit clear of the corner
-   reroll + end-turn buttons that overlay the widget's edges, while the
-   vines underneath stretch all the way across. Wreath positions in the
-   620-wide viewBox match: 112 / 310 / 508. */
-.ca-summoner .ca-plot[data-idx="0"] { left: 18%; top: 48%; }
+   reroll + end-turn buttons that overlay the widget's edges on every
+   container width down to ~320 cqw — at 18 / 82 % the outer plots
+   slid behind the buttons on narrow phones (z-index 5 reroll/end-turn
+   covered the rightmost ×3 plot). Tightened to 22 / 78 % so the plot
+   right edge sits clear of the end-turn safe area at every supported
+   width, with the vines still stretching across the full strip.
+   Wreath positions in the 620-wide viewBox match: 136 / 310 / 484. */
+.ca-summoner .ca-plot[data-idx="0"] { left: 22%; top: 48%; }
 .ca-summoner .ca-plot[data-idx="1"] { left: 50%; top: 48%; }
-.ca-summoner .ca-plot[data-idx="2"] { left: 82%; top: 48%; }
+.ca-summoner .ca-plot[data-idx="2"] { left: 78%; top: 48%; }
 
 /* Right-anchored title variant for Summoner (top-left corner is reserved
    for the vine trunk). Reuses the base ca-title styling but mirrors
