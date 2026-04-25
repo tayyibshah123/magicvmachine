@@ -770,38 +770,41 @@ export const ClassAbility = {
                         <!-- Cradle wreaths around each plot position. Three open
                              rings curling toward the plot centre — they intersect
                              with both braids so the plots feel "held" by the vines.
-                             Wreath centres at viewBox x = 37 / 310 / 583 to match
-                             the plot DOM positions of 6% / 50% / 94%. -->
-                        <path class="ca-vine-cradle" d="M 12 42 a 30 28 0 1 1 50 0 a 30 28 0 1 1 -50 0"
+                             Wreath centres at viewBox x = 112 / 310 / 508 to match
+                             the plot DOM positions of 18% / 50% / 82%. -->
+                        <path class="ca-vine-cradle" d="M 87 42 a 30 28 0 1 1 50 0 a 30 28 0 1 1 -50 0"
                               fill="none" stroke-width="2"/>
                         <path class="ca-vine-cradle" d="M 285 42 a 30 28 0 1 1 50 0 a 30 28 0 1 1 -50 0"
                               fill="none" stroke-width="2"/>
-                        <path class="ca-vine-cradle" d="M 558 42 a 30 28 0 1 1 50 0 a 30 28 0 1 1 -50 0"
+                        <path class="ca-vine-cradle" d="M 483 42 a 30 28 0 1 1 50 0 a 30 28 0 1 1 -50 0"
                               fill="none" stroke-width="2"/>
 
-                        <!-- Curling tendrils branching off the cradles, drawn so
-                             corner wreaths only reach inward toward the centre. -->
-                        <path class="ca-leaf-shoot" d="M 72 50 q 14 14 -2 30" stroke-width="1.4"/>
+                        <!-- Curling tendrils branching off the cradles -->
+                        <path class="ca-leaf-shoot" d="M 76 36 q -10 -16 6 -28" stroke-width="1.4"/>
+                        <path class="ca-leaf-shoot" d="M 146 50 q 12 14 -2 30" stroke-width="1.4"/>
                         <path class="ca-leaf-shoot" d="M 270 36 q -8 -18 8 -30" stroke-width="1.4"/>
                         <path class="ca-leaf-shoot" d="M 350 50 q 10 18 -4 30" stroke-width="1.4"/>
-                        <path class="ca-leaf-shoot" d="M 548 36 q -10 -16 6 -28" stroke-width="1.4"/>
+                        <path class="ca-leaf-shoot" d="M 472 36 q -10 -16 6 -28" stroke-width="1.4"/>
+                        <path class="ca-leaf-shoot" d="M 544 50 q 14 14 0 30" stroke-width="1.4"/>
 
                         <!-- Small leaf cluster above each plot to imply canopy -->
-                        <ellipse class="ca-leaf" cx="74" cy="80" rx="6" ry="2.5" transform="rotate(30 74 80)"/>
+                        <ellipse class="ca-leaf" cx="78" cy="10" rx="6" ry="2.5" transform="rotate(-30 78 10)"/>
+                        <ellipse class="ca-leaf" cx="148" cy="80" rx="6" ry="2.5" transform="rotate(30 148 80)"/>
                         <ellipse class="ca-leaf" cx="278" cy="8" rx="6" ry="2.5" transform="rotate(-25 278 8)"/>
                         <ellipse class="ca-leaf" cx="348" cy="82" rx="6" ry="2.5" transform="rotate(25 348 82)"/>
-                        <ellipse class="ca-leaf" cx="554" cy="10" rx="6" ry="2.5" transform="rotate(-30 554 10)"/>
+                        <ellipse class="ca-leaf" cx="478" cy="10" rx="6" ry="2.5" transform="rotate(-30 478 10)"/>
+                        <ellipse class="ca-leaf" cx="546" cy="82" rx="6" ry="2.5" transform="rotate(28 546 82)"/>
                         <!-- Smaller secondary leaves for density -->
-                        <ellipse class="ca-leaf" cx="120" cy="22" rx="4" ry="1.8" transform="rotate(-40 120 22)"/>
+                        <ellipse class="ca-leaf" cx="40" cy="22" rx="4" ry="1.8" transform="rotate(-40 40 22)"/>
                         <ellipse class="ca-leaf" cx="216" cy="22" rx="4" ry="1.8" transform="rotate(35 216 22)"/>
                         <ellipse class="ca-leaf" cx="404" cy="20" rx="4" ry="1.8" transform="rotate(-30 404 20)"/>
-                        <ellipse class="ca-leaf" cx="500" cy="22" rx="4" ry="1.8" transform="rotate(40 500 22)"/>
+                        <ellipse class="ca-leaf" cx="580" cy="22" rx="4" ry="1.8" transform="rotate(40 580 22)"/>
 
                         <!-- Buds at the wreath crowns. Each bud holds the leaf body
                              plus four petals that stay invisible until the grove
                              reaches full bloom (data-growth="3"), at which point
                              they unfurl with a gold glow. -->
-                        <g class="ca-bud" transform="translate(37 4) rotate(0)">
+                        <g class="ca-bud" transform="translate(112 4) rotate(0)">
                             <ellipse class="ca-bud-petal" cx="0" cy="-7" rx="2.6" ry="4.6"/>
                             <ellipse class="ca-bud-petal" cx="7" cy="0"  rx="4.6" ry="2.6"/>
                             <ellipse class="ca-bud-petal" cx="0" cy="7"  rx="2.6" ry="4.6"/>
@@ -817,7 +820,7 @@ export const ClassAbility = {
                             <ellipse class="ca-leaf" cx="0" cy="0" rx="5" ry="2.5"/>
                             <circle class="ca-bud-core" cx="0" cy="0" r="1.6"/>
                         </g>
-                        <g class="ca-bud" transform="translate(583 4) rotate(0)">
+                        <g class="ca-bud" transform="translate(508 4) rotate(0)">
                             <ellipse class="ca-bud-petal" cx="0" cy="-7" rx="2.6" ry="4.6"/>
                             <ellipse class="ca-bud-petal" cx="7" cy="0"  rx="4.6" ry="2.6"/>
                             <ellipse class="ca-bud-petal" cx="0" cy="7"  rx="2.6" ry="4.6"/>

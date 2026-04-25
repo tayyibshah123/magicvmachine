@@ -2380,7 +2380,10 @@ body.reduced-motion .intel-crawl-scanlines {
     bottom: auto;
     width: 70px;
     height: 70px;
-    z-index: 2;
+    /* Above the class-ability widget (z-index 2) so the widget's
+       translucent edge can pass behind the corner buttons without
+       intercepting clicks on them. */
+    z-index: 5;
 }
 .control-bar #btn-end-turn {
     position: absolute;
@@ -2397,7 +2400,9 @@ body.reduced-motion .intel-crawl-scanlines {
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 2;
+    /* Above the class-ability widget (z-index 2) so the widget's edge
+       can pass behind the button without blocking taps on it. */
+    z-index: 5;
     letter-spacing: 0;
 }
 
@@ -2521,13 +2526,11 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     left: 50%;
     transform: translateX(-50%);
     bottom: 12px;
-    /* Reserve only ~78px each side for the reroll + end-turn corner
-       buttons (70px button + 8px edge margin) so the widget actually
-       reaches the edges of the playable strip. The translucent edge
-       still doesn't intercept clicks because the corner buttons have
-       z-index priority and the widget bg fades to transparent at the
-       outer ring. */
-    width: clamp(240px, calc(100cqw - 156px), 700px);
+    /* Widget spans almost the full lower strip. The corner reroll +
+       end-turn buttons sit ON TOP of the translucent widget edge
+       (their z-index is higher), so they stay clickable even though
+       the widget bg passes underneath. */
+    width: clamp(320px, 94cqw, 620px);
     height: 88px;
     z-index: 2;
     pointer-events: auto;
@@ -3704,14 +3707,13 @@ body[data-hand="left"] .control-bar #btn-end-turn {
        cleanest visual fit is slightly above each peak on the sprout vertex. */
     transform: translate(-50%, -50%);
 }
-/* Plots fan out to the edges of the bar so the grove fills the entire
-   lower strip — matches the reach of the other class widgets and gives
-   players an even reading line from corner button to corner button.
-   The matching wreath positions in the SVG (37 / 310 / 583 of the
-   620-wide viewBox) sit directly under each plot. */
-.ca-summoner .ca-plot[data-idx="0"] { left: 6%;  top: 48%; }
+/* Plot positions inside the now-wide widget. Sit clear of the corner
+   reroll + end-turn buttons that overlay the widget's edges, while the
+   vines underneath stretch all the way across. Wreath positions in the
+   620-wide viewBox match: 112 / 310 / 508. */
+.ca-summoner .ca-plot[data-idx="0"] { left: 18%; top: 48%; }
 .ca-summoner .ca-plot[data-idx="1"] { left: 50%; top: 48%; }
-.ca-summoner .ca-plot[data-idx="2"] { left: 94%; top: 48%; }
+.ca-summoner .ca-plot[data-idx="2"] { left: 82%; top: 48%; }
 
 /* Right-anchored title variant for Summoner (top-left corner is reserved
    for the vine trunk). Reuses the base ca-title styling but mirrors
@@ -3819,11 +3821,10 @@ body[data-hand="left"] .control-bar #btn-end-turn {
    so this applies on every device. Nudges the asymmetric layouts tighter so
    every element fits at 300px bar width without clipping off-screen. */
 /* Class-ability widget sizing — applied universally so the 540px
-   game-container looks identical on mobile and PC. Width formula reserves
-   ~78px each side for the corner reroll + end-turn buttons so the bar
-   spans almost the full lower strip. */
+   game-container looks identical on mobile and PC. Widget spans the
+   full lower strip; corner buttons sit on top via z-index. */
 .class-ability {
-    width: clamp(240px, calc(100cqw - 156px), 600px);
+    width: clamp(300px, 94cqw, 520px);
     height: 80px;
     bottom: 10px;
 }
