@@ -3596,6 +3596,23 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     fill: none;
     stroke-linecap: round;
 }
+/* Cradle wreaths — open rings encircling each plot. Slightly darker
+   green so they read as "older woody growth" the plot button rests on,
+   while the bright braids pass over them in front. */
+.ca-summoner .ca-vine-cradle {
+    stroke: rgba(60, 200, 110, 0.7);
+    fill: none;
+    stroke-linecap: round;
+    stroke-dasharray: 3 4;
+    filter: drop-shadow(0 0 2px rgba(0, 255, 153, 0.45));
+    opacity: 0.85;
+}
+/* Mossy ground patches at the bottom of the canvas — fills the lower
+   band so the widget no longer reads as an empty box with a thin line. */
+.ca-summoner .ca-vine-moss {
+    fill: url(#vine-mossy);
+    opacity: 0.55;
+}
 .ca-summoner .ca-leaf-shoot {
     stroke: rgba(0, 255, 153, 0.7);
     fill: none;

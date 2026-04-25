@@ -711,38 +711,98 @@ export const ClassAbility = {
                         <span class="ca-plate ca-plate-right"  data-idx="2"></span>
                     </button>`;
             case 'summoner':
-                // SACRED GROVE — a living vine snakes across the full bar
-                // width. Three plot buttons sit at the peaks/bends of the
-                // vine, so the grove reads as "a single plant with three
-                // flowering points" rather than three separate dots.
-                // Title is tucked in the top-right so the trunk can emerge
-                // from the bottom-left without collision.
+                // SACRED GROVE — a thicket of intermingled vines fills the
+                // entire widget. Two main vines weave a horizontal braid;
+                // each of the three plot positions (18 / 50 / 82 % across)
+                // is wrapped in its own circular vine wreath. Side
+                // tendrils, leaves, moss tufts, and floating motes fill
+                // the upper / lower bands so the canvas no longer reads
+                // as "thin string drawn across a black box."
                 return `
                     <div class="ca-title ca-title-right">SACRED GROVE</div>
                     <svg class="ca-vine" viewBox="0 0 620 88" preserveAspectRatio="none" aria-hidden="true">
                         <defs>
                             <linearGradient id="vine-glow" x1="0" y1="0" x2="1" y2="0">
-                                <stop offset="0" stop-color="#115c2a"/>
+                                <stop offset="0" stop-color="#0d4a22"/>
                                 <stop offset="0.5" stop-color="#00ff99"/>
-                                <stop offset="1" stop-color="#115c2a"/>
+                                <stop offset="1" stop-color="#0d4a22"/>
                             </linearGradient>
+                            <radialGradient id="vine-mossy" cx="0.5" cy="0.5" r="0.5">
+                                <stop offset="0" stop-color="rgba(0, 255, 153, 0.45)"/>
+                                <stop offset="1" stop-color="rgba(0, 80, 30, 0)"/>
+                            </radialGradient>
                         </defs>
-                        <!-- Trunk emerging from bottom-left, thickens as it rises -->
-                        <path class="ca-vine-trunk" d="M 30 92 Q 22 68 36 44" stroke-width="5"/>
-                        <!-- Main winding vine, uses gentle quadratic beziers between anchors -->
-                        <path class="ca-vine-main" d="M 36 44 Q 80 22 140 42 Q 190 60 250 44 Q 310 28 370 46 Q 430 60 490 38 Q 560 20 608 32" stroke-width="2.6" fill="none"/>
-                        <!-- Brighter inner filament overlay for glowing core line -->
-                        <path class="ca-vine-core" d="M 36 44 Q 80 22 140 42 Q 190 60 250 44 Q 310 28 370 46 Q 430 60 490 38 Q 560 20 608 32" stroke-width="1.1" fill="none"/>
-                        <!-- Leaf sprouts along the vine -->
-                        <path class="ca-leaf-shoot" d="M 90 32 Q 82 14 100 6" stroke-width="1.4"/>
-                        <path class="ca-leaf-shoot" d="M 215 54 Q 230 74 240 80" stroke-width="1.4"/>
-                        <path class="ca-leaf-shoot" d="M 340 36 Q 332 18 352 12" stroke-width="1.4"/>
-                        <path class="ca-leaf-shoot" d="M 460 50 Q 478 70 488 78" stroke-width="1.4"/>
-                        <!-- Buds at the end of each leaf shoot. Each bud holds the leaf
-                             body plus four petals that stay invisible until the grove
-                             reaches full bloom (data-growth="3"), at which point they
-                             unfurl with a gold glow. -->
-                        <g class="ca-bud" transform="translate(100 6) rotate(-25)">
+
+                        <!-- Mossy ground patches sweeping the bottom edge -->
+                        <ellipse class="ca-vine-moss" cx="80"  cy="86" rx="58" ry="6"/>
+                        <ellipse class="ca-vine-moss" cx="310" cy="86" rx="80" ry="7"/>
+                        <ellipse class="ca-vine-moss" cx="540" cy="86" rx="58" ry="6"/>
+
+                        <!-- Trunk rising from the bottom-left, thickens as it climbs -->
+                        <path class="ca-vine-trunk" d="M 14 92 C 8 70 30 60 24 40 Q 22 22 42 16" stroke-width="5"/>
+                        <!-- Mirror trunk on the right for symmetry, slightly thinner -->
+                        <path class="ca-vine-trunk" d="M 606 92 C 614 70 590 60 596 40 Q 598 22 578 16" stroke-width="4"/>
+
+                        <!-- Upper braid — gentle S-curve through the top half -->
+                        <path class="ca-vine-main" d="M 24 30
+                              C 70 8, 130 12, 170 28
+                              S 250 56, 310 30
+                              S 430 6, 490 26
+                              S 580 56, 596 30" stroke-width="2.8" fill="none"/>
+                        <path class="ca-vine-core" d="M 24 30
+                              C 70 8, 130 12, 170 28
+                              S 250 56, 310 30
+                              S 430 6, 490 26
+                              S 580 56, 596 30" stroke-width="1.2" fill="none"/>
+
+                        <!-- Lower braid — wraps under the plots and rises between -->
+                        <path class="ca-vine-main" d="M 24 58
+                              C 70 80, 130 76, 170 60
+                              S 250 32, 310 58
+                              S 430 82, 490 62
+                              S 580 32, 596 58" stroke-width="2.4" fill="none" opacity="0.85"/>
+                        <path class="ca-vine-core" d="M 24 58
+                              C 70 80, 130 76, 170 60
+                              S 250 32, 310 58
+                              S 430 82, 490 62
+                              S 580 32, 596 58" stroke-width="1" fill="none" opacity="0.85"/>
+
+                        <!-- Cradle wreaths around each plot position. Three open
+                             rings curling toward the plot centre — they intersect
+                             with both braids so the plots feel "held" by the vines. -->
+                        <path class="ca-vine-cradle" d="M 86 42 a 30 28 0 1 1 50 0 a 30 28 0 1 1 -50 0"
+                              fill="none" stroke-width="2"/>
+                        <path class="ca-vine-cradle" d="M 285 42 a 30 28 0 1 1 50 0 a 30 28 0 1 1 -50 0"
+                              fill="none" stroke-width="2"/>
+                        <path class="ca-vine-cradle" d="M 484 42 a 30 28 0 1 1 50 0 a 30 28 0 1 1 -50 0"
+                              fill="none" stroke-width="2"/>
+
+                        <!-- Curling tendrils branching off the cradles -->
+                        <path class="ca-leaf-shoot" d="M 76 36 q -10 -16 6 -28" stroke-width="1.4"/>
+                        <path class="ca-leaf-shoot" d="M 146 50 q 12 14 -2 30" stroke-width="1.4"/>
+                        <path class="ca-leaf-shoot" d="M 270 36 q -8 -18 8 -30" stroke-width="1.4"/>
+                        <path class="ca-leaf-shoot" d="M 350 50 q 10 18 -4 30" stroke-width="1.4"/>
+                        <path class="ca-leaf-shoot" d="M 472 36 q -10 -16 6 -28" stroke-width="1.4"/>
+                        <path class="ca-leaf-shoot" d="M 544 50 q 14 14 0 30" stroke-width="1.4"/>
+
+                        <!-- Small leaf cluster above each plot to imply canopy -->
+                        <ellipse class="ca-leaf" cx="78" cy="10" rx="6" ry="2.5" transform="rotate(-30 78 10)"/>
+                        <ellipse class="ca-leaf" cx="148" cy="80" rx="6" ry="2.5" transform="rotate(30 148 80)"/>
+                        <ellipse class="ca-leaf" cx="278" cy="8" rx="6" ry="2.5" transform="rotate(-25 278 8)"/>
+                        <ellipse class="ca-leaf" cx="348" cy="82" rx="6" ry="2.5" transform="rotate(25 348 82)"/>
+                        <ellipse class="ca-leaf" cx="478" cy="10" rx="6" ry="2.5" transform="rotate(-30 478 10)"/>
+                        <ellipse class="ca-leaf" cx="546" cy="82" rx="6" ry="2.5" transform="rotate(28 546 82)"/>
+                        <!-- Smaller secondary leaves for density -->
+                        <ellipse class="ca-leaf" cx="40" cy="22" rx="4" ry="1.8" transform="rotate(-40 40 22)"/>
+                        <ellipse class="ca-leaf" cx="216" cy="22" rx="4" ry="1.8" transform="rotate(35 216 22)"/>
+                        <ellipse class="ca-leaf" cx="404" cy="20" rx="4" ry="1.8" transform="rotate(-30 404 20)"/>
+                        <ellipse class="ca-leaf" cx="580" cy="22" rx="4" ry="1.8" transform="rotate(40 580 22)"/>
+
+                        <!-- Buds at the wreath crowns. Each bud holds the leaf body
+                             plus four petals that stay invisible until the grove
+                             reaches full bloom (data-growth="3"), at which point
+                             they unfurl with a gold glow. -->
+                        <g class="ca-bud" transform="translate(111 4) rotate(0)">
                             <ellipse class="ca-bud-petal" cx="0" cy="-7" rx="2.6" ry="4.6"/>
                             <ellipse class="ca-bud-petal" cx="7" cy="0"  rx="4.6" ry="2.6"/>
                             <ellipse class="ca-bud-petal" cx="0" cy="7"  rx="2.6" ry="4.6"/>
@@ -750,7 +810,7 @@ export const ClassAbility = {
                             <ellipse class="ca-leaf" cx="0" cy="0" rx="5" ry="2.5"/>
                             <circle class="ca-bud-core" cx="0" cy="0" r="1.6"/>
                         </g>
-                        <g class="ca-bud" transform="translate(240 80) rotate(25)">
+                        <g class="ca-bud" transform="translate(310 4) rotate(0)">
                             <ellipse class="ca-bud-petal" cx="0" cy="-7" rx="2.6" ry="4.6"/>
                             <ellipse class="ca-bud-petal" cx="7" cy="0"  rx="4.6" ry="2.6"/>
                             <ellipse class="ca-bud-petal" cx="0" cy="7"  rx="2.6" ry="4.6"/>
@@ -758,7 +818,7 @@ export const ClassAbility = {
                             <ellipse class="ca-leaf" cx="0" cy="0" rx="5" ry="2.5"/>
                             <circle class="ca-bud-core" cx="0" cy="0" r="1.6"/>
                         </g>
-                        <g class="ca-bud" transform="translate(352 12) rotate(-25)">
+                        <g class="ca-bud" transform="translate(508 4) rotate(0)">
                             <ellipse class="ca-bud-petal" cx="0" cy="-7" rx="2.6" ry="4.6"/>
                             <ellipse class="ca-bud-petal" cx="7" cy="0"  rx="4.6" ry="2.6"/>
                             <ellipse class="ca-bud-petal" cx="0" cy="7"  rx="2.6" ry="4.6"/>
@@ -766,19 +826,14 @@ export const ClassAbility = {
                             <ellipse class="ca-leaf" cx="0" cy="0" rx="5" ry="2.5"/>
                             <circle class="ca-bud-core" cx="0" cy="0" r="1.6"/>
                         </g>
-                        <g class="ca-bud" transform="translate(488 78) rotate(25)">
-                            <ellipse class="ca-bud-petal" cx="0" cy="-7" rx="2.6" ry="4.6"/>
-                            <ellipse class="ca-bud-petal" cx="7" cy="0"  rx="4.6" ry="2.6"/>
-                            <ellipse class="ca-bud-petal" cx="0" cy="7"  rx="2.6" ry="4.6"/>
-                            <ellipse class="ca-bud-petal" cx="-7" cy="0" rx="4.6" ry="2.6"/>
-                            <ellipse class="ca-leaf" cx="0" cy="0" rx="5" ry="2.5"/>
-                            <circle class="ca-bud-core" cx="0" cy="0" r="1.6"/>
-                        </g>
+
                         <!-- Ambient firefly motes scattered across the canopy -->
-                        <circle class="ca-vine-mote" cx="120" cy="20" r="1.3"/>
-                        <circle class="ca-vine-mote" cx="280" cy="72" r="1"/>
-                        <circle class="ca-vine-mote" cx="410" cy="18" r="1.3"/>
-                        <circle class="ca-vine-mote" cx="520" cy="60" r="1"/>
+                        <circle class="ca-vine-mote" cx="60"  cy="14" r="1.3"/>
+                        <circle class="ca-vine-mote" cx="200" cy="74" r="1"/>
+                        <circle class="ca-vine-mote" cx="240" cy="14" r="1.2"/>
+                        <circle class="ca-vine-mote" cx="380" cy="74" r="1"/>
+                        <circle class="ca-vine-mote" cx="430" cy="14" r="1.3"/>
+                        <circle class="ca-vine-mote" cx="560" cy="74" r="1.1"/>
                     </svg>
                     <div class="ca-plots">
                         <button class="ca-plot" data-action="plot-0" data-idx="0" title="Bloom to free-summon a Spirit"></button>
