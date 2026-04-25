@@ -2521,13 +2521,13 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     left: 50%;
     transform: translateX(-50%);
     bottom: 12px;
-    /* Reserve ~86px each side for the reroll + end-turn corner buttons
-       (70px button + 8px edge margin + 8px breathing) so the widget's
-       translucent edge never floats over them. Fixed earlier: players
-       saw the reroll arrow bleeding through the BLOOD widget on narrow
-       viewports and the click landing on the widget instead of the
-       button. */
-    width: clamp(240px, calc(100cqw - 172px), 620px);
+    /* Reserve only ~78px each side for the reroll + end-turn corner
+       buttons (70px button + 8px edge margin) so the widget actually
+       reaches the edges of the playable strip. The translucent edge
+       still doesn't intercept clicks because the corner buttons have
+       z-index priority and the widget bg fades to transparent at the
+       outer ring. */
+    width: clamp(240px, calc(100cqw - 156px), 700px);
     height: 88px;
     z-index: 2;
     pointer-events: auto;
@@ -3704,14 +3704,14 @@ body[data-hand="left"] .control-bar #btn-end-turn {
        cleanest visual fit is slightly above each peak on the sprout vertex. */
     transform: translate(-50%, -50%);
 }
-/* Plot positions are symmetric around the widget centerline so the
-   grove reads as centered, not right-weighted. Previously 23/60/90%
-   which anchored to the asymmetric vine peaks — that made the
-   whole bar look shifted right on-screen. The vine still flows
-   behind them as decoration. */
-.ca-summoner .ca-plot[data-idx="0"] { left: 18%; top: 48%; }
+/* Plots fan out to the edges of the bar so the grove fills the entire
+   lower strip — matches the reach of the other class widgets and gives
+   players an even reading line from corner button to corner button.
+   The matching wreath positions in the SVG (37 / 310 / 583 of the
+   620-wide viewBox) sit directly under each plot. */
+.ca-summoner .ca-plot[data-idx="0"] { left: 6%;  top: 48%; }
 .ca-summoner .ca-plot[data-idx="1"] { left: 50%; top: 48%; }
-.ca-summoner .ca-plot[data-idx="2"] { left: 82%; top: 48%; }
+.ca-summoner .ca-plot[data-idx="2"] { left: 94%; top: 48%; }
 
 /* Right-anchored title variant for Summoner (top-left corner is reserved
    for the vine trunk). Reuses the base ca-title styling but mirrors
@@ -3820,11 +3820,10 @@ body[data-hand="left"] .control-bar #btn-end-turn {
    every element fits at 300px bar width without clipping off-screen. */
 /* Class-ability widget sizing — applied universally so the 540px
    game-container looks identical on mobile and PC. Width formula reserves
-   ~86px each side for the corner reroll + end-turn buttons so the
-   widget's translucent edge never floats over them (previously the
-   reroll arrow bled through the BLOOD widget on narrow viewports). */
+   ~78px each side for the corner reroll + end-turn buttons so the bar
+   spans almost the full lower strip. */
 .class-ability {
-    width: clamp(240px, calc(100cqw - 172px), 520px);
+    width: clamp(240px, calc(100cqw - 156px), 600px);
     height: 80px;
     bottom: 10px;
 }
