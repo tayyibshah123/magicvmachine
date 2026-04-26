@@ -3744,8 +3744,26 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     color: #8d6a3a;                      /* seed-stage default: warm earth */
     display: inline-flex; align-items: center; justify-content: center;
     padding: 2px;
-    overflow: hidden;
+    /* Allow the wreath ring (::before, drawn outside the button) to be
+       visible — the original `overflow: hidden` clipped it. */
+    overflow: visible;
     transition: background 200ms, border-color 200ms, box-shadow 220ms, color 200ms, transform 180ms;
+}
+/* Dashed vine wreath drawn as an oval ring around each plot — replaces
+   the SVG cradle paths so the wreath always sits exactly where the
+   plot does, regardless of widget width or SVG preserveAspectRatio. */
+.ca-summoner .ca-plot::before {
+    content: '';
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 64px; height: 56px;
+    transform: translate(-50%, -50%);
+    border: 2px dashed rgba(60, 200, 110, 0.7);
+    border-radius: 50%;
+    pointer-events: none;
+    filter: drop-shadow(0 0 2px rgba(0, 255, 153, 0.45));
+    opacity: 0.85;
+    z-index: -1;
 }
 .ca-summoner .ca-plot .game-icon {
     width: 84%; height: 84%;

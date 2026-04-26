@@ -769,17 +769,14 @@ export const ClassAbility = {
                               S 430 82, 490 62
                               S 580 32, 596 58" stroke-width="1" fill="none" opacity="0.85"/>
 
-                        <!-- Cradle wreaths around each plot position. Three open
-                             rings curling toward the plot centre — they intersect
-                             with both braids so the plots feel "held" by the vines.
-                             Wreath centres at viewBox x = 136 / 310 / 484 to match
-                             the plot DOM positions of 22% / 50% / 78%. -->
-                        <path class="ca-vine-cradle" d="M 111 42 a 30 28 0 1 1 50 0 a 30 28 0 1 1 -50 0"
-                              fill="none" stroke-width="2"/>
-                        <path class="ca-vine-cradle" d="M 285 42 a 30 28 0 1 1 50 0 a 30 28 0 1 1 -50 0"
-                              fill="none" stroke-width="2"/>
-                        <path class="ca-vine-cradle" d="M 459 42 a 30 28 0 1 1 50 0 a 30 28 0 1 1 -50 0"
-                              fill="none" stroke-width="2"/>
+                        <!-- Cradle wreaths now live as CSS ::before rings on the
+                             .ca-plot buttons themselves (see style.css) so the
+                             wreath is GUARANTEED to be drawn at the plot's
+                             position — the previous SVG cradles drifted off the
+                             plot centres on some viewport widths because the
+                             braid crossings between cradles also formed dashed-
+                             looking lens shapes that read as extra "empty
+                             wreaths" in the bar. -->
 
                         <!-- Curling tendrils branching off the cradles -->
                         <path class="ca-leaf-shoot" d="M 100 36 q -10 -16 6 -28" stroke-width="1.4"/>
