@@ -3694,32 +3694,32 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 
 /* Plots now anchored at the three vine peaks. Absolute positioning
    by percentage so they stay on the vine as the bar rescales. */
+/* Plot container — a flex row that fills the widget. Padding reserves
+   60 px on each side for the corner reroll/end-turn buttons (52 px
+   button + 4 px edge inset + 4 px breathing room) so plots can never
+   sit under those buttons. justify-content: space-between pins plot 0
+   to the left padding edge, plot 2 to the right padding edge, and
+   centres plot 1 between them — symmetric by construction with no
+   percentage / cqw arithmetic to go wrong.
+   Earlier passes anchored each plot by absolute `left:` percentages or
+   px insets, but a duplicate `.ca-summoner .ca-plot` rule below set
+   `position: relative` and overrode the `position: absolute` we
+   needed for those anchors to bind, leaving the rightmost plot
+   floating off-screen on every render. The flex layout removes the
+   need for absolute positioning entirely. */
 .ca-summoner .ca-plots {
     position: absolute;
     inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 60px;
     pointer-events: none;
     z-index: 2;
 }
 .ca-summoner .ca-plot {
-    position: absolute;
     pointer-events: auto;
-    /* Vine arc peaks (from viewBox coords): 140/42, 370/46, 560/20 — but the
-       cleanest visual fit is slightly above each peak on the sprout vertex. */
-    transform: translate(-50%, -50%);
 }
-/* Plot positions — the outer two plots are anchored by absolute pixel
-   inset from each widget edge (70 px from left, 70 px from right) so
-   they are GUARANTEED symmetric around the widget centre regardless
-   of how the widget itself renders or how the SVG aspect-ratio
-   interprets viewBox percentages. The percentage anchor used
-   previously (22 / 78 %) drifted the rightmost plot toward the canvas
-   edge on user-side renders that don't honour the cqw cap exactly,
-   so the plot looked clipped against the end-turn button. With pixel
-   insets the gap from widget-left to plot-0 is identical to the gap
-   from plot-2 to widget-right — full symmetry, no exceptions. */
-.ca-summoner .ca-plot[data-idx="0"] { left: 70px; top: 48%; }
-.ca-summoner .ca-plot[data-idx="1"] { left: 50%; top: 48%; }
-.ca-summoner .ca-plot[data-idx="2"] { left: calc(100% - 70px); top: 48%; }
 
 /* Right-anchored title variant for Summoner (top-left corner is reserved
    for the vine trunk). Reuses the base ca-title styling but mirrors
