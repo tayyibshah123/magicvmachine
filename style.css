@@ -3707,18 +3707,19 @@ body[data-hand="left"] .control-bar #btn-end-turn {
        cleanest visual fit is slightly above each peak on the sprout vertex. */
     transform: translate(-50%, -50%);
 }
-/* Plot positions inside the now-wide widget. Pinned to exactly the
-   SVG wreath cradle centres (viewBox x = 136 / 310 / 484 → 22 / 50 /
-   78 % of widget width with preserveAspectRatio="none") so each plot
-   button sits framed inside its wreath at every container width.
-   The px clamp tried in an earlier pass pulled the outer plots off
-   their wreaths on narrow phones and was visibly worse than the
-   tight-but-aligned default — kept the percentage anchor and let the
-   widget min-width (300 px) plus the corner-button safe-zone keep
-   the buttons tappable. */
-.ca-summoner .ca-plot[data-idx="0"] { left: 22%; top: 48%; }
+/* Plot positions — the outer two plots are anchored by absolute pixel
+   inset from each widget edge (70 px from left, 70 px from right) so
+   they are GUARANTEED symmetric around the widget centre regardless
+   of how the widget itself renders or how the SVG aspect-ratio
+   interprets viewBox percentages. The percentage anchor used
+   previously (22 / 78 %) drifted the rightmost plot toward the canvas
+   edge on user-side renders that don't honour the cqw cap exactly,
+   so the plot looked clipped against the end-turn button. With pixel
+   insets the gap from widget-left to plot-0 is identical to the gap
+   from plot-2 to widget-right — full symmetry, no exceptions. */
+.ca-summoner .ca-plot[data-idx="0"] { left: 70px; top: 48%; }
 .ca-summoner .ca-plot[data-idx="1"] { left: 50%; top: 48%; }
-.ca-summoner .ca-plot[data-idx="2"] { left: 78%; top: 48%; }
+.ca-summoner .ca-plot[data-idx="2"] { left: calc(100% - 70px); top: 48%; }
 
 /* Right-anchored title variant for Summoner (top-left corner is reserved
    for the vine trunk). Reuses the base ca-title styling but mirrors
