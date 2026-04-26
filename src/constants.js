@@ -267,10 +267,14 @@ const PLAYER_CLASSES = [
     },
     {
         id: 'summoner', name: 'Summoner', icon: ICONS.classSummoner, color: '#00ff99',
-        desc: 'Starts with 2 Spirits at +40% HP/DMG.\nMax 3 Minions.\nMinion: Spirit (30% Revive chance)',
+        desc: 'Starts with 2 Spirits at +40% HP/DMG.\nMax 4 Minions.\nMinion: Spirit (30% Revive chance)',
         // Opening buff: 2 minions at +40% so the Summoner's opener survives
         // Sector 1 pressure — single +20% Spirit used to die turn 1 to AoEs.
-        traits: { startMinions: 2, startMinionBuff: 1.4, maxMinions: 3, minionName: "Spirit", minionTrait: "Death: 30% Revive." },
+        // Cap raised from 3 → 4 so the GROVE APEX (×2 every minion) reads
+        // as a true endgame swing — three minions are easy to keep alive,
+        // four demands the player actually finish the canopy and field a
+        // full grove. Only Summoner ever exceeds 3 minions.
+        traits: { startMinions: 2, startMinionBuff: 1.4, maxMinions: 4, minionName: "Spirit", minionTrait: "Death: 30% Revive." },
         classDice: { attack: 'SUM_ATTACK', defend: 'SUM_DEFEND', mana: 'SUM_MANA', minion: 'SUM_MINION' }
     }
 ];

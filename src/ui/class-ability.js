@@ -499,11 +499,13 @@ export const ClassAbility = {
                 const idx = parseInt(action.split('-')[1], 10);
                 if (isNaN(idx) || idx < 0 || idx >= state.plots.length) return;
                 if (state.plots[idx] !== 2) return; // only Bloomed plots
-                // APEX path — when the grove is full (3 living minions) AND
+                // APEX path — when the grove is full (4 living minions) AND
                 // every plot is bloomed, a bloom tap empowers every minion
-                // at ×3. The previous ×2 "amplify" intermediate tier was
-                // removed — APEX is the only whole-grove payoff now.
-                const atMax = p.minions && p.minions.length >= (p.maxMinions || 3);
+                // at ×2. The cap rose from 3 → 4 so APEX demands a fully
+                // built canopy: the grove only has 3 plots, so the player
+                // must supplement with non-bloom summons to reach the
+                // fourth minion before the ×2 unlocks.
+                const atMax = p.minions && p.minions.length >= (p.maxMinions || 4);
                 const bloomCount = (state.plots || []).filter(v => v === 2).length;
                 const isApex = !!(atMax && bloomCount >= 3);
                 if (isApex) {
@@ -949,20 +951,21 @@ export const ClassAbility = {
 
     _renderSummoner() {
         const el = $w(); if (!el) return;
-        // APEX-ready is now the ONLY whole-grove payoff: full grove (3/3
-        // minions out AND 3/3 plots bloomed) → tap any bloom to ×3 every
-        // minion. The previous ×2 "amplify" intermediate tier was removed.
-        // CSS still reads .apex-ready to paint the gold canopy treatment.
+        // APEX-ready is now the ONLY whole-grove payoff: full grove (4/4
+        // minions out AND 3/3 plots bloomed) → tap any bloom to ×2 every
+        // minion. The cap rose from 3 → 4 so the canopy + a non-grove
+        // summon are both required to unlock the buff. CSS still reads
+        // .apex-ready to paint the gold canopy treatment.
         const p = Game && Game.player;
-        const atMax = p && p.minions && p.minions.length >= (p.maxMinions || 3);
+        const atMax = p && p.minions && p.minions.length >= (p.maxMinions || 4);
         const bloomCount = (state.plots || []).filter(v => v === 2).length;
         const isApexReady = !!(atMax && bloomCount >= 3);
         // Keep the amplify-ready class as a harmless alias so older CSS
         // references don't break mid-deploy, but it tracks apex now.
         el.classList.toggle('amplify-ready', isApexReady);
         el.classList.toggle('apex-ready', isApexReady);
-        const apexTip  = 'GROVE APEX READY — bloom a plot to ×3 every minion (consumes the canopy).';
-        const fullTip  = 'MINIONS AT MAX — complete the canopy (3/3 blooms) to unleash APEX ×3.';
+        const apexTip  = 'GROVE APEX READY — bloom a plot to ×2 every minion (consumes the canopy).';
+        const fullTip  = 'MINIONS AT MAX — complete the canopy (3/3 blooms) to unleash APEX ×2.';
         const spawnTip = 'Bloom a plot to free-summon a Spirit.';
         // Grove growth = count of bloomed plots (0..3). Drives the tree
         // silhouette's brightness so the center tree visibly "grows" with

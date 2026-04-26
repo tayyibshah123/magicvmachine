@@ -2576,7 +2576,7 @@ startQTE(type, x, y, callback) {
             difficulty: 2,
         },
         summoner: {
-            description: "A nature-attuned summoner who commands a growing forest of Spirits. Starts combat with one Spirit already on the field and a maximum cap of three minions — more than any other class. The Grove grows plants over time, but only while a minion is alive, creating a self-reinforcing loop: keep minions up, earn free summons, field overwhelming numbers.",
+            description: "A nature-attuned summoner who commands a growing forest of Spirits. Starts combat with one Spirit already on the field and a maximum cap of four minions — the only class that can field more than three. The Grove grows plants over time, but only while a minion is alive, creating a self-reinforcing loop: keep minions up, earn free summons, field overwhelming numbers.",
             style: "Minion synergy. Swarm playstyle. Scales hard in longer fights; vulnerable in the first two turns before the grove blooms.",
             minion: "Spirit — a nimble nature ally with a 30% chance to revive at half HP when killed.",
             ability: "GROVE — three plots cycle Seed → Sprout → Bloom over three turns, growing only while a minion is alive. Tap any fully Bloomed plot to summon a free Spirit, then it restarts at Seed.",
@@ -12260,7 +12260,7 @@ drawEffects() {
                             if (this._combatGen !== minCbGen) return;
                             let dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
                             if (validTarget.takeDamage(dmg, this.enemy)) {
-                                 if (this.player.traits.maxMinions === 3 && Math.random() < 0.3) { 
+                                 if (this.player.traits.maxMinions === 4 && Math.random() < 0.3) {
                                      validTarget.currentHp = Math.floor(validTarget.maxHp / 2);
                                      ParticleSys.createFloatingText(validTarget.x, validTarget.y, "REVIVED!", "#00ff99");
                                  } else {
@@ -12364,7 +12364,7 @@ drawEffects() {
                     const dmgOut = (typeof min.getEffectiveDamage === 'function') ? min.getEffectiveDamage(min.dmg) : min.dmg;
                     if (t.takeDamage(dmgOut, min) && t === this.player) { this.gameOver(); return; }
                     if (t !== this.player && t.currentHp <= 0) {
-                         if (this.player.traits.maxMinions === 3 && Math.random() < 0.3) { 
+                         if (this.player.traits.maxMinions === 4 && Math.random() < 0.3) {
                              t.currentHp = Math.floor(t.maxHp / 2);
                              ParticleSys.createFloatingText(t.x, t.y, "REVIVED!", "#00ff99");
                          } else {

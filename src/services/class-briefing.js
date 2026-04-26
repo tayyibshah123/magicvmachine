@@ -54,7 +54,7 @@ const COPY = {
     summoner: {
         headline: 'SUMMONER',
         pillars: 'Your swarm fights for you.',
-        ability: 'SACRED GROVE — summons grow plots. Tap a Bloomed plot for a free Spirit, or AMPLIFY (×2 / ×3 APEX) when the grove is full + 3 minions out.',
+        ability: 'SACRED GROVE — summons grow plots. Tap a Bloomed plot for a free Spirit, or APEX ×2 every minion when the grove is full + 4 minions out.',
         signature: 'Call: summon a Spirit + 4 DMG.'
     }
 };

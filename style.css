@@ -3711,13 +3711,16 @@ body[data-hand="left"] .control-bar #btn-end-turn {
    reroll + end-turn buttons that overlay the widget's edges on every
    container width down to ~320 cqw — at 18 / 82 % the outer plots
    slid behind the buttons on narrow phones (z-index 5 reroll/end-turn
-   covered the rightmost ×3 plot). Tightened to 22 / 78 % so the plot
-   right edge sits clear of the end-turn safe area at every supported
-   width, with the vines still stretching across the full strip.
-   Wreath positions in the 620-wide viewBox match: 136 / 310 / 484. */
-.ca-summoner .ca-plot[data-idx="0"] { left: 22%; top: 48%; }
+   covered the rightmost ×3 plot). Pinned to 22 / 78 % AND clamped by
+   absolute pixel insets so the plot button never sits within ~75 px
+   of either widget edge even if the container drops below the design
+   minimum. At wide widget widths (≥ ~340 px) the percentage wins and
+   plots align with the SVG wreaths at viewBox x = 136 / 310 / 484; at
+   narrower widths the pixel clamp kicks in and pulls the outer plots
+   slightly inward off their wreaths so the buttons stay tappable. */
+.ca-summoner .ca-plot[data-idx="0"] { left: max(22%, 75px); top: 48%; }
 .ca-summoner .ca-plot[data-idx="1"] { left: 50%; top: 48%; }
-.ca-summoner .ca-plot[data-idx="2"] { left: 78%; top: 48%; }
+.ca-summoner .ca-plot[data-idx="2"] { left: min(78%, calc(100% - 75px)); top: 48%; }
 
 /* Right-anchored title variant for Summoner (top-left corner is reserved
    for the vine trunk). Reuses the base ca-title styling but mirrors
