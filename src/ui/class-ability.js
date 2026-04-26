@@ -194,22 +194,32 @@ export const ClassAbility = {
         // trigger fired. This replaces the previous +1-stage-per-summon
         // model, which only fully bloomed plots via the end-of-turn passive
         // tick and left new Summoners wondering why nothing was usable.
+        // EXCEPTION: when the summon was itself triggered by a bloom-tap
+        // (this._suppressBloomOnTap), skip the auto-bloom — otherwise the
+        // tap would refund itself by re-blooming a different plot, making
+        // the bloom-summon free.
         if (classId === 'summoner' && (type === 'minion_summoned' || type === 'minion_upgraded')) {
-            // Pick the youngest plot so growth spreads across the grove rather
-            // than stacking on a single already-bloomed plot.
-            let youngestIdx = -1;
-            for (let i = 0; i < state.plots.length; i++) {
-                if (state.plots[i] < 2 && (youngestIdx < 0 || state.plots[i] < state.plots[youngestIdx])) {
-                    youngestIdx = i;
+            if (this._suppressBloomOnTap) {
+                // Bloom-tap consumed the charge already; do NOT refund a
+                // bloom on a different plot. Plot growth resumes naturally
+                // via the end-of-turn tick.
+            } else {
+                // Pick the youngest plot so growth spreads across the grove rather
+                // than stacking on a single already-bloomed plot.
+                let youngestIdx = -1;
+                for (let i = 0; i < state.plots.length; i++) {
+                    if (state.plots[i] < 2 && (youngestIdx < 0 || state.plots[i] < state.plots[youngestIdx])) {
+                        youngestIdx = i;
+                    }
                 }
-            }
-            if (youngestIdx >= 0) {
-                state.plots[youngestIdx] = 2; // jump straight to Bloom
-                if (Game.player) {
-                    ParticleSys.createFloatingText(Game.player.x - 60, Game.player.y - 40,
-                        'BLOOM!', '#00ff99');
+                if (youngestIdx >= 0) {
+                    state.plots[youngestIdx] = 2; // jump straight to Bloom
+                    if (Game.player) {
+                        ParticleSys.createFloatingText(Game.player.x - 60, Game.player.y - 40,
+                            'BLOOM!', '#00ff99');
+                    }
+                    Hints.trigger && Hints.trigger('first_grove_bloom');
                 }
-                Hints.trigger && Hints.trigger('first_grove_bloom');
             }
         }
         if (classId === 'annihilator' && type === 'dice_used') {
@@ -542,13 +552,27 @@ export const ClassAbility = {
                     AudioMgr.playSound('defend');
                     break;
                 }
-                // Otherwise standard spawn path.
-                if (typeof Game._spawnSpirit === 'function') {
-                    Game._spawnSpirit();
-                } else {
-                    this._spawnSummonerSpirit();
-                }
+                // Otherwise standard spawn path. Reset the plot to seed
+                // BEFORE spawning so that when the new minion fires the
+                // synchronous 'minion_summoned' event, the plot we just
+                // tapped is the youngest-unbloomed candidate — combined
+                // with the _suppressBloomOnTap flag below the auto-bloom
+                // is skipped entirely. Without this gating the player
+                // could chain-tap bloomed plots forever: tapping plot A
+                // would spawn a spirit, the spawn would auto-bloom plot
+                // B, the player would tap plot B, which would auto-
+                // bloom plot C, etc. — effectively a no-cost summon.
                 state.plots[idx] = 0;
+                this._suppressBloomOnTap = true;
+                try {
+                    if (typeof Game._spawnSpirit === 'function') {
+                        Game._spawnSpirit();
+                    } else {
+                        this._spawnSummonerSpirit();
+                    }
+                } finally {
+                    this._suppressBloomOnTap = false;
+                }
                 ParticleSys.createFloatingText(p.x, p.y - 80, "BLOOM → SPIRIT", "#00ff99");
                 AudioMgr.playSound('mana');
                 break;
