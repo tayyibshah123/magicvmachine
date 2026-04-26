@@ -13128,23 +13128,23 @@ drawEffects() {
             ? { title: 'BIGGEST BLOW', body: `${biggest.amount} from ${biggest.sourceName || killer}` }
             : { title: 'BIGGEST BLOW', body: '—' };
 
-        // Best-run comparison — pulls from localStorage
+        // Best-run comparison — sector only. Turn count was tracked too,
+        // but "more turns" doesn't read as "better" on a death screen
+        // (turns survived already lives on its own card) and made the
+        // NEW BEST line read as a noisy "Sector X, Turn Y" tuple. Now
+        // we just record + display the deepest sector reached.
         let bestSector = parseInt(localStorage.getItem('mvm_best_sector') || '0', 10);
-        let bestTurns  = parseInt(localStorage.getItem('mvm_best_turns') || '0', 10);
         const curSector = this.sector || 1;
-        const curTurns  = this.turnCount || 0;
-        const isNewBest = curSector > bestSector || (curSector === bestSector && curTurns > bestTurns);
+        const isNewBest = curSector > bestSector;
         if (isNewBest) {
             bestSector = curSector;
-            bestTurns  = curTurns;
             try {
                 localStorage.setItem('mvm_best_sector', String(bestSector));
-                localStorage.setItem('mvm_best_turns', String(bestTurns));
             } catch (e) {}
         }
         const bestCard2 = {
             title: isNewBest ? 'NEW BEST' : 'PERSONAL BEST',
-            body: `Sector ${bestSector}, Turn ${bestTurns}`
+            body: `Sector ${bestSector}`
         };
 
         cards.innerHTML = [turnsCard, bestCard, hurtCard, bestCard2].map(c => `

@@ -10055,6 +10055,21 @@ body.reduced-motion.bloodstalker-critical::after {
 }
 #screen-gameover {
     background: radial-gradient(ellipse at center, rgba(40, 0, 15, 0.95) 0%, rgba(5, 0, 3, 0.98) 70%) !important;
+    /* The death screen stacks: title, portrait, 4 stat cards, lesson,
+       fragments, 3 buttons, RUN DIAGNOSTICS panel. That's taller than
+       the 9:16 viewport, so the bottom (run diagnostics rows) was
+       being clipped under justify-content: center. Switch to top-
+       aligned + scroll-if-overflows so every section is reachable. */
+    justify-content: flex-start !important;
+    overflow-y: auto;
+    padding-top: 24px !important;
+    padding-bottom: 32px !important;
+    -webkit-overflow-scrolling: touch;
+}
+#screen-gameover .run-summary {
+    /* Bottom margin so the last row sits above the safe-area / screen
+       padding even when the panel is the last scrollable element. */
+    margin-bottom: 24px;
 }
 #screen-gameover #go-title {
     font-size: clamp(1.5rem, 6cqw, 2.2rem);
