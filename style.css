@@ -5756,7 +5756,12 @@ body.reduced-motion .tutorial-narration.narration-switching .tutorial-narration-
 /* During auto-run (Phase 3), hide the legacy floating text box.
    Keep #tutorial-overlay alive — it's the invisible click catcher that advances
    tap-to-continue steps, but make it visually transparent so no extra box renders. */
-body.tutorial-auto-run #tutorial-text { display: none !important; }
+/* Legacy big bordered "OPERATOR STATS / ENEMY THREAT / MODULES" text box
+   is permanently retired — the floating narration pane (#tutorial-narration)
+   carries the guidance copy for the scripted tutorial. The element stays in
+   the DOM so updateTutorialStep can keep manipulating it without throwing,
+   it just never paints visually. */
+#tutorial-text { display: none !important; }
 body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
 
 /* Error boundary — Phase 9 */
