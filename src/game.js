@@ -7287,7 +7287,7 @@ triggerSystemCrash() {
         };
         
         this.renderHexGrid();
-        setTimeout(() => this.nextHexRound(), 1000);
+        setTimeout(() => { if (this.currentState === STATE.HEX) this.nextHexRound(); }, 1000);
     },
 
     renderHexGrid() {
@@ -7475,7 +7475,7 @@ updateHexBreach(dt) {
                 } else {
                     this.hex.round++;
                     this.hex.acceptingInput = false;
-                    setTimeout(() => this.nextHexRound(), 1000);
+                    setTimeout(() => { if (this.currentState === STATE.HEX) this.nextHexRound(); }, 1000);
                 }
             }
         } else {
@@ -7497,7 +7497,7 @@ updateHexBreach(dt) {
                     node.el.style.boxShadow = `0 0 5px ${node.color}`;
                 }, 500);
 
-                setTimeout(() => this.nextHexRound(), 1500);
+                setTimeout(() => { if (this.currentState === STATE.HEX) this.nextHexRound(); }, 1500);
             } else {
                 this.failHexBreach(node.el);
             }
@@ -12899,6 +12899,13 @@ drawEffects() {
         this.startTurn();
       } catch (err) {
         this._recoverFromCombatError('endTurn', err, false);
+      } finally {
+        // Always release the single-flight gate — without this, an exception
+        // anywhere in the enemy-phase chain leaves _endTurnRunning stuck at
+        // true and every subsequent END TURN press is silently dropped, with
+        // no in-game indication that the run has soft-locked. startTurn also
+        // clears the flag on the happy path, so re-clearing here is safe.
+        this._endTurnRunning = false;
       }
     },
 
@@ -13416,7 +13423,37 @@ drawEffects() {
         
         // Select Options
         const options = pool.slice(0, choices);
-        
+
+        // Hard fallback — the pool was filtered down to nothing (every
+        // stackable cap hit, every unique already owned). Without this the
+        // reward screen would render with zero clickable cards and the
+        // player would soft-lock in STATE.REWARD with no path back to the
+        // map. Auto-resolve: skip the screen, give a small fragment
+        // sweetener so the kill still feels rewarding, and complete the
+        // node so the run advances.
+        if (options.length === 0) {
+            const consolation = 25;
+            this.techFragments += consolation;
+            ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
+                `RELICS MAXED — +${consolation} FRAG`, COLORS.GOLD);
+            this.completeCurrentNode();
+            const wasBoss = this.bossDefeated;
+            if (wasBoss && !this.challengeMode && !this.archiveMode) {
+                this.bossDefeated = false;
+                this.sector++;
+                this.generateMap();
+                const sectorDisplay = document.getElementById('sector-display');
+                if (sectorDisplay) sectorDisplay.innerText = `SECTOR ${this.sector}`;
+                this.triggerSectorCollapse && this.triggerSectorCollapse();
+                this.playSectorIntro && this.playSectorIntro(this.sector);
+                this.saveGame();
+            } else if (wasBoss) {
+                this.bossDefeated = false;
+            }
+            this.changeState(STATE.MAP);
+            return;
+        }
+
         options.forEach(item => {
             const card = document.createElement('div');
             const isGold = item.rarity === 'gold';

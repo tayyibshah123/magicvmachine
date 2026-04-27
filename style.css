@@ -10421,8 +10421,8 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
 /* Active-pact pills under the Challenge chip in combat */
 .pact-pill-strip {
     position: fixed;
-    top: 110px;
-    left: 22px;
+    top: calc(110px + max(0px, env(safe-area-inset-top)));
+    left: calc(22px + max(0px, env(safe-area-inset-left)));
     z-index: 4500;
     pointer-events: none;
     display: flex;
@@ -10471,21 +10471,29 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
 .title-frame-corner.br { bottom: 0; right: 0;   border-left: none;  border-top: none; }
 .title-frame-badge {
     position: absolute;
-    bottom: -14px; left: 50%;
+    /* On narrow viewports the negative `bottom` was pulling the badge below
+       the glow-container; lock it to a min of -2px so the pill always stays
+       inside the frame's footprint, then shrink the badge text/padding too. */
+    bottom: max(-14px, -2px);
+    left: 50%;
     transform: translateX(-50%);
     font-family: var(--font-cyber);
-    font-size: 0.62rem;
+    font-size: clamp(0.5rem, 1.6vw, 0.62rem);
     letter-spacing: 0.32em;
     color: var(--frame-color, #c69c52);
     background: rgba(0, 0, 0, 0.85);
-    padding: 3px 14px;
+    padding: 3px 12px;
     border: 1px solid var(--frame-color, #c69c52);
     border-radius: 999px;
     text-shadow: 0 0 6px var(--frame-glow, rgba(198, 156, 82, 0.55));
     box-shadow: 0 0 8px var(--frame-glow, rgba(198, 156, 82, 0.45));
     animation: archivist-frame-pulse 3.6s ease-in-out infinite;
     white-space: nowrap;
+    /* Pause animation when the parent isn't visible to spare CPU on
+       low-tier mobile (audited 2026-04-27). */
+    animation-play-state: paused;
 }
+.title-frame.shown .title-frame-badge { animation-play-state: running; }
 @keyframes archivist-frame-pulse {
     0%, 100% { filter: brightness(1); transform: translateX(-50%) scale(1); }
     50%      { filter: brightness(1.35); transform: translateX(-50%) scale(1.04); }
