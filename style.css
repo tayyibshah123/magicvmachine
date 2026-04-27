@@ -10690,3 +10690,315 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     background: rgba(255, 255, 255, 0.04);
 }
 .loadout-die-row .count { color: var(--neon-gold); font-weight: 600; }
+
+/* === INTEL 3.0 ============================================================
+   Operator profile banner, progressive dossier, chronicle stats panel,
+   and chapter-grouped cipher. Replaces the basic counters that shipped
+   with Intel 2.0. */
+
+.intel-profile {
+    width: min(680px, 96vw);
+    margin: 8px auto 14px;
+    padding: 14px 16px;
+    border: 1px solid rgba(0, 243, 255, 0.32);
+    border-radius: 12px;
+    background:
+        linear-gradient(135deg, rgba(0, 30, 50, 0.55), rgba(20, 0, 40, 0.55)),
+        rgba(0, 0, 0, 0.4);
+    box-shadow: 0 0 18px rgba(0, 243, 255, 0.15), inset 0 0 14px rgba(0, 243, 255, 0.08);
+}
+.intel-profile-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 12px;
+    margin-top: 8px;
+}
+.intel-profile-row:first-child { margin-top: 0; }
+.intel-profile-row:last-child {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+    grid-template-columns: 3fr 1fr;
+}
+.intel-profile-cell-wide { grid-column: span 1; }
+.intel-profile-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.58rem;
+    letter-spacing: 0.22em;
+    color: rgba(180, 220, 240, 0.55);
+    margin-bottom: 4px;
+}
+.intel-profile-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.05rem;
+    color: #fff;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+.intel-profile-value.intel-prof-asc { color: var(--neon-gold); text-shadow: 0 0 6px rgba(255, 215, 0, 0.5); }
+.intel-profile-value.intel-prof-files { color: var(--neon-pink); display: inline-flex; align-items: baseline; gap: 6px; }
+.intel-profile-files-icon { font-size: 1.2em; opacity: 0.7; }
+.intel-profile-sub {
+    font-size: 0.7rem;
+    color: rgba(200, 220, 240, 0.6);
+    margin-top: 2px;
+}
+.intel-profile-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+}
+.intel-profile-pill {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.16em;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(220, 240, 255, 0.78);
+}
+.intel-profile-pill.win   { border-color: var(--neon-gold); color: #ffe89a; background: rgba(255, 215, 106, 0.12); }
+.intel-profile-pill.loss  { border-color: var(--neon-pink); color: #ffb3c8; background: rgba(255, 0, 85, 0.10); }
+.intel-profile-pill.arch  { border-color: var(--neon-gold); color: var(--neon-gold); background: rgba(255, 215, 106, 0.18); text-shadow: 0 0 6px rgba(255, 215, 0, 0.45); }
+.intel-profile-pill.locked{ opacity: 0.4; }
+
+@media (max-width: 540px) {
+    .intel-profile-row, .intel-profile-row:last-child { grid-template-columns: 1fr 1fr; }
+}
+
+.intel-dossier {
+    width: min(680px, 96vw);
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+.intel-dossier-section { display: flex; flex-direction: column; gap: 6px; }
+.intel-dossier-section-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.24em;
+    color: var(--neon-gold);
+    margin-bottom: 4px;
+    border-bottom: 1px dashed rgba(255, 215, 106, 0.25);
+    padding-bottom: 4px;
+}
+.intel-dossier-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+}
+.intel-dossier-card {
+    position: relative;
+    padding: 10px 12px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: linear-gradient(135deg, rgba(20, 30, 50, 0.7), rgba(10, 5, 30, 0.7));
+    cursor: pointer;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+.intel-dossier-card:hover, .intel-dossier-card:focus {
+    transform: translateY(-2px);
+    border-color: var(--neon-blue);
+    box-shadow: 0 0 14px rgba(0, 243, 255, 0.3);
+    outline: none;
+}
+.intel-dossier-card.boss   { border-color: rgba(255, 215, 106, 0.6); background: linear-gradient(135deg, rgba(50, 35, 0, 0.85), rgba(30, 10, 0, 0.85)); }
+.intel-dossier-card.elite  { border-color: rgba(170, 102, 255, 0.55); background: linear-gradient(135deg, rgba(40, 10, 60, 0.85), rgba(15, 0, 30, 0.85)); }
+.intel-dossier-card.minion { border-color: rgba(0, 243, 255, 0.35); }
+.intel-dossier-card.archivist {
+    border-color: var(--neon-gold);
+    background: linear-gradient(135deg, rgba(60, 40, 0, 0.9), rgba(40, 0, 0, 0.9));
+    box-shadow: 0 0 14px rgba(255, 215, 106, 0.28);
+}
+.intel-dossier-card-name {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.85rem;
+    letter-spacing: 0.06em;
+    color: #fff;
+    margin-bottom: 2px;
+}
+.intel-dossier-card-tier {
+    font-size: 0.6rem;
+    letter-spacing: 0.18em;
+    margin-bottom: 6px;
+}
+.intel-dossier-tier-newcomer  { color: rgba(180, 200, 220, 0.6); }
+.intel-dossier-tier-logged    { color: var(--neon-blue); }
+.intel-dossier-tier-hunted    { color: var(--neon-gold); }
+.intel-dossier-tier-adversary { color: var(--neon-pink); text-shadow: 0 0 6px rgba(255, 0, 85, 0.4); }
+.intel-dossier-tier-nemesis   { color: #ff66ff; text-shadow: 0 0 8px rgba(255, 102, 255, 0.5); }
+.intel-dossier-card-stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: rgba(200, 220, 240, 0.78);
+}
+.intel-dossier-card-stats .kills { color: var(--neon-gold); font-weight: 700; }
+.intel-dossier-card-progress {
+    margin-top: 6px;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.intel-dossier-card-progress > div {
+    height: 100%;
+    background: linear-gradient(90deg, var(--neon-blue), var(--neon-gold));
+    transition: width 320ms ease;
+}
+.intel-dossier-card-detail {
+    display: none;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: rgba(220, 235, 245, 0.92);
+}
+.intel-dossier-card.expanded .intel-dossier-card-detail { display: block; }
+.intel-dossier-detail-line { margin-top: 4px; }
+.intel-dossier-detail-line .lbl {
+    color: rgba(180, 210, 230, 0.6);
+    letter-spacing: 0.14em;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    display: block;
+}
+.intel-dossier-locked-line {
+    margin-top: 6px;
+    font-size: 0.7rem;
+    color: rgba(180, 200, 220, 0.45);
+    font-style: italic;
+}
+
+.intel-chronicle-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    width: min(680px, 96vw);
+    margin: 0 auto 10px;
+}
+.intel-chronicle-stat {
+    text-align: center;
+    padding: 8px 6px;
+    border-radius: 8px;
+    background: rgba(0, 243, 255, 0.05);
+    border: 1px solid rgba(0, 243, 255, 0.18);
+}
+.intel-chronicle-stat-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.2em;
+    color: rgba(180, 210, 230, 0.6);
+}
+.intel-chronicle-stat-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.1rem;
+    color: #fff;
+    margin-top: 2px;
+}
+.intel-chronicle-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    width: min(680px, 96vw);
+    margin: 0 auto 10px;
+    justify-content: center;
+}
+.intel-chronicle-filter {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.18em;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: transparent;
+    color: rgba(220, 235, 245, 0.65);
+    cursor: pointer;
+}
+.intel-chronicle-filter:hover { color: #fff; border-color: var(--neon-blue); }
+.intel-chronicle-filter.active {
+    background: var(--neon-blue);
+    color: #001020;
+    border-color: var(--neon-blue);
+}
+@media (max-width: 540px) {
+    .intel-chronicle-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+.intel-cipher-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: min(680px, 96vw);
+    margin: 0 auto 12px;
+    gap: 10px;
+}
+.intel-cipher-progress {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.2em;
+    color: var(--neon-pink);
+}
+.intel-cipher-btn { width: auto !important; min-width: 180px; }
+.intel-cipher-chapters {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: min(680px, 96vw);
+    margin: 0 auto;
+}
+.intel-cipher-chapter {
+    border: 1px solid rgba(255, 0, 85, 0.25);
+    border-radius: 10px;
+    padding: 10px 12px 12px;
+    background: linear-gradient(135deg, rgba(40, 0, 20, 0.55), rgba(0, 0, 20, 0.55));
+}
+.intel-cipher-chapter-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.24em;
+    color: var(--neon-pink);
+    margin-bottom: 4px;
+}
+.intel-cipher-chapter-meta {
+    font-size: 0.65rem;
+    color: rgba(200, 220, 240, 0.6);
+    margin-bottom: 8px;
+}
+.intel-cipher-entries {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+    gap: 6px;
+}
+.intel-cipher-tile {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 0, 85, 0.35);
+    background: rgba(255, 0, 85, 0.06);
+    color: rgba(255, 200, 220, 0.55);
+    font-family: 'Orbitron', monospace;
+    font-size: 0.7rem;
+    cursor: not-allowed;
+    transition: transform 160ms ease, color 160ms ease;
+}
+.intel-cipher-tile.unlocked {
+    background: rgba(255, 0, 85, 0.18);
+    color: #fff;
+    cursor: pointer;
+    border-color: var(--neon-pink);
+    box-shadow: 0 0 8px rgba(255, 0, 85, 0.35);
+}
+.intel-cipher-tile.unlocked:hover { transform: scale(1.06); }
+.intel-cipher-hint {
+    font-size: 0.7rem;
+    color: rgba(200, 220, 240, 0.55);
+    margin-top: 6px;
+    font-style: italic;
+}

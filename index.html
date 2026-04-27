@@ -303,51 +303,83 @@
                 <button id="btn-back-achievements" class="btn secondary" style="width: auto; min-width: 150px;">BACK</button>
             </div>
 
-            <!-- Intel / Debriefing Screen -->
+            <!-- Intel 3.0 — Operator Profile + Dossier / Cipher / Chronicle -->
             <div id="screen-intel" class="screen hidden">
-                <h2 class="neon-text-blue">INTEL DATABASE</h2>
-                <div id="intel-stats" class="currency-display neon-text-pink" style="font-size: 1rem; margin-bottom: 10px;">
-                    Encrypted Files: <span id="encrypted-count">0</span>
+                <h2 class="neon-text-blue">INTEL ARCHIVE</h2>
+
+                <!-- Operator profile banner — totals + best clears. Always
+                     visible; the tabs below drill into a specific surface. -->
+                <div id="intel-profile" class="intel-profile glass-panel">
+                    <div class="intel-profile-row">
+                        <div class="intel-profile-cell">
+                            <div class="intel-profile-label">OPERATOR</div>
+                            <div class="intel-profile-value" id="intel-prof-name">—</div>
+                        </div>
+                        <div class="intel-profile-cell">
+                            <div class="intel-profile-label">RUNS</div>
+                            <div class="intel-profile-value" id="intel-prof-runs">0</div>
+                            <div class="intel-profile-sub" id="intel-prof-runrate">0% wins</div>
+                        </div>
+                        <div class="intel-profile-cell">
+                            <div class="intel-profile-label">ASCENSION</div>
+                            <div class="intel-profile-value intel-prof-asc" id="intel-prof-asc">A0</div>
+                        </div>
+                        <div class="intel-profile-cell">
+                            <div class="intel-profile-label">KILLS</div>
+                            <div class="intel-profile-value" id="intel-prof-kills">0</div>
+                            <div class="intel-profile-sub" id="intel-prof-bestiary">0 logged</div>
+                        </div>
+                    </div>
+                    <div class="intel-profile-row">
+                        <div class="intel-profile-cell intel-profile-cell-wide">
+                            <div class="intel-profile-label">SIGNATURE STATUS</div>
+                            <div class="intel-profile-pills" id="intel-prof-status"></div>
+                        </div>
+                        <div class="intel-profile-cell">
+                            <div class="intel-profile-label">FILES</div>
+                            <div class="intel-profile-value intel-prof-files">
+                                <span id="intel-prof-files-count">0</span>
+                                <span class="intel-profile-files-icon" aria-hidden="true">⌬</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Intel 2.0 tab bar (Roadmap Part 27). Three tabs —
-                     Cipher (lore), Bestiary (defeated enemies), Chronicle
-                     (recent runs). Tab switching is handled in game.js. -->
                 <div id="intel-tabs" class="intel-tabs" role="tablist">
-                    <button class="intel-tab active" data-intel-tab="cipher" role="tab">CIPHER</button>
-                    <button class="intel-tab" data-intel-tab="bestiary" role="tab">BESTIARY</button>
+                    <button class="intel-tab active" data-intel-tab="dossier" role="tab">DOSSIER</button>
                     <button class="intel-tab" data-intel-tab="chronicle" role="tab">CHRONICLE</button>
+                    <button class="intel-tab" data-intel-tab="cipher" role="tab">CIPHER</button>
                 </div>
 
-                <!-- Cipher pane (original lore grid) -->
-                <div class="intel-pane active" data-intel-pane="cipher">
-                    <div id="lore-grid" class="lore-grid">
-                        <!-- Populated by JS -->
+                <!-- DOSSIER pane — progressive enemy unlocks -->
+                <div class="intel-pane active" data-intel-pane="dossier">
+                    <div id="intel-dossier" class="intel-dossier"></div>
+                    <div id="intel-dossier-empty" class="intel-empty" style="display: none;">
+                        No targets logged yet. First kills will appear here.
                     </div>
                 </div>
 
-                <!-- Bestiary pane (in-place; previously a separate screen) -->
-                <div class="intel-pane" data-intel-pane="bestiary">
-                    <div id="intel-bestiary-grid" class="codex-grid"></div>
-                    <div id="intel-bestiary-empty" class="intel-empty" style="display: none;">
-                        No enemies defeated yet. Go clear a combat to populate the Bestiary.
-                    </div>
-                </div>
-
-                <!-- Chronicle pane — last 20 runs as a scrollable timeline -->
+                <!-- CHRONICLE pane — stats + filterable run history -->
                 <div class="intel-pane" data-intel-pane="chronicle">
+                    <div id="intel-chronicle-stats" class="intel-chronicle-stats"></div>
+                    <div id="intel-chronicle-filters" class="intel-chronicle-filters"></div>
                     <div id="intel-chronicle-list" class="intel-chronicle"></div>
                     <div id="intel-chronicle-empty" class="intel-empty" style="display: none;">
                         No runs logged yet. Every run — win or loss — appears here for review.
                     </div>
                 </div>
 
-                <div class="spacer"></div>
-
-                <div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;">
-                    <button id="btn-decrypt" class="btn primary neon-border-pink">DECRYPT FILE</button>
-                    <button id="btn-back-intel" class="btn secondary">RETURN</button>
+                <!-- CIPHER pane — chapter-grouped lore -->
+                <div class="intel-pane" data-intel-pane="cipher">
+                    <div class="intel-cipher-header">
+                        <span class="intel-cipher-progress" id="intel-cipher-progress">0 / 0 decrypted</span>
+                        <button id="btn-decrypt" class="btn primary neon-border-pink intel-cipher-btn">DECRYPT FILE</button>
+                    </div>
+                    <div id="intel-cipher-chapters" class="intel-cipher-chapters"></div>
                 </div>
+
+                <div class="spacer"></div>
+                <button id="btn-back-intel" class="btn secondary">RETURN</button>
             </div>
 
             <!-- Codex (enemy kill ledger) -->

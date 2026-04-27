@@ -7205,41 +7205,78 @@ triggerSystemCrash() {
     },
 
     renderIntel() {
-        document.getElementById('encrypted-count').innerText = this.encryptedFiles;
-        const grid = document.getElementById('lore-grid');
-        grid.innerHTML = '';
-
-        LORE_DATABASE.forEach((entry, index) => {
-            const isUnlocked = this.unlockedLore.includes(index);
-            const el = document.createElement('div');
-            el.className = `lore-node ${isUnlocked ? 'unlocked' : 'locked'}`;
-            el.innerText = index + 1;
-
-            if (isUnlocked) {
-                el.onclick = (e) => {
-                    AudioMgr.playSound('click');
-                    TooltipMgr.show(entry, e.clientX, e.clientY);
-                };
-            }
-            grid.appendChild(el);
-        });
-
-        const btnDecrypt = document.getElementById('btn-decrypt');
-        if (this.encryptedFiles > 0) {
-            btnDecrypt.disabled = false;
-            btnDecrypt.style.opacity = 1;
-            btnDecrypt.innerText = "DECRYPT (START BREACH)";
-        } else {
-            btnDecrypt.disabled = true;
-            btnDecrypt.style.opacity = 0.5;
-            btnDecrypt.innerText = "NO FILES";
-        }
-
-        // Intel 2.0: render the bestiary (kill ledger, in-place) and
-        // chronicle (last 20 runs). Wire the tab bar once per open.
-        this._renderIntelBestiary();
+        // Intel 3.0 (audit upgrade) — replaces the flat Bestiary/Cipher/
+        // Chronicle dump with an Operator Profile banner + progressive
+        // Dossier disclosure + Chronicle stats banner & filters + Cipher
+        // chapter grouping. Each tab pulls live data from the run history,
+        // Intel kill ledger, Ascension service, and lore database.
+        this._renderIntelProfile();
+        this._renderIntelDossier();
         this._renderIntelChronicle();
+        this._renderIntelCipher();
         this._wireIntelTabs();
+    },
+
+    _renderIntelProfile() {
+        // Header banner shown above the tabs. Pulls operator name (set in
+        // onboarding), aggregate run/kill stats, ascension high-water mark,
+        // and Sector X status pills.
+        const opName = (typeof Onboarding !== 'undefined' && Onboarding.getName) ? Onboarding.getName() : 'OPERATOR';
+        const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+        // Run history aggregates.
+        let history = [];
+        try { history = JSON.parse(localStorage.getItem('mvm_run_history') || '[]'); } catch (_) {}
+        if (!Array.isArray(history)) history = [];
+        const runs = history.length;
+        const wins = history.filter(r => r && r.result === 'win').length;
+        const winRate = runs > 0 ? Math.round((wins / runs) * 100) : 0;
+
+        const ascUnlocked = (typeof Ascension !== 'undefined' && Ascension.getUnlocked) ? Ascension.getUnlocked() : 0;
+        const totalKills = (typeof Intel !== 'undefined' && Intel.total) ? Intel.total() : 0;
+        const distinct = (typeof Intel !== 'undefined' && Intel.distinctCount) ? Intel.distinctCount() : 0;
+
+        setText('intel-prof-name', (opName || 'OPERATOR').toUpperCase());
+        setText('intel-prof-runs', runs);
+        setText('intel-prof-runrate', `${winRate}% wins · ${wins} cleared`);
+        setText('intel-prof-asc', `A${ascUnlocked}`);
+        setText('intel-prof-kills', totalKills);
+        setText('intel-prof-bestiary', `${distinct} logged`);
+        setText('intel-prof-files-count', this.encryptedFiles || 0);
+
+        // Status pills — live milestones the player has earned.
+        const statusEl = document.getElementById('intel-prof-status');
+        if (statusEl) {
+            const pills = [];
+            if (localStorage.getItem('mvm_gameCompleted') === 'true') {
+                pills.push('<span class="intel-profile-pill win">SECTOR 5 CLEARED</span>');
+            } else {
+                pills.push('<span class="intel-profile-pill locked">SECTOR 5 — UNTAKEN</span>');
+            }
+            if (localStorage.getItem('mvm_archivist_slain') === 'true') {
+                const bestArch = parseInt(localStorage.getItem('mvm_archivist_best_asc') || '0', 10) || 0;
+                pills.push(`<span class="intel-profile-pill arch">ARCHIVIST · A${bestArch}</span>`);
+            } else if (localStorage.getItem('mvm_gameCompleted') === 'true') {
+                pills.push('<span class="intel-profile-pill locked">ARCHIVIST — UNCONFRONTED</span>');
+            }
+            const challengeRuns = (() => {
+                try { return JSON.parse(localStorage.getItem('mvm_challenge_history') || '[]').length; }
+                catch (_) { return 0; }
+            })();
+            if (challengeRuns > 0) {
+                pills.push(`<span class="intel-profile-pill win">CHALLENGE × ${challengeRuns}</span>`);
+            }
+            // Most-played class (light data — only if we have ≥3 runs to read).
+            if (runs >= 3) {
+                const byClass = {};
+                history.forEach(r => { if (r && r.classId) byClass[r.classId] = (byClass[r.classId] || 0) + 1; });
+                const topClass = Object.entries(byClass).sort((a, b) => b[1] - a[1])[0];
+                if (topClass) {
+                    pills.push(`<span class="intel-profile-pill">FAVOURITE · ${topClass[0].toUpperCase()}</span>`);
+                }
+            }
+            statusEl.innerHTML = pills.join('');
+        }
     },
 
     /* Intel tab bar wiring (Roadmap Part 27). Delegates show/hide to the
@@ -7261,47 +7298,244 @@ triggerSystemCrash() {
         });
     },
 
-    _renderIntelBestiary() {
-        const grid = document.getElementById('intel-bestiary-grid');
-        const empty = document.getElementById('intel-bestiary-empty');
-        if (!grid) return;
-        grid.innerHTML = '';
-        const kills = (typeof Intel !== 'undefined' && Intel.all) ? Intel.all() : {};
-        const names = Object.keys(kills).filter(n => kills[n] > 0);
+    // Intel 3.0 progressive disclosure tiers — each kill threshold reveals
+    // a new field in the dossier so the player feels growth, not a flat
+    // counter. Tuned so the first reveal is fast (3 kills = sector + intent
+    // moves), then ramps up to "Nemesis" prestige.
+    _dossierTier(count) {
+        if (count >= 20) return { key: 'nemesis',  label: 'NEMESIS',   reveal: 4, next: null };
+        if (count >= 10) return { key: 'adversary',label: 'ADVERSARY', reveal: 3, next: 20 };
+        if (count >= 5)  return { key: 'hunted',   label: 'HUNTED',    reveal: 2, next: 10 };
+        if (count >= 3)  return { key: 'logged',   label: 'LOGGED',    reveal: 1, next: 5 };
+        return                  { key: 'newcomer', label: 'NEWCOMER',  reveal: 0, next: 3 };
+    },
+
+    _classifyEnemyForDossier(name) {
+        // Returns { kind: 'archivist'|'boss'|'elite'|'mob'|'minion', meta }
+        if (name === 'THE ARCHIVIST') return { kind: 'archivist', meta: BOSS_DATA && BOSS_DATA[6] };
+        if (typeof BOSS_DATA !== 'undefined') {
+            for (const k in BOSS_DATA) {
+                if (BOSS_DATA[k] && BOSS_DATA[k].name === name) return { kind: 'boss', meta: BOSS_DATA[k] };
+            }
+        }
+        if (typeof ENEMIES !== 'undefined' && Array.isArray(ENEMIES)) {
+            const e = ENEMIES.find(en => en.name === name);
+            if (e) return { kind: e.elite ? 'elite' : 'mob', meta: e };
+        }
+        return { kind: 'minion', meta: null };
+    },
+
+    _dossierIntentSummary(meta) {
+        if (!meta) return '';
+        const moves = (meta.moves && Array.isArray(meta.moves)) ? meta.moves : null;
+        if (!moves || !moves.length) return '';
+        const labels = {
+            attack: 'STRIKE', shield: 'BARRIER', buff: 'FORTIFY', debuff: 'VIRUS',
+            multi_attack: 'BARRAGE', summon: 'REINFORCE', summon_glitch: 'GLITCH SPAWN',
+            summon_void: 'VOID SPAWN', dispel: 'CLEANSE', analyse: 'ANALYSE',
+            reality_overwrite: 'REALITY SHIFT', purge_attack: 'PURGE',
+            consume: 'CONSUME', charge: 'CHARGING', cataclysm: 'CATACLYSM'
+        };
+        return moves.map(m => labels[m] || m.toUpperCase()).join(' · ');
+    },
+
+    _renderIntelDossier() {
+        const wrap = document.getElementById('intel-dossier');
+        const empty = document.getElementById('intel-dossier-empty');
+        if (!wrap) return;
+        wrap.innerHTML = '';
+        const ledger = (typeof Intel !== 'undefined' && Intel.all) ? Intel.all() : {};
+        const names = Object.keys(ledger).filter(n => ledger[n] && ledger[n].count > 0);
         if (!names.length) {
             if (empty) empty.style.display = '';
             return;
         }
         if (empty) empty.style.display = 'none';
-        names.sort((a, b) => kills[b] - kills[a]);
+
+        // Group by enemy class so the dossier feels organised, not a flat
+        // dump of names.
+        const SECTION_ORDER = [
+            { key: 'archivist', title: '⚜ THE ARCHIVIST' },
+            { key: 'boss',      title: '✦ SECTOR BOSSES' },
+            { key: 'elite',     title: '✧ ELITES' },
+            { key: 'mob',       title: '◇ STANDARD' },
+            { key: 'minion',    title: '◦ MINIONS' }
+        ];
+        const groups = {};
         names.forEach(name => {
-            const el = document.createElement('div');
-            el.className = 'codex-entry intel-beast-entry';
-            const count = kills[name];
-            const tier = count >= 20 ? 'veteran' : count >= 10 ? 'seasoned' : count >= 5 ? 'logged' : 'new';
-            el.innerHTML = `
-                <div class="intel-beast-name">${name}</div>
-                <div class="intel-beast-count">${count} KILL${count === 1 ? '' : 'S'}</div>
-                <div class="intel-beast-tier intel-beast-tier-${tier}">${tier.toUpperCase()}</div>
-            `;
-            grid.appendChild(el);
+            const cls = this._classifyEnemyForDossier(name);
+            if (!groups[cls.kind]) groups[cls.kind] = [];
+            groups[cls.kind].push({ name, kind: cls.kind, meta: cls.meta, record: ledger[name] });
         });
+
+        SECTION_ORDER.forEach(sec => {
+            const list = groups[sec.key];
+            if (!list || !list.length) return;
+            list.sort((a, b) => b.record.count - a.record.count);
+            const sectionEl = document.createElement('div');
+            sectionEl.className = 'intel-dossier-section';
+            const title = document.createElement('div');
+            title.className = 'intel-dossier-section-title';
+            title.textContent = sec.title;
+            sectionEl.appendChild(title);
+            const grid = document.createElement('div');
+            grid.className = 'intel-dossier-grid';
+            list.forEach(item => grid.appendChild(this._buildDossierCard(item)));
+            sectionEl.appendChild(grid);
+            wrap.appendChild(sectionEl);
+        });
+    },
+
+    _buildDossierCard({ name, kind, meta, record }) {
+        const count = record.count;
+        const tier = this._dossierTier(count);
+        const card = document.createElement('div');
+        card.className = `intel-dossier-card ${kind} tier-${tier.key}`;
+        card.tabIndex = 0;
+
+        // Reveal levels:
+        //   0 — silhouette (just the name)
+        //   1 — sector(s) seen + first-seen date
+        //   2 — meta tagline (boss subtitle / enemy lore)
+        //   3 — intent move list
+        //   4 — full dossier (all of the above + nemesis flair)
+        const sectors = (record.sectors || []).join(', ');
+        const firstSeen = record.firstSeen ? new Date(record.firstSeen).toLocaleDateString() : '—';
+        const subtitle = meta && meta.subtitle ? meta.subtitle : (meta && meta.lore ? meta.lore : '');
+        const intents = (tier.reveal >= 3) ? this._dossierIntentSummary(meta) : '';
+        const cap = tier.next ? `${count} / ${tier.next}` : 'MAX';
+        const progressPct = tier.next ? Math.min(100, Math.floor(((count) / tier.next) * 100)) : 100;
+
+        let detailHtml = '';
+        if (tier.reveal >= 1) {
+            detailHtml += `<div class="intel-dossier-detail-line"><span class="lbl">Encountered</span>${sectors ? `Sector${sectors.includes(',') ? 's' : ''} ${sectors}` : 'Unknown sector'} · first seen ${firstSeen}</div>`;
+        }
+        if (tier.reveal >= 2 && subtitle) {
+            detailHtml += `<div class="intel-dossier-detail-line"><span class="lbl">Profile</span>${subtitle}</div>`;
+        }
+        if (tier.reveal >= 3 && intents) {
+            detailHtml += `<div class="intel-dossier-detail-line"><span class="lbl">Known Moves</span>${intents}</div>`;
+        }
+        if (tier.reveal >= 4) {
+            detailHtml += `<div class="intel-dossier-detail-line"><span class="lbl">Nemesis Note</span>You have made this target your specialty. Their patterns are no longer a surprise.</div>`;
+        }
+        // Show the next reveal hint if not maxed.
+        if (tier.next) {
+            const remaining = tier.next - count;
+            const nextTier = this._dossierTier(tier.next);
+            detailHtml += `<div class="intel-dossier-locked-line">${remaining} more kill${remaining === 1 ? '' : 's'} → ${nextTier.label}</div>`;
+        }
+
+        card.innerHTML = `
+            <div class="intel-dossier-card-name">${name}</div>
+            <div class="intel-dossier-card-tier intel-dossier-tier-${tier.key}">${tier.label}</div>
+            <div class="intel-dossier-card-stats">
+                <span class="kills">${count} KILL${count === 1 ? '' : 'S'}</span>
+                <span>${cap}</span>
+            </div>
+            <div class="intel-dossier-card-progress"><div style="width:${progressPct}%;"></div></div>
+            <div class="intel-dossier-card-detail">${detailHtml}</div>
+        `;
+        const toggle = () => {
+            card.classList.toggle('expanded');
+            AudioMgr.playSound && AudioMgr.playSound('click');
+        };
+        card.onclick = toggle;
+        card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
+        return card;
     },
 
     _renderIntelChronicle() {
         const list = document.getElementById('intel-chronicle-list');
         const empty = document.getElementById('intel-chronicle-empty');
+        const statsEl = document.getElementById('intel-chronicle-stats');
+        const filtersEl = document.getElementById('intel-chronicle-filters');
         if (!list) return;
-        list.innerHTML = '';
+
         let history = [];
         try { history = JSON.parse(localStorage.getItem('mvm_run_history') || '[]'); } catch (e) {}
-        if (!Array.isArray(history) || !history.length) {
-            if (empty) empty.style.display = '';
+        if (!Array.isArray(history)) history = [];
+
+        // Stats banner — always shown when there's at least one run, gives
+        // the chronicle tab a sense of long-term progress instead of just
+        // "here are your last 20 attempts".
+        if (statsEl) {
+            statsEl.innerHTML = '';
+            if (history.length > 0) {
+                const wins = history.filter(r => r.result === 'win').length;
+                const losses = history.length - wins;
+                const winRate = Math.round((wins / history.length) * 100);
+                const winRuns = history.filter(r => r.result === 'win' && r.turnCount);
+                const fastest = winRuns.length ? Math.min.apply(null, winRuns.map(r => r.turnCount)) : null;
+                const stats = [
+                    { label: 'TOTAL', value: history.length },
+                    { label: 'WINS',  value: `${wins} (${winRate}%)` },
+                    { label: 'LOSSES', value: losses },
+                    { label: 'FASTEST WIN', value: fastest != null ? `${fastest}T` : '—' }
+                ];
+                stats.forEach(s => {
+                    const cell = document.createElement('div');
+                    cell.className = 'intel-chronicle-stat';
+                    cell.innerHTML = `<div class="intel-chronicle-stat-label">${s.label}</div><div class="intel-chronicle-stat-value">${s.value}</div>`;
+                    statsEl.appendChild(cell);
+                });
+            }
+        }
+
+        // Filter bar — ALL / WINS / LOSSES + per-class chips for any class
+        // the player has actually played.
+        const filters = ['all', 'win', 'loss'];
+        const seenClasses = new Set();
+        history.forEach(r => { if (r && r.classId) seenClasses.add(r.classId); });
+        seenClasses.forEach(c => filters.push('class:' + c));
+        if (!this._intelChronicleFilter || !filters.includes(this._intelChronicleFilter)) {
+            this._intelChronicleFilter = 'all';
+        }
+        if (filtersEl) {
+            filtersEl.innerHTML = '';
+            if (history.length > 0) {
+                filters.forEach(f => {
+                    const btn = document.createElement('button');
+                    btn.className = 'intel-chronicle-filter';
+                    if (f === this._intelChronicleFilter) btn.classList.add('active');
+                    let label;
+                    if (f === 'all') label = 'ALL';
+                    else if (f === 'win') label = 'WINS';
+                    else if (f === 'loss') label = 'LOSSES';
+                    else label = f.replace('class:', '').toUpperCase();
+                    btn.textContent = label;
+                    btn.onclick = () => {
+                        this._intelChronicleFilter = f;
+                        AudioMgr.playSound && AudioMgr.playSound('click');
+                        this._renderIntelChronicle();
+                    };
+                    filtersEl.appendChild(btn);
+                });
+            }
+        }
+
+        // Filter applied list.
+        const filter = this._intelChronicleFilter || 'all';
+        const filtered = history.filter(r => {
+            if (filter === 'all') return true;
+            if (filter === 'win') return r.result === 'win';
+            if (filter === 'loss') return r.result !== 'win';
+            if (filter.startsWith('class:')) return r.classId === filter.slice(6);
+            return true;
+        });
+
+        list.innerHTML = '';
+        if (!filtered.length) {
+            if (empty) {
+                empty.style.display = '';
+                empty.textContent = (history.length === 0)
+                    ? 'No runs logged yet. Every run — win or loss — appears here for review.'
+                    : 'No runs match this filter yet.';
+            }
             return;
         }
         if (empty) empty.style.display = 'none';
-        // Newest first
-        history.slice().reverse().slice(0, 20).forEach(run => {
+        filtered.slice().reverse().slice(0, 20).forEach(run => {
             const row = document.createElement('div');
             const won = run.result === 'win';
             row.className = 'intel-chronicle-row ' + (won ? 'run-won' : 'run-lost');
@@ -7319,6 +7553,93 @@ triggerSystemCrash() {
             `;
             list.appendChild(row);
         });
+    },
+
+    // Intel 3.0 cipher — group the lore database into chapters so it
+    // reads as a story being uncovered, not a numbered grid.
+    //
+    // Each chapter spans a slice of LORE_DATABASE indices. The chapter
+    // metadata (title, prologue, hint shown when none of its entries
+    // are decrypted) is hand-picked to mirror the existing lore arc.
+    _intelLoreChapters() {
+        const total = (typeof LORE_DATABASE !== 'undefined' && LORE_DATABASE.length) ? LORE_DATABASE.length : 0;
+        // Five chapters split across ~33 entries — adjust slice ranges if
+        // the database length changes substantially.
+        return [
+            { title: 'I · THE FALL',         range: [0, 8],        hint: 'Decrypt to recover how it ended.' },
+            { title: 'II · THE NEW WORLD',   range: [8, 16],       hint: 'How the machines rebuilt — fragments only.' },
+            { title: 'III · THE RESISTANCE', range: [16, 24],      hint: 'What hides in the analog gaps.' },
+            { title: 'IV · THE CLASSES',     range: [24, 32],      hint: 'Who you are, and who you were.' },
+            { title: 'V · THE TRUTH',        range: [32, total],   hint: 'For those who reach the end.' }
+        ].map(c => ({ ...c, range: [Math.min(c.range[0], total), Math.min(c.range[1], total)] }))
+         .filter(c => c.range[1] > c.range[0]);
+    },
+
+    _renderIntelCipher() {
+        const wrap = document.getElementById('intel-cipher-chapters');
+        if (!wrap) return;
+        wrap.innerHTML = '';
+        const total = (typeof LORE_DATABASE !== 'undefined') ? LORE_DATABASE.length : 0;
+        const unlocked = (this.unlockedLore || []).slice();
+        const setProgress = document.getElementById('intel-cipher-progress');
+        if (setProgress) setProgress.textContent = `${unlocked.length} / ${total} decrypted`;
+
+        const chapters = this._intelLoreChapters();
+        chapters.forEach(ch => {
+            const el = document.createElement('div');
+            el.className = 'intel-cipher-chapter';
+            const title = document.createElement('div');
+            title.className = 'intel-cipher-chapter-title';
+            title.textContent = ch.title;
+            el.appendChild(title);
+
+            const meta = document.createElement('div');
+            meta.className = 'intel-cipher-chapter-meta';
+            const span = ch.range[1] - ch.range[0];
+            const localUnlocked = unlocked.filter(i => i >= ch.range[0] && i < ch.range[1]).length;
+            meta.textContent = `${localUnlocked} / ${span} decrypted`;
+            el.appendChild(meta);
+
+            const grid = document.createElement('div');
+            grid.className = 'intel-cipher-entries';
+            for (let i = ch.range[0]; i < ch.range[1]; i++) {
+                const tile = document.createElement('div');
+                tile.className = 'intel-cipher-tile';
+                if (unlocked.includes(i)) tile.classList.add('unlocked');
+                tile.textContent = (i + 1).toString();
+                if (unlocked.includes(i)) {
+                    tile.onclick = (e) => {
+                        AudioMgr.playSound && AudioMgr.playSound('click');
+                        TooltipMgr.show(LORE_DATABASE[i], e.clientX, e.clientY);
+                    };
+                }
+                grid.appendChild(tile);
+            }
+            el.appendChild(grid);
+
+            if (localUnlocked === 0) {
+                const hint = document.createElement('div');
+                hint.className = 'intel-cipher-hint';
+                hint.textContent = ch.hint;
+                el.appendChild(hint);
+            }
+
+            wrap.appendChild(el);
+        });
+
+        // DECRYPT FILE button state.
+        const btnDecrypt = document.getElementById('btn-decrypt');
+        if (btnDecrypt) {
+            if (this.encryptedFiles > 0) {
+                btnDecrypt.disabled = false;
+                btnDecrypt.style.opacity = 1;
+                btnDecrypt.innerText = `DECRYPT FILE (×${this.encryptedFiles})`;
+            } else {
+                btnDecrypt.disabled = true;
+                btnDecrypt.style.opacity = 0.5;
+                btnDecrypt.innerText = 'NO FILES';
+            }
+        }
     },
 
     /* Push a run record to history (Roadmap Part 27 Chronicle tab). Keeps
@@ -13237,12 +13558,12 @@ drawEffects() {
         // Track the kill so the next time the player meets this enemy the
         // briefing shows "Encountered N times" and achievements can fire.
         if (this.enemy && this.enemy.name && this.currentState !== STATE.TUTORIAL_COMBAT) {
-            Intel.recordKill(this.enemy.name);
+            Intel.recordKill(this.enemy.name, this.sector);
             // Also log any enemy-side minion kills for regular combats so
             // the total-kill counter climbs realistically.
             if (Array.isArray(this.enemy.minions)) {
                 this.enemy.minions.forEach(m => {
-                    if (m && m.name && m.currentHp <= 0) Intel.recordKill(m.name);
+                    if (m && m.name && m.currentHp <= 0) Intel.recordKill(m.name, this.sector);
                 });
             }
         }
