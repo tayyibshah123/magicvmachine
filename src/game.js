@@ -746,16 +746,16 @@ const Game = {
         attachButtonEvent('btn-achievements', () => this.changeState(STATE.ACHIEVEMENTS));
         attachButtonEvent('btn-back-achievements', () => this.changeState(STATE.META));
 
-        // --- Replay tutorial on next run ---
+        // --- Replay onboarding on next run ---
         attachButtonEvent('btn-replay-tutorial', () => {
             localStorage.removeItem('mvm_first_run_done');
-            // Reset onboarding so the scripted 5-stage flow runs again on
-            // next app load (player must manually reload to see it).
+            // Reset the welcome card + field-notes recap so they fire again
+            // on the next launch / first map entry.
             Onboarding.reset && Onboarding.reset();
-            // Also reset class briefings so each class feels fresh again.
+            try { localStorage.removeItem('mvm_post_tutorial_recap_seen'); } catch (_) {}
             ClassBriefing.reset && ClassBriefing.reset();
-            this.tutorialAutoRun = true;
-            ParticleSys.createFloatingText(540, 800, 'TUTORIAL WILL REPLAY ON NEXT LAUNCH', '#00f3ff');
+            this.tutorialAutoRun = false;
+            ParticleSys.createFloatingText(540, 800, 'ONBOARDING WILL REPLAY ON NEXT LAUNCH', '#00f3ff');
             const modal = d.getElementById('modal-settings');
             if (modal) modal.classList.add('hidden');
         });
@@ -1942,10 +1942,17 @@ startQTE(type, x, y, callback) {
                 activate('screen-achievements');
                 this.renderAchievements();
                 break;
-            case STATE.MAP: 
-                activate('screen-map'); 
-                this.renderMap(); 
+            case STATE.MAP:
+                activate('screen-map');
+                this.renderMap();
                 this.saveGame();
+                // Field-notes recap fires here on first MAP entry post
+                // class select, replacing the legacy openPostTutorial trigger
+                // (the scripted tutorial it gated on was retired).
+                if (this.player && this.player.classId
+                    && localStorage.getItem('mvm_post_tutorial_recap_seen') !== '1') {
+                    setTimeout(() => this._showPostTutorialRecap && this._showPostTutorialRecap(), 240);
+                }
                 break;
             case STATE.SHOP:
                 activate('screen-shop');
@@ -2059,16 +2066,16 @@ startQTE(type, x, y, callback) {
             this.generateMap();
         }
         this.renderRelics();
-        this._showPostTutorialRecap(() => {
-            this.changeState(STATE.MAP);
-            this.saveGame();
-        });
+        // Recap is now triggered from changeState(STATE.MAP) so it covers
+        // both this legacy path and the new welcome-card path uniformly.
+        this.changeState(STATE.MAP);
+        this.saveGame();
     },
 
-    // Compact post-tutorial recap. Scoped to the three things the scripted
-    // tutorial fight doesn't directly teach. Single-screen, single button.
+    // First-map FIELD NOTES card. Fires once per install, the first time
+    // the player reaches the sector map after picking a class. Covers the
+    // three systems the dice tray + HP bars don't visually self-teach.
     _showPostTutorialRecap(onContinue) {
-        // Already shown once before? Skip — happens on tutorial replay.
         if (localStorage.getItem('mvm_post_tutorial_recap_seen') === '1') {
             if (onContinue) onContinue();
             return;
@@ -2081,23 +2088,23 @@ startQTE(type, x, y, callback) {
         overlay.innerHTML = `
             <div class="ptr-card">
                 <div class="ptr-header">// FIELD NOTES</div>
-                <h2 class="ptr-title">YOU KNOW THE BASICS.</h2>
-                <p class="ptr-sub">Three more things the simulator didn't show you:</p>
+                <h2 class="ptr-title">BEFORE YOU MOVE.</h2>
+                <p class="ptr-sub">Three things the dice tray won't shout at you:</p>
                 <div class="ptr-bullets">
                     <div class="ptr-bullet">
                         <span class="ptr-bullet-icon">◆</span>
-                        <span><strong>Class ability</strong> — the widget below the dice tray fills as you play. Tap it when ready. Each class has a unique payoff.</span>
+                        <span><strong>Class ability</strong>. The widget below the dice tray fills as you play. Tap it when ready. Each class has a unique payoff.</span>
                     </div>
                     <div class="ptr-bullet">
                         <span class="ptr-bullet-icon">◆</span>
-                        <span><strong>Reroll</strong> — tap a die to <em>lock</em> it, then reroll. Two free per turn.</span>
+                        <span><strong>Reroll</strong>. Tap a die to <em>lock</em> it, then reroll. Two free per turn.</span>
                     </div>
                     <div class="ptr-bullet">
                         <span class="ptr-bullet-icon">◆</span>
-                        <span><strong>Status icons</strong> on HP bars (WEAK, BLEED, etc) — tap any icon for details.</span>
+                        <span><strong>Status icons</strong> on HP bars (WEAK, BLEED, etc). Tap any icon for details.</span>
                     </div>
                 </div>
-                <button id="ptr-continue" class="btn primary ptr-continue">DEPLOY</button>
+                <button id="ptr-continue" class="btn primary ptr-continue">GOT IT</button>
             </div>
         `;
         document.body.appendChild(overlay);
@@ -3345,20 +3352,17 @@ startQTE(type, x, y, callback) {
         this.generateMap();
         this.renderRelics();
 
-        // First-run auto-tutorial (Phase 3). Profile-level flag (persists across runs).
-        const firstRunDone = localStorage.getItem('mvm_first_run_done') === '1';
-        if (!firstRunDone) {
-            this.tutorialAutoRun = true;
-            this.startTutorial();
-            this.saveGame();
-            return;
-        }
-
+        // First-run path no longer kicks the legacy 12-step scripted
+        // tutorial — that flow was leaking into STATE.MAP and crashing on
+        // a null `this.enemy.x`. Players land in their first real Sector 1
+        // fight with the onboarding welcome card behind them; the
+        // post-first-map "FIELD NOTES" recap (see changeState) covers the
+        // mechanics the welcome card didn't.
+        try { localStorage.setItem('mvm_first_run_done', '1'); } catch (_) {}
+        this.tutorialAutoRun = false;
+        document.body.classList.remove('tutorial-auto-run');
         this.changeState(STATE.MAP);
-
-        // Save initial state
         this.saveGame();
-
     },
 
     getRelicDescription(relic, count) {
@@ -20650,43 +20654,45 @@ drawEntity(entity) {
         }
     },
 
-// --- TUTORIAL SYSTEM ---
-
+// --- LEGACY TUTORIAL — STRIPPED ----------------------------------------
+// The 12-step scripted "OPERATOR STATS / ENEMY THREAT / MODULES …" rig
+// was retired: it leaked an OPERATOR STATS overlay onto the sector map
+// after completion and crashed on `this.enemy.x` with the enemy already
+// nulled. The new player path is welcome card → char select → real
+// Sector 1 fight, with the field-notes recap firing on first map entry
+// (see changeState). startTutorial / updateTutorialStep are kept as
+// no-ops so any stale dev-menu / settings hook doesn't ReferenceError;
+// they simply route the player back to the map.
     startTutorial() {
-        this.changeState(STATE.TUTORIAL_COMBAT);
-        this.tutorialStep = 0;
-
-        // Mark body for auto-run so CSS can suppress the legacy tutorial-text overlay.
-        document.body.classList.toggle('tutorial-auto-run', !!this.tutorialAutoRun);
-
-        // If we're running this BEFORE the player picked a class (manual Training Mode),
-        // spawn a mock player. For Phase 3 auto-run we use the real player the user chose.
-        if (!this.tutorialAutoRun) {
-            this.player = new Player(PLAYER_CLASSES[0]);
-            this.player.currentHp = 30;
-            this.player.maxHp = 30;
-            this.player.mana = 3;
-            this.player.diceCount = 2;
+        this.tutorialAutoRun = false;
+        document.body.classList.remove('tutorial-auto-run');
+        try { localStorage.setItem('mvm_first_run_done', '1'); } catch (_) {}
+        const tOverlay = document.getElementById('tutorial-overlay');
+        if (tOverlay) tOverlay.classList.add('hidden');
+        const tText = document.getElementById('tutorial-text');
+        if (tText) tText.classList.add('hidden');
+        const tSpot = document.getElementById('tutorial-spotlight');
+        if (tSpot) tSpot.classList.add('hidden');
+        if (!this.map || !this.map.nodes || this.map.nodes.length === 0) {
+            this.generateMap();
         }
-
-        // Training Dummy: HP caps so it can't die until step 12 (Phase 3).
-        this.enemy = new Enemy({ name: "Training Dummy", hp: 10, dmg: 2 }, 1);
-        this.enemy.nextIntent = { type: 'attack', val: 2, target: this.player };
-        this.enemy.showIntent = false;
-        this.enemy.isTutorialDummy = true; // flag read by takeDamage guard below
-
-        const hud = document.getElementById('hud');
-        hud.classList.remove('hidden');
-        hud.style.zIndex = "3500";
-
-        const overlay = document.getElementById('tutorial-overlay');
-        overlay.classList.remove('hidden');
-        overlay.style.opacity = "1";
-
-        this.updateTutorialStep();
+        this.changeState(STATE.MAP);
+        this.saveGame();
     },
 
      updateTutorialStep() {
+        // Legacy 12-step tutorial stripped (audit fix). Guard at the top so
+        // any stale invocation (canvas tap handler, settings replay button,
+        // dev menu) is a silent no-op instead of crashing on null entities.
+        if (this.currentState !== STATE.TUTORIAL_COMBAT) {
+            const tOverlay = document.getElementById('tutorial-overlay');
+            if (tOverlay) tOverlay.classList.add('hidden');
+            const tText = document.getElementById('tutorial-text');
+            if (tText) tText.classList.add('hidden');
+            const tSpot = document.getElementById('tutorial-spotlight');
+            if (tSpot) tSpot.classList.add('hidden');
+            return;
+        }
         const overlay = document.getElementById('tutorial-overlay');
         const text = document.getElementById('tutorial-text');
         const canvas = document.getElementById('gameCanvas');

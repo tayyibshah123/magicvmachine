@@ -166,36 +166,30 @@ export const Onboarding = {
             resetIdle(() => { emitStage('2_primer_idle'); state.stage = 3; renderStage3(); });
         };
 
-        // ---- Stage 3: Hand off to the scripted tutorial combat ----
-        // The existing tutorial combat rig in game.js is a solid scripted
-        // flow — we just launch it here. Completion is captured by Game
-        // clearing its 'tutorial_combat_done' flag, which calls finish().
+        // ---- Stage 3: Final hand-off card ----
+        // Previously launched a 12-step scripted tutorial fight, which has
+        // since been retired (it was leaking onto the sector map and
+        // crashing on null entities). The button now simply closes
+        // onboarding and drops the player at the main menu. They pick
+        // INITIATE RUN, choose a class, and the FIELD NOTES recap fires
+        // automatically on the first map visit.
         const renderStage3 = () => {
             root.innerHTML = `
                 <div class="onb-card">
-                    <div class="onb-header">// LIVE-FIRE DRILL</div>
-                    <h2 class="onb-title-mid">YOUR FIRST FIGHT.</h2>
+                    <div class="onb-header">// READY</div>
+                    <h2 class="onb-title-mid">DEPLOY WHEN READY.</h2>
                     <p class="onb-body">
-                        A training dummy awaits. Every action is safe. Every mistake is forgivable.
-                        Hit the enemy. Block the counter. End the turn. Step through training.
+                        Pick your operator. Drag dice onto targets. Survive the sector. Repeat.
                     </p>
                     <div class="onb-actions">
-                        <button class="btn secondary onb-skip" id="onb-skip-3">SKIP</button>
                         <button class="btn primary onb-next" id="onb-next-3">DEPLOY</button>
                     </div>
                 </div>
             `;
-            document.getElementById('onb-skip-3').onclick = () => {
-                emitStage('3_tutorial_skipped');
-                finish();
-            };
             document.getElementById('onb-next-3').onclick = () => {
-                emitStage('3_tutorial_start');
+                emitStage('3_deploy');
                 finish();
-                if (onStartTutorial) onStartTutorial();
             };
-            // No idle auto-advance here — this is the last chance to skip,
-            // and pushing someone into combat unexpectedly is hostile.
         };
 
         renderStage1();
