@@ -4957,7 +4957,35 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     color: #fff;
 }
 .custom-run-net span { color: var(--neon-gold); text-shadow: 0 0 8px rgba(255, 215, 0, 0.4); }
+/* Net-payout colour cues — the fastest read of "is this run worth it":
+   green = easier (lower payout), red = harder (bigger payout), white = par. */
+.custom-run-net span.payout-up      { color: #ff6b9b; text-shadow: 0 0 10px rgba(255, 107, 155, 0.5); }
+.custom-run-net span.payout-down    { color: #5ad864; text-shadow: 0 0 10px rgba(90, 216, 100, 0.5); }
+.custom-run-net span.payout-neutral { color: #ffffff; text-shadow: 0 0 8px rgba(255, 255, 255, 0.4); }
 .custom-run-actions { display: flex; gap: 8px; }
+/* Preset chips — dive straight into a flavour without picking 8 mods. */
+.custom-run-presets {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+.custom-run-preset {
+    font-family: var(--font-cyber);
+    font-size: 0.75rem;
+    letter-spacing: 0.16em;
+    padding: 6px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.04);
+    color: #d8d8e6;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 120ms, color 120ms, border-color 120ms;
+}
+.custom-run-preset:hover  { background: rgba(255, 255, 255, 0.10); color: #fff; border-color: rgba(255, 255, 255, 0.36); }
+.custom-run-preset:active { transform: translateY(1px); }
+#btn-custom-run:disabled  { opacity: 0.45; cursor: not-allowed; }
 #screen-char-select .char-grid {
     display: grid;
     /* 3 columns × 2 rows for all six classes — every card same size. */

@@ -7896,13 +7896,40 @@ triggerSystemCrash() {
             || !(typeof Ascension !== 'undefined' && Ascension.getUnlocked && Ascension.getUnlocked() >= 1);
         bar.classList.toggle('hidden', gated);
         if (gated) return;
-        if (!this.customRunModifiers) this.customRunModifiers = new Set();
+        // Hydrate selection from localStorage on first read so the player's
+        // last-picked modifiers survive a page reload (the configure modal
+        // is otherwise the only way to set them, and re-clicking 4 mods
+        // every launch is hostile).
+        if (!this.customRunModifiers) {
+            this.customRunModifiers = new Set();
+            try {
+                const raw = localStorage.getItem('mvm_custom_run');
+                if (raw) {
+                    const arr = JSON.parse(raw);
+                    if (Array.isArray(arr)) arr.forEach(id => this.customRunModifiers.add(id));
+                }
+            } catch (_) { /* ignore */ }
+        }
         const count = this.customRunModifiers.size;
         const summary = document.getElementById('custom-run-bar-summary');
         if (summary) {
             if (count === 0) summary.textContent = 'Standard run';
             else summary.textContent = `${count} modifier${count === 1 ? '' : 's'} · Net ${this._computeCustomRunNetPct()}%`;
         }
+        // Lock the configure button outside MENU/CHAR_SELECT so a mid-run
+        // tweak can't break in-flight effect math.
+        const btn = document.getElementById('btn-custom-run');
+        if (btn) {
+            const lockable = (this.currentState === STATE.MENU || this.currentState === STATE.CHAR_SELECT);
+            btn.disabled = !lockable;
+            btn.title = lockable ? '' : 'Custom run is locked once you deploy.';
+        }
+    },
+    _saveCustomRunModifiers() {
+        try {
+            const arr = Array.from(this.customRunModifiers || []);
+            localStorage.setItem('mvm_custom_run', JSON.stringify(arr));
+        } catch (_) { /* ignore */ }
     },
     _computeCustomRunNetPct() {
         if (!this.customRunModifiers) return 100;
@@ -7937,6 +7964,7 @@ triggerSystemCrash() {
                     else this.customRunModifiers.add(m.id);
                     card.classList.toggle('selected');
                     this._refreshCustomRunNet();
+                    this._saveCustomRunModifiers();
                 };
                 grid.appendChild(card);
             });
@@ -7951,7 +7979,15 @@ triggerSystemCrash() {
     },
     _refreshCustomRunNet() {
         const netEl = document.getElementById('custom-run-net');
-        if (netEl) netEl.textContent = `${this._computeCustomRunNetPct()}%`;
+        if (!netEl) return;
+        const pct = this._computeCustomRunNetPct();
+        netEl.textContent = `${pct}%`;
+        // Colour the payout so a glance at the modal reveals the wager:
+        // green = easier-than-default, red = harder, white = neutral.
+        netEl.classList.remove('payout-up', 'payout-down', 'payout-neutral');
+        if (pct > 100)      netEl.classList.add('payout-up');
+        else if (pct < 100) netEl.classList.add('payout-down');
+        else                netEl.classList.add('payout-neutral');
     },
     _clearCustomRunModifiers() {
         if (!this.customRunModifiers) this.customRunModifiers = new Set();
@@ -7959,14 +7995,54 @@ triggerSystemCrash() {
         const modal = document.getElementById('custom-run-modal');
         if (modal) modal.querySelectorAll('.custom-run-card.selected').forEach(c => c.classList.remove('selected'));
         this._refreshCustomRunNet();
+        this._saveCustomRunModifiers();
+    },
+    _applyCustomRunPreset(name) {
+        if (!this.customRunModifiers) this.customRunModifiers = new Set();
+        this.customRunModifiers.clear();
+        if (name === 'hardcore') {
+            CUSTOM_RUN_MODIFIERS.filter(m => m.kind === 'negative').forEach(m => this.customRunModifiers.add(m.id));
+        } else if (name === 'casual') {
+            CUSTOM_RUN_MODIFIERS.filter(m => m.kind === 'positive').forEach(m => this.customRunModifiers.add(m.id));
+        } else if (name === 'random') {
+            // Pick 3 distinct mods (any kind). Bias slightly toward negative
+            // for a meaningful payout — net would otherwise hover near 100%.
+            const pool = [...CUSTOM_RUN_MODIFIERS];
+            for (let i = pool.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [pool[i], pool[j]] = [pool[j], pool[i]];
+            }
+            pool.slice(0, 3).forEach(m => this.customRunModifiers.add(m.id));
+        }
+        // Re-paint the modal cards so the selection is visible immediately.
+        const modal = document.getElementById('custom-run-modal');
+        if (modal) {
+            modal.querySelectorAll('.custom-run-card').forEach(card => {
+                const id = card.dataset.modId;
+                card.classList.toggle('selected', this.customRunModifiers.has(id));
+            });
+        }
+        this._refreshCustomRunNet();
+        this._saveCustomRunModifiers();
     },
     _wireCustomRunEvents() {
         const btnOpen = document.getElementById('btn-custom-run');
         if (btnOpen) btnOpen.onclick = () => this._openCustomRunModal();
         const btnApply = document.getElementById('btn-custom-run-apply');
-        if (btnApply) btnApply.onclick = () => this._closeCustomRunModal();
+        if (btnApply) btnApply.onclick = () => { this._saveCustomRunModifiers(); this._closeCustomRunModal(); };
         const btnClear = document.getElementById('btn-custom-run-clear');
         if (btnClear) btnClear.onclick = () => this._clearCustomRunModifiers();
+        // Preset chips — three quick-fill shortcuts so a player can dive
+        // into a preset rather than hand-selecting modifiers.
+        const presetWrap = document.getElementById('custom-run-presets');
+        if (presetWrap && !presetWrap.dataset.wired) {
+            presetWrap.dataset.wired = '1';
+            presetWrap.addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-preset]');
+                if (!btn) return;
+                this._applyCustomRunPreset(btn.dataset.preset);
+            });
+        }
     },
     /* Apply selected modifiers to the run. Called from selectClass after
        player is constructed. Effect flags are stored on the Game object
