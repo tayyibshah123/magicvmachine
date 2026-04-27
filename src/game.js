@@ -4110,16 +4110,21 @@ triggerPhaseGlitch() {
             2: {
                 'THE PANOPTICON':  'EYE LOCKED. ALL GAZE FOCUSED',
                 'NULL_POINTER':    'SYSTEM REWRITE INITIATED',
-                'THE COMPILER':    'BUILD PIPELINE CORRUPTED',
+                'THE COMPILER':    'BUILD PIPELINE CORRUPTED. HEAT VENTING',
                 'HIVE PROTOCOL':   'SWARM INDEX MAXIMIZED',
                 'TESSERACT PRIME': 'DIMENSION UNSEALED',
+                'THE ARCHIVIST':   'ARCHIVE OPEN. YOUR DICE REMEMBERED',
             },
             3: {
                 'THE PANOPTICON':  'BLIND PROTOCOL. SIGHT FAILING',
-                'NULL_POINTER':    'REALITY SHATTER. MODULES MUTED',
-                'THE COMPILER':    'STRUCTURAL COLLAPSE',
+                'NULL_POINTER':    'REALITY SHATTER. SYSTEMS BLEEDING',
+                'THE COMPILER':    'STRUCTURAL COLLAPSE. SHRAPNEL LIVE',
                 'HIVE PROTOCOL':   'ASSIMILATION PROTOCOL',
-                'TESSERACT PRIME': 'REALITY SPLIT',
+                'TESSERACT PRIME': 'REALITY SPLIT. EVERY HIT TWICE',
+                'THE ARCHIVIST':   'REWIND ENGAGED. HEAVY HITS UNDONE',
+            },
+            4: {
+                'THE ARCHIVIST':   'ENRAGE. EVERY MECHANIC AT ONCE',
             }
         };
         const lines = PHASE_LINES[phase] || PHASE_LINES[2];
@@ -4462,6 +4467,10 @@ triggerPhaseGlitch() {
                 ParticleSys.createShockwave(enemy.x, enemy.y, '#00f3ff', 40);
             } else if (phase === 3) {
                 enemy.blindProtocol = true;
+                // Tier 3: bumped from a flat 20% miss-chance to 35%. The phase
+                // banner reads "SIGHT FAILING" — the previous rate felt too
+                // mild to support the line. Read by entity.takeDamage.
+                enemy.blindRate = 0.35;
                 enemy.eyeLockTurns = 0;
                 // Phase 3 switches to white — eye closes, both sides blind.
                 enemy.phaseTelegraphColor = '#eaffff';
@@ -4488,6 +4497,11 @@ triggerPhaseGlitch() {
                 // +4 permanent baseDmg. If no minions, no-op. Forces the
                 // player to either kill minions fast OR let the boss scale.
                 enemy.voidConsumesMinions = true;
+                // Wire the long-dormant realityShatter mechanic: a flat
+                // chip-damage drip every player turn end. Bypasses shield
+                // (it's the world bleeding, not an attack). Read by
+                // Game.endTurn — the value scales loosely with boss damage.
+                enemy.realityShatterDmg = 5;
                 // Phase 3 shifts to deep purple — relics "muting".
                 enemy.phaseTelegraphColor = '#bc13fe';
                 this.triggerScreenFlash && this.triggerScreenFlash('rgba(188, 19, 254, 0.35)', 400);
@@ -4497,12 +4511,20 @@ triggerPhaseGlitch() {
         else if (name === 'THE COMPILER') {
             if (phase === 2) {
                 if (enemy.bossData.actionsPerTurn < 3) enemy.bossData.actionsPerTurn++;
+                // Build pipeline corrupted: heat radiates from the boss every
+                // player turn end. Bypasses shield (environmental, not an
+                // attack) so shield-stack runs still feel the tempo squeeze.
+                // Read by Game.endTurn.
+                enemy.compilerOverheat = 3;
                 // Orange telegraph — molten overclock.
                 enemy.phaseTelegraphColor = '#ff4500';
                 this.triggerScreenFlash && this.triggerScreenFlash('rgba(255, 69, 0, 0.32)', 400);
                 ParticleSys.createShockwave(enemy.x, enemy.y, '#ff4500', 42);
             } else if (phase === 3) {
                 enemy.armorProjectileMode = true;
+                // Phase 3 ramps the heat tick — shell breaking apart vents
+                // more aggressively than the corrupted pipeline did.
+                enemy.compilerOverheat = 5;
                 // Brighter heat — shrapnel mode.
                 enemy.phaseTelegraphColor = '#ffaa00';
                 this.triggerScreenFlash && this.triggerScreenFlash('rgba(255, 170, 0, 0.35)', 400);
@@ -4536,6 +4558,32 @@ triggerPhaseGlitch() {
                 enemy.phaseTelegraphColor = '#32cd32';
                 this.triggerScreenFlash && this.triggerScreenFlash('rgba(50, 205, 50, 0.35)', 400);
                 ParticleSys.createShockwave(enemy.x, enemy.y, '#32cd32', 44);
+            }
+        }
+        else if (name === 'THE ARCHIVIST') {
+            // The Archivist's gameplay mechanics are wired in
+            // enemy.generateSingleIntent (phase-aware intent rotation),
+            // game.endTurn (phase 2+ archives the last-played die), and
+            // entity.takeDamage (phase 3 rewinds heavy hits). This block
+            // owns the *cinematic* — telegraph color, screen flash, and a
+            // phase-4 enrage stat boost so enrage isn't purely cosmetic.
+            if (phase === 2) {
+                enemy.phaseTelegraphColor = '#ffd76a';
+                this.triggerScreenFlash && this.triggerScreenFlash('rgba(255, 215, 106, 0.32)', 400);
+                ParticleSys.createShockwave(enemy.x, enemy.y, '#ffd76a', 40);
+            } else if (phase === 3) {
+                enemy.phaseTelegraphColor = '#ff77aa';
+                this.triggerScreenFlash && this.triggerScreenFlash('rgba(255, 119, 170, 0.35)', 400);
+                ParticleSys.createShockwave(enemy.x, enemy.y, '#ff77aa', 44);
+            } else if (phase === 4) {
+                // Enrage. The intent rotation already alternates a hard
+                // multi-attack; layer +25% baseDmg so every action lands
+                // heavier and the enrage banner has teeth.
+                enemy.baseDmg = Math.floor((enemy.baseDmg || enemy.bossData.dmg || 30) * 1.25);
+                enemy.archivistEnraged = true;
+                enemy.phaseTelegraphColor = '#ff0055';
+                this.triggerScreenFlash && this.triggerScreenFlash('rgba(255, 0, 85, 0.45)', 500);
+                ParticleSys.createShockwave(enemy.x, enemy.y, '#ff0055', 52);
             }
         }
         else if (name === 'TESSERACT PRIME') {
@@ -12974,6 +13022,28 @@ drawEffects() {
                 });
                 this.player.minions = this.player.minions.filter(m => m && m.currentHp > 0);
             }
+        }
+        // Boss phase chip-damage ticks (§5.3.1). These fire at end-of-player-
+        // turn so the player sees the damage before the enemy phase banner
+        // and reads "the boss's mere presence is bleeding me." Bypass shield
+        // so the effect is environmental, not absorbable. Nothing fires
+        // unless the relevant phase flag is set in _applyBossPhaseMechanic.
+        if (this.enemy && this.player && this.player.currentHp > 0) {
+            // COMPILER P2/P3 — corrupted pipeline vents heat at the player.
+            const overheat = this.enemy.compilerOverheat;
+            if (typeof overheat === 'number' && overheat > 0 && this.enemy.name === 'THE COMPILER') {
+                this.player.takeDamage(overheat, this.enemy, true, /*bypassShield*/ true);
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 120, `OVERHEAT -${overheat}`, '#ff4500');
+            }
+            // NULL_POINTER P3 — reality shatters; the world bleeds the operator.
+            const shatter = this.enemy.realityShatterDmg;
+            if (typeof shatter === 'number' && shatter > 0 && this.enemy.name === 'NULL_POINTER' && this.player.currentHp > 0) {
+                this.player.takeDamage(shatter, this.enemy, true, /*bypassShield*/ true);
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 140, `SHATTER -${shatter}`, '#bc13fe');
+            }
+            // If the chip ticks killed the player, gameOver has already moved
+            // state — bail before kicking the enemy phase.
+            if (this.player.currentHp <= 0) return;
         }
         // Show end-of-turn summary if any meaningful stats this turn
         this.showTurnSummary();

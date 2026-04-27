@@ -148,11 +148,15 @@ class Entity {
             }
         }
 
-        // PANOPTICON blind protocol (phase 3): 20% miss chance on both sides
-        // when the boss is in blind mode.
-        if (Game.enemy && Game.enemy.blindProtocol && Math.random() < 0.2) {
-            ParticleSys.createFloatingText(this.x, this.y - 90, "BLIND MISS", "#88eaff");
-            return false;
+        // PANOPTICON blind protocol (phase 3): miss chance on both sides
+        // when the boss is in blind mode. Default 20% with a `blindRate`
+        // override picked up from the phase-3 mechanic block (currently 35%).
+        if (Game.enemy && Game.enemy.blindProtocol) {
+            const rate = (typeof Game.enemy.blindRate === 'number') ? Game.enemy.blindRate : 0.2;
+            if (Math.random() < rate) {
+                ParticleSys.createFloatingText(this.x, this.y - 90, "BLIND MISS", "#88eaff");
+                return false;
+            }
         }
 
         // Ascension flat-damage twist: brittle hull
