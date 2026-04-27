@@ -465,8 +465,21 @@
                             <div><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19 L11 13"/><path d="M11 13 L13 11 L15 13 L17 11 Q19 9 17 7 Q15 5 13 7 L11 9 L13 11 Z" fill="currentColor" fill-opacity="0.22"/></svg> TINKER</div>
                             <div style="font-size: 0.8rem; color: #aaa;">Upgrade a Random Skill</div>
                         </button>
+                        <!-- Challenge Mode only — surfaced/hidden by Game.visitNode. -->
+                        <button id="btn-rest-pact" class="btn secondary neon-border-pink hidden">
+                            <div><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 L20 8 L20 16 L12 21 L4 16 L4 8 Z" fill="currentColor" fill-opacity="0.18"/><path d="M12 7 L12 17 M8 12 L16 12"/></svg> SIGN A PACT</div>
+                            <div style="font-size: 0.8rem; color: #ff77aa;">Trade survival for power. Stacks all run.</div>
+                        </button>
                     </div>
                 </div>
+            </div>
+
+            <!-- Pact pick modal (Challenge Mode) -->
+            <div id="screen-pact" class="screen hidden">
+                <h2 class="neon-text-pink">SIGN A PACT</h2>
+                <p class="pact-subtitle">Each pact stays for the rest of the gauntlet. Pick once, live with it.</p>
+                <div id="pact-options" class="pact-options"></div>
+                <button id="btn-pact-cancel" class="btn secondary" style="margin-top: 18px;">CANCEL — RETURN TO REST</button>
             </div>
 
 	<!-- Tutorial Dark Background -->

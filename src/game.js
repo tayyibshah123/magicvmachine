@@ -28,6 +28,42 @@ import { Perf } from './services/perf.js';
 
 registerEntityClasses(Player, Minion, Enemy);
 
+// Roadmap Part 24 — Pacts. Between-fight modifiers offered at Rest nodes
+// during Challenge Mode runs. Each Pact stays on for the rest of the run
+// (stacking) and trades survival for power. Effect resolution lives in
+// applyPact() / read points scattered through combat code (search for the
+// flag names below).
+const PACTS = [
+    {
+        id: 'ruin',
+        name: 'PACT OF RUIN',
+        cost: '-30% MAX HP',
+        effect: '<strong>+50% damage</strong> on every player attack.',
+        flavour: '"Burn the bones to light the strike."',
+        // Applied immediately when signed.
+        damageMult: 1.5,
+        maxHpFraction: 0.7
+    },
+    {
+        id: 'silence',
+        name: 'PACT OF SILENCE',
+        cost: 'COMBOS DISABLED',
+        effect: 'Rerolls cost <strong>nothing</strong>. Combo bonuses no longer trigger.',
+        flavour: '"Speak no name. Roll forever."',
+        freeRerolls: true,
+        disableCombos: true
+    },
+    {
+        id: 'hunger',
+        name: 'PACT OF HUNGER',
+        cost: 'MINIONS DIE AFTER 1 TURN',
+        effect: 'Player minions deal <strong>×2 damage</strong>. They expire at the next end-of-turn.',
+        flavour: '"Brief, ravenous, unforgiving."',
+        minionDmgMult: 2,
+        minionTurnTimer: 1
+    }
+];
+
 const Game = {
     canvas: null, ctx: null, lastTime: 0, currentState: STATE.BOOT,
     player: null, enemy: null, techFragments: 0,
@@ -701,6 +737,14 @@ const Game = {
         attachButtonEvent('btn-rest-sleep', () => this.handleRest('sleep'));
         attachButtonEvent('btn-rest-meditate', () => this.handleRest('meditate'));
         attachButtonEvent('btn-rest-tinker', () => this.handleRest('tinker'));
+        attachButtonEvent('btn-rest-pact', () => this.openPactPicker());
+        attachButtonEvent('btn-pact-cancel', () => {
+            // Back to the rest screen — same options still available.
+            document.getElementById('screen-pact').classList.remove('active');
+            document.getElementById('screen-pact').classList.add('hidden');
+            document.getElementById('screen-rest').classList.remove('hidden');
+            document.getElementById('screen-rest').classList.add('active');
+        });
         attachButtonEvent('btn-finish-ending', () => { this._renderVictoryCard(); this.changeState(STATE.VICTORY); });
         attachButtonEvent('btn-share-victory', () => {
             if (typeof Share !== 'undefined' && Share.shareRun) Share.shareRun(this);
@@ -3104,6 +3148,10 @@ startQTE(type, x, y, callback) {
         this.player.classId = cls.id;
         this.sector = 1;
         this.bossDefeated = false;
+        // Pacts are run-scoped — clear any leftovers so a Challenge attempt
+        // started right after a previous one doesn't carry over signed pacts.
+        this.activePacts = new Set();
+        this._renderPactPills && this._renderPactPills();
         // Chronicle start marker (Roadmap Part 27).
         this.runStartedAt = Date.now();
         // Custom run modifiers applied here so every downstream spawn
@@ -5645,6 +5693,18 @@ triggerSystemCrash() {
                 btnTinker.innerHTML = "<div>🔧 TINKER</div><div style='font-size: 0.8rem; color: #aaa;'>Upgrade a Random Skill</div>";
             }
 
+            // Pact option — Challenge Mode only, and only while at least one
+            // unsigned pact remains. Hidden everywhere else.
+            const btnPact = document.getElementById('btn-rest-pact');
+            if (btnPact) {
+                const remaining = PACTS.filter(p => !this.activePacts || !this.activePacts.has(p.id));
+                if (this.challengeMode && remaining.length > 0) {
+                    btnPact.classList.remove('hidden');
+                } else {
+                    btnPact.classList.add('hidden');
+                }
+            }
+
             document.getElementById('screen-rest').classList.remove('hidden');
             document.getElementById('screen-rest').classList.add('active');
         } else {
@@ -5696,6 +5756,111 @@ triggerSystemCrash() {
                 // Note: Node completion happens in leaveShop()
             }
         }
+    },
+
+    // ----- PACTS (Challenge Mode, Roadmap Part 24) ------------------------
+    // Open the pick screen — renders one card per unsigned PACT. Tapping a
+    // card commits the pact; cancelling returns the player to the rest
+    // screen so they can still take a normal heal/upgrade instead.
+    openPactPicker() {
+        const restScreen = document.getElementById('screen-rest');
+        const pactScreen = document.getElementById('screen-pact');
+        const list = document.getElementById('pact-options');
+        if (!pactScreen || !list) return;
+        list.innerHTML = '';
+        const signed = this.activePacts || new Set();
+        PACTS.forEach(p => {
+            const card = document.createElement('button');
+            card.type = 'button';
+            card.className = 'pact-card' + (signed.has(p.id) ? ' signed' : '');
+            card.dataset.pactId = p.id;
+            card.innerHTML = `
+                <div class="pact-card-name">${p.name}</div>
+                <div class="pact-card-cost">COST: ${p.cost}</div>
+                <div class="pact-card-effect">${p.effect}</div>
+                <div class="pact-card-flavour">${p.flavour}</div>
+            `;
+            if (!signed.has(p.id)) {
+                card.addEventListener('click', () => this.signPact(p.id));
+            }
+            list.appendChild(card);
+        });
+        if (restScreen) {
+            restScreen.classList.remove('active');
+            restScreen.classList.add('hidden');
+        }
+        pactScreen.classList.remove('hidden');
+        pactScreen.classList.add('active');
+    },
+
+    signPact(id) {
+        const pact = PACTS.find(p => p.id === id);
+        if (!pact) return;
+        if (!this.activePacts) this.activePacts = new Set();
+        if (this.activePacts.has(id)) return;
+        this.activePacts.add(id);
+        this.applyPact(pact);
+        AudioMgr.playSound('explosion');
+        const cx = CONFIG.CANVAS_WIDTH / 2;
+        const cy = CONFIG.CANVAS_HEIGHT / 2;
+        ParticleSys.createFloatingText(cx, cy, `${pact.name} SIGNED`, '#ff0055');
+        if (this.shake) this.shake(14);
+        // Pact replaces the rest's normal action, like the other rest options.
+        const pactScreen = document.getElementById('screen-pact');
+        if (pactScreen) {
+            pactScreen.classList.remove('active');
+            pactScreen.classList.add('hidden');
+        }
+        const restScreen = document.getElementById('screen-rest');
+        if (restScreen) {
+            restScreen.classList.remove('active');
+            restScreen.classList.add('hidden');
+        }
+        this.completeCurrentNode();
+        this.renderMap();
+        this.changeState(STATE.MAP);
+        this._renderPactPills();
+    },
+
+    // Run-side application of a pact. Idempotent — re-running the same pact
+    // a second time would double-apply Ruin's HP cut, so signPact's set
+    // gating is the source of truth.
+    applyPact(pact) {
+        if (!pact || !this.player) return;
+        if (pact.id === 'ruin') {
+            // -30% Max HP; clamp current HP. Damage multiplier read live in
+            // calculateCardDamage so it stacks with other modifiers cleanly.
+            const newMax = Math.max(1, Math.floor(this.player.maxHp * (pact.maxHpFraction || 0.7)));
+            this.player.maxHp = newMax;
+            this.player.currentHp = Math.min(this.player.currentHp, newMax);
+        }
+        // 'silence' and 'hunger' read their flags directly off this.activePacts
+        // each frame — no per-sign wiring needed.
+    },
+
+    // True if the named pact has been signed this run.
+    hasPact(id) {
+        return !!(this.activePacts && this.activePacts.has(id));
+    },
+
+    // Mini chip strip top-left that shows which pacts are live during combat.
+    _renderPactPills() {
+        let strip = document.getElementById('pact-pill-strip');
+        const active = this.activePacts ? Array.from(this.activePacts) : [];
+        if (!active.length) {
+            if (strip) strip.remove();
+            return;
+        }
+        if (!strip) {
+            strip = document.createElement('div');
+            strip.id = 'pact-pill-strip';
+            strip.className = 'pact-pill-strip';
+            (document.getElementById('hud') || document.body).appendChild(strip);
+        }
+        strip.innerHTML = active.map(id => {
+            const p = PACTS.find(x => x.id === id);
+            return p ? `<div class="pact-pill">${p.name}</div>` : '';
+        }).join('');
     },
 
     // --- Full progress reset — wipes every mvm_ localStorage key and reloads.
@@ -5863,6 +6028,7 @@ triggerSystemCrash() {
             currentIdx: this.map.currentIdx,
             bossDefeated: this.bossDefeated,
             challengeMode: !!this.challengeMode,
+            activePacts: this.activePacts ? Array.from(this.activePacts) : [],
             // Persist per-run rolling stats so the victory/death screen's
             // breakdown (biggest hit, rerolls used, perfect QTEs, HP lost)
             // survives a browser reload or mid-run resume.
@@ -5926,6 +6092,8 @@ triggerSystemCrash() {
             // it, and a save loaded in a fresh tab would otherwise see the
             // run as a normal one.
             Challenge.markActive(this.challengeMode);
+            this.activePacts = new Set(Array.isArray(data.activePacts) ? data.activePacts : []);
+            this._renderPactPills && this._renderPactPills();
 
             const classConfig = PLAYER_CLASSES.find(c => c.id === (data.player && data.player.classId))
                 || PLAYER_CLASSES[0];
@@ -7382,6 +7550,7 @@ async startCombat(type) {
         CombatLog.clear();
         this.player.minions = [];
         this._ensureDailyChip();
+        this._renderPactPills && this._renderPactPills();
         // Per-combat trackers used by new relics and combos.
         this.firstAttackDealt = false;
         this.firstDefendUsedThisTurn = false;
@@ -8194,6 +8363,13 @@ async startTurn() {
         const dmgMult = this.player.traits.dmgMultiplier || 1.0;
         dmg = Math.floor(dmg * dmgMult);
 
+        // Pact of Ruin (Challenge Mode) — +50% on every player attack. Applied
+        // after the trait multiplier so it stacks multiplicatively with any
+        // class-trait scaling and won't be wiped by titan/charged below.
+        if (this.hasPact && this.hasPact('ruin')) {
+            dmg = Math.floor(dmg * 1.5);
+        }
+
         if(this.player.hasRelic('titan_module')) {
             const stacks = this.stackCount('titan_module');
             dmg = Math.floor(dmg * Math.pow(1.25, stacks));
@@ -8653,6 +8829,9 @@ async startTurn() {
         this.comboSiblingBond = false;
         this.comboSets = {}; // id -> { name, color, members: Set<dieId> }
         this.activeCombos = [];
+        // Pact of Silence — combos do not trigger this run. Cleared maps
+        // above mean the UI also stops glowing combo-eligible dice.
+        if (this.hasPact && this.hasPact('silence')) return;
         if (!this.dicePool || this.dicePool.length === 0) return;
 
         const bySlot = { attack: [], defend: [], mana: [], minion: [] };
@@ -10123,8 +10302,10 @@ async startTurn() {
             return;
         }
 
-        // Allow if rerolls > 0 OR (rerolls <= 0 AND is Annihilator)
-        if (this.rerolls <= 0 && !isAnnihilator) return;
+        // Allow if rerolls > 0 OR (rerolls <= 0 AND is Annihilator) OR
+        // Pact of Silence is active (rerolls are free under it).
+        const silentRerolls = (this.hasPact && this.hasPact('silence'));
+        if (this.rerolls <= 0 && !isAnnihilator && !silentRerolls) return;
 
         Hints.trigger('first_reroll');
 
@@ -10176,6 +10357,9 @@ async startTurn() {
             // Same reasoning as blood reroll: bypass shield so the HP cost is real.
             this.player.takeDamage(2, null, false, /*bypassShield*/ true);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "FRACTURE -2HP", "#ff4444");
+        } else if (this.hasPact && this.hasPact('silence')) {
+            // Pact of Silence — rerolls cost nothing this run.
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "SILENT REROLL", "#ff77aa");
         } else {
             this.rerolls--;
         }
@@ -12012,7 +12196,11 @@ drawEffects() {
                                 // and QTE multiplier so debuffs scale the base attack, not the
                                 // boosted total (keeps swarm stacking predictable).
                                 const effBase = (typeof m.getEffectiveDamage === 'function') ? m.getEffectiveDamage(m.dmg) : m.dmg;
-                                const dmg = Math.floor((effBase + swarmBonus) * multiplier);
+                                // Pact of Hunger — minion attacks deal ×2 in
+                                // exchange for one-turn lifespan (death applied
+                                // in endTurn). Layered after debuff scaling.
+                                const hungerMult = (this.hasPact && this.hasPact('hunger')) ? 2 : 1;
+                                const dmg = Math.floor((effBase + swarmBonus) * multiplier * hungerMult);
                                 if (t.takeDamage(dmg, m) && t === this.enemy) { this.winCombat(); return; }
                                 if (t !== this.enemy && t.currentHp <= 0) {
                                      // Blood Thrall kills no longer heal the player — the
@@ -12045,6 +12233,22 @@ drawEffects() {
         // unit that's about to die from a dart still in flight.
         if (inFlightAttacks.length) {
             await Promise.all(inFlightAttacks);
+        }
+
+        // Pact of Hunger — minions burn out one turn after spawning. Done
+        // AFTER they attack so the player still gets the ×2 strike, then
+        // BEFORE the enemy phase so dying minions don't soak hits this turn.
+        if (this.hasPact && this.hasPact('hunger') && this.player && Array.isArray(this.player.minions)) {
+            const expired = this.player.minions.filter(m => m && m.currentHp > 0);
+            if (expired.length > 0) {
+                expired.forEach(m => {
+                    ParticleSys.createExplosion(m.x, m.y, 24, '#ff77aa');
+                    ParticleSys.createFloatingText(m.x, m.y - 60, 'HUNGER CONSUMES', '#ff77aa');
+                    m.currentHp = 0;
+                });
+                this.player.minions = [];
+                AudioMgr.playSound('explosion');
+            }
         }
 
         if(!this.enemy || this.enemy.currentHp <= 0) { this.winCombat(); return; }
@@ -12761,9 +12965,12 @@ drawEffects() {
                 Challenge.markComplete({
                     fragments: this.techFragments,
                     turns: (this.runStats && this.runStats.turns) || 0,
-                    ascension: selected
+                    ascension: selected,
+                    pacts: this.activePacts ? Array.from(this.activePacts) : []
                 });
                 this.challengeMode = false;
+                this.activePacts = new Set();
+                this._renderPactPills && this._renderPactPills();
                 if (typeof Achievements !== 'undefined') {
                     Achievements.unlock('DAILY_FINISH');
                     const finishes = Challenge.getHistory().length;
@@ -13235,6 +13442,8 @@ drawEffects() {
             Challenge.markActive(false);
             this.challengeMode = false;
         }
+        this.activePacts = new Set();
+        this._renderPactPills && this._renderPactPills();
 
         localStorage.removeItem('mvm_save_v1');
         document.getElementById('btn-load-save').style.display = 'none';
@@ -13497,6 +13706,8 @@ drawEffects() {
         if (Game._origRandom) Math.random = Game._origRandom;
         Challenge.markActive(false);
         this.challengeMode = false;
+        this.activePacts = new Set();
+        this._renderPactPills && this._renderPactPills();
         this.changeState(STATE.MENU);
     },
     

@@ -10343,3 +10343,100 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     50%  { box-shadow: 0 0 24px rgba(255, 215, 0, 0.85); }
     100% { box-shadow: 0 0 0 rgba(255, 215, 0, 0); }
 }
+
+/* === PACTS (Challenge Mode, Roadmap Part 24) ============================= */
+.pact-subtitle {
+    text-align: center;
+    color: #ff77aa;
+    opacity: 0.9;
+    font-family: var(--font-cyber);
+    font-size: 0.85rem;
+    letter-spacing: 0.18em;
+    margin: 0 0 22px 0;
+    padding: 0 24px;
+}
+.pact-options {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    width: min(560px, 92vw);
+    margin: 0 auto;
+}
+.pact-card {
+    position: relative;
+    text-align: left;
+    padding: 18px 18px 16px 22px;
+    border: 1.5px solid rgba(255, 0, 85, 0.55);
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(60, 0, 30, 0.85), rgba(20, 0, 10, 0.92));
+    color: #fff;
+    cursor: pointer;
+    transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+    box-shadow: 0 0 14px rgba(255, 0, 85, 0.18), inset 0 0 14px rgba(255, 0, 85, 0.08);
+}
+.pact-card:hover, .pact-card:focus {
+    transform: translateY(-2px);
+    border-color: var(--neon-pink);
+    box-shadow: 0 0 22px rgba(255, 0, 85, 0.4), inset 0 0 18px rgba(255, 0, 85, 0.16);
+    outline: none;
+}
+.pact-card.signed {
+    opacity: 0.55;
+    cursor: not-allowed;
+    pointer-events: none;
+    border-color: rgba(120, 120, 120, 0.6);
+    box-shadow: none;
+}
+.pact-card-name {
+    font-family: var(--font-cyber);
+    font-size: 1.05rem;
+    letter-spacing: 0.18em;
+    color: var(--neon-pink);
+    text-shadow: 0 0 6px rgba(255, 0, 85, 0.55);
+    margin-bottom: 4px;
+}
+.pact-card-cost {
+    font-family: var(--font-cyber);
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    color: #ff8888;
+    margin-bottom: 10px;
+}
+.pact-card-effect {
+    font-size: 0.85rem;
+    line-height: 1.45;
+    color: #f7e6ee;
+}
+.pact-card-effect strong {
+    color: #ffd76a;
+    font-weight: 700;
+}
+.pact-card-flavour {
+    margin-top: 10px;
+    font-size: 0.72rem;
+    color: #aa6677;
+    font-style: italic;
+    letter-spacing: 0.08em;
+}
+/* Active-pact pills under the Challenge chip in combat */
+.pact-pill-strip {
+    position: fixed;
+    top: 110px;
+    left: 22px;
+    z-index: 4500;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.pact-pill {
+    font-family: var(--font-cyber);
+    font-size: 0.55rem;
+    letter-spacing: 0.2em;
+    padding: 3px 9px;
+    border: 1px solid var(--neon-pink);
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(255, 0, 85, 0.25), rgba(255, 0, 85, 0.08));
+    color: #fff;
+    box-shadow: 0 0 8px rgba(255, 0, 85, 0.4);
+}
