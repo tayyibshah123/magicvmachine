@@ -580,14 +580,26 @@ export const ClassAbility = {
                 // bloom plot C, etc. — effectively a no-cost summon.
                 state.plots[idx] = 0;
                 this._suppressBloomOnTap = true;
-                try {
-                    if (typeof Game._spawnSpirit === 'function') {
-                        Game._spawnSpirit();
+                // The synchronous `Game._spawnSpirit` path resolves the
+                // minion_summoned event inside the try/finally, so the flag
+                // is safe to clear in `finally`. The fallback path uses a
+                // dynamic import — it spawns AFTER this stack unwinds, so
+                // we must defer the flag clear until the promise resolves
+                // (or rejects). Otherwise the suppression lifts before the
+                // new minion's constructor fires `minion_summoned`, the
+                // auto-bloom handler picks the just-reset plot as the
+                // youngest, and re-blooms it — making the tap free.
+                if (typeof Game._spawnSpirit === 'function') {
+                    try { Game._spawnSpirit(); }
+                    finally { this._suppressBloomOnTap = false; this.render(); }
+                } else {
+                    const clear = () => { this._suppressBloomOnTap = false; this.render(); };
+                    const promise = this._spawnSummonerSpirit();
+                    if (promise && typeof promise.then === 'function') {
+                        promise.then(clear, clear);
                     } else {
-                        this._spawnSummonerSpirit();
+                        clear();
                     }
-                } finally {
-                    this._suppressBloomOnTap = false;
                 }
                 ParticleSys.createFloatingText(p.x, p.y - 80, "BLOOM → SPIRIT", "#00ff99");
                 AudioMgr.playSound('mana');
@@ -629,8 +641,11 @@ export const ClassAbility = {
 
     _spawnSummonerSpirit() {
         // Minimal Summoner spirit spawn — mirrors MINION-die branch in game.js
-        // Uses late import to avoid circular deps at module load time.
-        import('../entities/minion.js').then(mod => {
+        // Uses late import to avoid circular deps at module load time. Returns
+        // the import promise so callers can chain off of it (e.g. to clear
+        // _suppressBloomOnTap AFTER the new minion's constructor has fired
+        // the minion_summoned event).
+        return import('../entities/minion.js').then(mod => {
             if (!Game.player) return;
             const m = new mod.Minion(0, 0, Game.player.minions.length + 1, true);
             m.spawnTimer = 1.0;
