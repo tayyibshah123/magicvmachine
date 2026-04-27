@@ -653,15 +653,31 @@ const BOSS_DATA = {
         moves: ['attack', 'multi_attack', 'summon'], 
         shieldVal: 15
     },
-    5: { 
-        name: "TESSERACT PRIME", 
+    5: {
+        name: "TESSERACT PRIME",
         subtitle: "GEOMETRIC IMPOSSIBILITY",
-        hp: 1000, 
-        dmg: 50, 
+        hp: 1000,
+        dmg: 50,
         actionsPerTurn: 3,
         color: '#ffffff', // Pure White/Gold
-        moves: ['attack', 'purge_attack', 'reality_overwrite', 'shield'], 
+        moves: ['attack', 'purge_attack', 'reality_overwrite', 'shield'],
         shieldVal: 60
+    },
+    // Sector X — Roadmap Part 24.2. Post-Sector-5 boss; only spawned via the
+    // ARCHIVE main-menu run path. HP scales +150 per Ascension level (handled
+    // at spawn time in startCombat). Moves are unused — generateSingleIntent
+    // has a `name === "THE ARCHIVIST"` branch that picks from the rotating
+    // sector mechanic menu (Phase 1) and layers per-phase behaviours on top.
+    6: {
+        name: "THE ARCHIVIST",
+        subtitle: "KEEPER OF DEAD RUNS",
+        hp: 500,
+        dmg: 30,
+        actionsPerTurn: 2,
+        color: '#ffd76a',
+        moves: ['attack'],
+        shieldVal: 30,
+        isArchivist: true
     }
 };
 

@@ -386,9 +386,33 @@ const Game = {
             Math.random = Game._origRandom;
             Challenge.markActive(false);
             this.challengeMode = false;
+            this.archiveMode = false;
             this.seenFlags['intro_cinematic'] = true;
             localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
             this.playIntro();
+        });
+        attachButtonEvent('btn-archive', () => {
+            // ARCHIVE — single fight against THE ARCHIVIST. Only callable
+            // after the first Sector 5 clear (mvm_gameCompleted is set in
+            // winCombat's TESSERACT PRIME branch).
+            if (localStorage.getItem('mvm_gameCompleted') !== 'true') {
+                ParticleSys.createFloatingText(540, 600, 'ARCHIVE LOCKED — CLEAR SECTOR 5 FIRST', '#888');
+                return;
+            }
+            this.archiveMode = true;
+            this.challengeMode = false;
+            Challenge.markActive(false);
+            this.seenFlags['intro_cinematic'] = true;
+            localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
+            localStorage.setItem('mvm_first_run_done', '1');
+            this.tutorialAutoRun = false;
+            localStorage.removeItem('mvm_save_v1');
+            const btnLoad = document.getElementById('btn-load-save');
+            if (btnLoad) btnLoad.style.display = 'none';
+            if (this.showPhaseBanner) {
+                this.showPhaseBanner('THE ARCHIVE', 'A KEEPER REMEMBERS', 'enemy');
+            }
+            this.changeState(STATE.CHAR_SELECT);
         });
         attachButtonEvent('btn-challenge', () => {
             // Challenge Mode — boss rush with rest nodes between bosses. Skip
@@ -5109,6 +5133,23 @@ triggerSystemCrash() {
     },
 
     generateMap() {
+        // Archive Mode — Sector X. Single fight against THE ARCHIVIST.
+        // Map is start → boss with no other nodes; visitNode hands off to
+        // startCombat which sees `this.sector === 6` and picks BOSS_DATA[6].
+        if (this.archiveMode) {
+            this.map.nodes = [];
+            this.map.nodes.push({
+                id: 'start', layer: 0, lane: 0, x: 50, y: 92,
+                type: 'start', connections: ['boss-x'], status: 'completed'
+            });
+            this.map.nodes.push({
+                id: 'boss-x', layer: 1, lane: 0, x: 50, y: 18,
+                type: 'boss', nodeSector: 6, connections: [],
+                status: 'available'
+            });
+            this.map.currentIdx = 'start';
+            return;
+        }
         // Challenge Mode — boss gauntlet with rest nodes between bosses.
         // No combats, events, shops or branching: just sector1 boss → rest →
         // sector2 boss → rest → ... → sector5 boss. Each boss node carries
@@ -5348,6 +5389,16 @@ triggerSystemCrash() {
     },
 
     _refreshMenuChips() {
+        // Archive button — reveals once the player has cleared Sector 5 at
+        // least once. The flag is set in winCombat's TESSERACT PRIME branch.
+        const archiveBtn = document.getElementById('btn-archive');
+        if (archiveBtn) {
+            const unlocked = localStorage.getItem('mvm_gameCompleted') === 'true';
+            archiveBtn.classList.toggle('hidden', !unlocked);
+            const statusArch = document.getElementById('archive-status');
+            if (unlocked && statusArch) statusArch.textContent = '· READY';
+        }
+
         const statusEl = document.getElementById('challenge-status');
         const challengeBtn = document.getElementById('btn-challenge');
         if (statusEl && challengeBtn) {
@@ -5650,20 +5701,24 @@ triggerSystemCrash() {
 
         // 4. Trigger Node Action
         if(node.type === 'combat' || node.type === 'elite' || node.type === 'boss') {
-            // Challenge Mode boss nodes carry their own sector index so each
-            // fight pulls the correct BOSS_DATA template. Snap this.sector
-            // to the node BEFORE startCombat so the HUD, ambient track, and
-            // boss generation all line up. Skip the dramatic sector-collapse
-            // intro on the first boss (we just walked into it) — it would
-            // double up with the phase banner.
-            if (this.challengeMode && node.type === 'boss' && typeof node.nodeSector === 'number') {
+            // Challenge / Archive boss nodes carry their own sector index
+            // so each fight pulls the correct BOSS_DATA template. Snap
+            // this.sector to the node BEFORE startCombat so the HUD,
+            // ambient track, and boss generation all line up.
+            if ((this.challengeMode || this.archiveMode)
+                && node.type === 'boss' && typeof node.nodeSector === 'number') {
                 const previousSector = this.sector;
                 this.sector = node.nodeSector;
                 const sectorDisplay = document.getElementById('sector-display');
                 if (sectorDisplay) sectorDisplay.innerText = `SECTOR ${this.sector}`;
+                // Sector 6 (Archive) reuses the Sector 5 backdrop because
+                // SECTOR_CONFIG only has 1-5. The collapse cinematic still
+                // sells the "you crossed a threshold" beat for the Archivist.
                 if (previousSector !== this.sector) {
                     this.triggerSectorCollapse && this.triggerSectorCollapse();
-                    this.playSectorIntro && this.playSectorIntro(this.sector);
+                    if (this.sector <= 5 && this.playSectorIntro) {
+                        this.playSectorIntro(this.sector);
+                    }
                 }
             }
             this.startCombat(node.type);
@@ -6028,6 +6083,7 @@ triggerSystemCrash() {
             currentIdx: this.map.currentIdx,
             bossDefeated: this.bossDefeated,
             challengeMode: !!this.challengeMode,
+            archiveMode: !!this.archiveMode,
             activePacts: this.activePacts ? Array.from(this.activePacts) : [],
             // Persist per-run rolling stats so the victory/death screen's
             // breakdown (biggest hit, rerolls used, perfect QTEs, HP lost)
@@ -6087,6 +6143,7 @@ triggerSystemCrash() {
             this.map.currentIdx = data.currentIdx || 'start';
             this.bossDefeated = !!data.bossDefeated;
             this.challengeMode = !!data.challengeMode;
+            this.archiveMode = !!data.archiveMode;
             // Keep the Challenge active flag in localStorage in sync with the
             // mode we just restored — the chip + reward bookkeeping read from
             // it, and a save loaded in a fresh tab would otherwise see the
@@ -7612,6 +7669,21 @@ async startCombat(type) {
         // Create New Enemy
         this.enemy = new Enemy(template, level, isElite);
 
+        // Archivist HP scaling — base 500, +150 per Ascension level
+        // (Roadmap Part 24.2). Applied after construction so the standard
+        // sector multiplier doesn't compound onto the Sector X bracket.
+        if (this.enemy.name === 'THE ARCHIVIST') {
+            const ascSelArch = (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0;
+            const baseHp = 500 + 150 * ascSelArch;
+            this.enemy.maxHp = baseHp;
+            this.enemy.currentHp = baseHp;
+            // Phase markers reset to 1 — they're set in the constructor but
+            // re-asserting them keeps the 4-phase progression clean.
+            this.enemy.phase = 1;
+            this.enemy._archivistTurn = 0;
+            this.enemy._archivistMechIdx = -1; // first decideTurn picks 0
+        }
+
         // Pre-combat briefing — one-liner that frames the fight. Skipped
         // during the scripted tutorial combat so the onboarding flow isn't
         // interrupted. Class briefing moved to AFTER state transitions to
@@ -8810,6 +8882,23 @@ async startTurn() {
 
         this.player.sigMissStreak = sigPlaced ? 0 : ((this.player.sigMissStreak || 0) + 1);
 
+        // Archivist — seal every die that matches the type the boss archived
+        // last turn. The flag is consumed (one-turn lockout) so the player
+        // gets the die back on the following turn, but the boss can stack
+        // archives on consecutive turns by re-archiving fresh plays.
+        if (this.player && this.player._archivedDieType) {
+            const sealType = this.player._archivedDieType;
+            let sealedCount = 0;
+            this.dicePool.forEach(d => {
+                if (d.type === sealType) { d.sealed = true; sealedCount++; }
+            });
+            if (sealedCount > 0) {
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 130,
+                    `ARCHIVED — ${sealedCount} DIE LOCKED`, '#ffd76a');
+            }
+            this.player._archivedDieType = null;
+        }
+
         // Combo detection — reward natural variety / repeats.
         this._detectAndApplyCombos();
         this.renderDiceUI();
@@ -9402,6 +9491,11 @@ async startTurn() {
         TooltipMgr.hide();
         die.used = true;
         this.haptic('die_use');
+        // Track the most recent die type for the Archivist's Phase 2 archive
+        // and any other "remember the last die" mechanic. Stored on the
+        // player so it survives between Game.useDie calls without growing
+        // global state.
+        this.player._lastPlayedDieType = die.type;
         this._onDieConsumed(die);
         // Unified-die burst (Tier 8/#33) — fire a class-tinted radial pulse at
         // the die's on-screen position BEFORE renderDiceUI rebuilds the DOM,
@@ -12740,6 +12834,22 @@ drawEffects() {
         }
 
         if (!stillLive()) return;
+
+        // Archivist Phase 2+ — "archive" the player's last-played die. Records
+        // the die TYPE so that next turn's startTurn seals every matching die
+        // in the freshly-rolled hand. Phase 4 (enrage) keeps the archive
+        // active too. Skipped in Phase 1 since the archive mechanic doesn't
+        // unlock until the boss drops below 66% HP.
+        if (this.enemy && this.enemy.name === "THE ARCHIVIST" && this.enemy.phase >= 2) {
+            const last = this.player && this.player._lastPlayedDieType;
+            if (last) {
+                this.player._archivedDieType = last;
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 80,
+                    `ARCHIVED ${last}`, '#ffd76a');
+                ParticleSys.createShockwave(this.enemy.x, this.enemy.y, '#ffd76a', 26);
+            }
+        }
+
         this.updateHUD();
         this.startTurn();
       } catch (err) {
@@ -12936,6 +13046,30 @@ drawEffects() {
             // Normal mob kills get a brief slow-mo so every victory lands.
             this.triggerSlowMo(0.7, 0.18);
             await this.sleep(150);
+        }
+
+        // --- ARCHIVIST KILL — Sector X gauntlet ends here. Awards a fixed
+        // fragment payout and routes back to the menu without the run-end
+        // cinematic that's reserved for the canonical Sector 5 win.
+        if (this.enemy && this.enemy.name === "THE ARCHIVIST") {
+            this._logRunHistory && this._logRunHistory('win', { defeatedBy: null, archivist: true });
+            this.techFragments += 500;
+            this.encryptedFiles += 1;
+            try { localStorage.setItem('mvm_archivist_slain', 'true'); } catch (_) {}
+            if (typeof Achievements !== 'undefined') {
+                try { Achievements.unlock('DAILY_FINISH'); } catch (_) {}
+            }
+            ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
+                'ARCHIVIST SLAIN', '#ffd76a');
+            ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2 + 60,
+                '+500 FRAG · +1 FILE', '#ffd76a');
+            await this.sleep(2200);
+            this.archiveMode = false;
+            localStorage.removeItem('mvm_save_v1');
+            const btnLoad = document.getElementById('btn-load-save');
+            if (btnLoad) btnLoad.style.display = 'none';
+            this.changeState(STATE.MENU);
+            return;
         }
 
         // --- UPDATED: VICTORY SEQUENCE FOR TESSERACT PRIME ---
@@ -13442,6 +13576,9 @@ drawEffects() {
             Challenge.markActive(false);
             this.challengeMode = false;
         }
+        if (this.archiveMode) {
+            this.archiveMode = false;
+        }
         this.activePacts = new Set();
         this._renderPactPills && this._renderPactPills();
 
@@ -13706,6 +13843,7 @@ drawEffects() {
         if (Game._origRandom) Math.random = Game._origRandom;
         Challenge.markActive(false);
         this.challengeMode = false;
+        this.archiveMode = false;
         this.activePacts = new Set();
         this._renderPactPills && this._renderPactPills();
         this.changeState(STATE.MENU);

@@ -82,6 +82,9 @@ class Enemy extends Entity {
 
     decideTurn() {
         this.nextIntents = [];
+        // Archivist rewind cooldown resets at the start of each round so the
+        // boss can rewind once per player turn, not once per fight.
+        this._rewindUsedThisTurn = false;
         const actionCount = this.isBoss ? this.bossData.actionsPerTurn : 1;
 
         for(let i=0; i<actionCount; i++) {
@@ -133,11 +136,54 @@ class Enemy extends Entity {
         }
 
         if (this.isBoss) {
+            // --- THE ARCHIVIST (Sector X) ---
+            // 4-phase fight that channels mechanics from every prior boss:
+            //   Phase 1 — rotating "mechanic menu" — one sector mechanic per turn.
+            //   Phase 2 — "archive" the player's last-played die so it can't be
+            //              played next turn (handled in Game.useDie).
+            //   Phase 3 — "rewind" — heavy hits restore boss HP (handled in
+            //              entity.takeDamage when `currentHp` drops by >= 80 in
+            //              one tick).
+            //   Phase 4 — enrage; all prior mechanics fire simultaneously for
+            //              up to 3 turns.
+            if (this.name === "THE ARCHIVIST") {
+                // Pick this turn's signature mechanic by rotating an index.
+                // Phase 4 (enrage) triggers BOTH the rotating mechanic AND
+                // an attack/multi_attack on the second action — handled by
+                // the actionCount loop in decideTurn picking different
+                // intents per call.
+                this._archivistTurn = (this._archivistTurn || 0) + 1;
+                this._archivistMechIdx = ((this._archivistMechIdx || 0) + 1) % 5;
+                const mechIdx = this._archivistMechIdx;
+                // Rotating menu — keyed by sector mechanic.
+                //   0: Panopticon → analyse (nullify a die next turn)
+                //   1: Cryo       → frost AoE (Weak debuff on player + minions)
+                //   2: Foundry    → heat tick (player burn this turn)
+                //   3: Hive       → summon glitch ally (cap 2)
+                //   4: Source     → reality overwrite (chaos)
+                let intent;
+                if (mechIdx === 0) intent = { type: 'analyse', val: 0 };
+                else if (mechIdx === 1) intent = { type: 'frost_aoe', val: Math.floor(this.baseDmg * 0.7), isAOE: true };
+                else if (mechIdx === 2) intent = { type: 'attack', val: Math.floor(this.baseDmg * 1.1), target: Game.player, _archivistHeat: true };
+                else if (mechIdx === 3) intent = (this.minions.length < 2)
+                    ? { type: 'summon_glitch', val: 0 }
+                    : { type: 'attack', val: this.baseDmg, target: Game.player };
+                else intent = { type: 'reality_overwrite', val: 0 };
+                // Phase 4 enrage — alternating action slot becomes a hard
+                // multi-attack so the simultaneous-mechanic feeling lands.
+                if (this.phase === 4) {
+                    if (Math.random() < 0.5) {
+                        return { type: 'multi_attack', val: Math.floor(this.baseDmg * 0.7), hits: 3, target: getTarget() };
+                    }
+                }
+                return intent;
+            }
+
             // --- THE SOURCE SPECIAL LOGIC ---
             if (this.name === "THE SOURCE") {
                 if (this.chargingPurge) {
                     this.chargingPurge = false;
-                    return { type: 'purge_attack', val: 100, target: Game.player }; 
+                    return { type: 'purge_attack', val: 100, target: Game.player };
                 }
                 if (!this.realityOverwritten && Math.random() < 0.15) {
                     return { type: 'reality_overwrite', val: 0 };
@@ -331,6 +377,33 @@ class Enemy extends Entity {
         // Phase 3 (20%–0%). Each transition fires Game.triggerBossPhaseTransition
         // which handles the cinematic beat (zoom, shake, banner, flash).
         if (!this.isBoss) return;
+        // Archivist runs a 4-phase cadence (66/33/15) — see generateSingleIntent
+        // for the mechanic each phase unlocks.
+        if (this.name === "THE ARCHIVIST") {
+            if (this.phase === 1 && this.currentHp < this.maxHp * 0.66) {
+                this.phase = 2;
+                ParticleSys.createExplosion(this.x, this.y, 50, '#ffd76a');
+                AudioMgr.playSound('explosion');
+                if (Game && typeof Game.triggerBossPhaseTransition === 'function') {
+                    Game.triggerBossPhaseTransition(this, 2);
+                }
+            } else if (this.phase === 2 && this.currentHp < this.maxHp * 0.33) {
+                this.phase = 3;
+                ParticleSys.createExplosion(this.x, this.y, 60, '#ff77aa');
+                AudioMgr.playSound('explosion');
+                if (Game && typeof Game.triggerBossPhaseTransition === 'function') {
+                    Game.triggerBossPhaseTransition(this, 3);
+                }
+            } else if (this.phase === 3 && this.currentHp < this.maxHp * 0.15) {
+                this.phase = 4;
+                ParticleSys.createExplosion(this.x, this.y, 80, '#ff0055');
+                AudioMgr.playSound('explosion');
+                if (Game && typeof Game.triggerBossPhaseTransition === 'function') {
+                    Game.triggerBossPhaseTransition(this, 4);
+                }
+            }
+            return;
+        }
         if (this.phase === 1 && this.currentHp < this.maxHp * 0.5) {
             this.phase = 2;
             ParticleSys.createExplosion(this.x, this.y, 50, '#f0f');

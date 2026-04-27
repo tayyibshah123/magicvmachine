@@ -331,6 +331,25 @@ class Entity {
             this.currentHp = Math.max(0, this.currentHp - actualDmg);
         }
 
+        // Archivist Phase 3+ — REWIND. A heavy single hit (≥80 raw dmg)
+        // restores the boss back up by the value of the hit (capped at
+        // current+30%) once per turn. Applied before checkPhase so the
+        // restored HP is what the threshold check sees, preventing a
+        // phase-skip cheese where one big crit lands them in Phase 4
+        // before the boss has played out Phase 3 at all.
+        if (Enemy && this instanceof Enemy && this.name === 'THE ARCHIVIST'
+            && this.phase >= 3 && actualDmg >= 80
+            && !this._rewindUsedThisTurn) {
+            this._rewindUsedThisTurn = true;
+            const cap = Math.floor(this.maxHp * 0.3);
+            const restore = Math.min(cap, actualDmg);
+            this.currentHp = Math.min(this.maxHp, this.currentHp + restore);
+            ParticleSys.createFloatingText(this.x, this.y - 140, `REWIND +${restore}`, '#ffd76a');
+            ParticleSys.createShockwave(this.x, this.y, '#ffd76a', 36);
+            AudioMgr.playSound && AudioMgr.playSound('hex_barrier');
+            if (Game && Game.shake) Game.shake(8);
+        }
+
         // Immediately check for phase transition so a big hit that drops
         // the boss through a threshold plays the cinematic on the same
         // damage tick — no waiting for the player's next die use.
