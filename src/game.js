@@ -1521,6 +1521,13 @@ startDrag(e, die, el) {
     _qtePatternFor(type, opts) {
         // Honour an explicit override first — caller knows best.
         if (opts && opts.pattern) return { pattern: opts.pattern, waves: opts.waves || 1 };
+        // Tutorial combat ALWAYS uses the simplest pattern. The scripted
+        // dummy is the player's first taste of timing — exposing them to
+        // feint/accelerate/multi here would teach the wrong reflex. The
+        // free-play first encounter is when patterns start flexing.
+        if (this.currentState === STATE.TUTORIAL_COMBAT) {
+            return { pattern: 'steady', waves: 1 };
+        }
         if (type === 'DEFEND') {
             // Multi-hit chains explicitly request a wave count.
             if (opts && opts.hits && opts.hits > 1) {
@@ -1539,6 +1546,46 @@ startDrag(e, die, el) {
         if (cls === 'bloodstalker') return { pattern: 'pulse',      waves: 1 };
         if (cls === 'summoner')     return { pattern: 'multi',      waves: 2 };
         return { pattern: 'steady', waves: 1 };
+    },
+
+    // Briefly apply a hue-rotate / saturate canvas filter to sell the
+    // moment of a perfect resolve. Cheap (CSS filter on the canvas
+    // element, no per-pixel work) and reads as the "world snaps for a
+    // beat" effect that Clair Obscur uses on parries.
+    _qteChromaticPulse(durationMs = 240) {
+        const cv = this.canvas || document.getElementById('gameCanvas');
+        if (!cv) return;
+        const prev = cv.style.filter;
+        cv.style.transition = `filter ${durationMs}ms ease-out`;
+        cv.style.filter = 'saturate(1.6) hue-rotate(-12deg) contrast(1.15)';
+        setTimeout(() => {
+            cv.style.filter = prev || '';
+            setTimeout(() => { cv.style.transition = ''; }, durationMs + 20);
+        }, Math.max(60, durationMs * 0.4));
+    },
+
+    // Pattern-color screen flash + audio sting when the QTE first
+    // enters the active phase. Very short, low-intensity — the goal
+    // is "snap to attention", not concuss. Called from updateQTE on
+    // each warmup → active transition (works for every wave too).
+    _qteFlashOnStart() {
+        const PATTERN_FLASH = {
+            steady:     'rgba(255, 215, 0, 0.18)',
+            accelerate: 'rgba(255, 51, 85, 0.22)',
+            feint:      'rgba(188, 19, 254, 0.22)',
+            pulse:      'rgba(255, 102, 221, 0.22)',
+            multi:      'rgba(0, 243, 255, 0.20)'
+        };
+        const color = PATTERN_FLASH[this.qte.pattern || 'steady'];
+        if (this.triggerScreenFlash) this.triggerScreenFlash(color, 160);
+        // Per-pattern audio cue. Reuses existing patches so no new
+        // assets — accelerate/multi sting heavier; feint/pulse cue
+        // softer to avoid over-cueing.
+        try {
+            if (this.qte.pattern === 'accelerate') AudioMgr.playSound('zap');
+            else if (this.qte.pattern === 'multi') AudioMgr.playSound('beam');
+            else AudioMgr.playSound('click');
+        } catch (_) {}
     },
 
     // Per-pattern shrink speed factor. Returns dt-multiplier given the
@@ -1622,8 +1669,12 @@ startQTE(type, x, y, callback, opts) {
             this.drawQTE();
 
             // Failsafe with ID Check. Multi-wave QTEs need more headroom
-            // since they queue several rings end-to-end.
-            const failsafeMs = 6000 + (pat.waves - 1) * 1800;
+            // since they queue several rings end-to-end. Per-wave budget:
+            // ~500ms warmup + ~470ms shrink + ~280ms wave_break + 450ms
+            // feint pause if pattern is feint = ~1.7s. Tutorial scales
+            // shrink by 0.45 — bump per-wave allowance to 2200ms so a
+            // 4-wave feint chain in tutorial still has slack.
+            const failsafeMs = 6500 + (pat.waves - 1) * 2200;
             setTimeout(() => {
                 if (this.qte.active && this.qte.id === now &&
                    (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT)) {
@@ -1648,6 +1699,10 @@ startQTE(type, x, y, callback, opts) {
             this.qte.radius = this.qte.maxRadius;
             if (this.qte.warmupTimer <= 0) {
                 this.qte.phase = 'active';
+                // Pattern-color screen flash on phase transition — sells
+                // the moment the ring "goes live" so a player who
+                // glanced away during warmup gets snapped back.
+                this._qteFlashOnStart();
             }
             return;
         }
@@ -1659,6 +1714,7 @@ startQTE(type, x, y, callback, opts) {
             this.qte.radius = this.qte.maxRadius;
             if (this.qte.warmupTimer <= 0) {
                 this.qte.phase = 'active';
+                this._qteFlashOnStart();
             }
             return;
         }
@@ -1675,25 +1731,42 @@ startQTE(type, x, y, callback, opts) {
 
         // Trigger the feint pause once, when the ring first crosses ~55px
         // (just outside the target zone). The player's reflex is to tap;
-        // doing so registers as 'early'. They have to read the freeze.
+        // doing so registers as 'early'. Hysteresis: under a single big
+        // dt frame the previous shrink could overshoot the trigger
+        // radius entirely, missing the equality check. Treat any radius
+        // *at or below* the trigger as eligible — the trigger is a
+        // one-shot anyway (feintTriggered guards re-entry).
         if (pattern === 'feint' && !this.qte.feintTriggered) {
             const triggerR = scaledTarget + 25 * scale;
-            if (this.qte.radius <= triggerR) {
+            // ~85px lower bound prevents the pause firing if a freak
+            // frame skip slammed the radius past the target. In that
+            // edge the player will get a fail-on-undershoot anyway.
+            if (this.qte.radius <= triggerR && this.qte.radius > scaledTarget - 5 * scale) {
                 this.qte.feintTriggered = true;
                 this.qte.phase = 'feint_pause';
                 this.qte.feintPauseTimer = 0.45;
+                this.qte.radius = triggerR; // snap to the visual freeze point
                 return;
             }
         }
 
         // Normal shrink. Base speed × pattern modifier × tutorial slowdown.
-        const progress = Math.max(0, Math.min(1, (this.qte.radius - scaledTarget) / (this.qte.maxRadius - scaledTarget)));
+        // Guard the progress denominator so a degenerate scale (maxRadius
+        // == scaledTarget) can't NaN the shrink speed.
+        const span = (this.qte.maxRadius - scaledTarget);
+        const progress = (span <= 0) ? 0 :
+            Math.max(0, Math.min(1, (this.qte.radius - scaledTarget) / span));
         let speed = this._qteShrinkSpeed(pattern, progress, this.qte.baseShrinkSpeed);
         if (this.currentState === STATE.TUTORIAL_COMBAT) speed *= 0.45;
 
+        // Clamp the radius to a small negative floor before the fail
+        // check. accelerate can otherwise smash radius far below zero
+        // in a single frame, which both fails-checks correctly AND
+        // bleeds into drawQTE on the next frame as a negative arc that
+        // canvas treats as a giant ring.
         this.qte.radius -= speed * dt;
-
         if (this.qte.radius <= 0) {
+            this.qte.radius = 0;
             this.resolveQTE('fail');
         }
     },
@@ -1706,6 +1779,10 @@ startQTE(type, x, y, callback, opts) {
         const scale = this.qte.qteScale || 1;
         const targetZone = 30 * scale;
         const pattern = this.qte.pattern || 'steady';
+        const inActive = this.qte.phase === 'active';
+        // Detect whether the ring is currently inside the perfect window.
+        // Drives the gold lock-on visual + heightened target-zone pulse.
+        const inPerfectWindow = inActive && Math.abs(radius - targetZone) < 10 * scale;
         // Pattern-tinted ring colour — the player learns the pattern
         // through colour at a glance (gold = standard, red = fast,
         // purple = feint, magenta = pulse, cyan = chain).
@@ -1720,22 +1797,50 @@ startQTE(type, x, y, callback, opts) {
 
         ctx.save();
 
-        // 1. Draw Static Target Zone — pulses on `pulse` pattern.
+        // ── 0. Vignette focus pull. A radial gradient darkens the screen
+        // edges, shrinking the player's visual field to the QTE — the
+        // single biggest "engagement" upgrade for tap-timing. Cheaper
+        // and crisper than a full canvas overlay since gradient gradient
+        // sits behind everything else.
+        const cw = this.canvas.width / (this.renderScale || 1);
+        const ch = this.canvas.height / (this.renderScale || 1);
+        const vigOuter = Math.max(cw, ch) * 0.95;
+        const vigInner = Math.max(160, radius * 1.6 + 40);
+        const vig = ctx.createRadialGradient(targetX, targetY, vigInner, targetX, targetY, vigOuter);
+        vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        vig.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
+        ctx.fillStyle = vig;
+        ctx.fillRect(0, 0, cw, ch);
+
+        // ── 1. Static Target Zone. Pulses on every pattern in the active
+        // phase (subtler on `steady`, harder on `pulse`). The pulse
+        // visibly intensifies when the ring is in the perfect window so
+        // the player gets a tactile "now!" cue at the moment of truth.
         let zoneR = targetZone;
-        if (pattern === 'pulse') {
-            zoneR = targetZone + Math.sin(this.qte.elapsed * 7) * 4;
-        }
+        if (pattern === 'pulse')      zoneR = targetZone + Math.sin(this.qte.elapsed * 7) * 4;
+        else if (inActive)            zoneR = targetZone + Math.sin(this.qte.elapsed * 4) * 1.5;
+        if (inPerfectWindow)          zoneR += Math.sin(this.qte.elapsed * 22) * 2.5;
         ctx.beginPath();
         ctx.arc(targetX, targetY, zoneR, 0, Math.PI*2);
         ctx.lineWidth = 8;
         ctx.strokeStyle = '#000000';
         ctx.stroke();
 
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = patternColor;
-        ctx.shadowColor = patternColor;
-        ctx.shadowBlur = 15;
+        ctx.lineWidth = inPerfectWindow ? 6 : 4;
+        ctx.strokeStyle = inPerfectWindow ? COLORS.GOLD : patternColor;
+        ctx.shadowColor = inPerfectWindow ? COLORS.GOLD : patternColor;
+        ctx.shadowBlur = inPerfectWindow ? 28 : 15;
         ctx.stroke();
+        // Inside-out gold halo when in the perfect window — "tap now"
+        // signal that doesn't require reading the ring radius.
+        if (inPerfectWindow) {
+            ctx.beginPath();
+            ctx.arc(targetX, targetY, zoneR + 8, 0, Math.PI*2);
+            ctx.strokeStyle = `rgba(255, 215, 0, ${0.5 + Math.sin(this.qte.elapsed * 22) * 0.4})`;
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 12;
+            ctx.stroke();
+        }
 
         // Feint warning — flash the target zone red during the freeze
         // so a player who didn't read the pattern still has a chance to
@@ -1834,6 +1939,25 @@ startQTE(type, x, y, callback, opts) {
             else ringColor = patternColor;
         }
 
+        // Motion-blur trail. Three ghost rings at 1.04× / 1.09× / 1.15×
+        // the current radius, fading out — sells the speed of the
+        // shrink without animating per-frame interpolation. Skipped
+        // during the warmup / wave_break / feint_pause phases since
+        // there's no movement to trail.
+        if (inActive) {
+            for (let i = 0; i < 3; i++) {
+                const trailR = radius + (i + 1) * 6 * scale;
+                if (trailR <= 0) continue;
+                ctx.beginPath();
+                ctx.arc(targetX, targetY, trailR, 0, Math.PI*2);
+                ctx.lineWidth = 4 - i;
+                ctx.strokeStyle = `rgba(255, 255, 255, ${0.18 - i * 0.05})`;
+                ctx.shadowColor = patternColor;
+                ctx.shadowBlur = 8;
+                ctx.stroke();
+            }
+        }
+
         ctx.beginPath();
         ctx.arc(targetX, targetY, Math.max(0, radius), 0, Math.PI*2);
         ctx.lineWidth = 10;
@@ -1844,23 +1968,26 @@ startQTE(type, x, y, callback, opts) {
         ctx.lineWidth = 6;
         ctx.strokeStyle = ringColor;
         ctx.shadowColor = ringColor;
-        ctx.shadowBlur = 20;
+        ctx.shadowBlur = inPerfectWindow ? 32 : 20;
         ctx.stroke();
 
-        // 3. Text Instruction
+        // 3. Text Instruction. Tier-aware: warmup gets the pattern label
+        // (large, pattern-tinted), wave break gets a giant centred wave
+        // count, perfect-window gets an animated "TAP NOW!" pop, and
+        // feint pause gets a "WAIT..." that pulses in red.
         ctx.globalAlpha = 1.0;
         ctx.fillStyle = "#fff";
-        ctx.font = "bold 24px 'Orbitron'";
         ctx.textAlign = "center";
         ctx.shadowColor = "#000";
         ctx.shadowBlur = 0;
-        
-        // FIX: Thick black outline for visibility
         ctx.lineWidth = 5;
         ctx.strokeStyle = "#000000";
-        ctx.lineJoin = "round"; // Smoother corners on text stroke
-        
+        ctx.lineJoin = "round";
+
         let txt = (this.qte.type === 'ATTACK') ? "CLICK TO CRIT!" : "CLICK TO BLOCK!";
+        let txtSize = 24;
+        let txtY = targetY + 140;
+        let scaleBoost = 1;
 
         if (warmupTimer > 0) {
             // Pattern-specific warmup label so the player learns the
@@ -1875,20 +2002,32 @@ startQTE(type, x, y, callback, opts) {
             };
             txt = PATTERN_LABEL[pattern] || 'LOCKED ON';
             ctx.fillStyle = patternColor;
+            // Slight bounce-in scale during warmup so the eye is drawn.
+            const wp = 1 - (this.qte.warmupTimer / 0.5);
+            scaleBoost = 1 + Math.sin(Math.min(1, wp) * Math.PI) * 0.18;
         } else if (this.qte.phase === 'feint_pause') {
-            // Mid-feint: explicit "DON'T TAP" so a player who only saw
-            // the ring stop has the cause spelled out. They learn next
-            // time without dying for the lesson.
             txt = "WAIT...";
             ctx.fillStyle = '#ff3355';
+            scaleBoost = 1 + Math.sin(this.qte.elapsed * 14) * 0.10;
         } else if (this.qte.phase === 'wave_break') {
-            txt = `NEXT! ${this.qte.waveIdx + 1} / ${this.qte.waveTotal}`;
+            txt = `WAVE ${this.qte.waveIdx + 1} / ${this.qte.waveTotal}`;
             ctx.fillStyle = patternColor;
+            txtSize = 38;
+            txtY = targetY + 130;
+            scaleBoost = 1.15;
+        } else if (inPerfectWindow) {
+            // Pop a "TAP NOW!" right at the perfect moment, slightly
+            // larger and pulsing so the player's eye lands on it
+            // mid-tap instead of having to read radius proximity.
+            txt = "TAP NOW!";
+            ctx.fillStyle = COLORS.GOLD;
+            txtSize = 30;
+            scaleBoost = 1 + Math.sin(this.qte.elapsed * 24) * 0.12;
         }
 
-        // FIX: Moved Y position to +140 (Below entity) to avoid HP bar overlap
-        ctx.strokeText(txt, targetX, targetY + 140);
-        ctx.fillText(txt, targetX, targetY + 140);
+        ctx.font = `bold ${Math.round(txtSize * scaleBoost)}px 'Orbitron'`;
+        ctx.strokeText(txt, targetX, txtY);
+        ctx.fillText(txt, targetX, txtY);
 
         ctx.restore();
     },
@@ -1957,12 +2096,22 @@ startQTE(type, x, y, callback, opts) {
             const isLast = (this.qte.waveIdx >= this.qte.waveTotal - 1);
             const broke = (quality === 'fail' || quality === 'early');
             if (!isLast && !broke) {
-                // Inter-wave bridge — quick floater so the player sees the
-                // result of THIS wave before the next ring renders, plus a
-                // brief warmup window so they aren't slammed mid-rhythm.
-                const tier = quality === 'perfect' ? COLORS.GOLD : COLORS.MECH_LIGHT;
-                ParticleSys.createFloatingText(this.qte.targetX, this.qte.targetY - 40,
-                    quality === 'perfect' ? '!' : '·', tier);
+                // Inter-wave bridge — show the result of THIS wave with a
+                // visible burst before the next ring renders, plus a brief
+                // warmup so the player isn't slammed mid-rhythm. Perfect
+                // hits add a small shockwave + chromatic pulse so a clean
+                // chain feels rewarding wave-by-wave.
+                if (quality === 'perfect') {
+                    ParticleSys.createFloatingText(this.qte.targetX, this.qte.targetY - 40,
+                        'CHAIN!', COLORS.GOLD);
+                    ParticleSys.createShockwave(this.qte.targetX, this.qte.targetY, COLORS.GOLD, 22);
+                    this._qteChromaticPulse(160);
+                    AudioMgr.playSound('beam');
+                } else {
+                    ParticleSys.createFloatingText(this.qte.targetX, this.qte.targetY - 40,
+                        'HIT', COLORS.MECH_LIGHT);
+                    ParticleSys.createShockwave(this.qte.targetX, this.qte.targetY, COLORS.MECH_LIGHT, 14);
+                }
                 this.qte.waveIdx++;
                 this.qte.radius = this.qte.maxRadius;
                 this.qte.phase = 'wave_break';
@@ -2030,6 +2179,7 @@ startQTE(type, x, y, callback, opts) {
                      this.triggerSlowMo(0.1, 0.095);
                      this.triggerScreenFlash('rgba(255, 215, 0, 0.45)', 220);
                      this.hitStop(70);
+                     this._qteChromaticPulse(280);
                      // Relic: CELESTIAL SYNC — perfect QTEs heal 3 HP.
                      if (this.player.hasRelic('celestial_sync')) {
                          const stacks = this.stackCount('celestial_sync');
@@ -2061,9 +2211,26 @@ startQTE(type, x, y, callback, opts) {
                      this.triggerScreenFlash('rgba(255, 215, 0, 0.5)', 240);
                      this.hitStop(80);
                      this.shake(10);
+                     this._qteChromaticPulse(300);
+                     // Shatter the parried ring in gold shards at the
+                     // QTE position — same VFX as a perfect crit, so
+                     // the parry beat has visible weight, not just a
+                     // text pop.
+                     this.effects.push({
+                         type: 'qte_shatter',
+                         x: this.qte.targetX, y: this.qte.targetY,
+                         baseRadius: this.qte.radius || 30,
+                         life: 28, maxLife: 28,
+                         color: COLORS.GOLD
+                     });
+                     this.triggerSlowMo && this.triggerSlowMo(0.1, 0.085);
                      // Reflect a portion back at the attacker so the parry
                      // feels like an active counter, not a passive dodge.
-                     if (this.enemy && this.enemy.currentHp > 0) {
+                     // Skipped during scripted tutorial combat: the dummy
+                     // is sized for the lesson, and a 2 HP riposte chip
+                     // per parry would derail the choreographed pacing.
+                     if (this.enemy && this.enemy.currentHp > 0
+                         && this.currentState !== STATE.TUTORIAL_COMBAT) {
                          const reflect = Math.max(2, Math.floor(this.enemy.baseDmg * 0.25));
                          this.enemy.takeDamage(reflect, this.player);
                          ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, `RIPOSTE ${reflect}`, COLORS.GOLD);
@@ -13933,10 +14100,12 @@ drawEffects() {
             // damage, VFX, hit-stop, and QTEs uniformly.
             else if (intent.type === 'aoe_sweep') {
                 // Riot Suppressor: single QTE then damage everyone player-side.
+                // The sweep arc telegraphs as a fast wind-up; accelerate
+                // pattern matches the visual cue.
                 const dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
                 await this.sleep(300);
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, "SWEEP ARC", "#ff3355");
-                const mult = await this.startQTE('DEFEND', this.player.x, this.player.y);
+                const mult = await this.startQTE('DEFEND', this.player.x, this.player.y, null, { pattern: 'accelerate' });
                 const finalDmg = Math.floor(dmg * mult);
                 {
                     const sweepGen = this._combatGen || 0;
@@ -13952,10 +14121,12 @@ drawEffects() {
                 continue;
             }
             else if (intent.type === 'frost_aoe') {
+                // Frost field telegraphs slow & steady but the freeze pulse
+                // is twitchy — pulse pattern catches the unstable cadence.
                 const dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
                 await this.sleep(300);
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, "CRYO FIELD", "#88eaff");
-                const mult = await this.startQTE('DEFEND', this.player.x, this.player.y);
+                const mult = await this.startQTE('DEFEND', this.player.x, this.player.y, null, { pattern: 'pulse' });
                 const finalDmg = Math.floor(dmg * mult);
                 if (this.player.takeDamage(finalDmg, this.enemy, true) && this.player.currentHp <= 0) { this.gameOver(); return; }
                 this.player.addEffect('weak', 2, 0, '🥶', 'Deals 50% less DMG.');
@@ -14014,6 +14185,11 @@ drawEffects() {
                     ParticleSys.createFloatingText(this.player.x, this.player.y - 130, "SHIELD PURGED", "#ff66aa");
                     ParticleSys.createShockwave(this.player.x, this.player.y, '#ff66aa', 32);
                 }
+                // Preserve the original beat for QTE pattern selection —
+                // strip-then-strike feels like a ramping threat, so the
+                // shared attack block reads `_originalIntent` as
+                // 'shield_strip_attack' and routes to 'accelerate'.
+                intent._originalIntent = 'shield_strip_attack';
                 intent.type = 'attack';
             }
             else if (intent.type === 'chaotic_act') {
@@ -14023,6 +14199,7 @@ drawEffects() {
                 else if (pick === 'thorns') { this.enemy.thorns = (this.enemy.thorns || 0) + 4; ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, "THORNS +4", "#ffffff"); }
                 else if (pick === 'regen')  { this.enemy.heal && this.enemy.heal(Math.floor(this.enemy.maxHp * 0.08)); }
                 else                         { this.enemy.addShield && this.enemy.addShield(15); }
+                intent._originalIntent = 'chaotic_act';
                 intent.type = 'attack';
             }
             else if (intent.type === 'mirror_attack' || intent.type === 'observer_strike' || intent.type === 'burrow_resurge') {
@@ -14032,6 +14209,7 @@ drawEffects() {
                 const color = intent.type === 'mirror_attack' ? "#00f3ff" :
                               intent.type === 'observer_strike' ? "#ff3355" : "#cc6600";
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, label, color);
+                intent._originalIntent = intent.type;
                 intent.type = 'attack';
             }
 
@@ -14083,10 +14261,31 @@ drawEffects() {
                 // only the first hit and gave 0.8 to the rest, which
                 // meant the player never had to read the rhythm. Now a
                 // missed wave taxes EVERY hit in the chain.
+                //
+                // Pattern selection: a multi-hit always uses 'multi' (each
+                // hit is its own wave). For single-hit special intents
+                // (mirror/observer/burrow/strip) we stashed the original
+                // type on intent._originalIntent so the QTE can dress
+                // each in a unique tempo:
+                //   mirror_attack       → feint  (sneaky reflection)
+                //   observer_strike     → pulse  (twitchy patience break)
+                //   burrow_resurge      → pulse  (unpredictable surfacing)
+                //   shield_strip_attack → accelerate (ramping threat)
+                //   chaotic_act         → pulse  (random buff into hit)
                 let chainMultiplier = 1.0;
                 if (validTarget === this.player && hits > 0) {
-                    chainMultiplier = await this.startQTE('DEFEND', this.player.x, this.player.y, null,
-                        hits > 1 ? { pattern: 'multi', waves: Math.min(4, hits) } : null);
+                    let qteOpts = null;
+                    if (hits > 1) {
+                        qteOpts = { pattern: 'multi', waves: Math.min(4, hits) };
+                    } else {
+                        const orig = intent._originalIntent;
+                        if (orig === 'mirror_attack')         qteOpts = { pattern: 'feint' };
+                        else if (orig === 'observer_strike')  qteOpts = { pattern: 'pulse' };
+                        else if (orig === 'burrow_resurge')   qteOpts = { pattern: 'pulse' };
+                        else if (orig === 'shield_strip_attack') qteOpts = { pattern: 'accelerate' };
+                        else if (orig === 'chaotic_act')      qteOpts = { pattern: 'pulse' };
+                    }
+                    chainMultiplier = await this.startQTE('DEFEND', this.player.x, this.player.y, null, qteOpts);
                 }
                 for(let h=0; h<hits; h++) {
                     // Slight delay between multi-hits

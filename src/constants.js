@@ -116,10 +116,10 @@ const TUTORIAL_NARRATION = [
     { story: "Modules are your magic.", action: "Tap to continue." },
     { story: "Study your target.", action: "Tap the enemy." },
     { story: "Strike first.", action: "Drag the ATTACK module onto the enemy." },
-    { story: "Time your strike.", action: "Click the inner ring for a critical hit." },
+    { story: "Time your strike. Tap the moment the ring crosses the gold zone for a critical.", action: "Tap when the ring lands on the target." },
     { story: "Brace yourself.", action: "Drag the SHIELD module onto yourself." },
     { story: "Cycle complete.", action: "Tap END TURN (⏭)." },
-    { story: "React.", action: "Click the ring to block." },
+    { story: "Read the strike. Tap the ring at the target zone to parry. Perfect parries fully nullify the hit.", action: "Tap the ring to parry the incoming attack." },
     { story: "Bad roll?", action: "Tap the reroll icon." },
     { story: "Call in reinforcements.", action: "Drag the MINION module onto empty space." },
     { story: "Finish it.", action: "Attack to complete training." }
@@ -150,10 +150,11 @@ const TUTORIAL_PAGES = [
                  "<div class='tut-tip'>NOTE: Minions have unique names and traits based on your Class. Check their tooltips!</div>"
     },
     {
-        title: "ACTION COMMANDS (QTE)",
-        content: "<p>Timing is everything in the digital realm.</p>" +
-                 "<p><strong>ATTACK:</strong> A ring will shrink on the target. Click/Tap in the zone to deal <strong>+30% DAMAGE</strong>.</p>" +
-                 "<p><strong>DEFEND:</strong> Click/Tap in the ring to <strong>BLOCK</strong> (-20% Dmg). Hit the center perfectly to <strong>PERFECT BLOCK</strong> (-50% Dmg).</p>"
+        title: "ACTION COMMANDS (TIMING)",
+        content: "<p>Timing rewards reading the enemy. Each strike spawns a ring that shrinks toward a target zone.</p>" +
+                 "<p><strong>CRIT (Attack):</strong> Tap as the ring crosses the target. Perfect timing deals <strong>+60% DAMAGE</strong>.</p>" +
+                 "<p><strong>PARRY (Defend):</strong> A perfect tap <strong>FULLY NULLIFIES</strong> the hit and ripostes 25% back. A late tap still <strong>BLOCKS</strong> 40%.</p>" +
+                 "<div class='tut-tip'>READ THE PATTERN: Bosses ramp up fast. Elites feint. Multi-hits chain — every wave matters.</div>"
     },
     {
         title: "PROGRESSION",
