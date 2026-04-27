@@ -1033,9 +1033,10 @@ export const ClassAbility = {
             const icon = stage === 0 ? ICONS.grovePlotSeed
                        : stage === 1 ? ICONS.grovePlotSprout
                                      : ICONS.grovePlotBloom;
-            // Only show the ×3 badge when apex is live — no more ×2 tier.
+            // Apex now empowers ×2 (down from ×3 in earlier balancing). Badge
+            // text must match `mult` in the apex-tap branch.
             const badge = (stage === 2 && isApexReady)
-                ? `<span class="ca-plot-amp-badge">×3</span>`
+                ? `<span class="ca-plot-amp-badge">×2</span>`
                 : '';
             btn.innerHTML = icon + badge;
         });
