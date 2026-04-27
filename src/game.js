@@ -485,6 +485,10 @@ const Game = {
             // attempt for returning players, not a fresh-install funnel.
             Challenge.markActive(true);
             this.challengeMode = true;
+            // Snapshot today's twist on the run so the leaderboard records
+            // which mod was active. todayTwist is deterministic per UTC date
+            // so every leaderboard entry on a given day has the same flavour.
+            this._challengeTwist = Challenge.todayTwist();
             this.seenFlags['intro_cinematic'] = true;
             localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
             localStorage.setItem('mvm_first_run_done', '1');
@@ -5737,6 +5741,23 @@ triggerSystemCrash() {
             }
             challengeBtn.style.opacity = '1';
         }
+        // Daily Twist — render the rotating modifier above the button so the
+        // player knows the day's flavour BEFORE committing to the run.
+        const twist = Challenge.todayTwist && Challenge.todayTwist();
+        let twistEl = document.getElementById('challenge-daily-twist');
+        if (twist && challengeBtn) {
+            if (!twistEl && challengeBtn.parentNode) {
+                twistEl = document.createElement('div');
+                twistEl.id = 'challenge-daily-twist';
+                twistEl.className = 'challenge-twist-pill';
+                challengeBtn.parentNode.insertBefore(twistEl, challengeBtn);
+            }
+            if (twistEl) {
+                twistEl.innerHTML = `<span class="twist-tag">DAILY TWIST</span> <span class="twist-name">${twist.name}</span> · <span class="twist-desc">${twist.desc}</span>`;
+            }
+        } else if (twistEl) {
+            twistEl.remove();
+        }
         // Personal-best line (local leaderboard) — kept below the button so
         // returning players see their peak to beat.
         const pb = Challenge.personalBest && Challenge.personalBest();
@@ -6716,10 +6737,16 @@ triggerSystemCrash() {
         // Shop price: base meta-upgrade discount multiplied by any ascension
         // shop-price modifier (Ascension 10 Apex = x2, Ascension 11 Null Field = x1.4).
         // Custom Run "Open Markets" stacks on top as an additional discount.
+        // Challenge Mode "Open Market" daily twist stacks on top of THAT, so
+        // a player on Asc 11 + Custom Open Markets + Open Market twist gets
+        // every discount layered (×1.4 × 0.7 × 0.8 ≈ 0.78× → 22% off net).
         const customDiscount = 1 - (this._customShopDiscount || 0);
+        const twistDiscount = (this.challengeMode && this._challengeTwist && this._challengeTwist.shopDiscount)
+            ? (1 - this._challengeTwist.shopDiscount) : 1;
         const discountMult = (this.hasMetaUpgrade('m_discount') ? 0.75 : 1.0)
             * (this._ascEffects && this._ascEffects.shopPriceMult ? this._ascEffects.shopPriceMult : 1)
-            * customDiscount;
+            * customDiscount
+            * twistDiscount;
 
         let items = [
             {
@@ -8586,6 +8613,38 @@ async startCombat(type) {
         if (this.enemy.isBoss && this._customBossHpMult && this._customBossHpMult !== 1) {
             this.enemy.maxHp = Math.max(1, Math.floor(this.enemy.maxHp * this._customBossHpMult));
             this.enemy.currentHp = this.enemy.maxHp;
+        }
+
+        // Daily Twist — small, sector-agnostic flavour for Challenge runs.
+        // Applied on combat start so it stacks ON TOP of (not under) sector
+        // mechanic effects. Skipped during the tutorial so the scripted
+        // beat stays predictable.
+        const twist = (this.challengeMode && this._challengeTwist) ? this._challengeTwist : null;
+        if (twist && this.currentState !== STATE.TUTORIAL_COMBAT) {
+            if (twist.enemyShieldBonus && !this.enemy.isBoss) {
+                this.enemy.shield = (this.enemy.shield || 0) + twist.enemyShieldBonus;
+                if (Array.isArray(this.enemy.minions)) {
+                    this.enemy.minions.forEach(m => {
+                        if (m) m.shield = (m.shield || 0) + twist.enemyShieldBonus;
+                    });
+                }
+            }
+            if (twist.startShield && this.player) {
+                this.player.addShield(twist.startShield);
+            }
+            if (twist.bonusMana && this.player) {
+                this.player.mana = Math.min(this.player.maxMana || 99, (this.player.mana || 0) + twist.bonusMana);
+            }
+            // dmg-out / dmg-in stack onto the customRun multipliers so a
+            // player running both layers takes the combined hit. _customXxx
+            // is reset every run by _applyCustomRunModifiers so no leak risk.
+            if (twist.dmgOutMult) this._customDmgOutMult = (this._customDmgOutMult || 1) * twist.dmgOutMult;
+            if (twist.dmgInMult)  this._customDmgInMult  = (this._customDmgInMult  || 1) * twist.dmgInMult;
+            // Reroll delta — applied on top of base/extra rerolls. Clamped
+            // at zero so a -1 twist on a 2-reroll baseline lands at 1.
+            if (twist.rerollDelta) {
+                this.rerolls = Math.max(0, (this.rerolls || 0) + twist.rerollDelta);
+            }
         }
 
         // Sector signature mechanic — Part 23. Cached on Game for the life
@@ -14108,9 +14167,13 @@ drawEffects() {
                     fragments: this.techFragments,
                     turns: (this.runStats && this.runStats.turns) || 0,
                     ascension: selected,
-                    pacts: this.activePacts ? Array.from(this.activePacts) : []
+                    pacts: this.activePacts ? Array.from(this.activePacts) : [],
+                    // Snapshot the daily twist on the run record so future
+                    // history rendering can label which day's twist this was.
+                    twist: this._challengeTwist ? this._challengeTwist.id : null
                 });
                 this.challengeMode = false;
+                this._challengeTwist = null;
                 this.activePacts = new Set();
                 this._renderPactPills && this._renderPactPills();
                 if (typeof Achievements !== 'undefined') {
@@ -14212,6 +14275,15 @@ drawEffects() {
             ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "STIM PACK", COLORS.NATURE_LIGHT);
         }
 
+        // Daily Twist — Frags Aplenty (+25% frag drops on every kill).
+        if (this.challengeMode && this._challengeTwist && this._challengeTwist.fragMult) {
+            const before = frags;
+            frags = Math.floor(frags * this._challengeTwist.fragMult);
+            const bonus = frags - before;
+            if (bonus > 0 && this.enemy) {
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 130, `TWIST +${bonus}`, '#ffd76a');
+            }
+        }
         this.techFragments += frags;
         // Corrupted: VOID SIPHON — killing an enemy grants +1 Max Mana.
         if (this.player.hasRelic('c_void_siphon')) {

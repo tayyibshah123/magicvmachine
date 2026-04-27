@@ -4963,6 +4963,28 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 .custom-run-net span.payout-down    { color: #5ad864; text-shadow: 0 0 10px rgba(90, 216, 100, 0.5); }
 .custom-run-net span.payout-neutral { color: #ffffff; text-shadow: 0 0 8px rgba(255, 255, 255, 0.4); }
 .custom-run-actions { display: flex; gap: 8px; }
+/* Challenge Mode — daily twist pill rendered above the gauntlet button. */
+.challenge-twist-pill {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: center;
+    gap: 6px;
+    margin: 6px auto 8px auto;
+    padding: 6px 12px;
+    border: 1px solid rgba(255, 215, 106, 0.4);
+    border-radius: 999px;
+    background: rgba(255, 215, 106, 0.08);
+    font-family: var(--font-cyber);
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    color: #ffd76a;
+    max-width: 100%;
+    text-align: center;
+}
+.challenge-twist-pill .twist-tag  { font-weight: 800; color: #ffd76a; opacity: 0.85; }
+.challenge-twist-pill .twist-name { font-weight: 800; color: #ffe6a8; text-shadow: 0 0 8px rgba(255, 215, 106, 0.4); }
+.challenge-twist-pill .twist-desc { font-weight: 500; color: #d8d8e6; opacity: 0.85; letter-spacing: 0.06em; text-transform: none; }
 /* Preset chips — dive straight into a flavour without picking 8 mods. */
 .custom-run-presets {
     display: flex;

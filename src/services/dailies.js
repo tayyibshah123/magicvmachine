@@ -18,8 +18,40 @@ function todayString() {
     return `${y}-${m}-${dd}`;
 }
 
+// Daily Twist — a single rotating modifier that flavours every Challenge run
+// played on a given UTC date. Picked deterministically from the date string so
+// every player sees the same twist on the same day, making the leaderboard
+// comparable. Effects are intentionally small (one knob each) so the gauntlet
+// stays the focal point — the twist is texture, not a deck-rebuild.
+const DAILY_TWISTS = [
+    { id: 'shielded_foes', name: 'Shielded Foes', desc: '+5 shield on every enemy.',                     enemyShieldBonus: 5 },
+    { id: 'frags_aplenty', name: 'Frags Aplenty', desc: '+25% Fragments from every kill.',               fragMult: 1.25 },
+    { id: 'fortified',     name: 'Fortified',     desc: 'Start every fight with +10 shield.',            startShield: 10 },
+    { id: 'open_market',   name: 'Open Market',   desc: 'All shop prices reduced by 20%.',               shopDiscount: 0.20 },
+    { id: 'tight_hand',    name: 'Tight Hand',    desc: '-1 reroll per turn.',                           rerollDelta: -1 },
+    { id: 'glassy',        name: 'Glassy',        desc: '+15% damage dealt, +15% damage taken.',         dmgOutMult: 1.15, dmgInMult: 1.15 },
+    { id: 'siphon_day',    name: 'Siphon Day',    desc: '+1 Mana at every combat start.',                bonusMana: 1 }
+];
+
+// Stable string hash → array index. Same date string always picks same mod.
+function hashIndex(str, mod) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+        h = ((h * 31) + str.charCodeAt(i)) | 0;
+    }
+    return Math.abs(h) % mod;
+}
+
 export const Challenge = {
     todayString,
+
+    // The single Daily Twist for today's UTC date. Same for every player on
+    // the same date so leaderboard scores are comparable. Returns a plain
+    // object (id, name, desc, effect-flags) — Game reads the flags directly.
+    todayTwist() {
+        return DAILY_TWISTS[hashIndex(todayString(), DAILY_TWISTS.length)];
+    },
+    twists: DAILY_TWISTS,
 
     markActive(active) {
         if (active) localStorage.setItem(KEY_ACTIVE, '1');
