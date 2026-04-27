@@ -56,7 +56,10 @@ export const Unlocks = {
         // Only gate buttons that actually exist on the main menu. Ascension is a
         // run-start modifier (shown on char-select), not a standalone menu item.
         const map = {
-            daily: 'btn-daily',
+            // Legacy `daily` unlock key still gates the menu button — now
+            // surfaced as the Challenge Mode entry point. Key kept for save
+            // compatibility with existing player progress.
+            daily: 'btn-challenge',
             intel: 'btn-intel'
         };
         for (const [key, id] of Object.entries(map)) {

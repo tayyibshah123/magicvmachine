@@ -8779,7 +8779,7 @@ canvas + .game-icon { filter: none; }
 }
 #screen-start:not(.menu-entering) #btn-load-save { animation-delay:  80ms; }
 #screen-start:not(.menu-entering) #btn-start     { animation-delay: 180ms; }
-#screen-start:not(.menu-entering) #btn-daily     { animation-delay: 300ms; }
+#screen-start:not(.menu-entering) #btn-challenge { animation-delay: 300ms; }
 #screen-start:not(.menu-entering) #btn-intel     { animation-delay: 420ms; }
 #screen-start:not(.menu-entering) #btn-upgrades  { animation-delay: 540ms; }
 #screen-start:not(.menu-entering) #login-streak  { animation-delay: 620ms; }
@@ -8977,7 +8977,7 @@ body.reduced-motion #screen-start #btn-load-save {
         0 0 10px var(--neon-gold),
         0 0 20px rgba(255, 215, 106, 0.4);
 }
-#screen-start #btn-daily,
+#screen-start #btn-challenge,
 #screen-start #btn-upgrades {
     --neon-color: var(--neon-gold);
     box-shadow:

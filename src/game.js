@@ -10,7 +10,7 @@ import { ClassAbility } from './ui/class-ability.js';
 import { ICONS, iconImage, drawIcon, preloadCombatIcons } from './ui/icons.js';
 import { drawIntentIcon, drawEffectIcon } from './ui/canvas-icons.js';
 import { Ascension, ASCENSION_TWISTS } from './services/ascension.js';
-import { Dailies, mulberry32 } from './services/dailies.js';
+import { Challenge } from './services/dailies.js';
 import { Achievements, ACHIEVEMENTS } from './services/achievements.js';
 import { Streak } from './services/streak.js';
 import { Hints } from './services/hints.js';
@@ -343,40 +343,34 @@ const Game = {
         // --- BUTTON BINDINGS ---
         attachButtonEvent('btn-load-save', () => this.loadGame());
         attachButtonEvent('btn-resume', () => d.getElementById('modal-settings').classList.add('hidden'));
-        // Cache the genuine Math.random so we can restore it after a seeded daily run.
         if (!Game._origRandom) Game._origRandom = Math.random;
         attachButtonEvent('btn-start', () => {
-            // Restore unseeded RNG for normal runs
+            // Standard run — make sure no Challenge state leaks from a prior
+            // attempt (active flag, challengeMode toggle).
             Math.random = Game._origRandom;
-            Dailies.markActive(false);
+            Challenge.markActive(false);
+            this.challengeMode = false;
             this.seenFlags['intro_cinematic'] = true;
             localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
             this.playIntro();
         });
-        attachButtonEvent('btn-daily', () => {
-            if (!Dailies.isDailyAvailable()) {
-                ParticleSys.createFloatingText(540, 600, 'DAILY ALREADY COMPLETE', '#888');
-                return;
-            }
-            // Seed Math.random so every player gets the same map + relic rolls today
-            const seed = Dailies.getTodaySeed();
-            Game.rng = mulberry32(seed);
-            Math.random = Game.rng;
-            Dailies.markActive(true);
-            // Mark intro / first-run as already seen so neither the storyboard
-            // cinematic NOR the beginner tutorial fires — daily runs are always
-            // short, focused attempts, not a fresh-install experience.
+        attachButtonEvent('btn-challenge', () => {
+            // Challenge Mode — boss rush with rest nodes between bosses. Skip
+            // the storyboard / first-run tutorial since Challenge is a focused
+            // attempt for returning players, not a fresh-install funnel.
+            Challenge.markActive(true);
+            this.challengeMode = true;
             this.seenFlags['intro_cinematic'] = true;
             localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
             localStorage.setItem('mvm_first_run_done', '1');
             this.tutorialAutoRun = false;
-            // Wipe any pending prior run so the character picker actually starts a fresh seeded run
+            // Wipe any pending prior run so the character picker starts a
+            // fresh Challenge gauntlet and doesn't resume a normal save.
             localStorage.removeItem('mvm_save_v1');
             const btnLoad = document.getElementById('btn-load-save');
             if (btnLoad) btnLoad.style.display = 'none';
-            // Show a brief banner announcing Daily Run, then straight to character select
             if (this.showPhaseBanner) {
-                this.showPhaseBanner('DAILY RUN', Dailies.todayString(), 'player');
+                this.showPhaseBanner('CHALLENGE', 'BOSS GAUNTLET', 'player');
             }
             this.changeState(STATE.CHAR_SELECT);
         });
@@ -5028,6 +5022,15 @@ triggerSystemCrash() {
     },
 
     generateMap() {
+        // Challenge Mode — boss gauntlet with rest nodes between bosses.
+        // No combats, events, shops or branching: just sector1 boss → rest →
+        // sector2 boss → rest → ... → sector5 boss. Each boss node carries
+        // its own `nodeSector` so visitNode can re-target this.sector before
+        // startCombat picks BOSS_DATA[sector].
+        if (this.challengeMode) {
+            this._generateChallengeMap();
+            return;
+        }
         // Organic branching map — variable node count per level, merges + crossings,
         // occasional "shifting" nodes whose type rerolls as the run progresses.
         this.map.nodes = [];
@@ -5123,6 +5126,56 @@ triggerSystemCrash() {
         this.map.currentIdx = 'start';
     },
 
+    // Challenge Mode map — fixed linear chain: start → boss(s1) → rest →
+    // boss(s2) → rest → ... → boss(s5). One node per layer so the path is
+    // unambiguous; vertical layout mirrors the standard map's bottom-to-top
+    // flow. `nodeSector` on each boss tells `visitNode` which sector boss
+    // template to load for that fight.
+    _generateChallengeMap() {
+        this.map.nodes = [];
+        // 5 bosses + 4 rests + start = 10 layers. Place start at the bottom,
+        // final boss at the top, and space everything evenly.
+        this.map.nodes.push({
+            id: 'start', layer: 0, lane: 0, x: 50, y: 92,
+            type: 'start', connections: [], status: 'completed'
+        });
+        const SECTORS = 5;
+        const totalLayers = SECTORS * 2 - 1; // 9 nodes after start (5 bosses + 4 rests)
+        const topY = 10;
+        const bottomY = 84;
+        const stepY = (bottomY - topY) / totalLayers;
+        let prevId = 'start';
+        for (let s = 1; s <= SECTORS; s++) {
+            // Boss layer for sector s: 1, 3, 5, 7, 9
+            const bossLayer = (s - 1) * 2 + 1;
+            const bossId = `boss-${s}`;
+            const bossY = bottomY - bossLayer * stepY;
+            this.map.nodes.push({
+                id: bossId, layer: bossLayer, lane: 0, x: 50, y: bossY,
+                type: 'boss', nodeSector: s, connections: [],
+                status: (bossLayer === 1) ? 'available' : 'locked'
+            });
+            const prev = this.map.nodes.find(n => n.id === prevId);
+            if (prev) prev.connections.push(bossId);
+            prevId = bossId;
+            // Rest layer follows every boss except the last (s=5 is the
+            // run-ending boss; no rest after it).
+            if (s < SECTORS) {
+                const restLayer = bossLayer + 1;
+                const restId = `rest-${s}`;
+                const restY = bottomY - restLayer * stepY;
+                this.map.nodes.push({
+                    id: restId, layer: restLayer, lane: 0, x: 50, y: restY,
+                    type: 'rest', connections: [], status: 'locked'
+                });
+                const bossNode = this.map.nodes.find(n => n.id === bossId);
+                if (bossNode) bossNode.connections.push(restId);
+                prevId = restId;
+            }
+        }
+        this.map.currentIdx = 'start';
+    },
+
     // Randomization: when a shifting node is still un-visited at map re-render, roll a chance to reshuffle its type.
     shiftRandomNodes() {
         if (!this.map || !this.map.nodes) return;
@@ -5188,10 +5241,10 @@ triggerSystemCrash() {
         this._streakBonusPending = null;
     },
 
-    // During gameplay, show a small "DAILY" chip in the top-bar so the player
-    // knows their run is seeded. Placed once at startCombat.
+    // During gameplay, show a small "CHALLENGE" chip in the top-bar so the
+    // player can see at a glance their run is the boss gauntlet.
     _ensureDailyChip() {
-        if (!Dailies.isActive()) {
+        if (!Challenge.isActive()) {
             const existing = document.getElementById('daily-run-chip');
             if (existing) existing.remove();
             return;
@@ -5204,39 +5257,34 @@ triggerSystemCrash() {
             const hud = document.getElementById('hud') || document.body;
             hud.appendChild(chip);
         }
-        chip.textContent = `DAILY · ${Dailies.todayString()}`;
+        chip.textContent = 'CHALLENGE';
     },
 
     _refreshMenuChips() {
-        // Daily Run button status
-        const dailyEl = document.getElementById('daily-status');
-        const dailyBtn = document.getElementById('btn-daily');
-        if (dailyEl && dailyBtn) {
-            if (Dailies.isDailyAvailable()) {
-                dailyEl.textContent = '· READY';
-                dailyBtn.style.opacity = '1';
+        const statusEl = document.getElementById('challenge-status');
+        const challengeBtn = document.getElementById('btn-challenge');
+        if (statusEl && challengeBtn) {
+            // No daily lockout — Challenge is always available. Surface the
+            // last completion so players can see their most recent score.
+            const history = Challenge.getHistory();
+            const last = history && history[0];
+            if (last) {
+                statusEl.textContent = `· LAST · ${last.fragments || 0} FRAG · ${last.turns || 0}T`;
             } else {
-                // Today already played — surface the player's run score so
-                // they can see what they set.
-                const today = Dailies.todayScore && Dailies.todayScore();
-                if (today) {
-                    dailyEl.textContent = `· DONE · ${today.fragments || 0} FRAG · ${today.turns || 0}T · ${Dailies.formatCountdown(Dailies.msUntilReset())}`;
-                } else {
-                    dailyEl.textContent = `· NEW IN ${Dailies.formatCountdown(Dailies.msUntilReset())}`;
-                }
-                dailyBtn.style.opacity = '0.6';
+                statusEl.textContent = '· READY';
             }
+            challengeBtn.style.opacity = '1';
         }
-        // Personal-best line (local leaderboard) — drop below the daily
-        // chip so returning players see their peak to beat.
-        const pb = Dailies.personalBest && Dailies.personalBest();
-        let pbEl = document.getElementById('daily-personal-best');
+        // Personal-best line (local leaderboard) — kept below the button so
+        // returning players see their peak to beat.
+        const pb = Challenge.personalBest && Challenge.personalBest();
+        let pbEl = document.getElementById('challenge-personal-best');
         if (pb) {
-            if (!pbEl && dailyBtn && dailyBtn.parentNode) {
+            if (!pbEl && challengeBtn && challengeBtn.parentNode) {
                 pbEl = document.createElement('div');
-                pbEl.id = 'daily-personal-best';
+                pbEl.id = 'challenge-personal-best';
                 pbEl.style.cssText = 'font-size:0.65rem; letter-spacing:0.12em; color:#ff9e00; opacity:0.85; margin-top:4px; text-align:center;';
-                dailyBtn.parentNode.insertBefore(pbEl, dailyBtn.nextSibling);
+                challengeBtn.parentNode.insertBefore(pbEl, challengeBtn.nextSibling);
             }
             if (pbEl) {
                 pbEl.textContent = `BEST: ${pb.fragments || 0} FRAG · ${pb.turns || 0}T · A${pb.ascension || 0}`;
@@ -5244,17 +5292,6 @@ triggerSystemCrash() {
         }
         // Login streak chip
         if (typeof this._renderLoginStreak === 'function') this._renderLoginStreak();
-        // Re-tick the daily countdown each second while menu is open
-        clearInterval(this._dailyCountdownTimer);
-        this._dailyCountdownTimer = setInterval(() => {
-            if (this.currentState !== STATE.MENU) {
-                clearInterval(this._dailyCountdownTimer);
-                return;
-            }
-            if (dailyEl && !Dailies.isDailyAvailable()) {
-                dailyEl.textContent = `· NEW IN ${Dailies.formatCountdown(Dailies.msUntilReset())}`;
-            }
-        }, 30000);
     },
 
     _renderAscensionPicker() {
@@ -5526,6 +5563,22 @@ triggerSystemCrash() {
 
         // 4. Trigger Node Action
         if(node.type === 'combat' || node.type === 'elite' || node.type === 'boss') {
+            // Challenge Mode boss nodes carry their own sector index so each
+            // fight pulls the correct BOSS_DATA template. Snap this.sector
+            // to the node BEFORE startCombat so the HUD, ambient track, and
+            // boss generation all line up. Skip the dramatic sector-collapse
+            // intro on the first boss (we just walked into it) — it would
+            // double up with the phase banner.
+            if (this.challengeMode && node.type === 'boss' && typeof node.nodeSector === 'number') {
+                const previousSector = this.sector;
+                this.sector = node.nodeSector;
+                const sectorDisplay = document.getElementById('sector-display');
+                if (sectorDisplay) sectorDisplay.innerText = `SECTOR ${this.sector}`;
+                if (previousSector !== this.sector) {
+                    this.triggerSectorCollapse && this.triggerSectorCollapse();
+                    this.playSectorIntro && this.playSectorIntro(this.sector);
+                }
+            }
             this.startCombat(node.type);
         } else if (node.type === 'shop') {
             this.generateShop(); 
@@ -5770,6 +5823,7 @@ triggerSystemCrash() {
             map: this.map,
             currentIdx: this.map.currentIdx,
             bossDefeated: this.bossDefeated,
+            challengeMode: !!this.challengeMode,
             // Persist per-run rolling stats so the victory/death screen's
             // breakdown (biggest hit, rerolls used, perfect QTEs, HP lost)
             // survives a browser reload or mid-run resume.
@@ -5827,6 +5881,12 @@ triggerSystemCrash() {
             this.map = data.map || { nodes: [], currentIdx: 'start' };
             this.map.currentIdx = data.currentIdx || 'start';
             this.bossDefeated = !!data.bossDefeated;
+            this.challengeMode = !!data.challengeMode;
+            // Keep the Challenge active flag in localStorage in sync with the
+            // mode we just restored — the chip + reward bookkeeping read from
+            // it, and a save loaded in a fresh tab would otherwise see the
+            // run as a normal one.
+            Challenge.markActive(this.challengeMode);
 
             const classConfig = PLAYER_CLASSES.find(c => c.id === (data.player && data.player.classId))
                 || PLAYER_CLASSES[0];
@@ -12657,15 +12717,20 @@ drawEffects() {
                     ParticleSys.createFloatingText(540, 800, `ASCENSION ${selected + 1} UNLOCKED`, '#ffd700');
                 }, 1500);
             }
-            // Daily Run completion bookkeeping
-            if (Dailies.isActive()) {
-                Dailies.markDailyComplete({
+            // Challenge Mode completion bookkeeping
+            if (Challenge.isActive()) {
+                Challenge.markComplete({
                     fragments: this.techFragments,
                     turns: (this.runStats && this.runStats.turns) || 0,
                     ascension: selected
                 });
-                Math.random = Game._origRandom; // restore unseeded RNG
-                if (typeof Achievements !== 'undefined') Achievements.unlock('DAILY_FINISH');
+                this.challengeMode = false;
+                if (typeof Achievements !== 'undefined') {
+                    Achievements.unlock('DAILY_FINISH');
+                    const finishes = Challenge.getHistory().length;
+                    if (finishes >= 7)  Achievements.unlock('DAILY_7');
+                    if (finishes >= 30) Achievements.unlock('DAILY_30');
+                }
             }
             
             // 3. Rewards
@@ -13011,6 +13076,16 @@ drawEffects() {
 
                 this.completeCurrentNode();
 
+                if (this.bossDefeated && this.challengeMode) {
+                    // Challenge Mode pre-builds the entire boss-rest chain in
+                    // _generateChallengeMap, so don't clobber it with a fresh
+                    // sector map. Sector advance happens when the player taps
+                    // the next boss node (visitNode reads node.nodeSector).
+                    this.bossDefeated = false;
+                    this.changeState(STATE.MAP);
+                    return;
+                }
+
                 if (this.bossDefeated) {
                     this.bossDefeated = false;
                     this.sector++;
@@ -13101,6 +13176,13 @@ drawEffects() {
 
         // RESET BOSS SILENCE
         AudioMgr.bossSilence = false;
+
+        // Challenge attempt ended in death — drop the active flag so the
+        // menu chip + next start don't think the player is still in one.
+        if (this.challengeMode) {
+            Challenge.markActive(false);
+            this.challengeMode = false;
+        }
 
         localStorage.removeItem('mvm_save_v1');
         document.getElementById('btn-load-save').style.display = 'none';
@@ -13360,9 +13442,9 @@ drawEffects() {
         AudioMgr.bossSilence = false;
         this.restoreCombatButtons();
         ClassAbility.endCombat();
-        // Restore unseeded RNG in case this was an aborted daily
         if (Game._origRandom) Math.random = Game._origRandom;
-        Dailies.markActive(false);
+        Challenge.markActive(false);
+        this.challengeMode = false;
         this.changeState(STATE.MENU);
     },
     

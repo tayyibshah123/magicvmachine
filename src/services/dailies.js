@@ -1,34 +1,16 @@
-// Daily Run service.
-// - Date-based seeded RNG using Mulberry32 → identical map/relics worldwide each day
-// - Tracks daily-completion status in localStorage so the player can't re-roll the same day
-// - Public API: getTodaySeed(), beginDailyRun(), isDailyAvailable(), markDailyComplete()
+// Challenge Mode service.
+// Replaces the old date-seeded Daily Run with a "boss rush": every sector
+// boss in a row, only a Rest node between each. No date seeding, no daily
+// lockout — players can run the gauntlet whenever they want.
+//
+// File path is kept as `dailies.js` (and the export is aliased as `Dailies`)
+// purely so callers and the legacy localStorage key namespace don't churn.
+// Treat `Challenge` as the canonical name going forward.
 
-const KEY_LAST_DAILY    = 'mvm_daily_last_complete';   // YYYY-MM-DD of last completed daily
-const KEY_DAILY_HISTORY = 'mvm_daily_history';         // JSON array of {date, fragments, score}
-const KEY_DAILY_ACTIVE  = 'mvm_daily_active';          // '1' if current run was started as daily
+const KEY_HISTORY = 'mvm_challenge_history';   // JSON array of {date, fragments, turns, ascension}
+const KEY_ACTIVE  = 'mvm_challenge_active';    // '1' if the current run was started as Challenge
 
-// --- seeded RNG (Mulberry32) ---
-export function mulberry32(seed) {
-    let t = seed >>> 0;
-    return function () {
-        t |= 0; t = (t + 0x6D2B79F5) | 0;
-        let r = Math.imul(t ^ (t >>> 15), 1 | t);
-        r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
-        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-    };
-}
-
-// Hash YYYY-MM-DD into a deterministic 32-bit seed
-function hashDate(dateStr) {
-    let h = 2166136261 >>> 0;
-    for (let i = 0; i < dateStr.length; i++) {
-        h ^= dateStr.charCodeAt(i);
-        h = Math.imul(h, 16777619);
-    }
-    return h >>> 0;
-}
-
-export function todayString() {
+function todayString() {
     const d = new Date();
     const y = d.getUTCFullYear();
     const m = String(d.getUTCMonth() + 1).padStart(2, '0');
@@ -36,66 +18,40 @@ export function todayString() {
     return `${y}-${m}-${dd}`;
 }
 
-export const Dailies = {
+export const Challenge = {
     todayString,
-    getTodaySeed() { return hashDate(this.todayString()); },
-
-    isDailyAvailable() {
-        const last = localStorage.getItem(KEY_LAST_DAILY) || '';
-        return last !== this.todayString();
-    },
 
     markActive(active) {
-        if (active) localStorage.setItem(KEY_DAILY_ACTIVE, '1');
-        else localStorage.removeItem(KEY_DAILY_ACTIVE);
+        if (active) localStorage.setItem(KEY_ACTIVE, '1');
+        else localStorage.removeItem(KEY_ACTIVE);
     },
-    isActive() { return localStorage.getItem(KEY_DAILY_ACTIVE) === '1'; },
+    isActive() { return localStorage.getItem(KEY_ACTIVE) === '1'; },
 
-    markDailyComplete(payload = {}) {
-        const today = this.todayString();
-        localStorage.setItem(KEY_LAST_DAILY, today);
+    markComplete(payload = {}) {
+        const today = todayString();
         this.markActive(false);
         const history = this.getHistory();
         history.unshift({ date: today, ...payload });
-        // Keep last 30 entries
-        localStorage.setItem(KEY_DAILY_HISTORY, JSON.stringify(history.slice(0, 30)));
+        // Keep last 50 entries — the Challenge gauntlet is short, so players
+        // may rip through several in a session.
+        localStorage.setItem(KEY_HISTORY, JSON.stringify(history.slice(0, 50)));
     },
 
     getHistory() {
-        try { return JSON.parse(localStorage.getItem(KEY_DAILY_HISTORY) || '[]'); }
+        try { return JSON.parse(localStorage.getItem(KEY_HISTORY) || '[]'); }
         catch { return []; }
     },
 
-    // Personal-best leaderboard — since the app ships without a server,
-    // the "leaderboard" is the player's own history. Picks the best run by
-    // composite score (ascension × fragments / (turns + 1)) so climbing an
-    // ascension matters more than grinding a low-tier run for raw frags.
+    // Personal-best leaderboard — score = (asc + 1) * fragments / (turns + 1).
+    // Higher ascension and lower turn count both win against a fragment-grind.
     personalBest() {
         const h = this.getHistory();
         if (!h.length) return null;
         const score = (e) => ((e.ascension || 0) + 1) * (e.fragments || 0) / ((e.turns || 0) + 1);
         return h.reduce((best, cur) => (score(cur) > score(best) ? cur : best), h[0]);
     },
-
-    // Today's recorded score (if any), used to show "You scored X today"
-    // before the reset timer ticks over.
-    todayScore() {
-        const today = this.todayString();
-        const h = this.getHistory();
-        return h.find(e => e.date === today) || null;
-    },
-
-    // Time until midnight UTC (ms) — useful for the menu countdown
-    msUntilReset() {
-        const now = new Date();
-        const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0));
-        return next.getTime() - now.getTime();
-    },
-
-    formatCountdown(ms) {
-        const total = Math.max(0, Math.floor(ms / 1000));
-        const h = String(Math.floor(total / 3600)).padStart(2, '0');
-        const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
-        return `${h}:${m}`;
-    }
 };
+
+// Backwards-compat alias for callers that still reference `Dailies`. Remove
+// once every callsite has been updated to `Challenge`.
+export const Dailies = Challenge;

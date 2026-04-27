@@ -50,10 +50,10 @@ export const ACHIEVEMENTS = [
     { id: 'CORRUPTED_3',         name: 'Risk Tolerance',      desc: 'Hold 3 corrupted relics at once.',   cat: 'build', frag: 150 },
     { id: 'NO_RELIC_BOSS',       name: 'Naked Power',         desc: 'Defeat a boss with 0 relics.',       cat: 'build', frag: 250 },
 
-    // ---- Daily / retention
-    { id: 'DAILY_FINISH',        name: 'Punch Card',          desc: 'Complete a Daily Run.',              cat: 'daily', frag: 50 },
-    { id: 'DAILY_7',             name: 'Devoted',              desc: 'Complete 7 Daily Runs.',             cat: 'daily', frag: 200 },
-    { id: 'DAILY_30',            name: 'Always Online',       desc: 'Complete 30 Daily Runs.',            cat: 'daily', frag: 750 },
+    // ---- Challenge / retention (legacy DAILY_* IDs kept for save compat)
+    { id: 'DAILY_FINISH',        name: 'Punch Card',          desc: 'Complete a Challenge Run.',          cat: 'daily', frag: 50 },
+    { id: 'DAILY_7',             name: 'Devoted',              desc: 'Complete 7 Challenge Runs.',         cat: 'daily', frag: 200 },
+    { id: 'DAILY_30',            name: 'Always Online',       desc: 'Complete 30 Challenge Runs.',        cat: 'daily', frag: 750 },
     { id: 'STREAK_3',            name: 'On a Roll',           desc: 'Login streak of 3 days.',            cat: 'daily', frag: 30 },
     { id: 'STREAK_7',            name: 'Habitual',            desc: 'Login streak of 7 days.',            cat: 'daily', frag: 100 },
     { id: 'STREAK_30',           name: 'Devotee',             desc: 'Login streak of 30 days.',           cat: 'daily', frag: 500 },
