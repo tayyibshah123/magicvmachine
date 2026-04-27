@@ -8,7 +8,7 @@ import { ParticleSys } from './effects/particles.js';
 import { TooltipMgr } from './ui/tooltip.js';
 import { ClassAbility } from './ui/class-ability.js';
 import { ICONS, iconImage, drawIcon, preloadCombatIcons } from './ui/icons.js';
-import { drawIntentIcon, drawEffectIcon } from './ui/canvas-icons.js';
+import { drawIntentIcon, drawEffectIcon, blitEffectIcon } from './ui/canvas-icons.js';
 import { Ascension, ASCENSION_TWISTS } from './services/ascension.js';
 import { Challenge, Archive } from './services/dailies.js';
 import { Achievements, ACHIEVEMENTS } from './services/achievements.js';
@@ -102,6 +102,46 @@ const Game = {
         const mult = this.combatPaceMult || 1;
         const scaled = Math.max(1, Math.round(ms / mult));
         return new Promise(resolve => setTimeout(resolve, scaled));
+    },
+
+    // -------- Tracked timers (perf audit P7) ------------------------------
+    // Registers every setTimeout/setInterval id so a state change (combat
+    // end, run quit, gameOver, route to MENU) can drain them in one pass.
+    // Direct setTimeout/setInterval calls scattered through the codebase
+    // still work — this is opt-in for combat-scoped timers that were
+    // previously leaking on early returns.
+    _timers: new Set(),
+    _intervals: new Set(),
+    setTimer(fn, ms) {
+        const id = setTimeout(() => {
+            this._timers.delete(id);
+            try { fn(); } catch (e) { console.warn('[setTimer]', e); }
+        }, ms);
+        this._timers.add(id);
+        return id;
+    },
+    setLoop(fn, ms) {
+        const id = setInterval(() => {
+            try { fn(); } catch (e) { console.warn('[setLoop]', e); }
+        }, ms);
+        this._intervals.add(id);
+        return id;
+    },
+    clearTimer(id) {
+        clearTimeout(id);
+        this._timers.delete(id);
+    },
+    clearLoop(id) {
+        clearInterval(id);
+        this._intervals.delete(id);
+    },
+    // Drain combat-scoped timers — safe to call from gameOver, quitRun, and
+    // from changeState when the new state isn't COMBAT/REWARD/COMBAT_WIN.
+    clearTrackedTimers() {
+        this._timers.forEach(id => clearTimeout(id));
+        this._timers.clear();
+        this._intervals.forEach(id => clearInterval(id));
+        this._intervals.clear();
     },
 
     init() {
@@ -874,8 +914,9 @@ const Game = {
              for (let i = this.effects.length - 1; i >= 0; i--) {
                  const eff = this.effects[i];
                  if (eff.type === 'micro_laser' && !eff.parried) {
-                     const dist = Math.hypot(this.mouseX - eff.x, this.mouseY - eff.y);
-                     if (dist < eff.radius + 30) {
+                     const _pdx = this.mouseX - eff.x, _pdy = this.mouseY - eff.y;
+                     const _pr = eff.radius + 30;
+                     if (_pdx * _pdx + _pdy * _pdy < _pr * _pr) {
                          eff.parried = true;
                          eff.onHit = null; 
                          const angle = Math.atan2(eff.y - this.mouseY, eff.x - this.mouseX);
@@ -889,8 +930,8 @@ const Game = {
                      }
                  }
                  if (eff.type === 'nature_dart' && !eff.empowered) {
-                     const dist = Math.hypot(this.mouseX - eff.x, this.mouseY - eff.y);
-                     if (dist < 60) { 
+                     const _ndx = this.mouseX - eff.x, _ndy = this.mouseY - eff.y;
+                     if (_ndx * _ndx + _ndy * _ndy < 3600 /* 60² */) {
                          eff.empowered = true;
                          eff.dmgMultiplier = 1.1 + Math.random() * 0.3; 
                          eff.speed *= 2.5; 
@@ -914,8 +955,9 @@ const Game = {
              }
 
              if ((this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT) && this.enemy && this.enemy.currentHp > 0) {
-                const dist = Math.hypot(this.mouseX - this.enemy.x, this.mouseY - this.enemy.y);
-                if (dist < this.enemy.radius) {
+                const _edx = this.mouseX - this.enemy.x, _edy = this.mouseY - this.enemy.y;
+                const _er = this.enemy.radius;
+                if (_edx * _edx + _edy * _edy < _er * _er) {
                     this.enemy.showIntent = !this.enemy.showIntent;
                     if (this.enemy.showIntent) {
                         ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "INTENT REVEALED", COLORS.MANA);
@@ -1069,8 +1111,9 @@ const Game = {
 
         for(let ent of entities) {
             if(!ent || ent.currentHp <= 0) continue;
-            const dist = Math.hypot(this.mouseX - ent.x, this.mouseY - ent.y);
-            if(dist < ent.radius) {
+            const _hdx = this.mouseX - ent.x, _hdy = this.mouseY - ent.y;
+            const _hr = ent.radius;
+            if(_hdx * _hdx + _hdy * _hdy < _hr * _hr) {
                 hoveredEntity = ent;
                 let txt = `<strong>${ent.name}</strong>\nHP: ${ent.currentHp}/${ent.maxHp}`;
                 if(ent.shield > 0) txt += `\nShield: ${ent.shield}`;
@@ -1377,8 +1420,9 @@ startDrag(e, die, el) {
 
         for(let ent of entities) {
             if(!ent || ent.currentHp <= 0) continue;
-            const dist = Math.hypot(this.mouseX - ent.x, this.mouseY - ent.y);
-            if(dist < ent.radius + 20) {
+            const _ddx = this.mouseX - ent.x, _ddy = this.mouseY - ent.y;
+            const _dr = ent.radius + 20;
+            if(_ddx * _ddx + _ddy * _ddy < _dr * _dr) {
                 return ent;
             }
         }
@@ -1732,6 +1776,15 @@ startQTE(type, x, y, callback) {
         const FORWARD = new Set([STATE.CHAR_SELECT, STATE.MAP, STATE.COMBAT, STATE.TUTORIAL_COMBAT, STATE.REWARD, STATE.COMBAT_WIN, STATE.SHOP, STATE.EVENT, STATE.HEX, STATE.STORY, STATE.ENDING, STATE.VICTORY]);
         const BACKWARD = new Set([STATE.MENU, STATE.GAMEOVER]);
         const prev = this.currentState;
+        // Drain combat-scoped tracked timers when leaving combat so a long
+        // run doesn't accumulate stuck setTimeouts. Combat-internal flow
+        // states (REWARD, COMBAT_WIN) keep timers — they're transient
+        // post-combat overlays that share lifecycle with the just-ended
+        // fight.
+        const COMBAT_LIKE = new Set([STATE.COMBAT, STATE.TUTORIAL_COMBAT, STATE.REWARD, STATE.COMBAT_WIN]);
+        if (COMBAT_LIKE.has(prev) && !COMBAT_LIKE.has(newState)) {
+            this.clearTrackedTimers();
+        }
         let direction = 'up';
         if (typeof prev !== 'undefined') {
             if (BACKWARD.has(newState)) direction = 'right';
@@ -2363,7 +2416,8 @@ startQTE(type, x, y, callback) {
         const unlockedCount = (this.metaUpgrades || []).length;
         const ascUnlocked = this.corruptionLevel > 0 || (typeof Ascension !== 'undefined' && Ascension.getSelected && Ascension.getSelected() > 0);
         const loreUnlocked = (this.unlockedLore && this.unlockedLore.length >= 6);
-        const within = (nx, ny) => Math.hypot(x - nx, y - ny) < R;
+        const R2 = R * R;
+        const within = (nx, ny) => { const _dx = x - nx, _dy = y - ny; return _dx * _dx + _dy * _dy < R2; };
         if (unlockedCount >= 5 && within(w * 0.82, h * 0.74)) return 'smith';
         if (ascUnlocked && within(w * 0.5, h * 0.55)) return 'oracle';
         if (loreUnlocked && within(w * 0.36, h * 0.68)) return 'curator';
@@ -11222,12 +11276,16 @@ drawEffects() {
                     continue;
                 }
 
-                // Logic: Hit Detection (Target)
-                const dist = Math.hypot(e.x - e.tx, e.y - e.ty);
-                if (dist < 20) {
-                    if (e.onHit) e.onHit();
-                    this.effects.splice(i, 1);
-                    ParticleSys.createExplosion(e.x, e.y, 15, e.color);
+                // Logic: Hit Detection (Target). Squared-distance check —
+                // fires every frame for every micro_laser in flight; sqrt
+                // showed up in the audit hotspot list.
+                {
+                    const _ldx = e.x - e.tx, _ldy = e.y - e.ty;
+                    if (_ldx * _ldx + _ldy * _ldy < 400 /* 20² */) {
+                        if (e.onHit) e.onHit();
+                        this.effects.splice(i, 1);
+                        ParticleSys.createExplosion(e.x, e.y, 15, e.color);
+                    }
                 }
                 continue;
             }
@@ -14184,7 +14242,7 @@ drawEffects() {
             statusList.forEach((eff, i) => {
                 const ix = barX + padding + (iconWidth / 2) + (i * iconWidth);
                 const iy = barY + (barHeight / 2);
-                drawEffectIcon(ctx, eff.id, ix, iy, 22, effectColor[eff.id] || '#ffffff');
+                blitEffectIcon(ctx, eff.id, ix, iy, effectColor[eff.id] || '#ffffff');
 
                 // Count badge: show the most meaningful number.
                 //   stacked DoT (bleed/poison) → stack count
@@ -14224,8 +14282,18 @@ drawEffects() {
     // persistent state flags that wouldn't otherwise render as icons.
     // Keeps the rendering path blind to the source so future additions
     // (new affixes, new class resources) just need one entry here.
+    //
+    // PERF (audit P2): cache on the entity for the current render frame.
+    // drawHealthBar fires per entity per frame, plus the hover hit-test
+    // calls again when the cursor's near a status icon — so a 1-vs-3 fight
+    // was rebuilding the same array 8-15× per frame. Cache key is the
+    // global `_statusFrameId` bumped once per render loop in update().
     _collectStatusDisplay(entity) {
         if (!entity) return [];
+        const fid = this._statusFrameId | 0;
+        if (entity._statusFrame === fid && entity._statusCache) {
+            return entity._statusCache;
+        }
         const out = [];
         // 1. Real on-duration effects (the existing system).
         if (Array.isArray(entity.effects)) {
@@ -14293,6 +14361,8 @@ drawEffects() {
                 for (const b of buffs) out.push(b);
             }
         }
+        entity._statusFrame = fid;
+        entity._statusCache = out;
         return out;
     },
 
@@ -14380,6 +14450,14 @@ drawEffects() {
             p.color = Math.random() > 0.5 ? '#f00' : '#fff';
         }
 
+        // Hard cap so a stuck particle (life never decremented, off-screen
+        // bounds-check missed because of an integration step glitch on
+        // resume) can't grow the array unbounded across a long run. The
+        // backdrop only reads ~50–80 particles at steady state, so 500 is
+        // generous overhead without ballooning memory.
+        if (this.bgState.particles.length >= 500) {
+            this.bgState.particles.splice(0, this.bgState.particles.length - 499);
+        }
         this.bgState.particles.push(p);
     },
 
@@ -15759,6 +15837,9 @@ drawEffects() {
         if (dt > 0.1) dt = 0.1;
 
         this.lastTime = timestamp;
+        // Bump the per-frame memo key so caches like _collectStatusDisplay
+        // know they're seeing a fresh frame and rebuild on the first call.
+        this._statusFrameId = (this._statusFrameId | 0) + 1;
 
         // Hit-stop: while active, freeze dt to 0 so animations pause.
         if (this.hitStopUntil && timestamp < this.hitStopUntil) {

@@ -771,3 +771,54 @@ export function drawBadgeIcon(ctx, name, cx, cy, size, color) {
     }
     return drawIntentIcon(ctx, name, cx, cy, size, color); // falls to default branch
 }
+
+// Sprite atlas for effect icons (perf audit P5). drawHealthBar fires the
+// status loop ~10 entities × 3-5 effects per frame; baking each (id, color)
+// pair to an offscreen canvas at first sight lets the hot path blit via
+// drawImage instead of replaying the wrapped path commands every frame.
+//
+// Sprites are sized so the natural shadow halo (blur 4 inside the wrapped
+// 22-px icon) doesn't clip — 32×32 backed at the device pixel ratio for
+// crispness on retina mobile.
+const _spriteAtlas = new Map();
+const _SPR_SIZE = 32;
+const _SPR_HALF = _SPR_SIZE / 2;
+
+function _buildEffectSprite(id, color) {
+    const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1;
+    const c = (typeof OffscreenCanvas === 'function')
+        ? (() => { try { return new OffscreenCanvas(_SPR_SIZE * dpr, _SPR_SIZE * dpr); } catch (e) { return null; } })()
+        : null;
+    const canvas = c || (typeof document !== 'undefined' ? document.createElement('canvas') : null);
+    if (!canvas) return null;
+    if (!c) { canvas.width = _SPR_SIZE * dpr; canvas.height = _SPR_SIZE * dpr; }
+    const sctx = canvas.getContext('2d');
+    sctx.scale(dpr, dpr);
+    drawEffectIcon(sctx, id, _SPR_HALF, _SPR_HALF, 22, color);
+    return canvas;
+}
+
+export function getEffectSprite(id, color) {
+    const key = id + '|' + color;
+    let spr = _spriteAtlas.get(key);
+    if (!spr) {
+        spr = _buildEffectSprite(id, color);
+        if (spr) _spriteAtlas.set(key, spr);
+    }
+    return spr;
+}
+
+// Blit-equivalent of drawEffectIcon — same call signature, but pulls from
+// the cached sprite atlas instead of replaying the path commands each frame.
+// Falls back to direct drawing if sprite generation isn't supported (very
+// old browsers without OffscreenCanvas + missing document).
+export function blitEffectIcon(ctx, id, cx, cy, color) {
+    const spr = getEffectSprite(id, color);
+    if (!spr) return drawEffectIcon(ctx, id, cx, cy, 22, color);
+    const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1;
+    // Source canvas is _SPR_SIZE × dpr; draw it back at logical _SPR_SIZE px,
+    // centred on (cx, cy). drawImage with the explicit src/dst args avoids
+    // accidental upscaling on retina screens.
+    ctx.drawImage(spr, 0, 0, _SPR_SIZE * dpr, _SPR_SIZE * dpr,
+                  cx - _SPR_HALF, cy - _SPR_HALF, _SPR_SIZE, _SPR_SIZE);
+}
