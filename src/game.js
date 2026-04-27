@@ -2035,9 +2035,11 @@ startQTE(type, x, y, callback) {
         const skipBtnDone = document.getElementById('btn-tutorial-skip');
         if (skipBtnDone) skipBtnDone.classList.add('hidden');
 
-        // Tutorial complete — go straight to the map. The post-tutorial debriefing
-        // page-flip screen has been removed; players learn the rest in-game via
-        // tooltips + first-time hint toasts.
+        // Tutorial complete — clear tutorial transient state, then surface a
+        // SHORT recap card covering only the systems the scripted fight
+        // didn't teach (class-ability widget, reroll lock-toggle, status
+        // tooltips). Long combat primer was moved out of pre-tutorial onb
+        // to land here as a recap, so players hit gameplay sooner.
         this.tutorialAutoRun = false;
         document.body.classList.remove('tutorial-auto-run');
         localStorage.setItem('mvm_first_run_done', '1');
@@ -2057,8 +2059,56 @@ startQTE(type, x, y, callback) {
             this.generateMap();
         }
         this.renderRelics();
-        this.changeState(STATE.MAP);
-        this.saveGame();
+        this._showPostTutorialRecap(() => {
+            this.changeState(STATE.MAP);
+            this.saveGame();
+        });
+    },
+
+    // Compact post-tutorial recap. Scoped to the three things the scripted
+    // tutorial fight doesn't directly teach. Single-screen, single button.
+    _showPostTutorialRecap(onContinue) {
+        // Already shown once before? Skip — happens on tutorial replay.
+        if (localStorage.getItem('mvm_post_tutorial_recap_seen') === '1') {
+            if (onContinue) onContinue();
+            return;
+        }
+        try { localStorage.setItem('mvm_post_tutorial_recap_seen', '1'); } catch (_) {}
+
+        const overlay = document.createElement('div');
+        overlay.id = 'post-tutorial-recap';
+        overlay.className = 'post-tutorial-recap';
+        overlay.innerHTML = `
+            <div class="ptr-card">
+                <div class="ptr-header">// FIELD NOTES</div>
+                <h2 class="ptr-title">YOU KNOW THE BASICS.</h2>
+                <p class="ptr-sub">Three more things the simulator didn't show you:</p>
+                <div class="ptr-bullets">
+                    <div class="ptr-bullet">
+                        <span class="ptr-bullet-icon">◆</span>
+                        <span><strong>Class ability</strong> — the widget below the dice tray fills as you play. Tap it when ready. Each class has a unique payoff.</span>
+                    </div>
+                    <div class="ptr-bullet">
+                        <span class="ptr-bullet-icon">◆</span>
+                        <span><strong>Reroll</strong> — tap a die to <em>lock</em> it, then reroll. Two free per turn.</span>
+                    </div>
+                    <div class="ptr-bullet">
+                        <span class="ptr-bullet-icon">◆</span>
+                        <span><strong>Status icons</strong> on HP bars (WEAK, BLEED, etc) — tap any icon for details.</span>
+                    </div>
+                </div>
+                <button id="ptr-continue" class="btn primary ptr-continue">DEPLOY</button>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        const finish = () => {
+            overlay.classList.add('fade-out');
+            setTimeout(() => { overlay.remove(); if (onContinue) onContinue(); }, 280);
+        };
+        const btn = document.getElementById('ptr-continue');
+        if (btn) btn.onclick = finish;
+        // Auto-advance after 25s if the player walks away.
+        setTimeout(() => { if (document.getElementById('post-tutorial-recap')) finish(); }, 25000);
     },
 
     skipFirstRunTutorial() {

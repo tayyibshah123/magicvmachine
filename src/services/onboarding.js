@@ -100,6 +100,9 @@ export const Onboarding = {
         };
 
         // ---- Stage 1: Welcome + name entry ----
+        // Stage 2 (the long combat primer) was moved to *after* the tutorial
+        // — see Game.openPostTutorial() — so first-time players land in
+        // gameplay sooner. Stage 1 now hands directly to Stage 3.
         const renderStage1 = () => {
             root.innerHTML = `
                 <div class="onb-card">
@@ -123,14 +126,14 @@ export const Onboarding = {
                 const input = document.getElementById('onb-name');
                 state.name = this.setName(input.value);
                 emitStage('1_welcome');
-                state.stage = 2;
-                renderStage2();
+                state.stage = 3;
+                renderStage3();
             };
             resetIdle(() => {
                 state.name = this.setName(document.getElementById('onb-name').value);
                 emitStage('1_welcome_idle');
-                state.stage = 2;
-                renderStage2();
+                state.stage = 3;
+                renderStage3();
             });
         };
 

@@ -10691,6 +10691,77 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
 }
 .loadout-die-row .count { color: var(--neon-gold); font-weight: 600; }
 
+/* === Post-tutorial recap card ===========================================
+   Tight 3-bullet overlay shown after the scripted tutorial fight. Covers
+   only what the live-fire drill didn't teach. Single CONTINUE button. */
+.post-tutorial-recap {
+    position: fixed;
+    inset: 0;
+    z-index: 11500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.78);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    animation: ptr-fade-in 320ms ease-out both;
+}
+.post-tutorial-recap.fade-out { animation: ptr-fade-out 280ms ease-in both; }
+@keyframes ptr-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ptr-fade-out { from { opacity: 1; } to { opacity: 0; } }
+.ptr-card {
+    width: min(440px, 92vw);
+    padding: 20px 22px;
+    border-radius: 14px;
+    border: 1.5px solid var(--neon-blue);
+    background: linear-gradient(135deg, rgba(0, 30, 50, 0.85), rgba(20, 0, 40, 0.85));
+    box-shadow: 0 0 24px rgba(0, 243, 255, 0.35), inset 0 0 14px rgba(0, 243, 255, 0.08);
+}
+.ptr-header {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.28em;
+    color: var(--neon-blue);
+    margin-bottom: 8px;
+    opacity: 0.85;
+}
+.ptr-title {
+    font-family: 'Orbitron', monospace;
+    color: #fff;
+    margin: 0 0 6px;
+    font-size: 1.2rem;
+    letter-spacing: 0.08em;
+}
+.ptr-sub {
+    color: rgba(200, 220, 240, 0.72);
+    font-size: 0.82rem;
+    margin: 0 0 14px;
+}
+.ptr-bullets {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+.ptr-bullet {
+    display: flex;
+    gap: 8px;
+    font-size: 0.86rem;
+    line-height: 1.45;
+    color: #e6f0fa;
+}
+.ptr-bullet strong { color: var(--neon-gold); }
+.ptr-bullet em { color: var(--neon-blue); font-style: normal; text-shadow: 0 0 4px rgba(0, 243, 255, 0.4); }
+.ptr-bullet-icon {
+    color: var(--neon-pink);
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+.ptr-continue {
+    width: 100% !important;
+    margin: 0 !important;
+}
+
 /* === INTEL 3.0 ============================================================
    Operator profile banner, progressive dossier, chronicle stats panel,
    and chapter-grouped cipher. Replaces the basic counters that shipped
