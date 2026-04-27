@@ -121,19 +121,25 @@ export const Onboarding = {
                     </div>
                 </div>
             `;
+            // Stage 3 was a "LIVE-FIRE DRILL / DEPLOY" teaser card. It served
+            // no real purpose because the tutorial itself is skippable from
+            // the in-combat skip button at the bottom of the screen, so the
+            // welcome card now hands straight off to the tutorial.
+            const handoffToTutorial = () => {
+                emitStage('1_welcome');
+                finish();
+                if (onStartTutorial) onStartTutorial();
+            };
             document.getElementById('onb-skip-1').onclick = skip;
             document.getElementById('onb-next-1').onclick = () => {
                 const input = document.getElementById('onb-name');
                 state.name = this.setName(input.value);
-                emitStage('1_welcome');
-                state.stage = 3;
-                renderStage3();
+                handoffToTutorial();
             };
             resetIdle(() => {
                 state.name = this.setName(document.getElementById('onb-name').value);
                 emitStage('1_welcome_idle');
-                state.stage = 3;
-                renderStage3();
+                handoffToTutorial();
             });
         };
 
