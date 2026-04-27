@@ -1891,6 +1891,10 @@ startQTE(type, x, y, callback) {
             if (narrPane) narrPane.classList.add('hidden');
             const skipBtn = document.getElementById('btn-tutorial-skip');
             if (skipBtn) skipBtn.classList.add('hidden');
+            // Drain any orphaned waitForTap pointerdown listeners. Without
+            // this they survive the state change and fire on the next map
+            // tap, crashing inside updateTutorialStep with a null enemy.
+            if (this._cleanupTutorialListeners) this._cleanupTutorialListeners();
         }
 
         TooltipMgr.hide();
@@ -2067,10 +2071,25 @@ startQTE(type, x, y, callback) {
         }
     },
     
+    // Drop every document-level pointerdown listener registered by
+    // waitForTap. The skip-button early-return inside `advance` leaves the
+    // listener active when the player skips mid-step, so without this drain
+    // the listener still fires on the next sector-map tap and tries to
+    // advance the (now reset) tutorial step into a null enemy.
+    _cleanupTutorialListeners() {
+        if (this._tutorialAdvances && this._tutorialAdvances.size) {
+            this._tutorialAdvances.forEach(fn => {
+                try { document.removeEventListener('pointerdown', fn, true); } catch (_) {}
+            });
+            this._tutorialAdvances.clear();
+        }
+    },
+
     openPostTutorial() {
         // Achievement: tutorial complete
         if (typeof Achievements !== 'undefined') Achievements.unlock('TUTORIAL_DONE');
 
+        this._cleanupTutorialListeners();
         // 1. Remove Z-Index Highlights (Fixes Blank Screen/Softlock)
         document.querySelectorAll('.tutorial-focus').forEach(el => el.classList.remove('tutorial-focus'));
 
@@ -2162,6 +2181,7 @@ startQTE(type, x, y, callback) {
 
     skipFirstRunTutorial() {
         if (!this.tutorialAutoRun) return;
+        this._cleanupTutorialListeners();
         this.tutorialAutoRun = false;
         document.body.classList.remove('tutorial-auto-run');
         localStorage.setItem('mvm_first_run_done', '1');
@@ -20738,6 +20758,24 @@ drawEntity(entity) {
     },
 
      updateTutorialStep() {
+        // Hard guard: any out-of-state call (stale document-level pointerdown
+        // listener from waitForTap, leftover advance closure firing after
+        // openPostTutorial reset state, dev tools hook) must never paint a
+        // tutorial overlay — most case branches reference this.enemy.x and
+        // would crash on the sector map where the enemy is null.
+        if (this.currentState !== STATE.TUTORIAL_COMBAT) {
+            const tNarr = document.getElementById('tutorial-narration');
+            if (tNarr) tNarr.classList.add('hidden');
+            const tOverlay = document.getElementById('tutorial-overlay');
+            if (tOverlay) tOverlay.classList.add('hidden');
+            const tText = document.getElementById('tutorial-text');
+            if (tText) tText.classList.add('hidden');
+            const tSpot = document.getElementById('tutorial-spotlight');
+            if (tSpot) tSpot.classList.add('hidden');
+            const tSkip = document.getElementById('btn-tutorial-skip');
+            if (tSkip) tSkip.classList.add('hidden');
+            return;
+        }
         const overlay = document.getElementById('tutorial-overlay');
         const text = document.getElementById('tutorial-text');
         const canvas = document.getElementById('gameCanvas');
@@ -20844,9 +20882,22 @@ drawEntity(entity) {
             const advance = (e) => {
                 if (advanced) return;
                 if (e && e.target && e.target.closest && e.target.closest('#btn-tutorial-skip')) return;
+                // Defensive: only advance while we're actually in the
+                // tutorial. A stale listener firing on the sector map (after
+                // openPostTutorial / skipFirstRunTutorial reset state) used
+                // to crash inside updateTutorialStep -> case 2/4 ->
+                // getEntityRect(this.enemy) with this.enemy === null.
+                if (this.currentState !== STATE.TUTORIAL_COMBAT) {
+                    advanced = true;
+                    overlay.onclick = null;
+                    document.removeEventListener('pointerdown', advance, true);
+                    if (this._tutorialAdvances) this._tutorialAdvances.delete(advance);
+                    return;
+                }
                 advanced = true;
                 overlay.onclick = null;
                 document.removeEventListener('pointerdown', advance, true);
+                if (this._tutorialAdvances) this._tutorialAdvances.delete(advance);
                 this.tutorialStep++;
                 this.updateTutorialStep();
             };
@@ -20854,8 +20905,11 @@ drawEntity(entity) {
             // step (from the previous step) doesn't immediately re-advance.
             setTimeout(() => {
                 if (advanced) return;
+                if (this.currentState !== STATE.TUTORIAL_COMBAT) return;
                 overlay.onclick = advance;
                 document.addEventListener('pointerdown', advance, true);
+                if (!this._tutorialAdvances) this._tutorialAdvances = new Set();
+                this._tutorialAdvances.add(advance);
             }, 120);
         };
 
