@@ -11155,12 +11155,18 @@ drawEffects() {
                 const ang = Math.atan2(dy, dx);
 
                 ctx.save();
-                // Dark aura pooling under the victim
-                const aur = ctx.createRadialGradient(e.tx, e.ty, 0, e.tx, e.ty, 80 * (1 - retract * 0.6));
-                aur.addColorStop(0, `rgba(40, 0, 50, ${0.65 * reach})`);
-                aur.addColorStop(1, 'rgba(20, 0, 30, 0)');
-                ctx.fillStyle = aur;
-                ctx.beginPath(); ctx.arc(e.tx, e.ty, 90, 0, Math.PI * 2); ctx.fill();
+                // Dark aura pooling under the victim — sprite blit (P1).
+                {
+                    const auraR = 80 * (1 - retract * 0.6);
+                    const spr = this._auraSprite('voidTendril', [
+                        [0, 'rgba(40, 0, 50, 0.65)'],
+                        [1, 'rgba(20, 0, 30, 0)']
+                    ]);
+                    const prevA = ctx.globalAlpha;
+                    ctx.globalAlpha = prevA * reach;
+                    ctx.drawImage(spr, e.tx - auraR, e.ty - auraR, auraR * 2, auraR * 2);
+                    ctx.globalAlpha = prevA;
+                }
 
                 // Tendrils: 5 wavy strokes from source curving to the target.
                 const tendrils = 5;
@@ -11328,14 +11334,20 @@ drawEffects() {
                 const alpha = e.life / e.maxLife;
 
                 ctx.save();
-                // Inner soft dome fill
-                const domeGrad = ctx.createRadialGradient(e.x, e.y, 10, e.x, e.y, e.radius);
-                domeGrad.addColorStop(0, `rgba(0, 243, 255, ${0.18 * alpha})`);
-                domeGrad.addColorStop(1, 'transparent');
-                ctx.fillStyle = domeGrad;
-                ctx.beginPath();
-                ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
-                ctx.fill();
+                // Inner soft dome fill — sprite blit (P1). The original
+                // gradient had a 10-px solid inner core; the sprite uses
+                // r0=0, which softens the centre very slightly. Visually
+                // imperceptible at the dome's animation tempo.
+                {
+                    const spr = this._auraSprite('hexBarrierDome', [
+                        [0, 'rgba(0, 243, 255, 0.18)'],
+                        [1, 'rgba(0, 243, 255, 0)']
+                    ]);
+                    const prevA = ctx.globalAlpha;
+                    ctx.globalAlpha = prevA * alpha;
+                    ctx.drawImage(spr, e.x - e.radius, e.y - e.radius, e.radius * 2, e.radius * 2);
+                    ctx.globalAlpha = prevA;
+                }
 
                 // Three stacked hex rings for depth
                 for (let layer = 0; layer < 3; layer++) {
@@ -11390,16 +11402,16 @@ drawEffects() {
                 for (let k = 0; k < 3; k++) {
                     ParticleSys.createExplosion(e.x + (Math.random()-0.5)*24, e.y - 30 - k*20, 1, k === 0 ? '#fff' : '#cc66ff');
                 }
-                // Atmospheric heat-haze glow
+                // Atmospheric heat-haze glow — sprite blit (P1).
                 ctx.save();
-                const haloGrad = ctx.createRadialGradient(e.x, e.y, 5, e.x, e.y, 90);
-                haloGrad.addColorStop(0, 'rgba(255,255,255,0.6)');
-                haloGrad.addColorStop(0.4, 'rgba(204,102,255,0.4)');
-                haloGrad.addColorStop(1, 'transparent');
-                ctx.fillStyle = haloGrad;
-                ctx.beginPath();
-                ctx.arc(e.x, e.y, 90, 0, Math.PI*2);
-                ctx.fill();
+                {
+                    const spr = this._auraSprite('orbitalHalo', [
+                        [0,    'rgba(255,255,255,0.6)'],
+                        [0.4,  'rgba(204,102,255,0.4)'],
+                        [1,    'rgba(204,102,255,0)']
+                    ]);
+                    ctx.drawImage(spr, e.x - 90, e.y - 90, 180, 180);
+                }
                 ctx.restore();
                 // Meteor body
                 ctx.save();
@@ -11598,17 +11610,22 @@ drawEffects() {
                 const intensity = Math.sin(ratio * Math.PI); // rises then falls
                 ctx.save();
                 ctx.translate(e.x, e.y);
-                for (let k = 0; k < 5; k++) {
-                    const a = (e.maxLife - e.life) * 0.15 + k * (Math.PI * 2 / 5);
-                    const r = 60 + Math.sin((e.maxLife - e.life) * 0.3 + k) * 25;
-                    const fx = Math.cos(a) * r, fy = Math.sin(a) * r;
-                    const grad = ctx.createRadialGradient(fx, fy, 0, fx, fy, 40);
-                    grad.addColorStop(0, `rgba(255, 180, 30, ${0.6 * intensity})`);
-                    grad.addColorStop(1, 'transparent');
-                    ctx.fillStyle = grad;
-                    ctx.beginPath();
-                    ctx.arc(fx, fy, 40, 0, Math.PI*2);
-                    ctx.fill();
+                // Five swirling embers — sprite blit (P1). Was 5×createRadialGradient
+                // per frame per active overheat effect.
+                {
+                    const spr = this._auraSprite('overheatEmber', [
+                        [0, 'rgba(255, 180, 30, 0.6)'],
+                        [1, 'rgba(255, 180, 30, 0)']
+                    ]);
+                    const prevA = ctx.globalAlpha;
+                    ctx.globalAlpha = prevA * intensity;
+                    for (let k = 0; k < 5; k++) {
+                        const a = (e.maxLife - e.life) * 0.15 + k * (Math.PI * 2 / 5);
+                        const r = 60 + Math.sin((e.maxLife - e.life) * 0.3 + k) * 25;
+                        const fx = Math.cos(a) * r, fy = Math.sin(a) * r;
+                        ctx.drawImage(spr, fx - 40, fy - 40, 80, 80);
+                    }
+                    ctx.globalAlpha = prevA;
                 }
                 ctx.restore();
                 // Ember particles trail upward.
@@ -12146,15 +12163,17 @@ drawEffects() {
                 ctx.fill();
                 ctx.stroke();
                 ctx.restore();
-                // Impact flash at target
+                // Impact flash at target — sprite blit (P1). Cached per
+                // colour so each effect's distinct flash colour gets its
+                // own bake on first sight, then gets reused thereafter.
                 if (impact) {
                     ctx.save();
                     ctx.globalAlpha = 0.8;
-                    const grad = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, 140);
-                    grad.addColorStop(0, e.color);
-                    grad.addColorStop(1, 'transparent');
-                    ctx.fillStyle = grad;
-                    ctx.fillRect(e.x - 140, e.y - 140, 280, 280);
+                    const spr = this._auraSprite('impactFlash|' + e.color, [
+                        [0, e.color],
+                        [1, 'transparent']
+                    ]);
+                    ctx.drawImage(spr, e.x - 140, e.y - 140, 280, 280);
                     ctx.restore();
                 }
                 // Expanding octagon ring
@@ -14464,6 +14483,41 @@ drawEffects() {
     // Epic, theme-specific backdrops that only render during boss fights.
     // Replaces the default sector celestial layer. Kept mobile-friendly (no huge
     // shadow blurs, bounded loop counts) so the sector 2 perf work still holds.
+    // ----- Aura sprite cache (perf audit P1) ------------------------------
+    // Bakes a radial gradient ONCE into an offscreen canvas of fixed size,
+    // then blits it at any radius/position via drawImage. Equivalent visual
+    // result to per-frame ctx.createRadialGradient when the gradient stops
+    // are static — only the position/radius vary per frame. The sprite is
+    // generated at full opacity; per-frame fades use ctx.globalAlpha at the
+    // call site so the cache key stays small.
+    //
+    // Usage:
+    //   const spr = this._auraSprite('voidTendril', stops);
+    //   ctx.globalAlpha = fadeT;
+    //   ctx.drawImage(spr, cx - r, cy - r, r * 2, r * 2);
+    _auraSprite(key, stops) {
+        if (!this._auraCache) this._auraCache = new Map();
+        let entry = this._auraCache.get(key);
+        if (entry) return entry;
+        const SIZE = 256;
+        let canvas;
+        if (typeof OffscreenCanvas === 'function') {
+            try { canvas = new OffscreenCanvas(SIZE, SIZE); } catch (e) { canvas = null; }
+        }
+        if (!canvas) {
+            canvas = document.createElement('canvas');
+            canvas.width = SIZE; canvas.height = SIZE;
+        }
+        const sctx = canvas.getContext('2d');
+        const cx = SIZE / 2, cy = SIZE / 2;
+        const grad = sctx.createRadialGradient(cx, cy, 0, cx, cy, cx);
+        for (const [t, color] of stops) grad.addColorStop(t, color);
+        sctx.fillStyle = grad;
+        sctx.fillRect(0, 0, SIZE, SIZE);
+        this._auraCache.set(key, canvas);
+        return canvas;
+    },
+
     // Memoise a gradient by key. Rebuilt only when canvas dimensions change
     // (device rotate / resize). Most boss/sector gradients are static in shape
     // and colour — the runtime just needs to read them back, not recreate them.
@@ -14885,9 +14939,38 @@ drawEffects() {
             ctx.lineTo(towerX + towerWidth * 0.5, towerBase);
             ctx.closePath();
             ctx.fill(); ctx.stroke();
-            // Honeycomb cells on the tower (stacked hexagons glowing)
+            // Honeycomb cells on the tower — perf P6: hex shape baked once,
+            // drawn ~84 times per frame via drawImage with per-cell alpha
+            // modulation. Replaces ~500 trig calls + 84 unique paths
+            // per frame with one cached bitmap blit per cell.
             ctx.shadowBlur = 0;
             const cellR = 22;
+            const hexSpr = this._cachedGradient('s4_hexCell', () => {
+                // Hex sprite — path baked into an offscreen 64×64 canvas at
+                // full opacity green. Note: _cachedGradient is being reused
+                // here as a generic per-key offscreen-canvas memo since the
+                // cache only stores objects (CanvasGradient OR HTMLCanvas).
+                const SZ = 64;
+                let off;
+                if (typeof OffscreenCanvas === 'function') {
+                    try { off = new OffscreenCanvas(SZ, SZ); } catch (_) { off = null; }
+                }
+                if (!off) { off = document.createElement('canvas'); off.width = SZ; off.height = SZ; }
+                const oc = off.getContext('2d');
+                oc.fillStyle = 'rgba(127, 255, 0, 1)';
+                oc.beginPath();
+                const r = cellR * 0.9;
+                const halfSZ = SZ / 2;
+                for (let k = 0; k < 6; k++) {
+                    const a = (Math.PI / 3) * k + Math.PI / 6;
+                    const px = halfSZ + Math.cos(a) * r;
+                    const py = halfSZ + Math.sin(a) * r;
+                    if (k === 0) oc.moveTo(px, py); else oc.lineTo(px, py);
+                }
+                oc.closePath();
+                oc.fill();
+                return off;
+            });
             for (let row = 0; row < 14; row++) {
                 const y = towerBase - 60 - row * (cellR * 1.7);
                 if (y < towerTop + 40) break;
@@ -14896,17 +14979,11 @@ drawEffects() {
                 for (let c = 0; c < cells; c++) {
                     const cx = towerX - rowWidth + (c + 0.5) * (rowWidth * 2 / cells);
                     const pulse = 0.35 + 0.5 * Math.abs(Math.sin(time * 2 + row * 0.3 + c * 0.7));
-                    ctx.fillStyle = `rgba(127, 255, 0, ${pulse})`;
-                    ctx.beginPath();
-                    for (let k = 0; k < 6; k++) {
-                        const a = (Math.PI / 3) * k + Math.PI / 6;
-                        const px = cx + Math.cos(a) * cellR * 0.9;
-                        const py = y + Math.sin(a) * cellR * 0.9;
-                        if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-                    }
-                    ctx.closePath(); ctx.fill();
+                    ctx.globalAlpha = pulse;
+                    ctx.drawImage(hexSpr, cx - 32, y - 32);
                 }
             }
+            ctx.globalAlpha = 1;
 
             // Neural network web across the sky
             ctx.strokeStyle = 'rgba(127, 255, 0, 0.35)';
