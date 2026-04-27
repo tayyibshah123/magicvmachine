@@ -7227,12 +7227,27 @@ triggerSystemCrash() {
         this.renderFusionPanel(grid);
     },
 
+    // Only relics whose effect resolution flows through Game.stackCount can
+    // meaningfully fuse: fused = 3 effective stacks (vs the 2 unfused copies
+    // you traded in), a real +50% net upgrade. Every other relic counts via
+    // a literal `relics.filter(...).length` and would LOSE one stack on fuse,
+    // so they're hidden from the fusion panel until that's reworked.
+    _fuseableRelicIds: new Set([
+        'titan_module',
+        'crit_lens',
+        'loot_bot',
+        'leyline_cache',
+        'salvage_arm',
+        'stim_pack',
+    ]),
+
     renderFusionPanel(grid) {
         if (!this.player || !this.player.relics) return;
         // Count un-fused copies per relic id.
         const counts = {};
         this.player.relics.forEach(r => {
             if (r.fused) return;
+            if (!this._fuseableRelicIds.has(r.id)) return;
             counts[r.id] = (counts[r.id] || 0) + 1;
         });
         const fuseable = Object.keys(counts).filter(id => counts[id] >= 2);
@@ -7251,7 +7266,7 @@ triggerSystemCrash() {
                 </div>
                 <div class="shop-info">
                     <div class="neon-text-gold shop-title">FUSE: ${sample.name}</div>
-                    <div class="shop-desc">Consume 2 copies → 1 Supercharged variant (+50% effect).</div>
+                    <div class="shop-desc">Trade 2 copies for 1 fused version that counts as 3 stacks. Net +50% effect, frees 1 module slot.</div>
                     <div class="cost-tag">${cost} Frags</div>
                 </div>`;
             div.onclick = () => {
