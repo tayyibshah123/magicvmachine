@@ -1040,6 +1040,71 @@ const Game = {
         return this.metaUpgrades.includes(id);
     },
 
+    // Friendly display name for a die type id. Looks up DICE_TYPES first
+    // (covers class dice like BLD_MANA → "Blood Price", and skill dice like
+    // METEOR → "Meteor"). Falls back to a humanised version of the raw id
+    // (BLD_ATTACK → "Bld Attack") rather than dumping the underscored
+    // uppercase string at the player. Used by Loadout, Combat Log, and
+    // anywhere else internal die identifiers risk leaking to the UI.
+    _friendlyDieName(typeId) {
+        if (!typeId) return '';
+        if (typeof DICE_TYPES !== 'undefined' && DICE_TYPES[typeId] && DICE_TYPES[typeId].name) {
+            return DICE_TYPES[typeId].name;
+        }
+        return String(typeId)
+            .toLowerCase()
+            .split(/[_\s]+/)
+            .filter(Boolean)
+            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
+    },
+
+    // Friendly name for an enemy intent type. Maps short kind keys
+    // (multi_attack, summon_glitch, frost_aoe, etc) to display labels
+    // so the entity tooltip never prints raw underscored strings.
+    _friendlyIntentName(type) {
+        if (!type) return '';
+        const MAP = {
+            attack: 'STRIKE',
+            multi_attack: 'BARRAGE',
+            mirror_attack: 'MIRROR STRIKE',
+            shield: 'BARRIER',
+            buff: 'FORTIFY',
+            debuff: 'VIRUS',
+            summon: 'REINFORCE',
+            summon_glitch: 'GLITCH SPAWN',
+            summon_void: 'VOID SPAWN',
+            dispel: 'CLEANSE',
+            consume: 'CONSUME',
+            analyse: 'ANALYSE',
+            reality_overwrite: 'REALITY SHIFT',
+            purge_attack: 'THE PURGE',
+            charge: 'CHARGING',
+            cataclysm: 'CATACLYSM',
+            aoe_sweep: 'SWEEPING ARC',
+            frost_aoe: 'FROST WAVE',
+            burrow_resurge: 'RESURGE',
+            burrow_idle: 'BURROWING',
+            heal_ally: 'HEAL ALLY',
+            shield_ally: 'SHIELD ALLY',
+            buff_allies: 'BUFF ALLIES',
+            shield_strip_attack: 'SHIELD STRIP',
+            chaotic_act: 'CHAOTIC',
+            observer_wait: 'OBSERVING',
+            observer_strike: 'OBSERVER STRIKE',
+            charging_immolate: 'CHARGING IMMOLATE',
+            immolate: 'IMMOLATE'
+        };
+        if (MAP[type]) return MAP[type];
+        return String(type)
+            .toLowerCase()
+            .split(/[_\s]+/)
+            .filter(Boolean)
+            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ')
+            .toUpperCase();
+    },
+
     // Probability check for player-favorable rolls (crits, dodges, drop
     // chances). Honors Ascension 17 (Aurelia's Curse): "All chance rolls
     // roll twice, take the worse." A pass requires BOTH rolls to be under
@@ -1173,38 +1238,31 @@ const Game = {
                     if (ent.nextIntents && ent.nextIntents.length > 0) {
                         txt += `\n\n--- INTENTS ---`;
                         ent.nextIntents.forEach((intent, i) => {
-                            let typeName = intent.type.toUpperCase();
+                            let typeName = this._friendlyIntentName(intent.type);
                             let desc = "";
+                            if (intent.type === 'analyse') desc = " (Nullifies next turn's first die)";
+                            else if (intent.type === 'reality_overwrite') desc = " (Alters physics)";
+                            else if (intent.type === 'purge_attack') desc = " (Massive Dmg)";
+                            else if (intent.type === 'charge') desc = " (Preparing Ult)";
 
-                            if (intent.type === 'buff') typeName = "FORTIFY"; 
-                            if (intent.type === 'debuff') typeName = "VIRUS"; 
-                            if (intent.type === 'shield') typeName = "BARRIER";
-                            if (intent.type === 'consume') typeName = "CONSUME";
-                            if (intent.type === 'summon' || intent.type === 'summon_glitch') typeName = "REINFORCE";
-                            if (intent.type === 'summon_void') typeName = "VOID SPAWN";
-                            if (intent.type === 'dispel') typeName = "CLEANSE";
-                            if (intent.type === 'analyse') { typeName = "ANALYSE"; desc = " (Nullifies next turn's first die)"; }
-                            if (intent.type === 'reality_overwrite') { typeName = "REALITY SHIFT"; desc = " (Alters physics)"; }
-                            if (intent.type === 'purge_attack') { typeName = "THE PURGE"; desc = " (Massive Dmg)"; }
-                            if (intent.type === 'charge') { typeName = "CHARGING"; desc = " (Preparing Ult)"; }
-                            
                             // FIX: Strict check for effectiveVal
                             let val = (intent.effectiveVal !== undefined) ? intent.effectiveVal : intent.val;
-                            
+
                             txt += `\n${i+1}. ${typeName}`;
                             if (val > 0) txt += ` (${val})`;
                             txt += desc;
-                            
+
                             if (intent.secondary) {
-                                let secName = intent.secondary.id ? intent.secondary.id.toUpperCase() : intent.secondary.type.toUpperCase();
+                                const secId = intent.secondary.id || intent.secondary.type;
+                                const secName = this._friendlyIntentName(secId);
                                 txt += ` + ${secName}`;
                             }
                         });
-                    } 
+                    }
                     else if(ent.nextIntent) {
                         const i = ent.nextIntent;
                         const val = (i.effectiveVal !== undefined) ? i.effectiveVal : i.val;
-                        txt += `\n\nIntent: ${i.type.toUpperCase()}`;
+                        txt += `\n\nIntent: ${this._friendlyIntentName(i.type)}`;
                         if(val > 0) txt += ` (${val})`;
                     }
                 }
@@ -4578,7 +4636,7 @@ triggerSystemCrash() {
         const val = (intent.effectiveVal !== undefined) ? intent.effectiveVal : intent.val;
         const name = enemy ? enemy.name : 'Enemy';
         const indexLine = (total > 1) ? `<strong>${name} · Action ${index} of ${total}</strong>` : `<strong>${name}'s next move</strong>`;
-        let label = intent.type.toUpperCase();
+        let label = this._friendlyIntentName(intent.type);
         let body  = '';
 
 
@@ -4700,14 +4758,15 @@ triggerSystemCrash() {
                 body  = `Strikes for <strong>${val} damage</strong> and removes any Shield you have first.`;
                 break;
             default:
-                label = intent.type.toUpperCase();
+                label = this._friendlyIntentName(intent.type);
                 body  = (val > 0) ? `Affects target for <strong>${val}</strong>.` : '(No detailed description.)';
         }
 
         // Secondary effect chained onto an attack (e.g. attack + bleed).
         let secondaryLine = '';
         if (intent.secondary) {
-            const secName = intent.secondary.id ? intent.secondary.id.toUpperCase() : (intent.secondary.type || 'EFFECT').toUpperCase();
+            const secId = intent.secondary.id || intent.secondary.type;
+            const secName = this._friendlyIntentName(secId);
             secondaryLine = `\n<em>+ Also applies ${secName}.</em>`;
         }
 
@@ -6099,10 +6158,11 @@ triggerSystemCrash() {
             html += `<div class="loadout-empty">Dice pool not yet rolled.</div>`;
         } else {
             html += `<div class="loadout-dice-list">`;
+            const slotLabel = (slot) => slot ? slot.toUpperCase() : 'SKILL';
             diceTypes.forEach(t => {
-                const data = (typeof DICE_TYPES !== 'undefined') ? DICE_TYPES[t] : null;
-                const name = (data && data.name) || t;
-                html += `<div class="loadout-die-row"><span>${name}</span><span class="count">${t}</span></div>`;
+                const name = this._friendlyDieName(t);
+                const slot = this._dieSlot ? this._dieSlot(t) : null;
+                html += `<div class="loadout-die-row"><span>${name}</span><span class="count">${slotLabel(slot)}</span></div>`;
             });
             html += `</div>`;
         }
@@ -6113,7 +6173,7 @@ triggerSystemCrash() {
             html += `<div class="loadout-pill-row">`;
             upgrades.forEach(u => {
                 const meta = (typeof DICE_UPGRADES !== 'undefined' && DICE_UPGRADES[u]) ? DICE_UPGRADES[u] : null;
-                html += `<span class="loadout-pill">${meta && meta.name ? meta.name.toUpperCase() : u.toUpperCase()}</span>`;
+                html += `<span class="loadout-pill">${meta && meta.name ? meta.name : this._friendlyDieName(u)}</span>`;
             });
             html += `</div>`;
         }
@@ -13510,7 +13570,7 @@ drawEffects() {
             if (last) {
                 this.player._archivedDieType = last;
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 80,
-                    `ARCHIVED ${last}`, '#ffd76a');
+                    `ARCHIVED ${(this._friendlyDieName(last) || last).toUpperCase()}`, '#ffd76a');
                 ParticleSys.createShockwave(this.enemy.x, this.enemy.y, '#ffd76a', 26);
             }
         }
