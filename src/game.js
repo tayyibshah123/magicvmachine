@@ -1808,7 +1808,7 @@ startQTE(type, x, y, callback) {
                      this.hitStop(70);
                      // Relic: CELESTIAL SYNC — perfect QTEs heal 3 HP.
                      if (this.player.hasRelic('celestial_sync')) {
-                         const stacks = this.player.relics.filter(r => r.id === 'celestial_sync').length;
+                         const stacks = this.stackCount('celestial_sync');
                          this.player.heal(3 * stacks);
                          ParticleSys.createFloatingText(this.player.x, this.player.y - 140, `CELESTIAL +${3 * stacks}`, "#ffd700");
                      }
@@ -6773,17 +6773,17 @@ triggerSystemCrash() {
         ];
 
         // ... (Filtering Logic Remains Same) ...
-        const coreCount = this.player.relics.filter(r => r.id === 'minion_core').length;
+        const coreCount = this.stackCount('minion_core');
         if(coreCount >= 2) items = items.filter(i => i.id !== 'minion_core');
-        const titanCount = this.player.relics.filter(r => r.id === 'titan_module').length;
+        const titanCount = this.stackCount('titan_module');
         if(titanCount >= 3) items = items.filter(i => i.name !== "Titan Module");
-        const lensCount = this.player.relics.filter(r => r.id === 'crit_lens').length;
+        const lensCount = this.stackCount('crit_lens');
         if(lensCount >= 5) items = items.filter(i => i.id !== 'crit_lens');
-        const holoCount = this.player.relics.filter(r => r.id === 'hologram').length;
+        const holoCount = this.stackCount('hologram');
         if(holoCount >= 3) items = items.filter(i => i.id !== 'hologram');
-        const fireCount = this.player.relics.filter(r => r.id === 'firewall').length;
+        const fireCount = this.stackCount('firewall');
         if(fireCount >= 3) items = items.filter(i => i.id !== 'firewall');
-        const gamblerCount = this.player.relics.filter(r => r.id === 'gamblers_chip').length;
+        const gamblerCount = this.stackCount('gamblers_chip');
         if(gamblerCount >= 3) items = items.filter(i => i.id !== 'gamblers_chip');
 
         for (let i = items.length - 1; i > 0; i--) {
@@ -7275,18 +7275,32 @@ triggerSystemCrash() {
         this.renderFusionPanel(grid);
     },
 
-    // Only relics whose effect resolution flows through Game.stackCount can
+    // Relics whose effect resolution flows through Game.stackCount can
     // meaningfully fuse: fused = 3 effective stacks (vs the 2 unfused copies
-    // you traded in), a real +50% net upgrade. Every other relic counts via
-    // a literal `relics.filter(...).length` and would LOSE one stack on fuse,
-    // so they're hidden from the fusion panel until that's reworked.
+    // you traded in), a real +50% net upgrade.
+    //
+    // The original 6-relic whitelist was a holdover from when only those
+    // call sites used stackCount; everything else still did
+    // `.filter(...).length` and would have LOST one stack on fuse. After
+    // the universal-fusion migration every linearly-scaling relic reads
+    // through stackCount, so we can offer fusion across the whole set.
     _fuseableRelicIds: new Set([
-        'titan_module',
-        'crit_lens',
-        'loot_bot',
-        'leyline_cache',
-        'salvage_arm',
-        'stim_pack',
+        // Original (pre-migration whitelist)
+        'titan_module', 'crit_lens', 'loot_bot', 'leyline_cache',
+        'salvage_arm', 'stim_pack',
+        // Combat scalars
+        'spike_armor', 'retaliator', 'reflection_glass', 'med_dispenser',
+        'coolant_loop', 'firewall', 'celestial_sync',
+        // Minion / spawn scalars
+        'minion_core', 'bait_drone', 'wisp_hp', 'swarm_beacon',
+        // Shield / defence per stack
+        'nano_shield', 'shield_gen', 'warden_protocol', 'tempo_loop',
+        'aegis_cycler', 'hex_fragment',
+        // Mana / reroll / economy per stack
+        'mana_syphon', 'static_capacitor', 'solar_battery', 'reroll_chip',
+        'gamblers_chip', 'shard_reactor', 'data_miner', 'c_void_siphon',
+        // Damage scalars
+        'relentless', 'venom_edge', 'dervish_mode', 'brutalize',
     ]),
 
     renderFusionPanel(grid) {
@@ -8668,7 +8682,7 @@ async startCombat(type) {
             }
         }
 
-        const coreStacks = this.player.relics.filter(r => r.id === 'minion_core').length;
+        const coreStacks = this.stackCount('minion_core');
         for(let i=0; i<coreStacks; i++) {
             const m = new Minion(0, 0, this.player.minions.length + 1, true);
             m.addShield(5);
@@ -8678,7 +8692,7 @@ async startCombat(type) {
         // Relic: BAIT DRONE — decoy whose HP scales with sector so it stays
         // viable past Sector 1. Stacks add flat HP per drone deployed.
         if (this.player.hasRelic('bait_drone')) {
-            const stacks = this.player.relics.filter(r => r.id === 'bait_drone').length;
+            const stacks = this.stackCount('bait_drone');
             const scaledHp = 10 + (this.sector || 1) * 5 + (stacks - 1) * 4;
             const bait = new Minion(0, 0, this.player.minions.length + 1, true);
             bait.name = "Bait Drone";
@@ -9008,19 +9022,19 @@ async startTurn() {
             ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "OVERCLOCK", "#ff4400");
         }
 
-        const shieldStacks = this.player.relics.filter(r => r.id === 'nano_shield').length;
+        const shieldStacks = this.stackCount('nano_shield');
         if(shieldStacks > 0 && this.turnCount === 1) {
             this.player.addShield(5 * shieldStacks);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `NANO +${5 * shieldStacks}`, COLORS.SHIELD);
         }
 
-        const shieldGen = this.player.relics.filter(r => r.id === 'shield_gen').length;
+        const shieldGen = this.stackCount('shield_gen');
         if(shieldGen > 0) {
             this.player.addShield(5 * shieldGen);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `SHIELD GEN +${5 * shieldGen}`, COLORS.SHIELD);
         }
 
-        const manaStacks = this.player.relics.filter(r => r.id === 'mana_syphon').length;
+        const manaStacks = this.stackCount('mana_syphon');
         if(manaStacks > 0) {
             this.player.mana += manaStacks;
             ParticleSys.createFloatingText(this.player.x, this.player.y - 120, `SYPHON +${manaStacks}`, COLORS.MANA);
@@ -9031,7 +9045,7 @@ async startTurn() {
             const pool = [this.enemy, ...this._enemyMinions()].filter(e => e && e.currentHp > 0);
             if (pool.length > 0) {
                 const t = pool[Math.floor(Math.random() * pool.length)];
-                const stacks = this.player.relics.filter(r => r.id === 'static_capacitor').length;
+                const stacks = this.stackCount('static_capacitor');
                 const dmg = 10 * stacks;
                 ParticleSys.createFloatingText(t.x, t.y - 80, `CAPACITOR ${dmg}`, "#00f3ff");
                 if (t.takeDamage(dmg)) {
@@ -9043,14 +9057,14 @@ async startTurn() {
 
         // Relic: WARDEN PROTOCOL — player minions gain +3 Shield at start of turn.
         if (this.player.hasRelic('warden_protocol') && this.player.minions.length > 0) {
-            const stacks = this.player.relics.filter(r => r.id === 'warden_protocol').length;
+            const stacks = this.stackCount('warden_protocol');
             this.player.minions.forEach(m => m.addShield(3 * stacks));
             ParticleSys.createFloatingText(this.player.x, this.player.y - 80, `WARDEN +${3 * stacks}`, COLORS.SHIELD);
         }
 
         // Relic: TEMPO LOOP — unused dice from previous turn → +3 Shield each.
         if (this.player.hasRelic('tempo_loop') && this._carriedUnusedDice > 0) {
-            const stacks = this.player.relics.filter(r => r.id === 'tempo_loop').length;
+            const stacks = this.stackCount('tempo_loop');
             const bonus = this._carriedUnusedDice * 3 * stacks;
             this.player.addShield(bonus);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `TEMPO +${bonus}`, COLORS.SHIELD);
@@ -9072,7 +9086,7 @@ async startTurn() {
 
         // Relic: AEGIS CYCLER — at start of turn, convert 5 Shield → +3 DMG next attack.
         if (this.player.hasRelic('aegis_cycler') && (this.player.shield || 0) >= 5) {
-            const stacks = this.player.relics.filter(r => r.id === 'aegis_cycler').length;
+            const stacks = this.stackCount('aegis_cycler');
             const consume = 5 * stacks;
             const dmgBonus = 3 * stacks;
             if (this.player.shield >= consume) {
@@ -9087,7 +9101,7 @@ async startTurn() {
         // Relic: DERVISH MODE — track attacks this turn (uses existing attacksThisTurn).
 
         if (this.player.hasRelic('solar_battery') && this.turnCount % 2 === 0) {
-             const stacks = this.player.relics.filter(r => r.id === 'solar_battery').length;
+             const stacks = this.stackCount('solar_battery');
              const flatMana = stacks; 
              this.player.mana += flatMana;
              ParticleSys.createFloatingText(this.player.x, this.player.y - 80, `SOLAR (+${flatMana})`, COLORS.GOLD);
@@ -9099,8 +9113,8 @@ async startTurn() {
             ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 150, "GLITCH REGEN", "#00ff00");
         }
 
-        let rerollStacks = this.player.relics.filter(r => r.id === 'reroll_chip').length;
-        let gamblerStacks = this.player.relics.filter(r => r.id === 'gamblers_chip').length;
+        let rerollStacks = this.stackCount('reroll_chip');
+        let gamblerStacks = this.stackCount('gamblers_chip');
         if(this.hasMetaUpgrade('m_reroll')) rerollStacks++;
 
         this.player.updateEffects();
@@ -9141,7 +9155,7 @@ async startTurn() {
             }
             // Relic: SHARD REACTOR — gain +1 Mana per minion death.
             if (this.player.hasRelic('shard_reactor')) {
-                const stacks = this.player.relics.filter(r => r.id === 'shard_reactor').length;
+                const stacks = this.stackCount('shard_reactor');
                 const gain = this.deadMinionsThisTurn * stacks;
                 this.player.mana += gain;
                 ParticleSys.createFloatingText(this.player.x, this.player.y - 40, `SHARD +${gain}`, "#ff88cc");
@@ -10254,7 +10268,7 @@ async startTurn() {
         }
         // Relic: HEX FRAGMENT — Skill dice cost -1 Mana per stack (min 0).
         if (data.isSkill && this.player.hasRelic('hex_fragment')) {
-            const stacks = this.player.relics.filter(r => r.id === 'hex_fragment').length;
+            const stacks = this.stackCount('hex_fragment');
             const before = effectiveCost;
             effectiveCost = Math.max(0, effectiveCost - stacks);
             if (before !== effectiveCost) {
@@ -10351,7 +10365,7 @@ async startTurn() {
                 }
                 if (this._dieSlot(type) === 'attack') {
                     this.attacksThisTurn++;
-                    const rStacks = this.player.relics.filter(r => r.id === 'relentless').length;
+                    const rStacks = this.stackCount('relentless');
                     let triggerRelentless = false;
                     if (rStacks === 1 && this.attacksThisTurn === 3) triggerRelentless = true;
                     else if (rStacks === 2 && this.attacksThisTurn === 2) triggerRelentless = true;
@@ -10540,7 +10554,7 @@ async startTurn() {
 
                 // Relic: VENOM EDGE — attacks apply 1 stack of Poison (2 DMG/turn, 3 turns).
                 if (this.player.hasRelic('venom_edge') && finalEnemy && finalEnemy.currentHp > 0) {
-                    const stacks = this.player.relics.filter(r => r.id === 'venom_edge').length;
+                    const stacks = this.stackCount('venom_edge');
                     const poisonDmg = 2 * stacks;
                     finalEnemy.addEffect('poison', 3, poisonDmg, '☠️', `Takes ${poisonDmg} DMG at end of turn.`, 'POISON');
                     ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 110, `POISON ${poisonDmg}`, "#88ff00");
@@ -10548,7 +10562,7 @@ async startTurn() {
 
                 // Relic: DERVISH MODE — 3 attacks in a turn → +2 Mana.
                 if (this.player.hasRelic('dervish_mode') && this.attacksThisTurn === 3) {
-                    const stacks = this.player.relics.filter(r => r.id === 'dervish_mode').length;
+                    const stacks = this.stackCount('dervish_mode');
                     const manaGain = 2 * stacks;
                     this.player.mana = Math.min(this.player.maxMana || 99, this.player.mana + manaGain);
                     ParticleSys.createFloatingText(this.player.x, this.player.y - 160, `DERVISH +${manaGain}`, "#ff4400");
@@ -11137,7 +11151,7 @@ async startTurn() {
     triggerBrutalize(source) {
         if(!this.player.hasRelic('brutalize')) return;
         
-        const stacks = this.player.relics.filter(r => r.id === 'brutalize').length;
+        const stacks = this.stackCount('brutalize');
         const dmg = 20 * stacks; // Updated to 20
         
         const targets = [];
@@ -13133,7 +13147,7 @@ drawEffects() {
                                 let swarmBonus = 0;
                                 if (this.player.hasRelic('swarm_beacon')) {
                                     const aliveCount = this.player.minions.filter(mm => mm && mm.currentHp > 0).length;
-                                    const stacks = this.player.relics.filter(r => r.id === 'swarm_beacon').length;
+                                    const stacks = this.stackCount('swarm_beacon');
                                     swarmBonus = aliveCount * stacks;
                                 }
                                 // Apply the minion's own Constrict/Weak before the swarm bonus
@@ -14062,7 +14076,7 @@ drawEffects() {
 
         // Data Miner: end combat at full HP → +20 fragments per stack.
         if (this.player.currentHp >= this.player.maxHp) {
-            const miners = this.player.relics.filter(r => r.id === 'data_miner').length;
+            const miners = this.stackCount('data_miner');
             if (miners > 0) {
                 const bonus = 20 * miners;
                 frags += bonus;
@@ -14120,7 +14134,7 @@ drawEffects() {
         this.techFragments += frags;
         // Corrupted: VOID SIPHON — killing an enemy grants +1 Max Mana.
         if (this.player.hasRelic('c_void_siphon')) {
-            const stacks = this.player.relics.filter(r => r.id === 'c_void_siphon').length;
+            const stacks = this.stackCount('c_void_siphon');
             this.player.baseMana = (this.player.baseMana || 3) + stacks;
             ParticleSys.createFloatingText(this.player.x, this.player.y - 120, `VOID SIPHON +${stacks} MAX MANA`, "#aa00ff");
         }
@@ -14250,25 +14264,25 @@ drawEffects() {
         if(this.player.hasRelic('reckless_drive')) pool = pool.filter(i => i.id !== 'reckless_drive'); 
         
         // Filter Maxed Items
-        const coreCount = this.player.relics.filter(r => r.id === 'minion_core').length;
+        const coreCount = this.stackCount('minion_core');
         if(coreCount >= 2) pool = pool.filter(i => i.id !== 'minion_core');
 
-        const titanCount = this.player.relics.filter(r => r.id === 'titan_module').length;
+        const titanCount = this.stackCount('titan_module');
         if(titanCount >= 3) pool = pool.filter(i => i.id !== 'titan_module');
 
-        const relentlessCount = this.player.relics.filter(r => r.id === 'relentless').length;
+        const relentlessCount = this.stackCount('relentless');
         if(relentlessCount >= 3) pool = pool.filter(i => i.id !== 'relentless');
 
-        const lensCount = this.player.relics.filter(r => r.id === 'crit_lens').length;
+        const lensCount = this.stackCount('crit_lens');
         if(lensCount >= 5) pool = pool.filter(i => i.id !== 'crit_lens');
 
-        const gamblerCount = this.player.relics.filter(r => r.id === 'gamblers_chip').length;
+        const gamblerCount = this.stackCount('gamblers_chip');
         if(gamblerCount >= 3) pool = pool.filter(i => i.id !== 'gamblers_chip');
 
-        const holoCount = this.player.relics.filter(r => r.id === 'hologram').length;
+        const holoCount = this.stackCount('hologram');
         if(holoCount >= 3) pool = pool.filter(i => i.id !== 'hologram');
 
-        const fireCount = this.player.relics.filter(r => r.id === 'firewall').length;
+        const fireCount = this.stackCount('firewall');
         if(fireCount >= 3) pool = pool.filter(i => i.id !== 'firewall');
 
         // Shuffle pool
@@ -15139,7 +15153,7 @@ drawEffects() {
                 out.push({ id: 'sig_thorns', val: 0, duration: 0, _permanent: true, _hideCount: true });
             }
             if (entity.hasRelic && entity.hasRelic('firewall')) {
-                const stacks = entity.relics.filter(r => r.id === 'firewall').length;
+                const stacks = this.stackCount('firewall');
                 const used = entity._firewallTriggersUsed || 0;
                 if (used < stacks) {
                     out.push({ id: 'firewall', val: stacks - used, duration: 0, _permanent: true });

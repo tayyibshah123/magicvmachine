@@ -226,7 +226,7 @@ class Entity {
             }
             // Coolant Loop: shield just broke this hit → heal per stack.
             if (this instanceof Player && shieldWas > 0 && this.shield === 0 && this.hasRelic('coolant_loop')) {
-                const stacks = this.relics.filter(r => r.id === 'coolant_loop').length;
+                const stacks = Game.stackCount('coolant_loop');
                 this.heal(2 * stacks);
                 ParticleSys.createFloatingText(this.x, this.y - 100, "COOLANT +" + (2 * stacks), COLORS.SHIELD);
             }
@@ -246,7 +246,7 @@ class Entity {
         // (stacks raise both the block and the shield refund, and allow
         // re-triggering within the same fight).
         if (this instanceof Player && this.hasRelic('firewall') && actualDmg >= 30) {
-            const stacks = this.relics.filter(r => r.id === 'firewall').length;
+            const stacks = Game.stackCount('firewall');
             const triggersUsed = this._firewallTriggersUsed || 0;
             if (triggersUsed < stacks) {
                 const block = 15 + (stacks - 1) * 5;
@@ -274,7 +274,7 @@ class Entity {
             if (this.hasRelic('reflection_glass')) {
                 const target = source || (Game && Game.enemy);
                 if (target && target.currentHp > 0 && target !== this) {
-                    const stacks = this.relics.filter(r => r.id === 'reflection_glass').length;
+                    const stacks = Game.stackCount('reflection_glass');
                     ParticleSys.createFloatingText(this.x, this.y - 100, `GLASS ${8 * stacks}`, "#aaffff");
                     if (target.takeDamage(8 * stacks)) _resolveEnemyKill(target);
                 }
@@ -504,7 +504,7 @@ class Entity {
             
              // Relic: Double Edge (Reflect 30%)
              if(this.hasRelic('spike_armor')) {
-                const stacks = this.relics.filter(r => r.id === 'spike_armor').length;
+                const stacks = Game.stackCount('spike_armor');
                 const reflectPct = 0.3 * stacks; // 30% per stack
                 const reflectDmg = Math.max(1, Math.floor(actualDmg * reflectPct));
                 
@@ -530,7 +530,7 @@ class Entity {
             if (this.hasRelic('retaliator') && actualDmg >= 20) {
                 const target = source || Game.enemy;
                 if (target && target.currentHp > 0 && target !== this) {
-                    const stacks = this.relics.filter(r => r.id === 'retaliator').length;
+                    const stacks = Game.stackCount('retaliator');
                     ParticleSys.createFloatingText(this.x, this.y - 130, `RETALIATE ${10 * stacks}`, "#ff3333");
                     if (target.takeDamage(10 * stacks)) _resolveEnemyKill(target);
                 }
@@ -619,7 +619,7 @@ class Entity {
             ParticleSys.createFloatingText(Game.player.x, Game.player.y - 150, `BLOOD TIER ${Game.player.bloodTier}`, '#ff2244');
         }
         if (diedByPlayer && killedTargetIsHostile && Game.player && Game.player.hasRelic('med_dispenser')) {
-            const stacks = Game.player.relics.filter(r => r.id === 'med_dispenser').length;
+            const stacks = Game.stackCount('med_dispenser');
             Game.player.heal(3 * stacks);
             ParticleSys.createFloatingText(Game.player.x, Game.player.y - 100, "MED +" + (3 * stacks), COLORS.NATURE_LIGHT);
         }

@@ -73,7 +73,7 @@ class Minion extends Entity {
         
         // Relic: Wisp Vitality (+5 HP)
         if(isPlayerSide && Game.player && Game.player.hasRelic('wisp_hp')) {
-            const stacks = Game.player.relics.filter(r => r.id === 'wisp_hp').length;
+            const stacks = Game.stackCount('wisp_hp');
             this.maxHp += (5 * stacks);
             this.currentHp += (5 * stacks);
         }
