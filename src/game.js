@@ -946,11 +946,14 @@ const Game = {
             }
         }
 
-        // Effect icon hit-test — mirrors the drawHealthBar effect bar geometry
-        // (iconWidth 30, barHeight 28, barY = y + height + 6 = entity.y - radius - 14).
-        // Use the same synthesized list the renderer uses (_collectStatusDisplay)
-        // so derived buffs/debuffs (overclock, charged, exposed, armor, sig_thorns,
-        // firewall, blood_tier, elite affixes) are hoverable, not just real effects.
+        // Effect icon hit-test — mirrors the drawHealthBar effect bar geometry.
+        // Enemy bar sits below the HP bar (barY = entity.y - radius - 14);
+        // player + player-minion bars sit ABOVE the HP bar
+        // (barY = entity.y - radius - 50 - 28 - 6 = entity.y - radius - 84) so
+        // buffs don't crowd the dice tray. Use the same synthesized list the
+        // renderer uses so derived buffs/debuffs (overclock, charged, tact_primed,
+        // aegis_primed, exposed, armor, sig_thorns, firewall, blood_tier, elite
+        // affixes) are all hoverable, not just real effects.
         {
             const ICON_W = 30, BAR_H = 28, PAD = 4;
             const effectEntities = [];
@@ -960,7 +963,9 @@ const Game = {
                 if (!ent || ent.currentHp <= 0) continue;
                 const statusList = this._collectStatusDisplay(ent);
                 if (!statusList || statusList.length === 0) continue;
-                const barY = ent.y - ent.radius - 14;
+                const buffsAbove = (ent instanceof Player) ||
+                                   (ent instanceof Minion && ent.isPlayerSide);
+                const barY = buffsAbove ? (ent.y - ent.radius - 84) : (ent.y - ent.radius - 14);
                 const totalW = statusList.length * ICON_W;
                 const barX = ent.x - totalW / 2;
                 if (this.mouseY < barY - PAD || this.mouseY > barY + BAR_H + PAD) continue;
@@ -4573,6 +4578,14 @@ triggerSystemCrash() {
             }
             case 'sig_thorns':
                 body = `Sentinel thorns active — reflects damage back to attackers this turn.`;
+                break;
+            case 'tact_primed': {
+                const bonus = Math.max(0, Math.round(eff.val || 0));
+                body = `<strong>Attack Primed</strong> — your next ATTACK die deals <strong>+${bonus} damage</strong>. Consumed on the next attack.`;
+                break;
+            }
+            case 'aegis_primed':
+                body = `<strong>Aegis Primed</strong> — the next enemy attack is fully nullified. Consumes all 3 Sentinel plates.`;
                 break;
             case 'firewall':
                 body = `<strong>Firewall</strong>: the first unblocked hit this turn is capped at 20 damage.`;
@@ -11845,6 +11858,12 @@ drawEffects() {
         // from the wrong position. Right-to-left order + snapshot makes
         // removal order match the rendered layout and avoids the skip.
         const minionOrder = this.player.minions.slice().sort((a, b) => b.x - a.x);
+        // Track in-flight player-minion attacks (darts) so the enemy phase
+        // doesn't begin until every attack has hit and damage/kills are
+        // committed. Without this, an enemy minion could queue and fire its
+        // own attack while a fatal dart is still mid-flight, "ghost-striking"
+        // from beyond the grave.
+        const inFlightAttacks = [];
         for (const m of minionOrder) {
             if (!stillLive()) return; // new combat started — abandon this phase
             if(!this.enemy || this.enemy.currentHp <= 0) break;
@@ -11877,38 +11896,58 @@ drawEffects() {
                     // dart in flight when the combat ends can't damage the
                     // next combat's enemy when its onHit fires.
                     const callbackGen = this._combatGen || 0;
-                    this.triggerVFX('nature_dart', m, t, (multiplier = 1.0) => {
-                        if (this._combatGen !== callbackGen) return;
-                        // Relic: SWARM BEACON — player minions deal +1 DMG per alive minion.
-                        let swarmBonus = 0;
-                        if (this.player.hasRelic('swarm_beacon')) {
-                            const aliveCount = this.player.minions.filter(mm => mm && mm.currentHp > 0).length;
-                            const stacks = this.player.relics.filter(r => r.id === 'swarm_beacon').length;
-                            swarmBonus = aliveCount * stacks;
-                        }
-                        // Apply the minion's own Constrict/Weak before the swarm bonus
-                        // and QTE multiplier so debuffs scale the base attack, not the
-                        // boosted total (keeps swarm stacking predictable).
-                        const effBase = (typeof m.getEffectiveDamage === 'function') ? m.getEffectiveDamage(m.dmg) : m.dmg;
-                        const dmg = Math.floor((effBase + swarmBonus) * multiplier);
-                        if (t.takeDamage(dmg, m) && t === this.enemy) { this.winCombat(); return; }
-                        if (t !== this.enemy && t.currentHp <= 0) {
-                             // Blood Thrall kills no longer heal the player — the
-                             // thrall's value now comes from soaking damage while
-                             // alive (see Player.takeDamage redirect). Per-hit
-                             // lifesteal on the player's own attacks is still on.
-                             if (this.enemy) this.enemy.minions = this.enemy.minions.filter(min => min !== t);
-                             if(this.player.hasRelic('brutalize') && !t.isPlayerSide) {
-                                 this.triggerBrutalize(t);
-                                 if(this.enemy && this.enemy.currentHp <= 0) { this.winCombat(); return; }
-                             }
-                        }
+                    const attackP = new Promise(resolve => {
+                        let settled = false;
+                        const finish = () => { if (!settled) { settled = true; resolve(); } };
+                        this.triggerVFX('nature_dart', m, t, (multiplier = 1.0) => {
+                            try {
+                                if (this._combatGen !== callbackGen) return;
+                                // Relic: SWARM BEACON — player minions deal +1 DMG per alive minion.
+                                let swarmBonus = 0;
+                                if (this.player.hasRelic('swarm_beacon')) {
+                                    const aliveCount = this.player.minions.filter(mm => mm && mm.currentHp > 0).length;
+                                    const stacks = this.player.relics.filter(r => r.id === 'swarm_beacon').length;
+                                    swarmBonus = aliveCount * stacks;
+                                }
+                                // Apply the minion's own Constrict/Weak before the swarm bonus
+                                // and QTE multiplier so debuffs scale the base attack, not the
+                                // boosted total (keeps swarm stacking predictable).
+                                const effBase = (typeof m.getEffectiveDamage === 'function') ? m.getEffectiveDamage(m.dmg) : m.dmg;
+                                const dmg = Math.floor((effBase + swarmBonus) * multiplier);
+                                if (t.takeDamage(dmg, m) && t === this.enemy) { this.winCombat(); return; }
+                                if (t !== this.enemy && t.currentHp <= 0) {
+                                     // Blood Thrall kills no longer heal the player — the
+                                     // thrall's value now comes from soaking damage while
+                                     // alive (see Player.takeDamage redirect). Per-hit
+                                     // lifesteal on the player's own attacks is still on.
+                                     if (this.enemy) this.enemy.minions = this.enemy.minions.filter(min => min !== t);
+                                     if(this.player.hasRelic('brutalize') && !t.isPlayerSide) {
+                                         this.triggerBrutalize(t);
+                                         if(this.enemy && this.enemy.currentHp <= 0) { this.winCombat(); return; }
+                                     }
+                                }
+                            } finally { finish(); }
+                        });
+                        // Safety net — if the dart never lands (combat ended,
+                        // VFX system hiccup), unblock the enemy phase after a
+                        // bounded wait. Dart speed=0.017/frame ≈ 970ms; 2s gives
+                        // headroom for slower devices without leaving the player
+                        // staring at a frozen screen.
+                        setTimeout(finish, 2000);
                     });
+                    inFlightAttacks.push(attackP);
                 }
             }
             await this.sleep(500);
         }
-        
+
+        // Wait for every in-flight player-minion attack to land before the
+        // enemy gets to act. Otherwise an enemy could queue an intent for a
+        // unit that's about to die from a dart still in flight.
+        if (inFlightAttacks.length) {
+            await Promise.all(inFlightAttacks);
+        }
+
         if(!this.enemy || this.enemy.currentHp <= 0) { this.winCombat(); return; }
 
         // --- ENEMY INTENT PHASE ---
@@ -13509,7 +13548,12 @@ drawEffects() {
 
             const totalBarWidth = (statusList.length * iconWidth) + (padding * 2);
             const barX = entity.x - (totalBarWidth / 2);
-            const barY = y + height + 6;
+            // Player + player-minion buffs sit ABOVE the HP bar so they don't
+            // crowd the dice tray. Enemy / enemy-minion bars stay below as
+            // before — keeps each side's threat read self-contained.
+            const buffsAbove = (entity instanceof Player) ||
+                               (entity instanceof Minion && entity.isPlayerSide);
+            const barY = buffsAbove ? (y - barHeight - 6) : (y + height + 6);
 
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(barX, barY, totalBarWidth, barHeight);
@@ -13548,6 +13592,8 @@ drawEffects() {
                 sig_thorns:  '#ffffff',   // Sentinel signature thorns
                 firewall:    '#00f3ff',   // Firewall relic armed this turn
                 blood_tier:  '#ff0033',   // Bloodstalker kill tier
+                tact_primed: '#00f3ff',   // Tactician primed attack (+5 next strike)
+                aegis_primed:'#ffffff',   // Sentinel block primed
                 // Incoming damage multipliers (Reckless Charge self-debuff etc.)
                 exposed:     '#ff3355'
             };
@@ -13655,6 +13701,13 @@ drawEffects() {
                 : 1;
             if (overclockMult && overclockMult > 1) {
                 out.push({ id: 'overclock', val: overclockMult, duration: 0 });
+            }
+            // Class-ability buff badges (Tactician primed attack, Sentinel
+            // aegis primed, etc.). The widget owns the state, so it returns
+            // the synthesized entries via peekBuffs().
+            if (typeof ClassAbility !== 'undefined' && typeof ClassAbility.peekBuffs === 'function') {
+                const buffs = ClassAbility.peekBuffs() || [];
+                for (const b of buffs) out.push(b);
             }
         }
         return out;

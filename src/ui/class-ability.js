@@ -287,6 +287,22 @@ export const ClassAbility = {
         return mult;
     },
 
+    // Buff badges for the player status bar — synthesized buffs that don't
+    // live on `entity.effects`. Returned as `{ id, val, duration, _permanent,
+    // _hideCount }` so the unified status renderer treats them like real
+    // effects (icon + tooltip). _permanent buffs persist until consumed.
+    peekBuffs() {
+        const out = [];
+        if (!state) return out;
+        if (classId === 'tactician' && state.pendingAttackBonus > 0) {
+            out.push({ id: 'tact_primed', val: state.pendingAttackBonus, duration: 0, _permanent: true, _hideCount: false });
+        }
+        if (classId === 'sentinel' && state.blockReady) {
+            out.push({ id: 'aegis_primed', val: 0, duration: 0, _permanent: true, _hideCount: true });
+        }
+        return out;
+    },
+
     // Called from useDie BEFORE damage is applied. Returns additive bonus.
     consumePreDamageBonus(dieType) {
         if (!state) return 0;

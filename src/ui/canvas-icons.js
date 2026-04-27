@@ -708,6 +708,45 @@ export function drawEffectIcon(ctx, effectId, cx, cy, size, color) {
                 c.beginPath(); c.arc(0, 0, 1.8, 0, Math.PI * 2); c.fill();
             });
             break;
+        case 'tact_primed':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // Crosshair + sword tip — primed strike.
+                c.globalAlpha = 0.22;
+                c.beginPath(); c.arc(0, 0, 8, 0, Math.PI * 2); c.fill();
+                c.globalAlpha = 1;
+                c.lineWidth = 1.6;
+                c.beginPath(); c.arc(0, 0, 7, 0, Math.PI * 2); c.stroke();
+                c.beginPath();
+                c.moveTo(-9, 0); c.lineTo(-5, 0);
+                c.moveTo(9, 0); c.lineTo(5, 0);
+                c.moveTo(0, -9); c.lineTo(0, -5);
+                c.moveTo(0, 9); c.lineTo(0, 5);
+                c.stroke();
+                // Centre pip — locked target
+                c.beginPath(); c.arc(0, 0, 1.6, 0, Math.PI * 2); c.fill();
+            });
+            break;
+        case 'aegis_primed':
+            _wrap(ctx, cx, cy, size, color, c => {
+                // Shield with star spark — block primed.
+                c.globalAlpha = 0.28;
+                c.beginPath();
+                c.moveTo(0, -9); c.lineTo(8, -5); c.lineTo(8, 2);
+                c.quadraticCurveTo(8, 8, 0, 10);
+                c.quadraticCurveTo(-8, 8, -8, 2); c.lineTo(-8, -5);
+                c.closePath(); c.fill();
+                c.globalAlpha = 1;
+                c.lineWidth = 1.8;
+                c.stroke();
+                // Spark inside — four-point star
+                c.lineWidth = 1.4;
+                c.beginPath();
+                c.moveTo(0, -4); c.lineTo(0, 4);
+                c.moveTo(-4, 0); c.lineTo(4, 0);
+                c.stroke();
+                c.beginPath(); c.arc(0, 0, 1.4, 0, Math.PI * 2); c.fill();
+            });
+            break;
 
         default:
             _wrap(ctx, cx, cy, size, color, c => {
