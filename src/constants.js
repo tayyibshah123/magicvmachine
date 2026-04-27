@@ -610,7 +610,20 @@ const ENEMIES = [
     { name: "Phage Drone",       hp: 80,  dmg: 14, sector: 4, shape: 'drone',  kind: 'detonator' },
     // Sector 5 — The Source
     { name: "Error Cluster",     hp: 170, dmg: 22, sector: 5, shape: 'wisp',   kind: 'shield_break' },
-    { name: "Glitch Cascade",    hp: 140, dmg: 28, sector: 5, shape: 'sniper', kind: 'chaotic' }
+    { name: "Glitch Cascade",    hp: 140, dmg: 28, sector: 5, shape: 'sniper', kind: 'chaotic' },
+    /* ==== Roster expansion — fills missing-kind gaps so each sector
+       carries a wider behavioural spread. Stats picked to slot between
+       the existing tier of that sector's roster, not to redefine it. */
+    // Sector 1 — first detonator so the player learns "kill carefully" early
+    { name: "Maintenance Spike", hp: 26,  dmg: 9,  sector: 1, shape: 'spider', kind: 'detonator' },
+    // Sector 2 — frost-themed shielder; introduces shield-allies in Cryo Docks
+    { name: "Cryo Lord",         hp: 70,  dmg: 9,  sector: 2, shape: 'tank',   kind: 'shielder' },
+    // Sector 3 — heavy shielder; pairs nicely with the sector's armored tier
+    { name: "Foundry Bulwark",   hp: 150, dmg: 11, sector: 3, shape: 'tank',   kind: 'shielder' },
+    // Sector 4 — burrow specialist; rewards intent reading mid-Hive
+    { name: "Hive Stalker",      hp: 95,  dmg: 22, sector: 4, shape: 'spider', kind: 'burrow' },
+    // Sector 5 — first healer at endgame; chips become liabilities
+    { name: "Void Mender",       hp: 140, dmg: 12, sector: 5, shape: 'drone',  kind: 'healer' }
 ];
 const BOSS_DATA = {
     1: { 

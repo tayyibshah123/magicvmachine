@@ -4256,7 +4256,12 @@ triggerPhaseGlitch() {
             'Silent Observer':  'watches your dice. Punishes patterns.',
             'Glitch Shard':     'creates a duplicate on hit.',
             'Echo Phantom':     'mirrors damage back onto you.',
-            'Paradox Loop':     'dies, returns for one final attack.'
+            'Paradox Loop':     'dies, returns for one final attack.',
+            'Maintenance Spike':'tiny chassis, fatal cargo. Detonates when killed.',
+            'Cryo Lord':        'frosts allies with a layered shield each turn.',
+            'Foundry Bulwark':  'shields the line. Crack the captain first.',
+            'Hive Stalker':     'burrows mid-fight. Resurfaces with a heavy strike.',
+            'Void Mender':      'patches its squad. Silence it before the heal lands.'
         };
         const byName = BY_NAME[name];
         if (byName) return `${name}: ${byName}`;
