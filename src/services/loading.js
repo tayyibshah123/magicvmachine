@@ -56,7 +56,7 @@ export const Loading = {
             if (!_root || !_root.classList.contains('active')) return;
             _root.classList.add('stalled');
             const lbl = _root.querySelector('.loading-label');
-            if (lbl) lbl.textContent = '// STILL WORKING — TAP RETRY IF STUCK';
+            if (lbl) lbl.textContent = '// STILL WORKING. TAP RETRY IF STUCK';
             const btn = _root.querySelector('.loading-retry');
             if (btn) {
                 btn.hidden = false;

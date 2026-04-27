@@ -129,7 +129,7 @@ const TUTORIAL_PAGES = [
     {
         title: "MISSION BRIEFING",
         content: "<p>The year is 21XX. Technology has consumed the Earth. The Silicon Empire controls everything with cold precision.</p>" +
-                 "<p>You are the <strong>Green Spark</strong>—the last avatar of Nature. Your mission is to infiltrate their servers, disrupt their code, and destroy the mechanical overlords.</p>"
+                 "<p>You are the <strong>Green Spark</strong>, the last avatar of Nature. Your mission is to infiltrate their servers, disrupt their code, and destroy the mechanical overlords.</p>"
     },
     {
         title: "INTEL & DATA FILES",
@@ -237,37 +237,37 @@ const POST_TUTORIAL_PAGES = [
 const PLAYER_CLASSES = [
     {
         id: 'tactician', name: 'Tactician', icon: ICONS.classTactician, color: '#00f3ff',
-        desc: 'Starts with 6 Dice.\nTAC_ATTACK builds pips twice.\nSpend 3 pips → also draw 1 extra die next turn.\nMinion: Pawn (+1 Reroll next turn on death)',
+        desc: 'Starts with 6 dice.\nAttacks build 2 Command pips instead of 1.\nSpending 3 pips also draws +1 die next turn.\nMinion: Pawn. +1 reroll on death.',
         traits: { diceCount: 6, minionName: "Pawn", minionTrait: "Death: +1 Reroll next turn.", pipPerAttack: 2, drawOnPipSpend: 1 },
         classDice: { attack: 'TAC_ATTACK', defend: 'TAC_DEFEND', mana: 'TAC_MANA', minion: 'TAC_MINION' }
     },
     {
         id: 'arcanist', name: 'Arcanist', icon: ICONS.classArcanist, color: '#bc13fe',
-        desc: 'Starts with 5 Base Mana.\n+1 Mana automatically at the start of every turn (Flux Regen).\nMinion: Mana Wisp (+1 Mana next turn on death)',
+        desc: 'Starts with 5 base mana.\nGains +1 mana every turn (Flux Regen).\nGlyph wheel cycles Fire, Ice, Lightning. One use per turn.\nMinion: Mana Wisp. +1 mana on death.',
         traits: { baseMana: 5, minionName: "Mana Wisp", minionTrait: "Death: +1 Mana next turn.", manaPassive: 1 },
         classDice: { attack: 'ARC_ATTACK', defend: 'ARC_DEFEND', mana: 'ARC_MANA', minion: 'ARC_MINION' }
     },
     {
         id: 'bloodstalker', name: 'Blood Stalker', icon: ICONS.classBloodstalker, color: '#ff0000',
-        desc: 'Lifesteal 2 HP on hit.\nTake +1 DMG from all sources.\nBlood Tier ticks up on every kill — each tier adds +1 lifesteal.\nMinion: Blood Thrall (soaks damage meant for you).',
+        desc: 'Lifesteal 2 HP on every hit.\nTakes +1 damage from every source.\nBlood Pool fills on damage taken. Spend HP for tribute payouts.\nMinion: Blood Thrall. Soaks every hit aimed at you.',
         traits: { lifesteal: true, vulnerable: true, minionName: "Blood Thrall", minionTrait: "Alive: absorbs damage meant for the player.", bloodTierPerKill: 1, bloodTierLifestealBonus: 1 },
         classDice: { attack: 'BLD_ATTACK', defend: 'BLD_DEFEND', mana: 'BLD_MANA', minion: 'BLD_MINION' }
     },
     {
         id: 'annihilator', name: 'Annihilator', icon: ICONS.classAnnihilator, color: '#ff8800',
-        desc: 'Deal +50% DMG.\nStarts with 6 Dice.\nEarn rerolls by landing QTE Crits — reward skilled timing.\nMinion: Bomb Bot (Deals 10 DMG to enemies on death).',
+        desc: 'Deals +50% damage.\nStarts with 6 dice and zero free rerolls.\nEarn rerolls by landing QTE crits, or pay 20% max HP.\nMinion: Bomb Bot. 10 AoE on death.',
         traits: { dmgMultiplier: 1.5, diceCount: 6, noRerolls: true, qteCritRerolls: 1, minionName: "Bomb Bot", minionTrait: "Death: 10 DMG to Enemies." },
         classDice: { attack: 'ANH_ATTACK', defend: 'ANH_DEFEND', mana: 'ANH_MANA', minion: 'ANH_MINION' }
     },
     {
         id: 'sentinel', name: 'Sentinel', icon: ICONS.classSentinel, color: '#ffffff',
-        desc: 'Start combat with 10 Shield.\nCounter: when your shield breaks, retaliate 4 DMG.\nMinion: Guardian (Spawns with 10 Shield)',
+        desc: 'Starts combat with 10 shield.\nCounter: 4 damage back when your shield breaks.\nAegis Plates bank shield gain into a guaranteed nullify.\nMinion: Guardian. +10 shield on spawn.',
         traits: { startShield: 10, shieldCounter: 4, minionName: "Guardian", minionTrait: "Spawn: +10 Shield." },
         classDice: { attack: 'SEN_ATTACK', defend: 'SEN_DEFEND', mana: 'SEN_MANA', minion: 'SEN_MINION' }
     },
     {
         id: 'summoner', name: 'Summoner', icon: ICONS.classSummoner, color: '#00ff99',
-        desc: 'Starts with 2 Spirits at +40% HP/DMG.\nMax 4 Minions.\nMinion: Spirit (30% Revive chance)',
+        desc: 'Starts with 2 Spirits at +40% HP and damage.\n4 minion cap. Only class above 3.\nSacred Grove blooms free Spirits while any minion lives.\nMinion: Spirit. 30% revive chance on death.',
         // Opening buff: 2 minions at +40% so the Summoner's opener survives
         // Sector 1 pressure — single +20% Spirit used to die turn 1 to AoEs.
         // Cap raised from 3 → 4 so the GROVE APEX (×2 every minion) reads
@@ -842,7 +842,7 @@ const EVENTS_DB = [
     },
     {
         title: "BURNT-OUT ORACLE",
-        desc: "A charred Oracle-class AI offers one last prophecy — but it needs a minion to focus.",
+        desc: "A charred Oracle-class AI offers one last prophecy, but it needs a minion to focus.",
         condition: (g) => g.player.minions && g.player.minions.length > 0,
         options: [
             { text: "Sacrifice a minion (Unlock Random Relic)", effect: (g) => {
@@ -979,7 +979,7 @@ const EVENTS_DB = [
     },
     {
         title: "LIGHT SENTRY",
-        desc: "An inactive sentry could be repurposed — at a cost.",
+        desc: "An inactive sentry could be repurposed, at a cost.",
         options: [
             { text: "Repurpose (Gain a Minion)", effect: (g) => {
                 if (g.player.minions.length < (g.player.maxMinions || 2)) {
@@ -996,7 +996,7 @@ const EVENTS_DB = [
     },
     {
         title: "BROKEN BEACON",
-        desc: "A damaged distress signal. Following it might bring help — or an ambush.",
+        desc: "A damaged distress signal. Following it might bring help, or an ambush.",
         options: [
             { text: "Investigate (50% ambush, 50% +100 Fragments)", effect: (g) => {
                 if (Math.random() < 0.5) { g.startCombat('elite'); return "AMBUSH! COMBAT_STARTED"; }

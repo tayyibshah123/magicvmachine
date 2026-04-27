@@ -461,7 +461,7 @@ const Game = {
             // after the first Sector 5 clear (mvm_gameCompleted is set in
             // winCombat's TESSERACT PRIME branch).
             if (localStorage.getItem('mvm_gameCompleted') !== 'true') {
-                ParticleSys.createFloatingText(540, 600, 'ARCHIVE LOCKED — CLEAR SECTOR 5 FIRST', '#888');
+                ParticleSys.createFloatingText(540, 600, 'ARCHIVE LOCKED. CLEAR SECTOR 5 FIRST', '#888');
                 return;
             }
             this.archiveMode = true;
@@ -545,7 +545,7 @@ const Game = {
                     const text = await f.text();
                     const blob = JSON.parse(text);
                     if (SaveSync.importAll(blob)) {
-                        ParticleSys.createFloatingText(540, 800, 'SAVE IMPORTED — RELOADING', COLORS.GOLD);
+                        ParticleSys.createFloatingText(540, 800, 'SAVE IMPORTED. RELOADING', COLORS.GOLD);
                         setTimeout(() => window.location.reload(), 900);
                     } else {
                         ParticleSys.createFloatingText(540, 800, 'INVALID SAVE FILE', '#ff3355');
@@ -2526,7 +2526,7 @@ startQTE(type, x, y, callback) {
                 picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
             }
             const curLine = current
-                ? `<p>Your banked starting relic: <b style="color:var(--neon-gold)">${current.name}</b> — it will be granted on your next run.</p>`
+                ? `<p>Your banked starting relic: <b style="color:var(--neon-gold)">${current.name}</b>. It will be granted on your next run.</p>`
                 : `<p>No starting relic banked. Roll a new one below.</p>`;
             const fragments = `<p>Fragments: <b style="color:var(--neon-gold)">${this.techFragments || 0}</b> &nbsp;·&nbsp; Reroll cost: <b>${cost}</b></p>`;
             body.innerHTML = `
@@ -2594,7 +2594,7 @@ startQTE(type, x, y, callback) {
                         </div>
                     </div>
                 `).join('')
-                : '<p>No bosses defeated yet — your trophy hall stands empty.</p>';
+                : '<p>No bosses defeated yet. Your trophy hall stands empty.</p>';
             const loreCount = (this.unlockedLore || []).length;
             const totalLore = (typeof LORE_DATABASE !== 'undefined' && LORE_DATABASE.length) || 0;
             body.innerHTML = `
@@ -2747,57 +2747,57 @@ startQTE(type, x, y, callback) {
     // the order rendered in the overlay: short description → style → minion → ability.
     _classMeta: {
         tactician: {
-            description: "A cerebral commander flanked by three satellite drones. The Tactician starts with an extra die each turn and turns every action into tactical advantage — each die spent builds a pip on the Command Track, and three pips can be cashed in for exactly the edge the moment demands. Strong against any matchup because they adapt; best when you want to think turn-by-turn.",
-            style: "Slow-build utility. Dice-efficient. Rewards patience and planning — weak to burst, strong against attrition.",
-            minion: "Pawn — a sturdy frontline ally that grants the Tactician +1 Reroll on the turn after it dies, converting loss into more options.",
-            ability: "COMMAND TRACK — 3 pips fill as dice are used. Spend all three on one of: +1 Reroll (flex your hand), +8 Shield (weather the next hit), or +5 damage on your next ATTACK (close the kill).",
-            attack: "Volley → Salvo → Checkmate — your scaling signature strike. Damage + rerolls climb with tier.",
-            combo:  "PINCER (ATK + DEF + MANA in one hand) — +1 reroll now and all enemy intents stay revealed.",
+            description: "A precision commander who turns every die spent into another option later.",
+            style: "Slow build, dice efficient, rewards patient planning.",
+            minion: "Pawn. A sturdy frontline that grants +1 reroll on the turn after it dies.",
+            ability: "Command Track fills 1 pip per die used. Spend 3 pips for +1 reroll, +8 shield, or +5 damage primed on your next ATTACK.",
+            attack: "Volley, Salvo, Checkmate. Damage and bonus rerolls scale with sector tier.",
+            combo:  "PINCER (ATK + DEF + MANA in one hand). +1 reroll now and all enemy intents stay revealed.",
             difficulty: 2,
         },
         arcanist: {
-            description: "A mana-rich ether-caster whose power is limited only by timing. The Arcanist starts combat with +2 base mana, opening up expensive skill plays early, and wields a Glyph Wheel that cycles through three elemental effects. Players who enjoy reading rhythm and claiming the right effect at the right moment will feel at home here.",
-            style: "High mana. Timing-based minigame. Rewards pattern-reading; punishes panic taps.",
-            minion: "Mana Wisp — a fragile conduit that grants +1 Mana on the turn after it dies, extending your spell economy.",
-            ability: "GLYPH WHEEL — an active glyph rotates through Fire / Ice / Lightning. Tap while the glyph you want is lit: Fire deals 12 damage, Ice grants 5 shield + applies Weak to the enemy, Lightning grants +1 Reroll. One use per turn.",
-            attack: "Spark → Hex → Rite — scaling arcane bolt. Later tiers also refund mana and apply Weak.",
-            combo:  "CONVERGENCE (3 MANA dice) — instantly gain +2 Mana at climax.",
+            description: "A mana-rich caster whose payoff lives entirely on the player's timing.",
+            style: "Big mana economy, glyph-wheel rhythm, punishes panic taps.",
+            minion: "Mana Wisp. Grants +1 mana on the turn after it dies.",
+            ability: "Glyph Wheel cycles Fire, Ice, Lightning every 0.7s. Tap when the glyph you want is lit. Fire: 12 damage. Ice: 5 shield plus Weak. Lightning: +1 reroll. Once per turn.",
+            attack: "Spark, Hex, Rite. Arcane bolt that refunds mana and applies Weak at higher tiers.",
+            combo:  "CONVERGENCE (3 MANA dice). Instantly gain +2 mana at climax.",
             difficulty: 3,
         },
         bloodstalker: {
-            description: "A vampiric predator who treats HP as currency. The Bloodstalker takes +1 damage from every hit (a lasting vulnerability), but heals on lifesteal kills and can pay HP to empower brutal finishers. Players who like trading life for lethal bursts will thrive — the trick is knowing when you can afford to bleed.",
-            style: "HP-as-resource. High risk, high reward. Burst-window class — all-in plays backed by heal triggers.",
-            minion: "Blood Thrall — a predatory shield. While alive it absorbs every hit that would land on you. The Blood Pool still fills on those hits, so the tribute cycle keeps churning even when you're untouched.",
-            ability: "BLOOD POOL — tap to pay 5 HP for one Blood Charge (up to 3). The next damage die you play consumes all charges for +5 damage per charge (up to +15).",
-            attack: "Bite → Gouge → Maul — predatory strike that also heals you on hit.",
-            combo:  "FEEDING FRENZY (2 ATK + 1 DEF) — heal 5 HP at climax on top of the per-hit lifesteal.",
+            description: "A vampiric predator who turns damage taken into a brutal payback.",
+            style: "High risk burst, lifesteal sustain, takes +1 incoming damage on every hit.",
+            minion: "Blood Thrall. While alive it soaks every hit aimed at you. Damage routed to it still fills the Blood Pool.",
+            ability: "Blood Pool fills as you take damage. At full, spend HP for one of three tributes. Minor: +1 reroll. Major: 20 damage plus Bleed. Grand: 40 damage plus Bleed plus mana plus rerolls.",
+            attack: "Bite, Gouge, Maul. Predatory strike that heals on hit and applies Frail at top tier.",
+            combo:  "FEEDING FRENZY (2 ATK + 1 DEF). Heal 5 HP at climax on top of the per-hit lifesteal.",
             difficulty: 4,
         },
         annihilator: {
-            description: "A reckless overcharged destroyer whose damage output is 50% higher than every other class. The trade-off: rerolling costs 20% of your max HP when you're out of free rerolls. Builds Overheat each die played; release it for massive payoff — or let it auto-vent and lose HP for free. A pure damage-focused class for players who want to delete enemies.",
-            style: "Reckless burst. Heat-management. All-offense — every reroll is a choice between HP and options.",
-            minion: "Bomb Bot — a volatile companion that detonates on death for 10 AoE damage to every enemy on the field.",
-            ability: "OVERHEAT CORE — +10% heat per die used. Yellow zone (50–79%): tap for ×1.4 damage on your next die. Red zone (80–100%): tap for 20 AoE damage and 5 self-damage. Hit 100% without venting and you auto-take 5 damage.",
-            attack: "Blast → Barrage → Annihilate — shield-piercing hammer. Late tiers Stun and apply Weak.",
-            combo:  "OVERLOAD (2 ATK + 1 MANA) — next attack ×1.5 damage at climax.",
+            description: "A reckless overcharger whose output is +50%, paid for in HP whenever the rerolls run dry.",
+            style: "All offense, heat management, every reroll costs life.",
+            minion: "Bomb Bot. Detonates on death for 10 AoE damage to every enemy.",
+            ability: "Overheat Core gains +10% heat per die used. Vent yellow (50%+) for x1.4 next attack. Vent red (80%+) for 20 AoE and 5 self damage. Hit 100% without venting and you auto-take 5.",
+            attack: "Blast, Barrage, Annihilate. Shield-piercing hammer that picks up Stun and Weak at higher tiers.",
+            combo:  "OVERLOAD (2 ATK + 1 MANA). Next attack x1.5 damage at climax.",
             difficulty: 4,
         },
         sentinel: {
-            description: "A stalwart bulwark who treats the first ten damage as an afterthought. The Sentinel begins every combat with 10 shield and gains more with every Defend die and relic tick — the only class that can bank an absolute perfect block against any attack, including boss crushers. The preferred pick for players who want to outlast and punish rather than race.",
-            style: "Defensive outlast. Shield-stacking. Steady attrition — strong into slow-cadence fights, weaker into multi-hit burst.",
-            minion: "Guardian — a durable bodyguard that spawns with +10 bonus shield on top of its base HP.",
-            ability: "SHIELD WALL — every 6 shield you gain lights one of three hex plates (buffered across turns). With all three lit, the next enemy attack is fully nullified, no matter how big.",
-            attack: "Bash → Slam → Aegis Break — converts shield into damage; later tiers Taunt + add Thorns.",
-            combo:  "FORTRESS (3 DEFEND dice) — +5 Thorns and a bubble at climax.",
+            description: "A stalwart wall who treats the first ten damage of every fight as background noise.",
+            style: "Defensive outlast, shield stacking, the only class that can perfect-block any single hit.",
+            minion: "Guardian. Spawns with +10 bonus shield on top of its base HP.",
+            ability: "Aegis Plates fill 1 plate per 6 shield gained, banked across turns. At 3 plates the next enemy attack is fully nullified.",
+            attack: "Bash, Slam, Aegis Break. Converts shield into damage, picks up Taunt and Thorns at higher tiers.",
+            combo:  "FORTRESS (3 DEFEND dice). +5 Thorns and a bubble at climax.",
             difficulty: 2,
         },
         summoner: {
-            description: "A nature-attuned summoner who commands a growing forest of Spirits. Starts combat with one Spirit already on the field and a maximum cap of four minions — the only class that can field more than three. The Grove grows plants over time, but only while a minion is alive, creating a self-reinforcing loop: keep minions up, earn free summons, field overwhelming numbers.",
-            style: "Minion synergy. Swarm playstyle. Scales hard in longer fights; vulnerable in the first two turns before the grove blooms.",
-            minion: "Spirit — a nimble nature ally with a 30% chance to revive at half HP when killed.",
-            ability: "GROVE — three plots cycle Seed → Sprout → Bloom over three turns, growing only while a minion is alive. Tap any fully Bloomed plot to summon a free Spirit, then it restarts at Seed.",
-            attack: "Call → Rouse → Primal Roar — summons + damage that scales with living minions.",
-            combo:  "WILD PACK (2 MINION + 1 ATK) — all alive minions gain +3 HP and +3 damage permanently.",
+            description: "A nature commander whose Sacred Grove keeps growing free Spirits while any minion still stands.",
+            style: "Swarm scaling, weak first two turns before the grove blooms, the only class with a 4-minion cap.",
+            minion: "Spirit. 30% chance to revive at half HP when killed.",
+            ability: "Sacred Grove. 3 plots tick Seed, Sprout, Bloom while a minion lives. Tap a Bloomed plot for a free Spirit. With 4 minions out and all 3 plots Bloomed, tap any to APEX x2 every minion's HP and damage.",
+            attack: "Call, Rouse, Primal Roar. Summon plus damage that scales with living minions.",
+            combo:  "WILD PACK (2 MINION + 1 ATK). All alive minions gain +3 HP and +3 damage permanently.",
             difficulty: 3,
         },
     },
@@ -3063,13 +3063,13 @@ startQTE(type, x, y, callback) {
 
         overlay.querySelector('.char-detail-name').textContent = cls.name.toUpperCase();
         overlay.querySelector('.char-detail-desc').textContent = meta.description || cls.desc.replace(/\n/g, ' ');
-        overlay.querySelector('.char-detail-style').textContent = meta.style || '—';
-        overlay.querySelector('.char-detail-minion').textContent = meta.minion || '—';
-        overlay.querySelector('.char-detail-ability').textContent = meta.ability || '—';
+        overlay.querySelector('.char-detail-style').textContent = meta.style || '...';
+        overlay.querySelector('.char-detail-minion').textContent = meta.minion || '...';
+        overlay.querySelector('.char-detail-ability').textContent = meta.ability || '...';
         const attackEl = overlay.querySelector('.char-detail-attack');
-        if (attackEl) attackEl.textContent = meta.attack || '—';
+        if (attackEl) attackEl.textContent = meta.attack || '...';
         const comboEl = overlay.querySelector('.char-detail-combo');
-        if (comboEl) comboEl.textContent = meta.combo || '—';
+        if (comboEl) comboEl.textContent = meta.combo || '...';
 
         const difficulty = meta.difficulty || 0;
         const stars = [];
@@ -3297,7 +3297,7 @@ startQTE(type, x, y, callback) {
             // for a beat before the first combat opens).
             setTimeout(() => {
                 ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, 200,
-                    `APOSTATE — ${label.toUpperCase()} DISABLED`, '#ff3355');
+                    `APOSTATE. ${label.toUpperCase()} DISABLED`, '#ff3355');
             }, 600);
         }
 
@@ -3614,7 +3614,7 @@ triggerPhaseGlitch() {
                 mechData.minionDmgMult || mechData.damageNoiseRange
             ));
             mech.textContent = hasRealMech
-                ? `${mechData.label} — ${mechData.desc}`
+                ? `${mechData.label}: ${mechData.desc}`
                 : '';
             // First-time-per-sector hint card explaining the rule. Hints
             // is install-scoped, so this fires once per player across all
@@ -3881,7 +3881,7 @@ triggerPhaseGlitch() {
 
         // Short user-visible toast for lesser errors (non-showFullOverlay)
         if (!showFullOverlay && this.showHintToast) {
-            this.showHintToast('Glitch detected — turn recovered.', 2600);
+            this.showHintToast('Glitch detected. Turn recovered.', 2600);
         } else {
             this._showErrorOverlay(err);
         }
@@ -4030,15 +4030,15 @@ triggerPhaseGlitch() {
         if (!enemy) return;
         const PHASE_LINES = {
             2: {
-                'THE PANOPTICON':  'EYE LOCKED — ALL GAZE FOCUSED',
+                'THE PANOPTICON':  'EYE LOCKED. ALL GAZE FOCUSED',
                 'NULL_POINTER':    'SYSTEM REWRITE INITIATED',
                 'THE COMPILER':    'BUILD PIPELINE CORRUPTED',
                 'HIVE PROTOCOL':   'SWARM INDEX MAXIMIZED',
                 'TESSERACT PRIME': 'DIMENSION UNSEALED',
             },
             3: {
-                'THE PANOPTICON':  'BLIND PROTOCOL — SIGHT FAILING',
-                'NULL_POINTER':    'REALITY SHATTER — MODULES MUTED',
+                'THE PANOPTICON':  'BLIND PROTOCOL. SIGHT FAILING',
+                'NULL_POINTER':    'REALITY SHATTER. MODULES MUTED',
                 'THE COMPILER':    'STRUCTURAL COLLAPSE',
                 'HIVE PROTOCOL':   'ASSIMILATION PROTOCOL',
                 'TESSERACT PRIME': 'REALITY SPLIT',
@@ -4138,7 +4138,7 @@ triggerPhaseGlitch() {
             'Watcher Pod':      'tags a die and exposes your plan.',
             'Paper Pusher':     'calls in backup every few turns.',
             'Signal Jammer':    'reflects a portion of your output.',
-            'Cryo Bot':         'chill package — slows your tempo.',
+            'Cryo Bot':         'chill package. Slows your tempo.',
             'Data Leech':       'drains resources over time.',
             'Firewall Sentinel':'hard shield, punishes direct attacks.',
             'Cryo Cultivator':  'frost field. Keep moving.',
@@ -4150,15 +4150,15 @@ triggerPhaseGlitch() {
             'Magma Construct':  'massive HP pool. Chip it down.',
             'Core Guardian':    'retaliation specialist.',
             'Nullifier':        'shuts down abilities.',
-            'Foundry Golem':    'industrial armor — expect to dig.',
+            'Foundry Golem':    'industrial armor. Expect to dig.',
             'Slag Geyser':      'self-immolates for an AoE burn.',
             'Coolant Tech':     'heals allies every turn.',
             'Forge Welder':     'detonates on death.',
             'Slag Mech':        'cleaves across the whole line.',
-            'Ember Swarm':      'low HP each — but there are many.',
+            'Ember Swarm':      'low HP each, but there are many.',
             'Praetorian':       'imperial guard. Shield-disciplined.',
             'Sentinel Orb':     'high burst damage in bursts.',
-            'Phase Stalker':    'phases — half your hits miss.',
+            'Phase Stalker':    'phases between forms. Half your hits miss.',
             'Hive Warden':      'shields its allies.',
             'Phage Pod':        'detonates, damaging nearby enemies AND you.',
             'Keeper':           'buffs nearby hostiles.',
@@ -4167,7 +4167,7 @@ triggerPhaseGlitch() {
             'Queen Node':       'restores the hive every turn.',
             'Code Fragment':    'unstable syntax. Expect glitches.',
             'Fatal Error':      'critical signal. Lands HARD.',
-            'Null Pointer':     'dereferences to nowhere — unpredictable.',
+            'Null Pointer':     'dereferences to nowhere. Unpredictable.',
             'Null Priest':      'breaks shields on contact.',
             'Entropy':          'actions scramble randomly.',
             'Silent Observer':  'watches your dice. Punishes patterns.',
@@ -4181,7 +4181,7 @@ triggerPhaseGlitch() {
         const BY_KIND = {
             mirror:       'reflects your attacks back at you.',
             swarm:        'summons reinforcements.',
-            aoe_sweep:    'sweeping AoE — hits the whole line.',
+            aoe_sweep:    'sweeping AoE. Hits the whole line.',
             frost:        'applies chill on contact.',
             burrow:       'burrows and resurges.',
             clone:        'splits into copies.',
@@ -4192,7 +4192,7 @@ triggerPhaseGlitch() {
             detonator:    'explodes on death.',
             buffer:       'amplifies nearby hostiles.',
             shield_break: 'strips shields on hit.',
-            chaotic:      'random actions — never predictable.',
+            chaotic:      'random actions. Never predictable.',
             observer:     'tags a die, exposes your plan.'
         };
         const byKind = enemy.kind && BY_KIND[enemy.kind];
@@ -4586,7 +4586,7 @@ triggerSystemCrash() {
         if (!intent) return '';
         const val = (intent.effectiveVal !== undefined) ? intent.effectiveVal : intent.val;
         const name = enemy ? enemy.name : 'Enemy';
-        const indexLine = (total > 1) ? `<strong>${name} — Action ${index} of ${total}</strong>` : `<strong>${name}'s next move</strong>`;
+        const indexLine = (total > 1) ? `<strong>${name} · Action ${index} of ${total}</strong>` : `<strong>${name}'s next move</strong>`;
         let label = intent.type.toUpperCase();
         let body  = '';
 
@@ -4604,7 +4604,7 @@ triggerSystemCrash() {
             }
             case 'purge_attack':
                 label = `${ICONS.intentPurge} THE PURGE`;
-                body  = `Devastating single hit — <strong>${val} damage</strong>. Block it.`;
+                body  = `Devastating single hit. <strong>${val} damage</strong>. Block it.`;
                 break;
             case 'shield':
                 label = `${ICONS.intentShield} BARRIER`;
@@ -4617,8 +4617,8 @@ triggerSystemCrash() {
             case 'debuff':
                 label = `${ICONS.intentDebuff} VIRUS`;
                 body  = (val > 0)
-                    ? `Hits for <strong>${val} damage</strong> AND inflicts <strong>WEAK (2 turns)</strong> — your damage halved.`
-                    : `Inflicts <strong>WEAK (2 turns)</strong> — your damage halved.`;
+                    ? `Hits for <strong>${val} damage</strong> AND inflicts <strong>WEAK (2 turns)</strong>. Your damage is halved.`
+                    : `Inflicts <strong>WEAK (2 turns)</strong>. Your damage is halved.`;
                 break;
             case 'heal':
                 label = `${ICONS.intentHeal} REPAIR`;
@@ -4650,11 +4650,11 @@ triggerSystemCrash() {
                 break;
             case 'reality_overwrite':
                 label = `${ICONS.intentReality} REALITY SHIFT`;
-                body  = `Inverts the battlefield. Boss-only mechanic — controls behave erratically.`;
+                body  = `Inverts the battlefield. Boss-only mechanic. Controls behave erratically.`;
                 break;
             case 'aoe_sweep':
                 label = `${ICONS.intentMultiAttack} SWEEP`;
-                body  = `Wide arc — strikes you AND every minion for <strong>${val} damage each</strong>. Spread or shield your allies.`;
+                body  = `Wide arc. Strikes you AND every minion for <strong>${val} damage each</strong>. Spread or shield your allies.`;
                 break;
             case 'mirror_attack':
                 label = `${ICONS.intentAttack} MIRROR STRIKE`;
@@ -4662,11 +4662,11 @@ triggerSystemCrash() {
                 break;
             case 'frost_aoe':
                 label = `${ICONS.intentMultiAttack} FROST WAVE`;
-                body  = `Freezing AoE — hits everyone for <strong>${val} damage</strong> and applies <strong>WEAK</strong> (your damage halved).`;
+                body  = `Freezing AoE. Hits everyone for <strong>${val} damage</strong> and applies <strong>WEAK</strong> (your damage halved).`;
                 break;
             case 'immolate':
                 label = `${ICONS.intentMultiAttack} IMMOLATE`;
-                body  = `Self-destructs in flames for <strong>${val} AoE damage</strong>. Telegraphed the previous turn — block hard.`;
+                body  = `Self-destructs in flames for <strong>${val} AoE damage</strong>. Telegraphed the previous turn, block hard.`;
                 break;
             case 'charging_immolate':
                 label = `${ICONS.intentCharge} CHARGING IMMOLATE`;
@@ -4723,7 +4723,7 @@ triggerSystemCrash() {
         // Honest flag for randomized boss intents (e.g. NULL_POINTER picks a random target).
         let randomLine = '';
         if (intent.random || (enemy && enemy.name === 'NULL_POINTER' && intent.type === 'attack')) {
-            randomLine = `\n<span style="color:#bc13fe;">⚡ Random target — picks a different unit each time.</span>`;
+            randomLine = `\n<span style="color:#bc13fe;">⚡ Random target. Picks a different unit each time.</span>`;
         }
         if (enemy && enemy.realityOverwritten) {
             randomLine += `\n<span style="color:#ff00ff;">⚠ Reality Shift active: this attack may behave unpredictably.</span>`;
@@ -4742,7 +4742,7 @@ triggerSystemCrash() {
             if (enemy && enemy.hasEffect && enemy.hasEffect('constrict')) reasons.push('CONSTRICT');
             if (this.player && this.player.hasEffect && this.player.hasEffect('vulnerable')) reasons.push('VULNERABLE (+1)');
             if (this.player && this.player.hasEffect && this.player.hasEffect('frail')) reasons.push('FRAIL (+30%)');
-            const why = reasons.length ? ` — ${reasons.join(', ')}` : '';
+            const why = reasons.length ? ` (${reasons.join(', ')})` : '';
             modLine = `\n<small style="color:#888;">(Base ${intent.val}, modified ${sign}${delta}${why})</small>`;
         }
 
@@ -4811,28 +4811,28 @@ triggerSystemCrash() {
             }
             case 'armor': {
                 const hits = Math.max(0, Math.round(eff.val || 0));
-                body = `<strong>Armor Plated</strong> — takes 90% less damage. Breaks after <strong>${hits}</strong> more hit${hits === 1 ? '' : 's'}.`;
+                body = `<strong>Armor Plated</strong>. Takes 90% less damage. Breaks after <strong>${hits}</strong> more hit${hits === 1 ? '' : 's'}.`;
                 break;
             }
             case 'sig_thorns':
-                body = `Sentinel thorns active — reflects damage back to attackers this turn.`;
+                body = `Sentinel thorns active. Reflects damage back to attackers this turn.`;
                 break;
             case 'tact_primed': {
                 const bonus = Math.max(0, Math.round(eff.val || 0));
-                body = `<strong>Attack Primed</strong> — your next ATTACK die deals <strong>+${bonus} damage</strong>. Consumed on the next attack.`;
+                body = `<strong>Attack Primed</strong>. Your next ATTACK die deals <strong>+${bonus} damage</strong>. Consumed on the next attack.`;
                 break;
             }
             case 'aegis_primed':
-                body = `<strong>Aegis Primed</strong> — the next enemy attack is fully nullified. Consumes all 3 Sentinel plates.`;
+                body = `<strong>Aegis Primed</strong>. The next enemy attack is fully nullified. Consumes all 3 Sentinel plates.`;
                 break;
             case 'firewall':
                 body = `<strong>Firewall</strong>: the first unblocked hit this turn is capped at 20 damage.`;
                 break;
             case 'blood_tier':
-                body = `<strong>Bloodstalker Hunt tier ${eff.val || 1}</strong> — recent kills have empowered your next strike.`;
+                body = `<strong>Bloodstalker Hunt tier ${eff.val || 1}</strong>. Recent kills have empowered your next strike.`;
                 break;
             case 'shielded':
-                body = `<strong>Invincible</strong> — all damage blocked while shields are active (${eff.duration} turn${eff.duration === 1 ? '' : 's'} left).`;
+                body = `<strong>Invincible</strong>. All damage blocked while shields are active (${eff.duration} turn${eff.duration === 1 ? '' : 's'} left).`;
                 break;
             // Elite affix synthesized entries — quick read of the affix behaviour.
             case 'brittle':       body = `<strong>Brittle</strong>: deals +25% damage but takes +50% damage.`; break;
@@ -5759,7 +5759,7 @@ triggerSystemCrash() {
             }
 
             const tipPrefix = node.shifting ? 'SHIFTING · ' : '';
-            const tipText = tipPrefix + node.type.toUpperCase() + (node.status === 'available' ? ' — Click to enter' : '');
+            const tipText = tipPrefix + node.type.toUpperCase() + (node.status === 'available' ? '. Click to enter' : '');
             el.onmouseenter = (e) => TooltipMgr.show(tipText, e.clientX, e.clientY);
             el.onmouseleave = () => TooltipMgr.hide();
 
@@ -5925,7 +5925,7 @@ triggerSystemCrash() {
             // toast and auto-complete so the player stays on the map.
             if (this._customDisableRest) {
                 ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
-                    'REST DENIED — MERCILESS', '#ff3355');
+                    'REST DENIED. MERCILESS', '#ff3355');
                 AudioMgr.playSound('defend');
                 this.completeCurrentNode();
                 this.renderMap();
@@ -6185,7 +6185,7 @@ triggerSystemCrash() {
         if (ParticleSys.createShockwave) ParticleSys.createShockwave(cx, cy, '#ff0055', 50);
         ParticleSys.createFloatingText(cx, cy - 40, pact.name, '#ff0055',
             { fontSize: 48, vy: -1.4, life: 2.2 });
-        ParticleSys.createFloatingText(cx, cy + 30, 'SIGNED — NO TAKE-BACKS', '#ffd76a',
+        ParticleSys.createFloatingText(cx, cy + 30, 'SIGNED. NO TAKE-BACKS', '#ffd76a',
             { fontSize: 22, vy: -0.7, life: 1.8 });
         if (this.shake) this.shake(22);
         if (this.haptic) this.haptic('heavy');
@@ -6780,8 +6780,8 @@ triggerSystemCrash() {
         grid.classList.add(buzzClass);
         // Big floating banner over the shop area — clear success/fail cue.
         const banner = won
-            ? `HACK SUCCESS — ${affectedCount} PRICES −25%`
-            : `HACK FAILED — PRICES DOUBLED`;
+            ? `HACK SUCCESS. ${affectedCount} PRICES −25%`
+            : `HACK FAILED. PRICES DOUBLED`;
         ParticleSys.createFloatingText(540, 780, banner, won ? '#00ff99' : '#ff3355');
         if (this.haptic) this.haptic(won ? 'heavy' : 'warn');
 
@@ -6824,7 +6824,7 @@ triggerSystemCrash() {
             resultEl.textContent = '';
             resultEl.className = 'hack-result';
             if (subEl) subEl.textContent = hard
-                ? 'FIREWALL HARDENED — larger maze, one touch = lockout.'
+                ? 'FIREWALL HARDENED. Larger maze, one touch = lockout.'
                 : 'Reach the exit before the timer expires. One wall touch = lockout.';
             if (statusEl) { statusEl.textContent = 'RUN'; statusEl.className = 'hack-status is-play'; }
             if (timerWrap) timerWrap.classList.remove('is-danger');
@@ -7301,13 +7301,13 @@ triggerSystemCrash() {
             if (localStorage.getItem('mvm_gameCompleted') === 'true') {
                 pills.push('<span class="intel-profile-pill win">SECTOR 5 CLEARED</span>');
             } else {
-                pills.push('<span class="intel-profile-pill locked">SECTOR 5 — UNTAKEN</span>');
+                pills.push('<span class="intel-profile-pill locked">SECTOR 5 UNTAKEN</span>');
             }
             if (localStorage.getItem('mvm_archivist_slain') === 'true') {
                 const bestArch = parseInt(localStorage.getItem('mvm_archivist_best_asc') || '0', 10) || 0;
                 pills.push(`<span class="intel-profile-pill arch">ARCHIVIST · A${bestArch}</span>`);
             } else if (localStorage.getItem('mvm_gameCompleted') === 'true') {
-                pills.push('<span class="intel-profile-pill locked">ARCHIVIST — UNCONFRONTED</span>');
+                pills.push('<span class="intel-profile-pill locked">ARCHIVIST UNCONFRONTED</span>');
             }
             const challengeRuns = (() => {
                 try { return JSON.parse(localStorage.getItem('mvm_challenge_history') || '[]').length; }
@@ -7450,7 +7450,7 @@ triggerSystemCrash() {
         //   3 — intent move list
         //   4 — full dossier (all of the above + nemesis flair)
         const sectors = (record.sectors || []).join(', ');
-        const firstSeen = record.firstSeen ? new Date(record.firstSeen).toLocaleDateString() : '—';
+        const firstSeen = record.firstSeen ? new Date(record.firstSeen).toLocaleDateString() : '...';
         const subtitle = meta && meta.subtitle ? meta.subtitle : (meta && meta.lore ? meta.lore : '');
         const intents = (tier.reveal >= 3) ? this._dossierIntentSummary(meta) : '';
         const cap = tier.next ? `${count} / ${tier.next}` : 'MAX';
@@ -7521,7 +7521,7 @@ triggerSystemCrash() {
                     { label: 'TOTAL', value: history.length },
                     { label: 'WINS',  value: `${wins} (${winRate}%)` },
                     { label: 'LOSSES', value: losses },
-                    { label: 'FASTEST WIN', value: fastest != null ? `${fastest}T` : '—' }
+                    { label: 'FASTEST WIN', value: fastest != null ? `${fastest}T` : '...' }
                 ];
                 stats.forEach(s => {
                     const cell = document.createElement('div');
@@ -7579,7 +7579,7 @@ triggerSystemCrash() {
             if (empty) {
                 empty.style.display = '';
                 empty.textContent = (history.length === 0)
-                    ? 'No runs logged yet. Every run — win or loss — appears here for review.'
+                    ? 'No runs logged yet. Every run, win or loss, appears here for review.'
                     : 'No runs match this filter yet.';
             }
             return;
@@ -7590,8 +7590,8 @@ triggerSystemCrash() {
             const won = run.result === 'win';
             row.className = 'intel-chronicle-row ' + (won ? 'run-won' : 'run-lost');
             const when = run.endedAt ? new Date(run.endedAt) : null;
-            const whenStr = when ? `${when.toLocaleDateString()}` : '—';
-            const dur = run.durationSeconds ? `${Math.floor(run.durationSeconds/60)}m ${run.durationSeconds%60}s` : '—';
+            const whenStr = when ? `${when.toLocaleDateString()}` : '...';
+            const dur = run.durationSeconds ? `${Math.floor(run.durationSeconds/60)}m ${run.durationSeconds%60}s` : '...';
             row.innerHTML = `
                 <div class="intel-chronicle-result">${won ? 'WIN' : 'LOSS'}</div>
                 <div class="intel-chronicle-main">
@@ -7617,7 +7617,7 @@ triggerSystemCrash() {
         // the database length changes substantially.
         return [
             { title: 'I · THE FALL',         range: [0, 8],        hint: 'Decrypt to recover how it ended.' },
-            { title: 'II · THE NEW WORLD',   range: [8, 16],       hint: 'How the machines rebuilt — fragments only.' },
+            { title: 'II · THE NEW WORLD',   range: [8, 16],       hint: 'How the machines rebuilt. Fragments only.' },
             { title: 'III · THE RESISTANCE', range: [16, 24],      hint: 'What hides in the analog gaps.' },
             { title: 'IV · THE CLASSES',     range: [24, 32],      hint: 'Who you are, and who you were.' },
             { title: 'V · THE TRUTH',        range: [32, total],   hint: 'For those who reach the end.' }
@@ -8369,7 +8369,7 @@ async startCombat(type) {
                 mechPill.textContent = hasRealMech ? (sectorMech.label || '') : '';
                 if (hasRealMech && sectorMech.desc) {
                     const tipText = `${sectorMech.label}\n${sectorMech.desc}`;
-                    mechPill.title = `${sectorMech.label} — ${sectorMech.desc}`;
+                    mechPill.title = `${sectorMech.label}: ${sectorMech.desc}`;
                     mechPill.onmouseenter = (e) => TooltipMgr.show(tipText, e.clientX, e.clientY);
                     mechPill.onmouseleave = () => TooltipMgr.hide();
                     mechPill.ontouchstart = (e) => {
@@ -9545,7 +9545,7 @@ async startTurn() {
             });
             if (sealedCount > 0) {
                 ParticleSys.createFloatingText(this.player.x, this.player.y - 130,
-                    `ARCHIVED — ${sealedCount} DIE LOCKED`, '#ffd76a');
+                    `ARCHIVED. ${sealedCount} DIE LOCKED`, '#ffd76a');
             }
             this.player._archivedDieType = null;
         }
@@ -14022,7 +14022,7 @@ drawEffects() {
             if (this.currentState !== STATE.COMBAT_WIN) return;
             if (skipEliteReward) {
                 ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
-                    'DARK CONTRACT — NO REWARD', '#ff3355');
+                    'DARK CONTRACT. NO REWARD', '#ff3355');
                 AudioMgr.playSound('defend');
                 this.completeCurrentNode();
                 this.changeState(STATE.MAP);
@@ -14098,7 +14098,7 @@ drawEffects() {
             const consolation = 25;
             this.techFragments += consolation;
             ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
-                `RELICS MAXED — +${consolation} FRAG`, COLORS.GOLD);
+                `RELICS MAXED. +${consolation} FRAG`, COLORS.GOLD);
             this.completeCurrentNode();
             const wasBoss = this.bossDefeated;
             if (wasBoss && !this.challengeMode && !this.archiveMode) {
@@ -14185,7 +14185,7 @@ drawEffects() {
                     if (progress) {
                         const missing = progress.ids.filter(id => !withPick.has(id)).length;
                         if (missing > 0) {
-                            synergyHint += `<div class="reward-synergy-hint" style="opacity:0.7">◇ ${progress.name} — needs ${missing} more</div>`;
+                            synergyHint += `<div class="reward-synergy-hint" style="opacity:0.7">◇ ${progress.name}, needs ${missing} more</div>`;
                         }
                     }
                 }
@@ -14405,10 +14405,10 @@ drawEffects() {
         };
         const bestCard = bestDealt
             ? { title: 'BEST HIT', body: `${bestDealt.amount} on ${bestDealt.targetName}` }
-            : { title: 'BEST HIT', body: '—' };
+            : { title: 'BEST HIT', body: '...' };
         const hurtCard = biggest
             ? { title: 'BIGGEST BLOW', body: `${biggest.amount} from ${biggest.sourceName || killer}` }
-            : { title: 'BIGGEST BLOW', body: '—' };
+            : { title: 'BIGGEST BLOW', body: '...' };
 
         // Best-run comparison — sector only. Turn count was tracked too,
         // but "more turns" doesn't read as "better" on a death screen
@@ -14455,11 +14455,11 @@ drawEffects() {
             } else if (manaSpent === 0 && turnsSurvived >= 3) {
                 lesson = 'You spent 0 Mana this run. Skill dice (Meteor, Earthquake) can finish fights you\'re losing.';
             } else if (rerollsUsed === 0 && turnsSurvived >= 3) {
-                lesson = 'You never rerolled. A bad hand isn\'t fate — reroll to chase a combo.';
+                lesson = 'You never rerolled. A bad hand isn\'t fate. Reroll to chase a combo.';
             } else if (relicsHeld === 0) {
                 lesson = 'Zero relics at time of death. Events + shops pay out more than they cost most of the time.';
             } else if (turnsSurvived >= 12) {
-                lesson = 'Long fight — next run, try picking up damage-dealers earlier to finish faster.';
+                lesson = 'Long fight. Next run, try picking up damage-dealers earlier to finish faster.';
             } else {
                 lesson = 'Every death is a read. Note which class + relics didn\'t click and try a different build.';
             }
@@ -21085,7 +21085,7 @@ drawEntity(entity) {
                 this.rollDice(2);
 
                 text.classList.add('tutorial-transparent');
-                text.innerHTML = "TWO ATTACKS — <strong>DOUBLE STRIKE</strong> COMBO. BOTH MODULES GLOW. DESTROY THE TARGET.";
+                text.innerHTML = "TWO ATTACKS. <strong>DOUBLE STRIKE</strong> COMBO. BOTH MODULES GLOW. DESTROY THE TARGET.";
 
                 overlay.classList.add('hidden');
                 spotlight.classList.add('hidden');

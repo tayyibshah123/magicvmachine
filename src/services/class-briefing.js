@@ -10,10 +10,10 @@
 
 import { Analytics } from './analytics.js';
 
-// Bumped to _v2 alongside the briefing-copy rewrite so existing players who
-// already dismissed the old (now-inaccurate) briefings see the corrected
-// ability + signature descriptions on their next combat.
-const KEY_SEEN = 'mvm_class_briefing_seen_v2';
+// Bumped to _v3 alongside the post-class-update copy rewrite so existing
+// players who already dismissed the old briefings see the corrected
+// ability + signature descriptions on their next combat with each class.
+const KEY_SEEN = 'mvm_class_briefing_seen_v3';
 
 // Per-class copy. `ability` describes the class ability widget; `signature`
 // describes the signature die. Matches the text in constants.js PLAYER_CLASSES
@@ -23,39 +23,39 @@ const KEY_SEEN = 'mvm_class_briefing_seen_v2';
 const COPY = {
     tactician: {
         headline: 'TACTICIAN',
-        pillars: 'Reroll-heavy control.',
-        ability: 'COMMAND TRACK fills as you spend dice. Spend 3 pips for +1 reroll, +8 shield, or a primed +5 ATTACK.',
-        signature: 'Volley: 7 DMG + a bonus reroll next turn.'
+        pillars: 'Patient utility. Adapts every turn.',
+        ability: 'COMMAND TRACK fills 1 pip per die used. Spend 3 pips for +1 reroll, +8 shield, or +5 damage on your next ATTACK.',
+        signature: 'Volley: 7 damage plus a bonus reroll next turn.'
     },
     arcanist: {
         headline: 'ARCANIST',
-        pillars: 'Big mana, bigger skills.',
-        ability: 'GLYPH WHEEL cycles Fire / Ice / Lightning. Tap when your pick is lit — once per turn.',
-        signature: 'Spark: 6 DMG + 1 Mana.'
+        pillars: 'Big mana economy. Timing-driven payoff.',
+        ability: 'GLYPH WHEEL cycles Fire, Ice, Lightning. Tap when your pick is lit. Once per turn.',
+        signature: 'Spark: 6 damage and +1 mana.'
     },
     bloodstalker: {
         headline: 'BLOODSTALKER',
-        pillars: 'Pay in blood. Burst hard.',
-        ability: 'BLOOD POOL fills as you lose HP. When full, pay HP for a Minor, Major, or Grand Tribute.',
-        signature: 'Bite: 8 DMG + heal 3 HP.'
+        pillars: 'HP as resource. Lifesteal sustain.',
+        ability: 'BLOOD POOL fills from damage taken. At full, spend HP for Minor (reroll), Major (20 damage + Bleed), or Grand Tribute (40 damage + Bleed + mana + rerolls).',
+        signature: 'Bite: 8 damage and heal 3 HP.'
     },
     annihilator: {
         headline: 'ANNIHILATOR',
-        pillars: 'Glass cannon.',
-        ability: 'REACTOR builds heat per die used. Vent yellow for OVERCLOCK ×1.4 — vent red for a MELTDOWN AoE (costs HP).',
-        signature: 'Blast: 12 DMG that ignores Shield.'
+        pillars: 'Glass cannon. Heat or pay HP for rerolls.',
+        ability: 'OVERHEAT CORE builds heat per die used. Vent yellow for x1.4 next attack. Vent red for 20 AoE and 5 self damage.',
+        signature: 'Blast: 12 damage that ignores shield.'
     },
     sentinel: {
         headline: 'SENTINEL',
-        pillars: 'Wall. Absorb. Retaliate.',
-        ability: 'AEGIS PLATES fill from gained shield (6 per plate). At 3 plates the next enemy hit is fully nullified.',
-        signature: 'Bash: 10 Shield + 4 DMG.'
+        pillars: 'Wall, absorb, retaliate.',
+        ability: 'AEGIS PLATES bank 1 plate per 6 shield gained, across turns. At 3 plates the next enemy attack is fully nullified.',
+        signature: 'Bash: 10 shield and 4 damage.'
     },
     summoner: {
         headline: 'SUMMONER',
-        pillars: 'Your swarm fights for you.',
-        ability: 'SACRED GROVE — summons grow plots. Tap a Bloomed plot for a free Spirit, or APEX ×2 every minion when the grove is full + 4 minions out.',
-        signature: 'Call: summon a Spirit + 4 DMG.'
+        pillars: 'Swarm scaling. Free Spirits while minions live.',
+        ability: 'SACRED GROVE plots tick Seed, Sprout, Bloom while a minion lives. Tap a Bloomed plot for a free Spirit, or APEX x2 every minion when the grove is full and 4 minions are out.',
+        signature: 'Call: summon a Spirit and 4 damage.'
     }
 };
 

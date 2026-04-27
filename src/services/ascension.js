@@ -24,7 +24,7 @@ export const ASCENSION_TWISTS = [
     { level: 14, name: 'Conservation Law',desc: 'Overheal becomes damage over time.',              effect: { overhealBecomesDot: true } },
     { level: 15, name: 'Mirror World',    desc: 'Enemies copy the player\'s last-played die.',     effect: { enemyCopiesLastDie: true } },
     { level: 16, name: 'Endless Loop',    desc: 'Boss Phase 3 lasts two extra turns.',             effect: { bossPhase3Bonus: 2 } },
-    { level: 17, name: 'Aurelia\'s Curse',desc: 'All chance rolls are taken twice — worse wins.',  effect: { doubleRollWorse: true } },
+    { level: 17, name: 'Aurelia\'s Curse',desc: 'All chance rolls are taken twice. Worse roll wins.',  effect: { doubleRollWorse: true } },
     { level: 18, name: 'Dark Contract',   desc: 'No rewards on elite kills.',                      effect: { noEliteRewards: true } },
     { level: 19, name: 'Apostate',        desc: 'Lose one passive meta-upgrade effect per run.',   effect: { loseOneMeta: true } },
     { level: 20, name: 'The Final Archive',desc: 'Archivist (Sector X) becomes a required boss.',  effect: { forceArchivist: true } },

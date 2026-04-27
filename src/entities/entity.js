@@ -702,7 +702,7 @@ class Entity {
             // matters but a single huge overheal doesn't one-shot the player.
             const tick = Math.max(1, Math.min(8, Math.ceil(overheal / 4)));
             this.addEffect('bleed', 3, tick, '🩸',
-                `Overheal sickness — ${tick} DMG at end of turn.`, 'OVERHEAL ROT');
+                `Overheal sickness. ${tick} DMG at end of turn.`, 'OVERHEAL ROT');
             ParticleSys.createFloatingText(this.x, this.y - 120, `OVERHEAL → ROT ${tick}`, '#ff3333');
         }
     }

@@ -554,7 +554,7 @@ export const ClassAbility = {
                     // APEX consumes the entire canopy — every plot drains
                     // back to seed stage regardless of its current growth.
                     for (let i = 0; i < state.plots.length; i++) state.plots[i] = 0;
-                    ParticleSys.createFloatingText(p.x, p.y - 100, `GROVE APEX — ×2 EMPOWERS ${buffed} ALLIES`, color);
+                    ParticleSys.createFloatingText(p.x, p.y - 100, `GROVE APEX. x2 EMPOWERS ${buffed} ALLIES`, color);
                     ParticleSys.createShockwave(p.x, p.y, color, 48);
                     if (Game.shake) Game.shake(16);
                     if (Game.haptic) Game.haptic('heavy');
@@ -564,7 +564,7 @@ export const ClassAbility = {
                 // At max but not apex — don't consume the bloom. Let the
                 // player keep building toward the three-plot Apex condition.
                 if (atMax) {
-                    ParticleSys.createFloatingText(p.x, p.y - 80, 'GROVE FULL — NEED FULL BLOOM', '#88eaff');
+                    ParticleSys.createFloatingText(p.x, p.y - 80, 'GROVE FULL. NEED FULL BLOOM', '#88eaff');
                     AudioMgr.playSound('defend');
                     break;
                 }
@@ -698,7 +698,7 @@ export const ClassAbility = {
                     <div class="ca-actions">
                         <button class="ca-act" data-action="tact-reroll" title="Spend 3 pips for +1 reroll">${ICONS.reroll}</button>
                         <button class="ca-act" data-action="tact-shield" title="Spend 3 pips for +${CFG.tactician.shieldGain} shield">${ICONS.defend}</button>
-                        <button class="ca-act" data-action="tact-dmg" title="Spend 3 pips — next ATTACK +${CFG.tactician.attackBonus}">${ICONS.attack}</button>
+                        <button class="ca-act" data-action="tact-dmg" title="Spend 3 pips. Next ATTACK +${CFG.tactician.attackBonus}">${ICONS.attack}</button>
                     </div>`;
             case 'arcanist':
                 // Title tucked top-right so the conduit trail + vortex own the left/center.
@@ -725,17 +725,17 @@ export const ClassAbility = {
                         </span>
                         <div class="ca-tributes">
                             <button class="ca-tribute ca-tribute-minor" data-action="tribute-minor"
-                                title="Minor Tribute — pay 5% Max HP for +1 reroll.">
+                                title="Minor Tribute. Pay 5% Max HP for +1 reroll.">
                                 <span class="ca-tribute-pips" aria-hidden="true">${drop}</span>
                                 <span class="ca-tribute-cost">5%</span>
                             </button>
                             <button class="ca-tribute ca-tribute-major" data-action="tribute-major"
-                                title="Major Tribute — pay 15% Max HP. Deal ${CFG.bloodstalker.majorAttack} DMG and apply ${CFG.bloodstalker.majorBleed} Bleed (3 turns).">
+                                title="Major Tribute. Pay 15% Max HP. Deal ${CFG.bloodstalker.majorAttack} DMG and apply ${CFG.bloodstalker.majorBleed} Bleed (3 turns).">
                                 <span class="ca-tribute-pips" aria-hidden="true">${drop}${drop}</span>
                                 <span class="ca-tribute-cost">15%</span>
                             </button>
                             <button class="ca-tribute ca-tribute-grand" data-action="tribute-grand"
-                                title="Grand Tribute — pay 30% Max HP. Deal ${CFG.bloodstalker.grandAttack} DMG, apply ${CFG.bloodstalker.grandBleed} Bleed (3 turns), +${CFG.bloodstalker.grandManaGain} Mana, +${CFG.bloodstalker.grandRerolls} rerolls.">
+                                title="Grand Tribute. Pay 30% Max HP. Deal ${CFG.bloodstalker.grandAttack} DMG, apply ${CFG.bloodstalker.grandBleed} Bleed (3 turns), +${CFG.bloodstalker.grandManaGain} Mana, +${CFG.bloodstalker.grandRerolls} rerolls.">
                                 <span class="ca-tribute-pips" aria-hidden="true">${drop}${drop}${drop}</span>
                                 <span class="ca-tribute-cost">30%</span>
                             </button>
@@ -1016,8 +1016,8 @@ export const ClassAbility = {
         // references don't break mid-deploy, but it tracks apex now.
         el.classList.toggle('amplify-ready', isApexReady);
         el.classList.toggle('apex-ready', isApexReady);
-        const apexTip  = 'GROVE APEX READY — bloom a plot to ×2 every minion (consumes the canopy).';
-        const fullTip  = 'MINIONS AT MAX — complete the canopy (3/3 blooms) to unleash APEX ×2.';
+        const apexTip  = 'GROVE APEX READY. Bloom a plot to x2 every minion (consumes the canopy).';
+        const fullTip  = 'MINIONS AT MAX. Complete the canopy (3/3 blooms) to unleash APEX x2.';
         const spawnTip = 'Bloom a plot to free-summon a Spirit.';
         // Grove growth = count of bloomed plots (0..3). Drives the tree
         // silhouette's brightness so the center tree visibly "grows" with
