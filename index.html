@@ -154,8 +154,8 @@
                 <div class="spacer"></div>
                 <!-- CHANGED ID: btn-load-save -->
                 <button id="btn-load-save" class="btn primary hidden" style="border-color: var(--neon-gold); color: var(--neon-gold);">RESUME RUN</button>
-                
-                <button id="btn-start" class="btn primary">INITIATE RUN</button>
+
+                <button id="btn-start" class="btn primary"><span id="btn-start-label">INITIATE RUN</span><span id="btn-start-warn" class="btn-start-warn hidden">DISCARDS CURRENT RUN</span></button>
                 <button id="btn-challenge" class="btn secondary neon-border-gold">CHALLENGE <span id="challenge-status" style="opacity:0.7; font-size:0.85em;"></span></button>
                 <button id="btn-archive" class="btn secondary neon-border-gold hidden">ARCHIVE <span id="archive-status" style="opacity:0.7; font-size:0.85em;"></span></button>
                 <button id="btn-intel" class="btn secondary">INTEL</button>
@@ -405,6 +405,8 @@
                         </div>
                     </div>
 
+                    <button id="btn-loadout" class="btn-icon" aria-label="Loadout summary" title="Loadout — relics, dice, ascension, pacts"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3 L19 3 L19 21 L5 21 Z" fill="currentColor" fill-opacity="0.14"/><path d="M9 3 L9 6 L15 6 L15 3"/><path d="M8 11 L16 11 M8 14 L16 14 M8 17 L13 17"/></svg></button>
+
                     <button id="btn-combat-log" class="btn-icon" aria-label="Combat Log"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4 L19 4 L19 20 L5 20 Z" fill="currentColor" fill-opacity="0.12"/><path d="M8 8 L16 8 M8 12 L16 12 M8 16 L13 16"/></svg></button>
                     <button id="btn-settings" class="btn-icon" aria-label="Settings"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5 L20 7 L20 17 L12 21.5 L4 17 L4 7 Z" fill="currentColor" fill-opacity="0.14"/><circle cx="12" cy="12" r="4.5" fill="none"/><path d="M12 5.5 L12 7.5 M12 16.5 L12 18.5 M5.5 12 L7.5 12 M16.5 12 L18.5 12 M7.6 7.6 L9 9 M15 15 L16.4 16.4 M16.4 7.6 L15 9 M7.6 16.4 L9 15" stroke-width="1.4"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg></button>
                 </div>
@@ -491,6 +493,20 @@
                 <p class="pact-subtitle">Each pact stays for the rest of the gauntlet. Pick once, live with it.</p>
                 <div id="pact-options" class="pact-options"></div>
                 <button id="btn-pact-cancel" class="btn secondary" style="margin-top: 18px;">CANCEL — RETURN TO REST</button>
+            </div>
+
+            <!-- LOADOUT modal (audit F8) — full mid-run summary. Toggled via
+                 the loadout icon in the combat top-bar. Dismissed by tapping
+                 the close button or anywhere on the dim backdrop. -->
+            <div id="loadout-modal" class="loadout-modal hidden" role="dialog" aria-modal="true" aria-labelledby="loadout-title">
+                <div class="loadout-backdrop" id="loadout-backdrop"></div>
+                <div class="loadout-panel glass-panel">
+                    <div class="loadout-header">
+                        <h2 id="loadout-title" class="neon-text-blue">LOADOUT</h2>
+                        <button id="btn-loadout-close" class="btn-icon" aria-label="Close loadout">✕</button>
+                    </div>
+                    <div id="loadout-body" class="loadout-body"></div>
+                </div>
             </div>
 
 	<!-- Tutorial Dark Background -->

@@ -421,6 +421,31 @@ const Game = {
         attachButtonEvent('btn-resume', () => d.getElementById('modal-settings').classList.add('hidden'));
         if (!Game._origRandom) Game._origRandom = Math.random;
         attachButtonEvent('btn-start', () => {
+            // Audit F7 — when a save exists, the first tap warns that
+            // pressing again will discard it. Second tap proceeds. Stops
+            // the player from accidentally trashing their in-progress run
+            // by misreading INITIATE RUN as RESUME.
+            const haveSave = !!localStorage.getItem('mvm_save_v1');
+            if (haveSave && !this._initiateConfirm) {
+                this._initiateConfirm = true;
+                const label = document.getElementById('btn-start-label');
+                const warn = document.getElementById('btn-start-warn');
+                if (label) label.textContent = 'TAP AGAIN TO CONFIRM';
+                if (warn) warn.classList.remove('hidden');
+                clearTimeout(this._initiateConfirmTimer);
+                this._initiateConfirmTimer = setTimeout(() => {
+                    this._initiateConfirm = false;
+                    if (label) label.textContent = 'INITIATE RUN';
+                    if (warn) warn.classList.add('hidden');
+                }, 4000);
+                return;
+            }
+            this._initiateConfirm = false;
+            clearTimeout(this._initiateConfirmTimer);
+            const startLabelEl = document.getElementById('btn-start-label');
+            if (startLabelEl) startLabelEl.textContent = 'INITIATE RUN';
+            const startWarnEl = document.getElementById('btn-start-warn');
+            if (startWarnEl) startWarnEl.classList.add('hidden');
             // Standard run — make sure no Challenge state leaks from a prior
             // attempt (active flag, challengeMode toggle).
             Math.random = Game._origRandom;
@@ -798,6 +823,10 @@ const Game = {
         attachButtonEvent('btn-tut-next', () => this.nextTutorial());
         attachButtonEvent('btn-tut-prev', () => this.prevTutorial());
         attachButtonEvent('btn-leave-shop', () => this.leaveShop());
+        attachButtonEvent('btn-loadout', () => this.openLoadout());
+        attachButtonEvent('btn-loadout-close', () => this.closeLoadout());
+        const _loadoutBackdrop = d.getElementById('loadout-backdrop');
+        if (_loadoutBackdrop) _loadoutBackdrop.addEventListener('click', () => this.closeLoadout());
         attachButtonEvent('btn-rest-sleep', () => this.handleRest('sleep'));
         attachButtonEvent('btn-rest-meditate', () => this.handleRest('meditate'));
         attachButtonEvent('btn-rest-tinker', () => this.handleRest('tinker'));
@@ -5467,6 +5496,20 @@ triggerSystemCrash() {
         if (archiveBtn) {
             const unlocked = localStorage.getItem('mvm_gameCompleted') === 'true';
             archiveBtn.classList.toggle('hidden', !unlocked);
+            // First-reveal shimmer — when the player has unlocked Archive but
+            // has never seen the menu pop up since, paint a one-time glow +
+            // hint so the new entry isn't silently appearing in the menu list.
+            if (unlocked) {
+                const seenArchive = localStorage.getItem('mvm_archive_menu_seen') === '1';
+                if (!seenArchive) {
+                    archiveBtn.classList.add('archive-just-unlocked');
+                    setTimeout(() => archiveBtn.classList.remove('archive-just-unlocked'), 6000);
+                    try { localStorage.setItem('mvm_archive_menu_seen', '1'); } catch (_) {}
+                    if (typeof Hints !== 'undefined' && Hints.trigger) {
+                        Hints.trigger('first_archive_unlock');
+                    }
+                }
+            }
             const statusArch = document.getElementById('archive-status');
             if (unlocked && statusArch) {
                 // Surface the latest Archive run's score — a single fight, so
@@ -5854,6 +5897,10 @@ triggerSystemCrash() {
                 const remaining = PACTS.filter(p => !this.activePacts || !this.activePacts.has(p.id));
                 if (this.challengeMode && remaining.length > 0) {
                     btnPact.classList.remove('hidden');
+                    // First-time discoverability — surface a hint the moment
+                    // the Pact option becomes pickable so players notice the
+                    // mechanic exists before they hit a tougher boss.
+                    Hints.trigger && Hints.trigger('first_pact_available');
                 } else {
                     btnPact.classList.add('hidden');
                 }
@@ -5912,6 +5959,128 @@ triggerSystemCrash() {
         }
     },
 
+    // ----- LOADOUT modal (audit F8) ---------------------------------------
+    // Single-tap full view of everything that defines the run: class +
+    // signature tier, ascension level + active modifiers, custom-run mods,
+    // signed pacts, full relic list, and the current dice pool composition.
+    // Surfaced from a top-bar icon during combat so players don't have to
+    // dig through dropdowns to theory-craft mid-run.
+    openLoadout() {
+        const modal = document.getElementById('loadout-modal');
+        const body  = document.getElementById('loadout-body');
+        if (!modal || !body) return;
+        body.innerHTML = this._renderLoadoutHtml();
+        modal.classList.remove('hidden');
+        AudioMgr.playSound && AudioMgr.playSound('click');
+    },
+    closeLoadout() {
+        const modal = document.getElementById('loadout-modal');
+        if (!modal) return;
+        modal.classList.add('hidden');
+    },
+    _renderLoadoutHtml() {
+        const p = this.player;
+        if (!p) return '<div class="loadout-empty">No active run.</div>';
+        const cls = (typeof PLAYER_CLASSES !== 'undefined' && PLAYER_CLASSES.find(c => c.id === p.classId))
+            || { name: p.classId || 'OPERATOR' };
+        const sig = (typeof SIGNATURE_DICE !== 'undefined' && SIGNATURE_DICE[p.classId])
+            ? SIGNATURE_DICE[p.classId][(p.signatureTier || 1) - 1] : null;
+
+        // --- Operator section ------------------------------------------------
+        let html = '<div class="loadout-section">';
+        html += `<div class="loadout-section-title">OPERATOR</div>`;
+        html += `<div class="loadout-row"><span><strong>${(cls.name || 'OPERATOR').toUpperCase()}</strong></span><span>HP ${Math.floor(p.currentHp || 0)} / ${p.maxHp || 0}</span></div>`;
+        html += `<div class="loadout-row"><span>Mana</span><span>${p.mana || 0} / ${p.baseMana || 0}</span></div>`;
+        if (sig) {
+            html += `<div class="loadout-row"><span>Signature</span><span>${sig.name} · TIER ${p.signatureTier || 1}</span></div>`;
+        }
+        html += `<div class="loadout-row"><span>Sector</span><span>${this.sector || 1}${this.archiveMode ? ' · ARCHIVE' : (this.challengeMode ? ' · CHALLENGE' : '')}</span></div>`;
+        html += `<div class="loadout-row"><span>Fragments</span><span>${this.techFragments || 0}</span></div>`;
+        html += '</div>';
+
+        // --- Active modifiers (Ascension + Custom Run + Pacts) ---------------
+        const ascSel = (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0;
+        const ascTw  = (typeof Ascension !== 'undefined' && Ascension.twist) ? Ascension.twist(ascSel) : null;
+        const pacts = this.activePacts ? Array.from(this.activePacts) : [];
+        const customMods = Array.isArray(this._customRunActive) ? this._customRunActive.map(m => m.id) : [];
+        if (ascSel > 0 || customMods.length || pacts.length) {
+            html += '<div class="loadout-section">';
+            html += `<div class="loadout-section-title">ACTIVE MODIFIERS</div>`;
+            html += `<div class="loadout-pill-row">`;
+            if (ascSel > 0) {
+                const ascName = ascTw ? ascTw.name : '';
+                html += `<span class="loadout-pill asc">A${ascSel}${ascName ? ' · ' + ascName.toUpperCase() : ''}</span>`;
+            }
+            customMods.forEach(id => {
+                const mod = (typeof CUSTOM_RUN_MODIFIERS !== 'undefined') ? CUSTOM_RUN_MODIFIERS.find(m => m.id === id) : null;
+                html += `<span class="loadout-pill custom">${(mod && mod.name) ? mod.name.toUpperCase() : id.toUpperCase()}</span>`;
+            });
+            pacts.forEach(id => {
+                const pact = (typeof PACTS !== 'undefined') ? PACTS.find(x => x.id === id) : null;
+                html += `<span class="loadout-pill pact">${pact ? pact.name : id.toUpperCase()}</span>`;
+            });
+            html += `</div>`;
+            if (ascSel > 0 && ascTw && ascTw.desc) {
+                html += `<div class="loadout-row" style="margin-top:6px; opacity:0.75; font-size:0.78rem;">${ascTw.desc}</div>`;
+            }
+            html += '</div>';
+        }
+
+        // --- Relics ----------------------------------------------------------
+        html += '<div class="loadout-section">';
+        const relics = Array.isArray(p.relics) ? p.relics : [];
+        const relicCounts = new Map();
+        const relicMeta = new Map();
+        relics.forEach(r => {
+            relicCounts.set(r.id, (relicCounts.get(r.id) || 0) + 1);
+            if (!relicMeta.has(r.id)) relicMeta.set(r.id, r);
+        });
+        html += `<div class="loadout-section-title">MODULES (${relics.length})</div>`;
+        if (!relics.length) {
+            html += `<div class="loadout-empty">No modules acquired yet.</div>`;
+        } else {
+            html += `<div class="loadout-relic-list">`;
+            for (const [id, count] of relicCounts) {
+                const r = relicMeta.get(id) || {};
+                const cls = r.rarity === 'gold' ? 'gold' : r.rarity === 'red' ? 'red' : (r.rarity === 'corrupted' ? 'corrupted' : '');
+                const stack = count > 1 ? ` ×${count}` : '';
+                html += `<div class="loadout-relic ${cls}">${r.name || id}${stack}</div>`;
+            }
+            html += `</div>`;
+        }
+        html += '</div>';
+
+        // --- Dice composition ------------------------------------------------
+        html += '<div class="loadout-section">';
+        html += `<div class="loadout-section-title">DICE COMPOSITION</div>`;
+        const diceTypes = (typeof this._getAvailableDiceTypes === 'function') ? this._getAvailableDiceTypes() : [];
+        if (!diceTypes.length) {
+            html += `<div class="loadout-empty">Dice pool not yet rolled.</div>`;
+        } else {
+            html += `<div class="loadout-dice-list">`;
+            diceTypes.forEach(t => {
+                const data = (typeof DICE_TYPES !== 'undefined') ? DICE_TYPES[t] : null;
+                const name = (data && data.name) || t;
+                html += `<div class="loadout-die-row"><span>${name}</span><span class="count">${t}</span></div>`;
+            });
+            html += `</div>`;
+        }
+        // Skill upgrades / dice tweaks
+        const upgrades = Array.isArray(p.diceUpgrades) ? p.diceUpgrades : [];
+        if (upgrades.length) {
+            html += `<div class="loadout-row" style="margin-top:8px;"><span>Skill Upgrades</span><span>${upgrades.length}</span></div>`;
+            html += `<div class="loadout-pill-row">`;
+            upgrades.forEach(u => {
+                const meta = (typeof DICE_UPGRADES !== 'undefined' && DICE_UPGRADES[u]) ? DICE_UPGRADES[u] : null;
+                html += `<span class="loadout-pill">${meta && meta.name ? meta.name.toUpperCase() : u.toUpperCase()}</span>`;
+            });
+            html += `</div>`;
+        }
+        html += '</div>';
+
+        return html;
+    },
+
     // ----- PACTS (Challenge Mode, Roadmap Part 24) ------------------------
     // Open the pick screen — renders one card per unsigned PACT. Tapping a
     // card commits the pact; cancelling returns the player to the rest
@@ -5954,11 +6123,23 @@ triggerSystemCrash() {
         if (this.activePacts.has(id)) return;
         this.activePacts.add(id);
         this.applyPact(pact);
+        // Celebrate the bargain — Pacts are run-defining trades, so the moment
+        // earns a relic-pickup-tier VFX stack. Audit feedback F1.
         AudioMgr.playSound('explosion');
+        AudioMgr.playSound('grid_fracture', { volume: 0.7 });
         const cx = CONFIG.CANVAS_WIDTH / 2;
         const cy = CONFIG.CANVAS_HEIGHT / 2;
-        ParticleSys.createFloatingText(cx, cy, `${pact.name} SIGNED`, '#ff0055');
-        if (this.shake) this.shake(14);
+        ParticleSys.createExplosion(cx, cy, 60, '#ff0055');
+        ParticleSys.createExplosion(cx, cy, 30, '#ffd76a');
+        if (ParticleSys.createSparks) ParticleSys.createSparks(cx, cy, '#ff0055', 24);
+        if (ParticleSys.createShockwave) ParticleSys.createShockwave(cx, cy, '#ff0055', 50);
+        ParticleSys.createFloatingText(cx, cy - 40, pact.name, '#ff0055',
+            { fontSize: 48, vy: -1.4, life: 2.2 });
+        ParticleSys.createFloatingText(cx, cy + 30, 'SIGNED — NO TAKE-BACKS', '#ffd76a',
+            { fontSize: 22, vy: -0.7, life: 1.8 });
+        if (this.shake) this.shake(22);
+        if (this.haptic) this.haptic('heavy');
+        if (this.triggerScreenFlash) this.triggerScreenFlash('rgba(255, 0, 85, 0.18)', 220);
         // Pact replaces the rest's normal action, like the other rest options.
         const pactScreen = document.getElementById('screen-pact');
         if (pactScreen) {
@@ -13099,6 +13280,9 @@ drawEffects() {
                     if (this.sector >= 4) nextTier = 3;
                     else if (this.sector >= 2) nextTier = Math.max(nextTier, 2);
                     if (nextTier > prevTier) {
+                        // Stash the tier-up so the COMBAT_WIN card and the
+                        // run-end Victory screen can surface it (audit F5).
+                        this._sigTierUpThisCombat = { from: prevTier, to: nextTier };
                         this.player.signatureTier = nextTier;
                         this._syncSignatureDie();
                         const def = (SIGNATURE_DICE[this.player.classId] || [])[nextTier - 1];
@@ -13237,9 +13421,27 @@ drawEffects() {
             const selected = Ascension.getSelected();
             const promoted = Ascension.onRunVictory(selected);
             if (promoted) {
+                // Audit F4 — promotion was previously a quiet flag flip, so a
+                // returning player wouldn't notice the next tier was open.
+                // Surface a centred banner, particle burst, and analytics
+                // event so the milestone reads.
+                const newLevel = selected + 1;
+                const cx = CONFIG.CANVAS_WIDTH / 2;
+                const cy = CONFIG.CANVAS_HEIGHT / 2;
                 setTimeout(() => {
-                    ParticleSys.createFloatingText(540, 800, `ASCENSION ${selected + 1} UNLOCKED`, '#ffd700');
+                    ParticleSys.createFloatingText(cx, cy - 40, `ASCENSION ${newLevel}`, '#ffd700',
+                        { fontSize: 56, vy: -1.2, life: 2.6 });
+                    ParticleSys.createFloatingText(cx, cy + 30, 'UNLOCKED', '#fff7c0',
+                        { fontSize: 28, vy: -0.8, life: 2.4 });
+                    if (ParticleSys.createExplosion) ParticleSys.createExplosion(cx, cy, 60, '#ffd700');
+                    if (ParticleSys.createSparks) ParticleSys.createSparks(cx, cy, '#ffd700', 30);
+                    if (ParticleSys.createShockwave) ParticleSys.createShockwave(cx, cy, '#ffd700', 80);
+                    AudioMgr.playSound && AudioMgr.playSound('upgrade');
+                    if (this.shake) this.shake(20);
                 }, 1500);
+                if (typeof Analytics !== 'undefined' && Analytics.emit) {
+                    Analytics.emit('ascension_unlocked', { level: newLevel });
+                }
             }
             // Challenge Mode completion bookkeeping
             if (Challenge.isActive()) {
@@ -13418,7 +13620,20 @@ drawEffects() {
                     }
                 }
             } catch (_) { /* cosmetic */ }
-            subEl.innerHTML = fragLine + fileLine + nameLine + highlightLine;
+            // Signature evolution callout (audit F5) — when this kill bumped
+            // the tier, surface it on the COMBAT_WIN card so the player sees
+            // a permanent power milestone, not just a transient float over
+            // the corpse.
+            let sigLine = '';
+            if (this._sigTierUpThisCombat) {
+                const { to } = this._sigTierUpThisCombat;
+                const def = (typeof SIGNATURE_DICE !== 'undefined' && this.player && SIGNATURE_DICE[this.player.classId])
+                    ? SIGNATURE_DICE[this.player.classId][to - 1] : null;
+                const sigName = def ? def.name.toUpperCase() : '';
+                sigLine = `<div class="combat-win-highlight" style="color: var(--neon-gold);">SIGNATURE → TIER ${to}${sigName ? ' · ' + sigName : ''}</div>`;
+                this._sigTierUpThisCombat = null;
+            }
+            subEl.innerHTML = fragLine + fileLine + nameLine + highlightLine + sigLine;
         }
         this.changeState(STATE.COMBAT_WIN);
         AudioMgr.duck(0.1, wasBoss ? 2200 : 900);
@@ -14261,7 +14476,10 @@ drawEffects() {
             statusList.forEach((eff, i) => {
                 const ix = barX + padding + (iconWidth / 2) + (i * iconWidth);
                 const iy = barY + (barHeight / 2);
-                blitEffectIcon(ctx, eff.id, ix, iy, effectColor[eff.id] || '#ffffff');
+                // Pass colourblind mode so the sprite gets baked with the
+                // 2-char abbreviation overlay when a CB palette is on.
+                const cbMode = (typeof Palette !== 'undefined' && Palette.mode && Palette.mode !== 'none') ? Palette.mode : null;
+                blitEffectIcon(ctx, eff.id, ix, iy, effectColor[eff.id] || '#ffffff', cbMode);
 
                 // Count badge: show the most meaningful number.
                 //   stacked DoT (bleed/poison) → stack count

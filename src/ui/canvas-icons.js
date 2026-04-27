@@ -784,7 +784,40 @@ const _spriteAtlas = new Map();
 const _SPR_SIZE = 32;
 const _SPR_HALF = _SPR_SIZE / 2;
 
-function _buildEffectSprite(id, color) {
+// 2-3 char abbreviations layered on top of effect icons for colourblind
+// affordance (audit F6). Caller turns this on by passing a non-empty
+// `labelMode` to getEffectSprite — when set, the sprite is baked with the
+// short label burned in, so the per-frame draw path stays a single blit.
+const _EFFECT_LABEL = {
+    weak:        'WK',
+    frail:       'FR',
+    vulnerable:  'VL',
+    overcharge:  'OC',
+    constrict:   'CN',
+    voodoo:      'VD',
+    bleed:       'BL',
+    poison:      'PO',
+    brittle:     'BR',
+    shielded:    'SH',
+    second_wind: '2W',
+    jammer:      'JM',
+    reflector:   'RF',
+    phase:       'PH',
+    multiplier:  'X',
+    anchor:      'AN',
+    vampiric:    'VP',
+    charged:     'CH',
+    armor:       'AR',
+    overclock:   'OV',
+    sig_thorns:  'TH',
+    firewall:    'FW',
+    blood_tier:  'BT',
+    tact_primed: 'TC',
+    aegis_primed:'AG',
+    exposed:     'EX'
+};
+
+function _buildEffectSprite(id, color, labelMode) {
     const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1;
     const c = (typeof OffscreenCanvas === 'function')
         ? (() => { try { return new OffscreenCanvas(_SPR_SIZE * dpr, _SPR_SIZE * dpr); } catch (e) { return null; } })()
@@ -795,25 +828,54 @@ function _buildEffectSprite(id, color) {
     const sctx = canvas.getContext('2d');
     sctx.scale(dpr, dpr);
     drawEffectIcon(sctx, id, _SPR_HALF, _SPR_HALF, 22, color);
+    // Abbreviation overlay — only painted when a colourblind palette is
+    // active, so the default look is unchanged. Drawn at the bottom-right
+    // of the icon with a black halo for readability against any tint.
+    if (labelMode && _EFFECT_LABEL[id]) {
+        const abbr = _EFFECT_LABEL[id];
+        sctx.save();
+        sctx.font = '700 9px "Orbitron", "Inter", system-ui, sans-serif';
+        sctx.textAlign = 'right';
+        sctx.textBaseline = 'bottom';
+        const tx = _SPR_SIZE - 2;
+        const ty = _SPR_SIZE - 1;
+        // 4-pass black halo for high contrast against any tint.
+        sctx.fillStyle = '#000';
+        for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+            sctx.fillText(abbr, tx + ox, ty + oy);
+        }
+        sctx.fillStyle = '#fff';
+        sctx.fillText(abbr, tx, ty);
+        sctx.restore();
+    }
     return canvas;
 }
 
-export function getEffectSprite(id, color) {
-    const key = id + '|' + color;
+export function getEffectSprite(id, color, labelMode) {
+    const key = id + '|' + color + (labelMode ? '|' + labelMode : '');
     let spr = _spriteAtlas.get(key);
     if (!spr) {
-        spr = _buildEffectSprite(id, color);
+        spr = _buildEffectSprite(id, color, labelMode);
         if (spr) _spriteAtlas.set(key, spr);
     }
     return spr;
+}
+
+export function clearEffectSpriteAtlas() {
+    _spriteAtlas.clear();
 }
 
 // Blit-equivalent of drawEffectIcon — same call signature, but pulls from
 // the cached sprite atlas instead of replaying the path commands each frame.
 // Falls back to direct drawing if sprite generation isn't supported (very
 // old browsers without OffscreenCanvas + missing document).
-export function blitEffectIcon(ctx, id, cx, cy, color) {
-    const spr = getEffectSprite(id, color);
+//
+// `labelMode` (audit F6) — pass any truthy string when a colourblind palette
+// is active so the sprite is baked with the abbreviated label overlay. The
+// cache key includes the mode, so the un-labelled variant is still reused
+// for default-palette players.
+export function blitEffectIcon(ctx, id, cx, cy, color, labelMode) {
+    const spr = getEffectSprite(id, color, labelMode);
     if (!spr) return drawEffectIcon(ctx, id, cx, cy, 22, color);
     const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1;
     // Source canvas is _SPR_SIZE × dpr; draw it back at logical _SPR_SIZE px,

@@ -1,3 +1,5 @@
+import { clearEffectSpriteAtlas } from '../ui/canvas-icons.js';
+
 // Canvas-palette adaptor for colorblind modes.
 //
 // The CSS already swaps `--neon-pink`, `--neon-green`, `--neon-blue` under
@@ -79,6 +81,10 @@ export const Palette = {
                 window.ParticleSys.clearTintCache();
             }
         } catch (_) { /* ignore */ }
+        // Same flush for the effect-icon sprite atlas — sprites baked under
+        // the previous mode embed the wrong abbreviation overlay (or none),
+        // so they must be regenerated on next blit.
+        try { clearEffectSpriteAtlas(); } catch (_) { /* ignore */ }
     },
 
     // Initialise from the already-applied body class. Safe to call before

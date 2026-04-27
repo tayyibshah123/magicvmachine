@@ -10511,3 +10511,182 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     --frame-color: #ff3355;
     --frame-glow: rgba(255, 51, 85, 0.85);
 }
+
+/* ARCHIVE button first-reveal shimmer (audit F3) — fires once per install
+   the first time the menu loads after the player has unlocked Sector X.
+   `.archive-just-unlocked` is removed by JS after 6s so the regular gold
+   button styling takes over. */
+#btn-archive.archive-just-unlocked {
+    animation: archive-unlock-pulse 1.4s ease-in-out 3;
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+        0 0 22px rgba(255, 215, 106, 0.85),
+        0 0 44px rgba(255, 215, 106, 0.4);
+}
+@keyframes archive-unlock-pulse {
+    0%, 100% {
+        transform: translateY(0) scale(1);
+        filter: brightness(1);
+    }
+    50% {
+        transform: translateY(-2px) scale(1.04);
+        filter: brightness(1.45) saturate(1.2);
+    }
+}
+
+/* INITIATE RUN warning sublabel (audit F7) — surfaced on the second-tap
+   prompt when a saved run already exists. */
+#btn-start { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.btn-start-warn {
+    font-size: 0.6rem;
+    letter-spacing: 0.18em;
+    color: #ff5577;
+    text-shadow: 0 0 6px rgba(255, 0, 85, 0.6);
+}
+
+/* Onboarding sub-bullets (audit F9) — class-ability primer detail rows
+   underneath the parent bullet so each class's beat is described in plain
+   language during the new-player primer. */
+.onb-subbullets {
+    margin-top: 6px;
+    margin-left: 4px;
+    padding-left: 10px;
+    border-left: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    color: rgba(220, 230, 240, 0.85);
+}
+.onb-subbullets strong {
+    color: var(--neon-blue);
+    text-shadow: 0 0 5px rgba(0, 243, 255, 0.4);
+}
+
+/* === LOADOUT MODAL (audit F8) ============================================ */
+.loadout-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 11000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+}
+.loadout-modal.hidden { display: none; }
+.loadout-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.78);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+.loadout-panel {
+    position: relative;
+    z-index: 1;
+    width: min(640px, 94vw);
+    max-height: 88vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 18px 20px 22px;
+    border-radius: 14px;
+    border: 1.5px solid rgba(0, 243, 255, 0.5);
+    box-shadow: 0 0 24px rgba(0, 243, 255, 0.35), inset 0 0 16px rgba(0, 243, 255, 0.1);
+}
+.loadout-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(0, 243, 255, 0.25);
+}
+.loadout-header h2 {
+    margin: 0;
+    font-size: 1.4rem;
+    letter-spacing: 0.18em;
+    font-family: 'Orbitron', monospace;
+}
+.loadout-section {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+.loadout-section:first-child { border-top: none; padding-top: 0; }
+.loadout-section-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.24em;
+    color: var(--neon-gold);
+    margin: 0 0 8px 0;
+    opacity: 0.95;
+}
+.loadout-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 0;
+    font-size: 0.86rem;
+    line-height: 1.4;
+    color: #d8e6f2;
+}
+.loadout-row strong { color: #fff; font-weight: 600; }
+.loadout-relic-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 10px;
+    margin: 6px 0 2px;
+}
+@media (max-width: 480px) {
+    .loadout-relic-list { grid-template-columns: 1fr; }
+}
+.loadout-relic {
+    font-size: 0.78rem;
+    color: #cdeaff;
+    padding: 3px 4px;
+    line-height: 1.3;
+}
+.loadout-relic.gold     { color: var(--neon-gold); }
+.loadout-relic.red      { color: #ff8a44; }
+.loadout-relic.corrupted{ color: #ff66ff; }
+.loadout-empty {
+    font-size: 0.78rem;
+    opacity: 0.55;
+    font-style: italic;
+}
+.loadout-pill-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+}
+.loadout-pill {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.16em;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--neon-blue);
+    color: #b3eaff;
+    background: rgba(0, 243, 255, 0.08);
+}
+.loadout-pill.pact     { border-color: var(--neon-pink); color: #ffb3c8; background: rgba(255, 0, 85, 0.12); }
+.loadout-pill.asc      { border-color: var(--neon-gold); color: #ffe89a; background: rgba(255, 215, 106, 0.1); }
+.loadout-pill.custom   { border-color: #aa66ff; color: #d6a8ff; background: rgba(170, 102, 255, 0.1); }
+.loadout-dice-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 6px;
+    margin-top: 4px;
+}
+.loadout-die-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: #cdeaff;
+    padding: 3px 6px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+}
+.loadout-die-row .count { color: var(--neon-gold); font-weight: 600; }

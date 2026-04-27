@@ -53,7 +53,11 @@ const HINTS = {
     // (first_boss + combo_double already exist above — don't duplicate.)
     first_nullified_die:   { title: "NULLIFIED",      body: "The boss analysed your first die. It's gone." },
     first_mana_spent:      { title: "MANA",           body: "Spend it on powerful dice. Refills each turn." },
-    first_shield_decay:    { title: "SHIELD DECAYS",  body: "Shield fades each turn. Renew with Defend." }
+    first_shield_decay:    { title: "SHIELD DECAYS",  body: "Shield fades each turn. Renew with Defend." },
+
+    // Endgame-mode discoverability (audit feedback F2/F3).
+    first_pact_available:  { title: "PACTS AVAILABLE", body: "Sign for power. Stays for the run." },
+    first_archive_unlock:  { title: "ARCHIVE UNLOCKED",body: "Sector X. Solo prestige fight." }
 };
 
 function readSeen() {
