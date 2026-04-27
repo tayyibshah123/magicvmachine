@@ -12941,13 +12941,24 @@ drawEffects() {
         if (this.player && this.player.hasRelic && this.player.hasRelic('tempo_loop')) {
             this._carriedUnusedDice = (this.dicePool || []).filter(d => !d.used).length;
         }
-        // Sector 3 — Heat Tiles. Molten ground burns the player each turn
-        // end. Ignores the shield (it's environmental, not an attack) so
-        // shield-stack runs still have to respect the sector tempo.
+        // Sector 3 — Heat Tiles. Molten ground burns the player AND every
+        // player minion each turn end. Ignores the shield (it's
+        // environmental, not an attack) so shield-stack runs still have to
+        // respect the sector tempo. Dead minions are filtered after the
+        // tick so a thrall that gets cooked off the field is removed
+        // before the enemy phase reads the slot.
         if (this._activeSectorMech && this._activeSectorMech.playerHeatDmg && this.player && this.player.currentHp > 0) {
             const burn = this._activeSectorMech.playerHeatDmg;
             this.player.takeDamage(burn, null, true, /*bypassShield*/ true);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 120, `HEAT -${burn}`, '#ff6600');
+            if (Array.isArray(this.player.minions) && this.player.minions.length > 0) {
+                this.player.minions.forEach(m => {
+                    if (!m || m.currentHp <= 0) return;
+                    m.takeDamage(burn, null, true, /*bypassShield*/ true);
+                    ParticleSys.createFloatingText(m.x, m.y - 60, `HEAT -${burn}`, '#ff6600');
+                });
+                this.player.minions = this.player.minions.filter(m => m && m.currentHp > 0);
+            }
         }
         // Show end-of-turn summary if any meaningful stats this turn
         this.showTurnSummary();
@@ -13501,13 +13512,26 @@ drawEffects() {
         if (!this.enemy || this.enemy.currentHp <= 0) return;
 
         // --- MINION ATTACKS ---
-        for (const min of this._enemyMinions()) {
+        // Snapshot then filter dead bodies before iteration: an enemy
+        // minion at 0 HP (took lethal damage during the boss intent phase
+        // or carry-over from a player tick) was still getting an attack
+        // here because the dead-minion sweep at the bottom of the loop
+        // ran AFTER all turns. Void Spawns in particular got a free
+        // consume-minion swing while sitting at zero. Filter once up
+        // front so corpses skip their turn.
+        const enemyMinionOrder = this._enemyMinions().slice().filter(m => m && m.currentHp > 0);
+        if (this.enemy) this.enemy.minions = this.enemy.minions.filter(m => m && m.currentHp > 0);
+        for (const min of enemyMinionOrder) {
             if (!stillLive()) return; // new combat started — abandon this phase
             // Bail if the player died on a prior minion's attack callback (or
             // via thorns/reflect). Prevents cascading gameOver calls and the
             // minion queue chewing on a corpse.
             if (this.currentState === STATE.GAMEOVER) return;
             if (this.player && this.player.currentHp <= 0) return;
+            // Snapshot was taken before the loop, but a previous minion in
+            // this same loop (chained kills, splash) may have just zeroed
+            // this one's HP. Skip the corpse rather than fire its intent.
+            if (!min || min.currentHp <= 0) continue;
             // --- VOID SPAWN: consume a player minion (heal boss by its HP) or drain mana on hit. ---
             if (min.isVoidSpawn) {
                 min.playAnim('lunge');

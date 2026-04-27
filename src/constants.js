@@ -53,7 +53,7 @@ const SECTOR_MECHANICS = {
     1: { label: 'STANDARD OPS',    desc: 'Corporate patrols. Baseline threat.' },
     2: { label: 'FROST FIELD',     desc: 'Cryo hostiles carry +6 Shield.',
          enemyShieldBonus: 6 },
-    3: { label: 'HEAT TILES',      desc: 'Molten ground deals 1 HP each turn end.',
+    3: { label: 'HEAT TILES',      desc: 'Molten ground burns you and every player minion 1 HP each turn end.',
          playerHeatDmg: 1 },
     4: { label: 'HIVE RESONANCE',  desc: 'Enemy minions hit +20% harder.',
          minionDmgMult: 1.2 },
