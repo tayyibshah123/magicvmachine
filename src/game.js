@@ -3452,7 +3452,16 @@ startQTE(type, x, y, callback) {
             if (count === 1) return "Killing a minion deals (its DMG + 3) to others."; // RESTORED: +3
             return `Killing a minion deals ${count}x (its DMG + 3) to others.`;
         }
-        
+
+        // Emergency Kit stacks as charges, not as a stronger heal — every
+        // dip below 30% HP burns one kit and restores 30%. The default
+        // number-scaling fallback would have shown "Heal 60% / 60%" at
+        // count=2, which is wrong: each kit is still 30%-for-30%.
+        if (relic.id === 'emergency_kit') {
+            const charges = count > 1 ? ` Charges: ${count}.` : '';
+            return `Heal 30% Max HP if below 30%. One charge consumed per trigger.${charges}`;
+        }
+
         return relic.desc.replace(/(\d+)/g, (match) => {
             return parseInt(match) * count;
         });
