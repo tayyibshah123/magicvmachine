@@ -185,6 +185,7 @@ export const ClassAbility = {
             // Pip-fill VFX — small cyan sparks per pip, full burst on track-up.
             if (state.pips > before && Game.player) {
                 ParticleSys.createSparks(Game.player.x, Game.player.y - 40, '#00f3ff', 6);
+                AudioMgr.playSound('tactician_pip');
             }
             // First time the Command Track fills, surface what the widget does.
             if (before < CFG.tactician.pipMax && state.pips >= CFG.tactician.pipMax) {
@@ -228,6 +229,7 @@ export const ClassAbility = {
                         // Bloom pollen ring — pale green leaves spiral up so the
                         // grove plot reads as "alive" not just "lit".
                         ParticleSys.createSummonerBurst(Game.player.x - 60, Game.player.y - 40);
+                        AudioMgr.playSound('summoner_bloom');
                     }
                     Hints.trigger && Hints.trigger('first_grove_bloom');
                 }
@@ -277,6 +279,7 @@ export const ClassAbility = {
                                                 '#ff2244', 0.4);
                     }
                 }
+                if (Game.player && amt > 0) AudioMgr.playSound('bloodstalker_drain');
                 if (state.bar >= CFG.bloodstalker.damageToFill) {
                     state.ready = true;
                     if (Game.player) {
@@ -301,6 +304,7 @@ export const ClassAbility = {
             // the plate snap into place rather than just slide on.
             if (Game.player && state.plates > platesBefore) {
                 ParticleSys.createSparks(Game.player.x, Game.player.y - 40, '#ffffff', 6);
+                AudioMgr.playSound('sentinel_clank');
             }
             if (state.plates >= CFG.sentinel.plateMax && !state.blockReady) {
                 state.blockReady = true;
@@ -391,7 +395,7 @@ export const ClassAbility = {
             if (Game.shake) Game.shake(10);
             if (Game.triggerScreenFlash) Game.triggerScreenFlash('rgba(255, 255, 255, 0.32)', 220);
             if (Game.haptic) Game.haptic('heavy');
-            AudioMgr.playSound('defend');
+            AudioMgr.playSound('sentinel_clank');
             this.render();
             return true;
         }
@@ -566,6 +570,7 @@ export const ClassAbility = {
                     ParticleSys.createShockwave(p.x, p.y, '#ff4400', 56);
                     if (Game.shake) Game.shake(18);
                     if (Game.triggerScreenFlash) Game.triggerScreenFlash('rgba(255, 68, 0, 0.4)', 280);
+                    AudioMgr.playSound('annihilator_vent');
                     AudioMgr.playSound('explosion');
                     ParticleSys.createFloatingText(p.x, p.y - 100, "MELTDOWN!", "#ff4400");
                     targets.forEach(m => _resolveKill(m));
@@ -575,7 +580,7 @@ export const ClassAbility = {
                     ParticleSys.createFloatingText(p.x, p.y - 80, "OVERCLOCK", "#ff8800");
                     ParticleSys.createSparks(p.x, p.y - 30, '#ff8800', 12);
                     ParticleSys.createShockwave(p.x, p.y, '#ff8800', 28);
-                    AudioMgr.playSound('zap');
+                    AudioMgr.playSound('annihilator_vent');
                     state.heat = 0;
                 } else return;
                 break;
@@ -678,7 +683,7 @@ export const ClassAbility = {
                 // minion reads as "growing out of the grove."
                 ParticleSys.createSummonerBurst(p.x, p.y - 30);
                 ParticleSys.createShockwave(p.x, p.y, '#00ff99', 24);
-                AudioMgr.playSound('mana');
+                AudioMgr.playSound('summoner_bloom');
                 break;
             }
         }
@@ -700,6 +705,7 @@ export const ClassAbility = {
         ParticleSys.createExplosion(e.x, e.y, 28, '#ff6600');
         ParticleSys.createShockwave(e.x, e.y, '#ff8800', 30);
         if (Game.shake) Game.shake(6);
+        AudioMgr.playSound('arcanist_chime');
         AudioMgr.playSound('zap');
         ParticleSys.createFloatingText(p.x, p.y - 100, `GLYPH-FIRE ${dmg}`, "#ff4400");
         _resolveKill(e);
@@ -716,6 +722,7 @@ export const ClassAbility = {
         // Caster shield bloom — pale-blue for ice/shield association.
         ParticleSys.createSentinelBurst(p.x, p.y - 30);
         ParticleSys.createShockwave(p.x, p.y, '#88eaff', 28);
+        AudioMgr.playSound('arcanist_chime');
         AudioMgr.playSound('defend');
         ParticleSys.createFloatingText(p.x, p.y - 100, "GLYPH-ICE", "#88eaff");
     },
@@ -727,6 +734,7 @@ export const ClassAbility = {
         ParticleSys.createSparks(p.x, p.y - 30, '#ffe040', 18);
         ParticleSys.createShockwave(p.x, p.y, '#ffe040', 28);
         if (Game.triggerScreenFlash) Game.triggerScreenFlash('rgba(255, 224, 64, 0.22)', 180);
+        AudioMgr.playSound('arcanist_chime');
         AudioMgr.playSound('zap');
         ParticleSys.createFloatingText(p.x, p.y - 100, "GLYPH-LIGHTNING", "#ffe040");
     },

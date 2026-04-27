@@ -829,6 +829,75 @@ const AudioMgr = {
                 osc.start(t);
                 osc.stop(t + 0.1);
                 break;
+            // ── Class signature SFX. Each is a short, distinctive timbre
+            // tied to the class's primary loop so the player builds an
+            // audio fingerprint of "this is my class doing its thing."
+            case 'tactician_pip':
+                // Rising cyan beep — short, crystalline. Fires per pip-fill.
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(620, t);
+                osc.frequency.linearRampToValueAtTime(1100, t + 0.07);
+                gain.gain.setValueAtTime(0.08, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.08);
+                osc.start(t);
+                osc.stop(t + 0.08);
+                break;
+            case 'annihilator_vent':
+                // Heavy whoosh + low rumble. Vent the reactor.
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(140, t);
+                osc.frequency.exponentialRampToValueAtTime(40, t + 0.45);
+                gain.gain.setValueAtTime(0.18, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.45);
+                osc.start(t);
+                osc.stop(t + 0.45);
+                this.createNoise(0.35, 0.45);
+                break;
+            case 'bloodstalker_drain':
+                // Wet thud — sawtooth slide + brief noise burst.
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(220, t);
+                osc.frequency.exponentialRampToValueAtTime(60, t + 0.18);
+                gain.gain.setValueAtTime(0.16, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.18);
+                osc.start(t);
+                osc.stop(t + 0.18);
+                this.createNoise(0.12, 0.25);
+                break;
+            case 'sentinel_clank':
+                // Metal plate slam — short square + harmonic ring.
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(280, t);
+                osc.frequency.linearRampToValueAtTime(180, t + 0.12);
+                gain.gain.setValueAtTime(0.18, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.16);
+                osc.start(t);
+                osc.stop(t + 0.16);
+                // Overtone — two-tone ring drives the metallic feel.
+                this.playTone(900, 0.18, 'triangle', 0.06);
+                break;
+            case 'arcanist_chime':
+                // Bell-like overtones — root + perfect fifth.
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, t);
+                gain.gain.setValueAtTime(0.10, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.45);
+                osc.start(t);
+                osc.stop(t + 0.45);
+                this.playTone(1320, 0.45, 'sine', 0.06);
+                this.playTone(1760, 0.30, 'triangle', 0.04);
+                break;
+            case 'summoner_bloom':
+                // Soft chime + airy ramp — a plot opening up.
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(540, t);
+                osc.frequency.linearRampToValueAtTime(820, t + 0.30);
+                gain.gain.setValueAtTime(0.08, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.30);
+                osc.start(t);
+                osc.stop(t + 0.30);
+                this.playTone(1080, 0.32, 'sine', 0.05);
+                break;
         }
     },
 
