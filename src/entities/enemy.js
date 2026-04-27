@@ -347,6 +347,20 @@ class Enemy extends Entity {
             AudioMgr.playSound('explosion');
             if (!this.phase3Triggered) {
                 this.phase3Triggered = true;
+                // Ascension 16 (Endless Loop) — Phase 3 lasts N extra turns.
+                // Heal the boss back up by ~10% maxHp per bonus turn so the
+                // fight literally takes longer to close. Capped at 70%
+                // maxHp so it never undoes the player's whole Phase 1+2
+                // grind, and surfaced as a "REWIND" floater so the
+                // modifier reads on screen.
+                const bonus = (Game && Game._ascEffects && Game._ascEffects.bossPhase3Bonus) || 0;
+                if (bonus > 0) {
+                    const cap = Math.floor(this.maxHp * 0.7);
+                    const restore = Math.min(cap, Math.floor(this.maxHp * 0.10 * bonus));
+                    this.currentHp = Math.min(this.maxHp, this.currentHp + restore);
+                    ParticleSys.createFloatingText(this.x, this.y - 120,
+                        `ENDLESS LOOP +${restore} HP`, '#ff3355');
+                }
                 if (Game && typeof Game.triggerBossPhaseTransition === 'function') {
                     Game.triggerBossPhaseTransition(this, 3);
                 }

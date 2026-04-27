@@ -260,8 +260,10 @@ class Entity {
             actualDmg += 1;
         }
         
-        // Hologram: 15% Dodge
-        if (this instanceof Player && this.hasRelic('hologram') && Math.random() < 0.15) {
+        // Hologram: 15% Dodge — routed through Game._luckyChance so
+        // Ascension 17 (Aurelia's Curse) halves it as advertised.
+        if (this instanceof Player && this.hasRelic('hologram')
+            && Game && Game._luckyChance && Game._luckyChance(0.15)) {
             actualDmg = 0;
             ParticleSys.createFloatingText(this.x, this.y - 60, "DODGE!", "#fff");
             // Relic: REFLECTION GLASS — dodging an attack deals 8 DMG back.
@@ -655,8 +657,18 @@ class Entity {
             actualHeal = Math.floor(actualHeal * constrict.val);
             ParticleSys.createFloatingText(this.x, this.y - 100, "HEAL REDUCED", "#ff0000");
         }
-        
+
         actualHeal = Math.max(0, actualHeal);
+
+        // Ascension 14 (Conservation Law) — overheal becomes a bleed DoT on
+        // the player. Computed BEFORE the cap so we know how much heal the
+        // player actually consumed vs threw away. Applied after the cap so
+        // the heal numbers + flash still read normally first.
+        let overheal = 0;
+        if (Player && this instanceof Player && actualHeal > 0
+            && Game && Game._ascEffects && Game._ascEffects.overhealBecomesDot) {
+            overheal = Math.max(0, (this.currentHp + actualHeal) - this.maxHp);
+        }
 
         this.currentHp = Math.min(this.maxHp, this.currentHp + actualHeal);
 
@@ -664,6 +676,15 @@ class Entity {
         AudioMgr.playSound('mana');
         if (Player && this instanceof Player && actualHeal > 0) {
             Hints.trigger('first_heal');
+        }
+
+        if (overheal > 0) {
+            // Cap the per-heal bleed so a chain of small overheals still
+            // matters but a single huge overheal doesn't one-shot the player.
+            const tick = Math.max(1, Math.min(8, Math.ceil(overheal / 4)));
+            this.addEffect('bleed', 3, tick, '🩸',
+                `Overheal sickness — ${tick} DMG at end of turn.`, 'OVERHEAL ROT');
+            ParticleSys.createFloatingText(this.x, this.y - 120, `OVERHEAL → ROT ${tick}`, '#ff3333');
         }
     }
 

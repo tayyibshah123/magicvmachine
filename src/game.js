@@ -906,7 +906,23 @@ const Game = {
     },
 
     hasMetaUpgrade(id) {
+        if (this._disabledMetaThisRun && this._disabledMetaThisRun.has(id)) return false;
         return this.metaUpgrades.includes(id);
+    },
+
+    // Probability check for player-favorable rolls (crits, dodges, drop
+    // chances). Honors Ascension 17 (Aurelia's Curse): "All chance rolls
+    // roll twice, take the worse." A pass requires BOTH rolls to be under
+    // the threshold, halving the chance roughly. Use this anywhere a
+    // succeeding roll BENEFITS the player; for unfavorable-to-player rolls
+    // (enemy crit, etc.) just keep using Math.random directly.
+    _luckyChance(p) {
+        if (p <= 0) return false;
+        if (p >= 1) return true;
+        if (this._ascEffects && this._ascEffects.doubleRollWorse) {
+            return (Math.random() < p) && (Math.random() < p);
+        }
+        return Math.random() < p;
     },
 
     handleCanvasHover(screenX, screenY) {
@@ -3060,6 +3076,29 @@ startQTE(type, x, y, callback) {
             localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
         } catch (e) { console.warn("Could not reset flags", e); }
         // ---------------------------------
+
+        // Ascension 19 (Apostate) — pick a single owned meta upgrade and
+        // disable it for the run. Resolved BEFORE `new Player(cls)` because
+        // Player's constructor reads hasMetaUpgrade(...) for starting HP /
+        // mana / thorn / relic perks; with the disabled set populated up
+        // front, those checks already see the curse on the first frame.
+        this._disabledMetaThisRun = new Set();
+        const ascSelected = (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0;
+        const ascNow = (typeof Ascension !== 'undefined' && Ascension.activeEffects) ? Ascension.activeEffects(ascSelected) : null;
+        if (ascNow && ascNow.loseOneMeta && this.metaUpgrades && this.metaUpgrades.length > 0) {
+            const owned = this.metaUpgrades.slice();
+            const drop = owned[Math.floor(Math.random() * owned.length)];
+            this._disabledMetaThisRun.add(drop);
+            const meta = (typeof META_UPGRADES !== 'undefined') ? META_UPGRADES.find(m => m.id === drop) : null;
+            const label = meta ? meta.name : drop;
+            // Defer the floating text so it lands once the combat scene is
+            // built (selectClass keeps the player on the char-select screen
+            // for a beat before the first combat opens).
+            setTimeout(() => {
+                ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, 200,
+                    `APOSTATE — ${label.toUpperCase()} DISABLED`, '#ff3355');
+            }, 600);
+        }
 
         this.player = new Player(cls);
         this.player.classId = cls.id;
@@ -9340,7 +9379,7 @@ async startTurn() {
                     ? this.player.traits.critChance : 0.15;
                 const critMult = (this.player.traits && typeof this.player.traits.critMult === 'number')
                     ? this.player.traits.critMult : 1.5;
-                if (critChance > 0 && Math.random() < critChance) {
+                if (critChance > 0 && this._luckyChance(critChance)) {
                     dmg = Math.floor(dmg * critMult);
                     ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 100, "CRIT!", COLORS.GOLD);
                     ParticleSys.createSparks && ParticleSys.createSparks(finalEnemy.x, finalEnemy.y, COLORS.GOLD, 12);
@@ -12762,7 +12801,7 @@ drawEffects() {
             droppedFile = true;
         } else if (this.enemy.isElite) {
             frags = Math.floor(Math.random() * (37 - 21 + 1)) + 21;
-            if (Math.random() < 0.10) droppedFile = true;
+            if (this._luckyChance(0.10)) droppedFile = true;
         } else {
             frags = Math.floor(Math.random() * (27 - 11 + 1)) + 11;
         }
@@ -12899,10 +12938,23 @@ drawEffects() {
         // stall the pacing. Bosses keep the long beat because the clear
         // is the emotional moment of the sector.
         const dwell = wasBoss ? 2500 : (wasElite ? 1300 : 1100);
+        // Ascension 18 (Dark Contract) — elite kills give no relic reward.
+        // Skip the reward screen entirely and route straight back to the
+        // map. The "DARK CONTRACT" banner replaces what would have been the
+        // reward picker so the player feels the loss explicitly.
+        const skipEliteReward = wasElite && !wasBoss
+            && this._ascEffects && this._ascEffects.noEliteRewards;
         setTimeout(() => {
-            if (this.currentState === STATE.COMBAT_WIN) {
-                this.changeState(STATE.REWARD);
+            if (this.currentState !== STATE.COMBAT_WIN) return;
+            if (skipEliteReward) {
+                ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
+                    'DARK CONTRACT — NO REWARD', '#ff3355');
+                AudioMgr.playSound('defend');
+                this.completeCurrentNode();
+                this.changeState(STATE.MAP);
+                return;
             }
+            this.changeState(STATE.REWARD);
         }, dwell);
     },
 
