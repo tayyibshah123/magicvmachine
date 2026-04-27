@@ -233,7 +233,7 @@ const Game = {
             this.seenFlags = savedSeen ? JSON.parse(savedSeen) : {};
             const savedCorruption = localStorage.getItem('mvm_corruption');
             this.corruptionLevel = savedCorruption ? parseInt(savedCorruption) : 0;
-            const saveFile = localStorage.getItem('mvm_save_v1');
+            const saveFile = this._readSaveRaw();
             const btnLoad = document.getElementById('btn-load-save');
             if (saveFile && saveFile !== "null") {
                 if (btnLoad) {
@@ -418,6 +418,8 @@ const Game = {
 
         // --- BUTTON BINDINGS ---
         attachButtonEvent('btn-load-save', () => this.loadGame());
+        attachButtonEvent('btn-save-slots', () => this._openSaveSlotPicker());
+        attachButtonEvent('btn-save-slot-close', () => this._closeSaveSlotPicker());
         attachButtonEvent('btn-resume', () => d.getElementById('modal-settings').classList.add('hidden'));
         if (!Game._origRandom) Game._origRandom = Math.random;
         attachButtonEvent('btn-start', () => {
@@ -425,7 +427,7 @@ const Game = {
             // pressing again will discard it. Second tap proceeds. Stops
             // the player from accidentally trashing their in-progress run
             // by misreading INITIATE RUN as RESUME.
-            const haveSave = !!localStorage.getItem('mvm_save_v1');
+            const haveSave = !!this._readSaveRaw();
             if (haveSave && !this._initiateConfirm) {
                 this._initiateConfirm = true;
                 const label = document.getElementById('btn-start-label');
@@ -471,7 +473,7 @@ const Game = {
             localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
             localStorage.setItem('mvm_first_run_done', '1');
             this.tutorialAutoRun = false;
-            localStorage.removeItem('mvm_save_v1');
+            this._clearSave();
             const btnLoad = document.getElementById('btn-load-save');
             if (btnLoad) btnLoad.style.display = 'none';
             if (this.showPhaseBanner) {
@@ -495,7 +497,7 @@ const Game = {
             this.tutorialAutoRun = false;
             // Wipe any pending prior run so the character picker starts a
             // fresh Challenge gauntlet and doesn't resume a normal save.
-            localStorage.removeItem('mvm_save_v1');
+            this._clearSave();
             const btnLoad = document.getElementById('btn-load-save');
             if (btnLoad) btnLoad.style.display = 'none';
             if (this.showPhaseBanner) {
@@ -3380,7 +3382,7 @@ startQTE(type, x, y, callback) {
         AudioMgr.playSound('click');
         
         // Wipe the active run save
-        localStorage.removeItem('mvm_save_v1');
+        this._clearSave();
         document.getElementById('btn-load-save').style.display = "none";
         
         // --- FIX: RESET ALL SEEN FLAGS ---
@@ -6594,6 +6596,164 @@ triggerSystemCrash() {
     // deploys without forcing the player to restart.
     SAVE_SCHEMA_VERSION: 2,
 
+    // ─── Save slots ────────────────────────────────────────────────
+    // Three named slots (A / B / C) stored under per-slot keys. The
+    // active slot is sticky in localStorage so the next launch resumes
+    // the same slot the player was last on. Legacy `mvm_save_v1` is
+    // migrated into slot A on first read.
+    SAVE_SLOTS: ['A', 'B', 'C'],
+    _activeSlot() {
+        try {
+            const v = localStorage.getItem('mvm_active_slot');
+            if (this.SAVE_SLOTS.includes(v)) return v;
+        } catch (_) {}
+        return 'A';
+    },
+    _setActiveSlot(slot) {
+        if (!this.SAVE_SLOTS.includes(slot)) return;
+        try { localStorage.setItem('mvm_active_slot', slot); } catch (_) {}
+    },
+    _saveKey(slot) {
+        const s = (slot && this.SAVE_SLOTS.includes(slot)) ? slot : this._activeSlot();
+        return `mvm_save_v1__${s}`;
+    },
+    // Read raw save JSON from the active slot. On first call, if the
+    // active slot is empty BUT the legacy single-slot key exists, lift
+    // the legacy save into slot A so existing players don't lose
+    // progress on the upgrade.
+    _readSaveRaw(slot) {
+        const key = this._saveKey(slot);
+        let raw = null;
+        try { raw = localStorage.getItem(key); } catch (_) {}
+        if (!raw && (slot || this._activeSlot()) === 'A') {
+            try {
+                const legacy = localStorage.getItem('mvm_save_v1');
+                if (legacy) {
+                    localStorage.setItem(key, legacy);
+                    this._clearSave();
+                    raw = legacy;
+                }
+            } catch (_) {}
+        }
+        return raw;
+    },
+    _writeSaveRaw(json) {
+        try { localStorage.setItem(this._saveKey(), json); } catch (e) {
+            console.warn('[saveGame] failed:', e);
+        }
+    },
+    _clearSave(slot) {
+        try { localStorage.removeItem(this._saveKey(slot)); } catch (_) {}
+        // Also clear legacy on full wipe so a stale single-slot blob can't
+        // resurrect on the next slot-A read.
+        if ((slot || this._activeSlot()) === 'A') {
+            try { this._clearSave(); } catch (_) {}
+        }
+    },
+    // Lightweight per-slot metadata for the picker. Reads each slot once.
+    _listSaveSlots() {
+        return this.SAVE_SLOTS.map(s => {
+            const raw = (function readSilent() {
+                try { return localStorage.getItem(`mvm_save_v1__${s}`); } catch (_) { return null; }
+            })();
+            if (!raw) return { slot: s, hasSave: false };
+            try {
+                const data = JSON.parse(raw);
+                const player = data.player || {};
+                return {
+                    slot: s,
+                    hasSave: true,
+                    classId: player.classId || 'unknown',
+                    sector: data.sector || 1,
+                    hp: player.hp,
+                    maxHp: player.maxHp,
+                    relicCount: Array.isArray(player.relics) ? player.relics.length : 0,
+                    challengeMode: !!data.challengeMode,
+                    archiveMode: !!data.archiveMode
+                };
+            } catch (_) {
+                return { slot: s, hasSave: true, corrupted: true };
+            }
+        });
+    },
+
+    _openSaveSlotPicker() {
+        const modal = document.getElementById('save-slot-modal');
+        const list = document.getElementById('save-slot-list');
+        if (!modal || !list) return;
+        const slots = this._listSaveSlots();
+        const active = this._activeSlot();
+        list.innerHTML = '';
+        slots.forEach(s => {
+            const card = document.createElement('div');
+            card.className = 'save-slot-card' + (s.slot === active ? ' active' : '');
+            let body;
+            if (!s.hasSave) {
+                body = '<div class="save-slot-empty">Empty</div>';
+            } else if (s.corrupted) {
+                body = '<div class="save-slot-empty" style="color:#ff6b9b">Corrupted</div>';
+            } else {
+                const mode = s.challengeMode ? 'CHALLENGE' : (s.archiveMode ? 'ARCHIVE' : 'STORY');
+                body = `
+                    <div class="save-slot-meta-row"><span>Class</span><span>${(s.classId || 'unknown').toUpperCase()}</span></div>
+                    <div class="save-slot-meta-row"><span>Sector</span><span>${s.sector || 1}</span></div>
+                    <div class="save-slot-meta-row"><span>HP</span><span>${s.hp || 0} / ${s.maxHp || 0}</span></div>
+                    <div class="save-slot-meta-row"><span>Modules</span><span>${s.relicCount || 0}</span></div>
+                    <div class="save-slot-meta-row"><span>Mode</span><span>${mode}</span></div>
+                `;
+            }
+            card.innerHTML = `
+                <div class="save-slot-head">
+                    <span class="save-slot-letter">SLOT ${s.slot}</span>
+                    ${s.slot === active ? '<span class="save-slot-active-tag">ACTIVE</span>' : ''}
+                </div>
+                <div class="save-slot-body">${body}</div>
+                <div class="save-slot-card-actions">
+                    <button class="btn secondary save-slot-select" data-slot="${s.slot}">${s.slot === active ? 'CURRENT' : 'SELECT'}</button>
+                    ${s.hasSave ? `<button class="btn secondary save-slot-wipe" data-slot="${s.slot}">WIPE</button>` : ''}
+                </div>
+            `;
+            list.appendChild(card);
+        });
+        list.onclick = (e) => {
+            const sel = e.target.closest('.save-slot-select');
+            const wipe = e.target.closest('.save-slot-wipe');
+            if (sel) {
+                this._setActiveSlot(sel.dataset.slot);
+                this._openSaveSlotPicker();
+                // Refresh the menu so RESUME RUN reflects the newly active slot.
+                this._refreshLoadButton && this._refreshLoadButton();
+            } else if (wipe) {
+                if (!confirm(`Wipe save slot ${wipe.dataset.slot}? This cannot be undone.`)) return;
+                this._clearSave(wipe.dataset.slot);
+                this._openSaveSlotPicker();
+                this._refreshLoadButton && this._refreshLoadButton();
+            }
+        };
+        modal.classList.remove('hidden');
+    },
+    _closeSaveSlotPicker() {
+        const modal = document.getElementById('save-slot-modal');
+        if (modal) modal.classList.add('hidden');
+        this._refreshLoadButton && this._refreshLoadButton();
+    },
+    // Re-evaluate the menu's RESUME button visibility against the current
+    // active slot. Called after slot switch / wipe so the player isn't
+    // staring at a "RESUME RUN" button that points at the wrong slot.
+    _refreshLoadButton() {
+        const btn = document.getElementById('btn-load-save');
+        if (!btn) return;
+        const json = this._readSaveRaw();
+        if (json && json !== 'null') {
+            btn.classList.remove('hidden');
+            btn.style.display = 'inline-block';
+            btn.innerText = 'RESUME RUN';
+        } else {
+            btn.classList.add('hidden');
+            btn.style.display = 'none';
+        }
+    },
+
     saveGame() {
         if (!this.map.currentIdx) this.map.currentIdx = 'start';
 
@@ -6624,14 +6784,9 @@ triggerSystemCrash() {
                 signatureTier: this.player.signatureTier || 1
             }
         };
-        try {
-            localStorage.setItem('mvm_save_v1', JSON.stringify(data));
-        } catch (e) {
-            // QuotaExceededError or blocked storage — surface a hint but don't
-            // throw, since saveGame is called from UI flows that would break
-            // mid-purchase if this bubbled.
-            console.warn('[saveGame] failed:', e);
-        }
+        // Slot-aware write. Quota / blocked-storage errors are swallowed
+        // by _writeSaveRaw so a save call from a UI flow can't bubble.
+        this._writeSaveRaw(JSON.stringify(data));
     },
 
     // Migrate a raw save object to the current schema. Returns the migrated
@@ -6656,7 +6811,7 @@ triggerSystemCrash() {
     },
 
     loadGame() {
-        const json = localStorage.getItem('mvm_save_v1');
+        const json = this._readSaveRaw();
         if (!json) return;
 
         try {
@@ -6713,7 +6868,7 @@ triggerSystemCrash() {
             ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH/2, CONFIG.CANVAS_HEIGHT/2, "SYSTEM RESTORED", COLORS.GOLD);
         } catch (e) {
             console.error("Save file corrupted", e);
-            try { localStorage.removeItem('mvm_save_v1'); } catch (_) {}
+            this._clearSave();
             alert("Save file corrupted. Starting new run.");
             this.goToCharSelect();
         }
@@ -14151,7 +14306,7 @@ drawEffects() {
                 '+500 FRAG · +1 FILE', '#ffd76a');
             await this.sleep(2200);
             this.archiveMode = false;
-            localStorage.removeItem('mvm_save_v1');
+            this._clearSave();
             const btnLoad = document.getElementById('btn-load-save');
             if (btnLoad) btnLoad.style.display = 'none';
             this.changeState(STATE.MENU);
@@ -14232,7 +14387,7 @@ drawEffects() {
             
             this.saveGame();
             
-            localStorage.removeItem('mvm_save_v1');
+            this._clearSave();
             document.getElementById('btn-load-save').style.display = 'none';
 
             this.changeState(STATE.ENDING);
@@ -14746,7 +14901,7 @@ drawEffects() {
         this.activePacts = new Set();
         this._renderPactPills && this._renderPactPills();
 
-        localStorage.removeItem('mvm_save_v1');
+        this._clearSave();
         document.getElementById('btn-load-save').style.display = 'none';
 
         // Chronicle entry (Roadmap Part 27) — every loss logs.

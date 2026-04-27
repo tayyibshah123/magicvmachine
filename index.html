@@ -154,6 +154,19 @@
                 <div class="spacer"></div>
                 <!-- CHANGED ID: btn-load-save -->
                 <button id="btn-load-save" class="btn primary hidden" style="border-color: var(--neon-gold); color: var(--neon-gold);">RESUME RUN</button>
+                <button id="btn-save-slots" class="btn secondary">SAVE SLOTS</button>
+
+                <!-- Save Slot picker — modal listing A/B/C with metadata. -->
+                <div id="save-slot-modal" class="save-slot-modal hidden" role="dialog" aria-modal="true">
+                    <div class="save-slot-panel glass-panel">
+                        <h3 class="save-slot-title neon-text-gold">SAVE SLOTS</h3>
+                        <p class="save-slot-sub">Pick the slot future saves write to. Each slot keeps its own run.</p>
+                        <div id="save-slot-list" class="save-slot-list"></div>
+                        <div class="save-slot-actions">
+                            <button id="btn-save-slot-close" class="btn primary">DONE</button>
+                        </div>
+                    </div>
+                </div>
 
                 <button id="btn-start" class="btn primary"><span id="btn-start-label">INITIATE RUN</span><span id="btn-start-warn" class="btn-start-warn hidden">DISCARDS CURRENT RUN</span></button>
                 <button id="btn-challenge" class="btn secondary neon-border-gold">CHALLENGE <span id="challenge-status" style="opacity:0.7; font-size:0.85em;"></span></button>
