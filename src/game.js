@@ -10,7 +10,7 @@ import { ClassAbility } from './ui/class-ability.js';
 import { ICONS, iconImage, drawIcon, preloadCombatIcons } from './ui/icons.js';
 import { drawIntentIcon, drawEffectIcon } from './ui/canvas-icons.js';
 import { Ascension, ASCENSION_TWISTS } from './services/ascension.js';
-import { Challenge } from './services/dailies.js';
+import { Challenge, Archive } from './services/dailies.js';
 import { Achievements, ACHIEVEMENTS } from './services/achievements.js';
 import { Streak } from './services/streak.js';
 import { Hints } from './services/hints.js';
@@ -5389,6 +5389,24 @@ triggerSystemCrash() {
     },
 
     _refreshMenuChips() {
+        // Archivist cosmetic frame (Roadmap Part 24.2). Reveal the brass /
+        // silver / gold / obsidian frame around the menu title based on the
+        // highest Ascension level the Archivist has been killed on. Reads
+        // mvm_archivist_slain (any kill) and mvm_archivist_best_asc (tier).
+        const frame = document.getElementById('title-frame');
+        if (frame) {
+            const slain = localStorage.getItem('mvm_archivist_slain') === 'true';
+            if (slain) {
+                let bestAsc = 0;
+                try { bestAsc = parseInt(localStorage.getItem('mvm_archivist_best_asc') || '0', 10) || 0; }
+                catch (_) { bestAsc = 0; }
+                frame.dataset.archivistTier = String(Math.max(0, bestAsc));
+                frame.classList.add('shown');
+            } else {
+                frame.classList.remove('shown');
+            }
+        }
+
         // Archive button — reveals once the player has cleared Sector 5 at
         // least once. The flag is set in winCombat's TESSERACT PRIME branch.
         const archiveBtn = document.getElementById('btn-archive');
@@ -5396,7 +5414,34 @@ triggerSystemCrash() {
             const unlocked = localStorage.getItem('mvm_gameCompleted') === 'true';
             archiveBtn.classList.toggle('hidden', !unlocked);
             const statusArch = document.getElementById('archive-status');
-            if (unlocked && statusArch) statusArch.textContent = '· READY';
+            if (unlocked && statusArch) {
+                // Surface the latest Archive run's score — a single fight, so
+                // the most recent attempt is the most useful number to show.
+                const last = (Archive.getHistory() || [])[0];
+                if (last) {
+                    statusArch.textContent = `· LAST · ${last.turns || 0}T · A${last.ascension || 0}`;
+                } else {
+                    statusArch.textContent = '· READY';
+                }
+            }
+            // Personal-best line — separate from Challenge so the player
+            // sees the Archive track on its own ladder.
+            const archPb = Archive.personalBest && Archive.personalBest();
+            let archPbEl = document.getElementById('archive-personal-best');
+            if (unlocked && archPb) {
+                if (!archPbEl && archiveBtn.parentNode) {
+                    archPbEl = document.createElement('div');
+                    archPbEl.id = 'archive-personal-best';
+                    archPbEl.style.cssText = 'font-size:0.65rem; letter-spacing:0.12em; color:#ffd76a; opacity:0.85; margin-top:4px; text-align:center;';
+                    archiveBtn.parentNode.insertBefore(archPbEl, archiveBtn.nextSibling);
+                }
+                if (archPbEl) {
+                    archPbEl.textContent = `BEST: ${archPb.turns || 0}T · A${archPb.ascension || 0}`;
+                    archPbEl.style.display = '';
+                }
+            } else if (archPbEl) {
+                archPbEl.style.display = 'none';
+            }
         }
 
         const statusEl = document.getElementById('challenge-status');
@@ -13056,6 +13101,24 @@ drawEffects() {
             this.techFragments += 500;
             this.encryptedFiles += 1;
             try { localStorage.setItem('mvm_archivist_slain', 'true'); } catch (_) {}
+            // Track the highest Ascension level the player has ever cleared
+            // the Archivist on — drives the cosmetic frame tier on the
+            // main-menu title (Roadmap Part 24.2 cosmetic reward).
+            const ascSelArch = (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0;
+            try {
+                const prev = parseInt(localStorage.getItem('mvm_archivist_best_asc') || '-1', 10);
+                if (ascSelArch > prev) {
+                    localStorage.setItem('mvm_archivist_best_asc', String(ascSelArch));
+                }
+            } catch (_) {}
+            // Archive leaderboard (Roadmap Part 24.3) — record the run's
+            // turn count + ascension so the menu can surface a personal
+            // best line distinct from the Challenge track.
+            Archive.markComplete({
+                fragments: 500,
+                turns: (this.runStats && this.runStats.turns) || 0,
+                ascension: ascSelArch
+            });
             if (typeof Achievements !== 'undefined') {
                 try { Achievements.unlock('DAILY_FINISH'); } catch (_) {}
             }

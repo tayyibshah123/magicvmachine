@@ -55,3 +55,28 @@ export const Challenge = {
 // Backwards-compat alias for callers that still reference `Dailies`. Remove
 // once every callsite has been updated to `Challenge`.
 export const Dailies = Challenge;
+
+// Archive (Sector X) leaderboard. Separate track from Challenge so a quick
+// 1-fight Archivist run isn't ranked against a 5-boss gauntlet — Roadmap
+// Part 24.3 calls this out explicitly. Score formula favours low turn-count
+// + high ascension, like Challenge, so the same readability applies.
+const KEY_ARCH_HISTORY = 'mvm_archive_history';
+
+export const Archive = {
+    markComplete(payload = {}) {
+        const today = todayString();
+        const history = this.getHistory();
+        history.unshift({ date: today, ...payload });
+        localStorage.setItem(KEY_ARCH_HISTORY, JSON.stringify(history.slice(0, 50)));
+    },
+    getHistory() {
+        try { return JSON.parse(localStorage.getItem(KEY_ARCH_HISTORY) || '[]'); }
+        catch { return []; }
+    },
+    personalBest() {
+        const h = this.getHistory();
+        if (!h.length) return null;
+        const score = (e) => ((e.ascension || 0) + 1) * (e.fragments || 0) / ((e.turns || 0) + 1);
+        return h.reduce((best, cur) => (score(cur) > score(best) ? cur : best), h[0]);
+    },
+};
