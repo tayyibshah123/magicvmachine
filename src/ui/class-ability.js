@@ -182,8 +182,16 @@ export const ClassAbility = {
             const gain = (isTacAttack && traits.pipPerAttack > 0) ? traits.pipPerAttack : 1;
             const before = state.pips;
             state.pips = Math.min(CFG.tactician.pipMax, state.pips + gain);
+            // Pip-fill VFX — small cyan sparks per pip, full burst on track-up.
+            if (state.pips > before && Game.player) {
+                ParticleSys.createSparks(Game.player.x, Game.player.y - 40, '#00f3ff', 6);
+            }
             // First time the Command Track fills, surface what the widget does.
             if (before < CFG.tactician.pipMax && state.pips >= CFG.tactician.pipMax) {
+                if (Game.player) {
+                    ParticleSys.createTacticianBurst(Game.player.x, Game.player.y - 40);
+                    AudioMgr.playSound('beam');
+                }
                 Hints.trigger && Hints.trigger('first_tactic_ready');
             }
         }
@@ -217,6 +225,9 @@ export const ClassAbility = {
                     if (Game.player) {
                         ParticleSys.createFloatingText(Game.player.x - 60, Game.player.y - 40,
                             'BLOOM!', '#00ff99');
+                        // Bloom pollen ring — pale green leaves spiral up so the
+                        // grove plot reads as "alive" not just "lit".
+                        ParticleSys.createSummonerBurst(Game.player.x - 60, Game.player.y - 40);
                     }
                     Hints.trigger && Hints.trigger('first_grove_bloom');
                 }
@@ -225,11 +236,27 @@ export const ClassAbility = {
         if (classId === 'annihilator' && type === 'dice_used') {
             const beforeHeat = state.heat;
             state.heat = Math.min(100, state.heat + CFG.annihilator.heatPerDie);
+            // Per-die heat shimmer — small orange spark burst on every fill so
+            // the heat bar reads as "boiling" rather than just sliding up.
+            if (Game.player && state.heat > beforeHeat) {
+                ParticleSys.createSparks(Game.player.x, Game.player.y - 40, '#ff8800', 5);
+            }
             // Zone-entry hints — yellow at 50, red at 80. One-time per install.
             if (beforeHeat < 50 && state.heat >= 50 && state.heat < 80) {
+                if (Game.player) {
+                    ParticleSys.createShockwave(Game.player.x, Game.player.y, '#ff8800', 22);
+                    ParticleSys.createFloatingText(Game.player.x, Game.player.y - 100, 'YELLOW ZONE', '#ff8800');
+                    AudioMgr.playSound('upgrade');
+                }
                 Hints.trigger && Hints.trigger('first_overheat_yellow');
             }
             if (beforeHeat < 80 && state.heat >= 80) {
+                if (Game.player) {
+                    ParticleSys.createAnnihilatorBurst(Game.player.x, Game.player.y - 40);
+                    ParticleSys.createShockwave(Game.player.x, Game.player.y, '#ff4400', 32);
+                    if (Game.shake) Game.shake(8);
+                    AudioMgr.playSound('explosion');
+                }
                 Hints.trigger && Hints.trigger('first_overheat_red');
             }
         }
@@ -239,10 +266,22 @@ export const ClassAbility = {
             const amt = (payload && payload.amount) || 0;
             if (amt > 0 && !state.ready) {
                 state.bar = Math.min(CFG.bloodstalker.damageToFill, state.bar + amt);
+                // Spray a few drops on every hit so the Pool reads as "drinking
+                // your blood." Quantity scales with damage, capped so a 50-DMG
+                // hit doesn't paint the screen.
+                if (Game.player) {
+                    const drops = Math.min(8, 2 + Math.floor(amt / 4));
+                    for (let i = 0; i < drops; i++) {
+                        ParticleSys.createTrail(Game.player.x + (Math.random() - 0.5) * 30,
+                                                Game.player.y + (Math.random() - 0.5) * 30,
+                                                '#ff2244', 0.4);
+                    }
+                }
                 if (state.bar >= CFG.bloodstalker.damageToFill) {
                     state.ready = true;
                     if (Game.player) {
                         ParticleSys.createFloatingText(Game.player.x, Game.player.y - 140, "BLOOD POOL READY", "#ff2244");
+                        ParticleSys.createBloodstalkerBurst(Game.player.x, Game.player.y - 30);
                     }
                     AudioMgr.playSound('heartbeat');
                     Hints.trigger && Hints.trigger('first_blood_pool');
@@ -253,15 +292,22 @@ export const ClassAbility = {
             // Running buffer — every `shieldPerPlate` shield earned across the combat
             // lights one plate. Buffer persists between turns.
             state.shieldBuffer = (state.shieldBuffer || 0) + (payload?.amount || 0);
+            const platesBefore = state.plates;
             while (state.shieldBuffer >= CFG.sentinel.shieldPerPlate && state.plates < CFG.sentinel.plateMax) {
                 state.shieldBuffer -= CFG.sentinel.shieldPerPlate;
                 state.plates++;
+            }
+            // Per-plate "click" — small white spark burst so the player sees
+            // the plate snap into place rather than just slide on.
+            if (Game.player && state.plates > platesBefore) {
+                ParticleSys.createSparks(Game.player.x, Game.player.y - 40, '#ffffff', 6);
             }
             if (state.plates >= CFG.sentinel.plateMax && !state.blockReady) {
                 state.blockReady = true;
                 AudioMgr.playSound('defend');
                 if (Game.player) {
                     ParticleSys.createFloatingText(Game.player.x, Game.player.y - 120, "WALL READY", "#ffffff");
+                    ParticleSys.createSentinelBurst(Game.player.x, Game.player.y - 30);
                 }
                 Hints.trigger && Hints.trigger('first_shield_wall');
             }
@@ -337,6 +383,14 @@ export const ClassAbility = {
             state.plates = 0;
             state.shieldBuffer = 0;
             ParticleSys.createFloatingText(Game.player.x, Game.player.y - 120, "PERFECT BLOCK", "#ffffff");
+            // Aegis slam — wide white shockwave + sentinel burst so the
+            // nullify lands as a moment, not a silent dodge.
+            ParticleSys.createSentinelBurst(Game.player.x, Game.player.y - 40);
+            ParticleSys.createShockwave(Game.player.x, Game.player.y, '#ffffff', 44);
+            ParticleSys.createSparks(Game.player.x, Game.player.y, '#c0c0c0', 18);
+            if (Game.shake) Game.shake(10);
+            if (Game.triggerScreenFlash) Game.triggerScreenFlash('rgba(255, 255, 255, 0.32)', 220);
+            if (Game.haptic) Game.haptic('heavy');
             AudioMgr.playSound('defend');
             this.render();
             return true;
@@ -438,12 +492,15 @@ export const ClassAbility = {
                     const badge = document.getElementById('reroll-badge');
                     if (badge) badge.innerText = Game.rerolls;
                     ParticleSys.createFloatingText(p.x, p.y - 100, "MINOR TRIBUTE +1 REROLL", "#ff8888");
+                    ParticleSys.createBloodstalkerBurst(p.x, p.y - 30);
                 } else if (action === 'tribute-major') {
                     // Direct strike + bleed.
                     if (Game.enemy && Game.enemy.currentHp > 0) {
                         const dmg = Game.calculateCardDamage(CFG.bloodstalker.majorAttack, 'ATTACK', Game.enemy);
                         Game.enemy.takeDamage(dmg, p);
                         if (Game.triggerVFX) Game.triggerVFX('slash', p, Game.enemy);
+                        ParticleSys.createBloodstalkerBurst(Game.enemy.x, Game.enemy.y - 20);
+                        ParticleSys.createShockwave(Game.enemy.x, Game.enemy.y, '#ff2244', 28);
                         if (Game.enemy.currentHp > 0) {
                             Game.enemy.addEffect('bleed', 3, CFG.bloodstalker.majorBleed, '🩸',
                                 `Takes ${CFG.bloodstalker.majorBleed} DMG at end of turn.`, 'BLEED');
@@ -451,6 +508,7 @@ export const ClassAbility = {
                         bossKilled = _resolveKill(Game.enemy);
                     }
                     ParticleSys.createFloatingText(p.x, p.y - 100, "MAJOR TRIBUTE", "#ff4444");
+                    if (Game.shake) Game.shake(8);
                     AudioMgr.playSound('attack');
                 } else if (action === 'tribute-grand') {
                     // Big strike + heavy bleed + mana + rerolls.
@@ -461,6 +519,13 @@ export const ClassAbility = {
                             Game.triggerVFX('slash_heavy', p, Game.enemy);
                             Game.triggerVFX('lightning', p, Game.enemy);
                         }
+                        // Grand tribute fans the burst on BOTH ends — player
+                        // bleeds out, enemy is drenched. Doubles up the burst
+                        // call deliberately for the heavier weight.
+                        ParticleSys.createBloodstalkerBurst(p.x, p.y - 30);
+                        ParticleSys.createBloodstalkerBurst(Game.enemy.x, Game.enemy.y - 20);
+                        ParticleSys.createShockwave(Game.enemy.x, Game.enemy.y, '#ff0044', 48);
+                        if (Game.triggerScreenFlash) Game.triggerScreenFlash('rgba(255, 0, 68, 0.35)', 320);
                         if (Game.enemy.currentHp > 0) {
                             Game.enemy.addEffect('bleed', 3, CFG.bloodstalker.grandBleed, '🩸',
                                 `Takes ${CFG.bloodstalker.grandBleed} DMG at end of turn.`, 'BLEED');
@@ -496,8 +561,11 @@ export const ClassAbility = {
                     if (Game.enemy && Game.enemy.currentHp > 0) Game.enemy.takeDamage(dmg);
                     targets.forEach(m => { if (m && m.currentHp > 0) m.takeDamage(dmg); });
                     p.takeDamage(CFG.annihilator.redSelfDmg);
+                    ParticleSys.createAnnihilatorBurst(p.x, p.y - 30);
                     ParticleSys.createExplosion(p.x, p.y, 40, "#ff4400");
+                    ParticleSys.createShockwave(p.x, p.y, '#ff4400', 56);
                     if (Game.shake) Game.shake(18);
+                    if (Game.triggerScreenFlash) Game.triggerScreenFlash('rgba(255, 68, 0, 0.4)', 280);
                     AudioMgr.playSound('explosion');
                     ParticleSys.createFloatingText(p.x, p.y - 100, "MELTDOWN!", "#ff4400");
                     targets.forEach(m => _resolveKill(m));
@@ -505,6 +573,8 @@ export const ClassAbility = {
                 } else if (state.heat >= CFG.annihilator.yellowMin) {
                     state.pendingDmgMult = CFG.annihilator.yellowMult;
                     ParticleSys.createFloatingText(p.x, p.y - 80, "OVERCLOCK", "#ff8800");
+                    ParticleSys.createSparks(p.x, p.y - 30, '#ff8800', 12);
+                    ParticleSys.createShockwave(p.x, p.y, '#ff8800', 28);
                     AudioMgr.playSound('zap');
                     state.heat = 0;
                 } else return;
@@ -556,6 +626,8 @@ export const ClassAbility = {
                     for (let i = 0; i < state.plots.length; i++) state.plots[i] = 0;
                     ParticleSys.createFloatingText(p.x, p.y - 100, `GROVE APEX. x2 EMPOWERS ${buffed} ALLIES`, color);
                     ParticleSys.createShockwave(p.x, p.y, color, 48);
+                    ParticleSys.createSummonerBurst(p.x, p.y - 30);
+                    if (Game.triggerScreenFlash) Game.triggerScreenFlash('rgba(255, 215, 106, 0.32)', 320);
                     if (Game.shake) Game.shake(16);
                     if (Game.haptic) Game.haptic('heavy');
                     AudioMgr.playSound('upgrade');
@@ -602,6 +674,10 @@ export const ClassAbility = {
                     }
                 }
                 ParticleSys.createFloatingText(p.x, p.y - 80, "BLOOM → SPIRIT", "#00ff99");
+                // Spirit unfurl swirl — leafy spiral at the player so the new
+                // minion reads as "growing out of the grove."
+                ParticleSys.createSummonerBurst(p.x, p.y - 30);
+                ParticleSys.createShockwave(p.x, p.y, '#00ff99', 24);
                 AudioMgr.playSound('mana');
                 break;
             }
@@ -618,8 +694,14 @@ export const ClassAbility = {
         const dmg = Game.calculateCardDamage(CFG.arcanist.fireDmg, 'ATTACK', e);
         e.takeDamage(dmg, p);
         if (Game.triggerVFX) Game.triggerVFX('lightning', p, e);
+        // Element-tinted ember burst at the impact + caster's hand. Distinct
+        // orange-red so a player learns "fire = damage" through pure colour.
+        ParticleSys.createSparks(p.x, p.y - 30, '#ff4400', 14);
+        ParticleSys.createExplosion(e.x, e.y, 28, '#ff6600');
+        ParticleSys.createShockwave(e.x, e.y, '#ff8800', 30);
+        if (Game.shake) Game.shake(6);
         AudioMgr.playSound('zap');
-        ParticleSys.createFloatingText(p.x, p.y - 100, `GLYPH-FIRE ${dmg}`, "#bc13fe");
+        ParticleSys.createFloatingText(p.x, p.y - 100, `GLYPH-FIRE ${dmg}`, "#ff4400");
         _resolveKill(e);
     },
     _ice() {
@@ -627,16 +709,26 @@ export const ClassAbility = {
         p.addShield(CFG.arcanist.iceShield);
         if (Game.enemy && Game.enemy.currentHp > 0) {
             Game.enemy.addEffect('weak', CFG.arcanist.iceWeakTurns, CFG.arcanist.iceWeakVal, '🌀', 'Weakened', 'WEAK');
+            // Frost ring on the enemy so the WEAK debuff has a visible cause.
+            ParticleSys.createShockwave(Game.enemy.x, Game.enemy.y, '#88eaff', 26);
+            ParticleSys.createSparks(Game.enemy.x, Game.enemy.y, '#88eaff', 10);
         }
+        // Caster shield bloom — pale-blue for ice/shield association.
+        ParticleSys.createSentinelBurst(p.x, p.y - 30);
+        ParticleSys.createShockwave(p.x, p.y, '#88eaff', 28);
         AudioMgr.playSound('defend');
-        ParticleSys.createFloatingText(p.x, p.y - 100, "GLYPH-ICE", "#bc13fe");
+        ParticleSys.createFloatingText(p.x, p.y - 100, "GLYPH-ICE", "#88eaff");
     },
     _lightning() {
         const p = Game.player;
         Game.rerolls += CFG.arcanist.lightningRerolls;
         document.getElementById('reroll-badge').innerText = Game.rerolls;
+        // Yellow zigzag spark burst — distinct from fire-orange.
+        ParticleSys.createSparks(p.x, p.y - 30, '#ffe040', 18);
+        ParticleSys.createShockwave(p.x, p.y, '#ffe040', 28);
+        if (Game.triggerScreenFlash) Game.triggerScreenFlash('rgba(255, 224, 64, 0.22)', 180);
         AudioMgr.playSound('zap');
-        ParticleSys.createFloatingText(p.x, p.y - 100, "GLYPH-LIGHTNING", "#bc13fe");
+        ParticleSys.createFloatingText(p.x, p.y - 100, "GLYPH-LIGHTNING", "#ffe040");
     },
 
     _spawnSummonerSpirit() {
