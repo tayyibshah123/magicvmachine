@@ -10370,6 +10370,36 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     padding-top: 8px;
     border-top: 1px solid rgba(255,255,255,0.08);
 }
+/* Curator stat panel — aggregate row dump under the trophy strip. */
+.sanctuary-npc-body .npc-stat-block {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px;
+    margin: 6px 0 12px 0;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+}
+.sanctuary-npc-body .npc-stat-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-family: var(--font-cyber);
+    font-size: 0.82rem;
+    letter-spacing: 0.06em;
+}
+.sanctuary-npc-body .npc-stat-row > span:first-child  { color: var(--text-muted); }
+.sanctuary-npc-body .npc-stat-row > span:last-child   { color: #ffe6a8; font-weight: 700; }
+.sanctuary-npc-body .npc-stat-head {
+    margin-top: 8px;
+    margin-bottom: 4px;
+    color: var(--neon-gold);
+    font-family: var(--font-cyber);
+    font-size: 0.78rem;
+    letter-spacing: 0.16em;
+    opacity: 0.8;
+}
 
 /* Death-screen enemy portrait — sits between title and "defeated by" line. */
 .go-portrait-slot {

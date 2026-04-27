@@ -2670,10 +2670,51 @@ startQTE(type, x, y, callback) {
                 : '<p>No bosses defeated yet. Your trophy hall stands empty.</p>';
             const loreCount = (this.unlockedLore || []).length;
             const totalLore = (typeof LORE_DATABASE !== 'undefined' && LORE_DATABASE.length) || 0;
+            // Pull aggregate stats from the Chronicle history so the Curator
+            // can show "what you've actually done" across every run, not
+            // just per-sector trophies. Cap reads silently — corrupted/empty
+            // history is treated as no data, never an error.
+            let history = [];
+            try { history = JSON.parse(localStorage.getItem('mvm_run_history') || '[]'); } catch (_) {}
+            const totalRuns = history.length;
+            const wins = history.filter(r => r && r.result === 'win');
+            const winCount = wins.length;
+            const winPct = totalRuns ? Math.round((winCount / totalRuns) * 100) : 0;
+            const totalFragsAllRuns = history.reduce((sum, r) => sum + (r && r.fragments ? r.fragments : 0), 0);
+            // Per-class win tally — the player learns which classes they
+            // actually finish runs with vs which ones still owe a trophy.
+            const perClass = {};
+            wins.forEach(r => {
+                const c = (r && r.classId) || 'unknown';
+                perClass[c] = (perClass[c] || 0) + 1;
+            });
+            const classRows = Object.keys(perClass).length > 0
+                ? Object.keys(perClass).sort().map(c => `<div class="npc-stat-row"><span>${c.toUpperCase()}</span><span>${perClass[c]} win${perClass[c] === 1 ? '' : 's'}</span></div>`).join('')
+                : '<div class="npc-stat-row" style="opacity:0.7"><span>No completed runs yet.</span></div>';
+            // Best win — lowest turnCount among winning runs. Captures pace
+            // pride across the whole save, not just current run.
+            const fastest = wins.length
+                ? wins.reduce((best, cur) => ((cur.turnCount || 0) < (best.turnCount || Infinity) ? cur : best), wins[0])
+                : null;
+            // Cross-mode personal bests so a Challenge / Archive grinder
+            // sees their leaderboard scores reflected here too.
+            const challengePb = (typeof Challenge !== 'undefined' && Challenge.personalBest) ? Challenge.personalBest() : null;
+            const archivePb  = (typeof Archive  !== 'undefined' && Archive.personalBest)  ? Archive.personalBest()  : null;
             body.innerHTML = `
                 <p>The Curator tends the quiet archive of your victories.</p>
-                <div><b>Lore fragments decrypted:</b> ${loreCount} / ${totalLore}</div>
-                <div class="npc-trophy-list" style="margin-top:8px">${bossRows}</div>
+                <div class="npc-stat-block">
+                    <div class="npc-stat-row"><span>Total runs</span><span>${totalRuns}</span></div>
+                    <div class="npc-stat-row"><span>Wins</span><span>${winCount} (${winPct}%)</span></div>
+                    <div class="npc-stat-row"><span>Lifetime Fragments</span><span>${totalFragsAllRuns}</span></div>
+                    <div class="npc-stat-row"><span>Lore decrypted</span><span>${loreCount} / ${totalLore}</span></div>
+                    ${fastest ? `<div class="npc-stat-row"><span>Fastest win</span><span>${fastest.turnCount || 0} turns &middot; S${fastest.sector || 1}</span></div>` : ''}
+                    ${challengePb ? `<div class="npc-stat-row"><span>Challenge PB</span><span>${challengePb.fragments || 0} frag &middot; ${challengePb.turns || 0}T</span></div>` : ''}
+                    ${archivePb  ? `<div class="npc-stat-row"><span>Archive PB</span><span>${archivePb.fragments || 0} frag &middot; ${archivePb.turns || 0}T &middot; A${archivePb.ascension || 0}</span></div>` : ''}
+                </div>
+                <div class="npc-stat-head">VICTORIES BY CLASS</div>
+                <div class="npc-stat-block">${classRows}</div>
+                <div class="npc-stat-head">SECTOR TROPHIES</div>
+                <div class="npc-trophy-list">${bossRows}</div>
             `;
         }
         else {
