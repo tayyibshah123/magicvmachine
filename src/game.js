@@ -13854,7 +13854,11 @@ drawEffects() {
 
             // 2. Set Data
             localStorage.setItem('mvm_gameCompleted', 'true');
-            
+            // Reveal Challenge Mode for clear-winners too. Previously the
+            // unlock only fired from gameOver() so a first-time player who
+            // happened to win their inaugural run never saw the button.
+            try { Unlocks.grant('daily', 'first_run_won'); } catch (_) {}
+
             // Increment Corruption Level
             this.corruptionLevel++;
             localStorage.setItem('mvm_corruption', this.corruptionLevel);
