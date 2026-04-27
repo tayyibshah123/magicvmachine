@@ -91,14 +91,22 @@ class Minion extends Entity {
         // die. Routed via ClassAbility.onEvent. Late-imported to dodge the
         // entity.js ↔ class-ability.js circular; if not yet loaded, skip
         // silently (first-launch edge case before ClassAbility.init).
+        //
+        // DEFERRED to a microtask so the call site's `player.minions.push(m)`
+        // — which runs AFTER this constructor returns — has updated the
+        // array before the Summoner widget reads `player.minions.length`.
+        // Without the defer, atMax was evaluated as length-1, and the Apex
+        // condition (full grove + 3/3 blooms) wasn't recognised until the
+        // next render trigger (typically end of turn). Microtasks still
+        // drain before the next paint, so the grove glow lands in the same
+        // frame visually.
         if (isPlayerSide) {
-            // Synchronous call so the grove UI updates in the same frame
-            // the minion spawns — the earlier dynamic-import version
-            // deferred the plot bloom by a microtask, which was visible
-            // as a one-frame delay on mobile.
             try {
                 if (ClassAbility && typeof ClassAbility.onEvent === 'function') {
-                    ClassAbility.onEvent('minion_summoned', { minion: this });
+                    queueMicrotask(() => {
+                        try { ClassAbility.onEvent('minion_summoned', { minion: this }); }
+                        catch (_) { /* ignore */ }
+                    });
                 }
             } catch (_) { /* ignore */ }
         }
@@ -120,12 +128,18 @@ class Minion extends Entity {
         AudioMgr.playSound('upgrade');
 
         // Fire a grove-trigger event so Summoner's Sacred Grove blooms a
-        // plot on upgrade just like it does on summon. Synchronous so the
-        // plot update lands on the same frame as the upgrade VFX.
+        // plot on upgrade just like it does on summon. Deferred to a
+        // microtask so any pending caller-side mutation (e.g. push, stat
+        // tweak) is visible to _renderSummoner — the Apex check reads
+        // player.minions.length immediately. Microtasks still drain
+        // before paint, so the visual update is same-frame.
         if (this.isPlayerSide) {
             try {
                 if (ClassAbility && typeof ClassAbility.onEvent === 'function') {
-                    ClassAbility.onEvent('minion_upgraded', { minion: this });
+                    queueMicrotask(() => {
+                        try { ClassAbility.onEvent('minion_upgraded', { minion: this }); }
+                        catch (_) { /* ignore */ }
+                    });
                 }
             } catch (_) { /* ignore */ }
         }
