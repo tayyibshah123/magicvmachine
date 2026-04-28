@@ -1548,6 +1548,40 @@ startDrag(e, die, el) {
         return { pattern: 'steady', waves: 1 };
     },
 
+    // Pre-attack windup audio — rising sawtooth ramp during the
+    // telegraph phase. Pattern decides the base note + sweep range;
+    // the rise visually crescendos with the charge orb growing at the
+    // attacker's position. WebAudio `playTone` (no asset weight).
+    _qteWindupAudio(pattern, telegraphSec) {
+        if (!AudioMgr || !AudioMgr.ctx || !AudioMgr.sfxEnabled) return;
+        // Per-pattern wind-up signature. Each tone takes the full
+        // telegraph window so the audio resolves exactly when the
+        // ring goes live — the "release" cue lands as the tone ends.
+        const settings = {
+            steady:     { freq: 200, dur: telegraphSec, type: 'sawtooth', vol: 0.05 },
+            accelerate: { freq: 320, dur: telegraphSec, type: 'sawtooth', vol: 0.07 }, // higher pitch = urgency
+            feint:      { freq: 180, dur: telegraphSec, type: 'square',   vol: 0.05 }, // square = uncertain
+            pulse:      { freq: 240, dur: telegraphSec, type: 'triangle', vol: 0.05 },
+            multi:      { freq: 260, dur: telegraphSec, type: 'sawtooth', vol: 0.06 }
+        };
+        const s = settings[pattern] || settings.steady;
+        try {
+            const t = AudioMgr.ctx.currentTime;
+            const osc = AudioMgr.ctx.createOscillator();
+            const gain = AudioMgr.ctx.createGain();
+            osc.type = s.type;
+            osc.frequency.setValueAtTime(s.freq, t);
+            osc.frequency.linearRampToValueAtTime(s.freq * 2.2, t + s.dur);
+            gain.gain.setValueAtTime(s.vol * 0.3, t);
+            gain.gain.linearRampToValueAtTime(s.vol, t + s.dur * 0.7);
+            gain.gain.exponentialRampToValueAtTime(0.01, t + s.dur);
+            osc.connect(gain);
+            gain.connect(AudioMgr._sfxMaster || AudioMgr.ctx.destination);
+            osc.start(t);
+            osc.stop(t + s.dur + 0.05);
+        } catch (_) {}
+    },
+
     // Briefly apply a hue-rotate / saturate canvas filter to sell the
     // moment of a perfect resolve. Cheap (CSS filter on the canvas
     // element, no per-pixel work) and reads as the "world snaps for a
@@ -1633,6 +1667,29 @@ startQTE(type, x, y, callback, opts) {
             const qteScale = 1;
             const pat = this._qtePatternFor(type, opts);
 
+            // Resolve the ATTACKER position so the telegraph + flying
+            // projectile have a clear point of origin. Caller can override
+            // via opts.attackerX/Y; defaults match who's doing the action
+            // (DEFEND = enemy is attacking; ATTACK = player is attacking).
+            let attackerX, attackerY;
+            if (opts && (typeof opts.attackerX === 'number')) {
+                attackerX = opts.attackerX;
+                attackerY = opts.attackerY;
+            } else if (type === 'DEFEND') {
+                attackerX = this.enemy ? this.enemy.x : x;
+                attackerY = this.enemy ? this.enemy.y : y;
+            } else {
+                attackerX = this.player ? this.player.x : x;
+                attackerY = this.player ? this.player.y : y;
+            }
+
+            // Telegraph window — extended from 0.5s to 0.9s so the
+            // attacker's wind-up actually reads as an attack starting,
+            // not a flicker. The player has time to identify the pattern
+            // before the strike commits. Wave breaks use a shorter
+            // telegraph (0.4s) since the player is already in rhythm.
+            const TELEGRAPH = 0.9;
+
             this.qte = {
                 id: now,
                 active: true,
@@ -1648,15 +1705,20 @@ startQTE(type, x, y, callback, opts) {
                 feintTriggered: false, // single-shot guard for feint phase
                 anchorX: x,           // original entity position (for a connector line)
                 anchorY: y,
+                attackerX, attackerY, // origin of the swing/projectile visual
                 targetX: tX,
                 targetY: tY,
                 maxRadius: 100 * qteScale,
                 radius: 100 * qteScale,
                 qteScale: qteScale,
-                // Tighter base shrink — was 128. The old value paired with
-                // the deceleration-near-target zone made perfect trivial.
-                baseShrinkSpeed: 150 * qteScale,
-                warmupTimer: 0.5,
+                // Slightly relaxed base shrink (was 150) so the player has
+                // time to track the projectile flying in. Combined with
+                // the ±10 px perfect window, perfect still demands a read
+                // — but the moment is now visibly TRACKABLE rather than a
+                // pure-reflex tap on an abstract ring.
+                baseShrinkSpeed: 110 * qteScale,
+                warmupTimer: TELEGRAPH,
+                initialWarmup: TELEGRAPH,
                 callback: callback || resolve
             };
 
@@ -1666,15 +1728,21 @@ startQTE(type, x, y, callback, opts) {
                 if (this.enemy) this.enemy.anim.type = 'windup';
             }
 
+            // Telegraph audio — rising sawtooth tone over the warmup
+            // window. Crescendos into the active-phase whoosh so the
+            // ear gets a "wind-up → release" cue separate from visuals.
+            this._qteWindupAudio(pat.pattern, TELEGRAPH);
+
             this.drawQTE();
 
             // Failsafe with ID Check. Multi-wave QTEs need more headroom
-            // since they queue several rings end-to-end. Per-wave budget:
-            // ~500ms warmup + ~470ms shrink + ~280ms wave_break + 450ms
-            // feint pause if pattern is feint = ~1.7s. Tutorial scales
-            // shrink by 0.45 — bump per-wave allowance to 2200ms so a
-            // 4-wave feint chain in tutorial still has slack.
-            const failsafeMs = 6500 + (pat.waves - 1) * 2200;
+            // since they queue several rings end-to-end. Updated budget
+            // per wave: 900ms telegraph + ~640ms shrink + 400ms wave
+            // break + 450ms feint pause = ~2.4s. Tutorial × 0.45 on
+            // active phase pushes that to ~3.0s — bump per-wave
+            // allowance to 2800ms so a 4-wave feint in tutorial still
+            // has slack.
+            const failsafeMs = 7500 + (pat.waves - 1) * 2800;
             setTimeout(() => {
                 if (this.qte.active && this.qte.id === now &&
                    (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT)) {
@@ -1811,6 +1879,135 @@ startQTE(type, x, y, callback, opts) {
         vig.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
         ctx.fillStyle = vig;
         ctx.fillRect(0, 0, cw, ch);
+
+        // ── 0a. ATTACKER TELEGRAPH (warmup + wave_break). The attacker
+        // visibly winds up — charging orb, inward-spiraling sparks, and
+        // a faint connector to the target — so the QTE's start-time
+        // reads as an attack ABOUT to land, not an abstract ring
+        // appearing. The telegraph IS the timing cue: when the orb
+        // peaks, the swing commits.
+        if (this.qte.attackerX !== undefined &&
+            (this.qte.phase === 'warmup' || this.qte.phase === 'wave_break')) {
+            const ax = this.qte.attackerX, ay = this.qte.attackerY;
+            const initWarm = this.qte.initialWarmup || 0.9;
+            // 0..1 progress through the telegraph
+            const wp = Math.max(0, Math.min(1, 1 - (this.qte.warmupTimer / initWarm)));
+
+            // Faint connector line attacker → target so the player's eye
+            // links the wind-up location to where the QTE will resolve.
+            ctx.beginPath();
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(targetX, targetY);
+            ctx.setLineDash([6, 6]);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${0.08 + wp * 0.18})`;
+            ctx.lineWidth = 1.5;
+            ctx.shadowColor = patternColor;
+            ctx.shadowBlur = 4;
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Inward-spiraling sparks converging on the attacker. Tighter
+            // and faster as the telegraph progresses.
+            const spiralCount = 6;
+            const spiralR = 64 - wp * 50;
+            for (let i = 0; i < spiralCount; i++) {
+                const phase = this.qte.elapsed * (5 + wp * 8) + (i * Math.PI * 2 / spiralCount);
+                const sx = ax + Math.cos(phase) * spiralR;
+                const sy = ay + Math.sin(phase) * spiralR;
+                ctx.beginPath();
+                ctx.arc(sx, sy, 2 + wp * 2, 0, Math.PI * 2);
+                ctx.fillStyle = patternColor;
+                ctx.shadowColor = patternColor;
+                ctx.shadowBlur = 12;
+                ctx.globalAlpha = 0.5 + wp * 0.5;
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1.0;
+
+            // Charge orb — grows from 0 to ~28 px as the wind-up peaks.
+            // Subtle pulse on top so it doesn't feel static at full size.
+            const chargeR = 6 + wp * 26 + Math.sin(this.qte.elapsed * 14) * 2;
+            const grad = ctx.createRadialGradient(ax, ay, 0, ax, ay, chargeR);
+            grad.addColorStop(0, '#ffffff');
+            grad.addColorStop(0.4, patternColor);
+            grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.beginPath();
+            ctx.arc(ax, ay, chargeR, 0, Math.PI * 2);
+            ctx.fillStyle = grad;
+            ctx.shadowColor = patternColor;
+            ctx.shadowBlur = 30;
+            ctx.fill();
+
+            // Pulse outer ring — release-cue, visibly tightens as the
+            // wind-up nears completion, mirroring the locking brackets.
+            const outerPulseR = chargeR + 14 + Math.sin(this.qte.elapsed * 10) * 4;
+            ctx.beginPath();
+            ctx.arc(ax, ay, outerPulseR, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${0.4 + wp * 0.4})`;
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 14;
+            ctx.stroke();
+        }
+
+        // ── 0b. FLYING PROJECTILE (active). The attack ITSELF flies
+        // from attacker → target as the ring shrinks. Position lerps
+        // with shrink progress so projectile arrival = ring-at-target =
+        // the perfect-tap moment. The animation IS the timing cue.
+        if (inActive && this.qte.attackerX !== undefined) {
+            const ax = this.qte.attackerX, ay = this.qte.attackerY;
+            const span = this.qte.maxRadius - targetZone;
+            const tp = (span > 0)
+                ? 1 - Math.max(0, Math.min(1, (radius - targetZone) / span))
+                : 1;
+            const px = ax + (targetX - ax) * tp;
+            const py = ay + (targetY - ay) * tp;
+
+            // Ghost trail behind projectile — three faded copies at
+            // earlier travel positions sell speed.
+            for (let i = 1; i <= 4; i++) {
+                const trailTp = Math.max(0, tp - i * 0.07);
+                const tx = ax + (targetX - ax) * trailTp;
+                const ty = ay + (targetY - ay) * trailTp;
+                ctx.beginPath();
+                ctx.arc(tx, ty, 13 - i * 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = patternColor;
+                ctx.shadowColor = patternColor;
+                ctx.shadowBlur = 16;
+                ctx.globalAlpha = 0.45 - i * 0.09;
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1.0;
+
+            // Projectile core — pattern-tinted outer + white-hot inner.
+            const projR = 14 + Math.sin(this.qte.elapsed * 18) * 2;
+            ctx.beginPath();
+            ctx.arc(px, py, projR, 0, Math.PI * 2);
+            ctx.fillStyle = patternColor;
+            ctx.shadowColor = patternColor;
+            ctx.shadowBlur = 30;
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(px, py, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowBlur = 14;
+            ctx.fill();
+            // Slash-style swing arc — for steady/accelerate, draw a
+            // short streak from the projectile's last position so the
+            // motion reads as a swing, not a glide.
+            if (pattern === 'steady' || pattern === 'accelerate' || pattern === 'multi') {
+                const tailTp = Math.max(0, tp - 0.04);
+                const lx = ax + (targetX - ax) * tailTp;
+                const ly = ay + (targetY - ay) * tailTp;
+                ctx.beginPath();
+                ctx.moveTo(lx, ly);
+                ctx.lineTo(px, py);
+                ctx.strokeStyle = '#ffffff';
+                ctx.shadowColor = patternColor;
+                ctx.shadowBlur = 22;
+                ctx.lineWidth = 4;
+                ctx.stroke();
+            }
+        }
 
         // ── 1. Static Target Zone. Pulses on every pattern in the active
         // phase (subtler on `steady`, harder on `pulse`). The pulse
@@ -2115,9 +2312,17 @@ startQTE(type, x, y, callback, opts) {
                 this.qte.waveIdx++;
                 this.qte.radius = this.qte.maxRadius;
                 this.qte.phase = 'wave_break';
-                this.qte.warmupTimer = 0.28;
+                // Inter-wave telegraph — shorter than the initial wind-up
+                // (player's already in rhythm) but long enough to read
+                // the next ring's spawn before it shrinks.
+                this.qte.warmupTimer = 0.42;
+                this.qte.initialWarmup = 0.42;
                 this.qte.feintTriggered = false;
                 this.qte.elapsed = 0;
+                // Mini wind-up audio for the next wave so each chain
+                // beat lands with its own cue. Shorter ramp than the
+                // initial telegraph since the player is already locked in.
+                this._qteWindupAudio(this.qte.pattern, 0.42);
                 return;
             }
             // Last wave (or break) — collapse to the worst-quality result.
@@ -2137,6 +2342,21 @@ startQTE(type, x, y, callback, opts) {
         if (quality === 'early') {
             msg = "TOO EARLY";
             color = "#888";
+        }
+
+        // Impact burst — bridges the in-QTE flying projectile to the
+        // post-QTE damage VFX so the visual is continuous: projectile
+        // arrives at the target, "lands" with this burst, then the
+        // damage VFX fires. Without it the projectile vanishes
+        // abruptly on tap and the next VFX appears with a gap.
+        if (quality !== 'fail' && quality !== 'early' && this.qte.targetX !== undefined) {
+            const PATTERN_COLOR = {
+                steady: COLORS.GOLD, accelerate: '#ff3355',
+                feint: '#bc13fe', pulse: '#ff66dd', multi: '#00f3ff'
+            };
+            const c = PATTERN_COLOR[this.qte.pattern] || COLORS.GOLD;
+            ParticleSys.createShockwave(this.qte.targetX, this.qte.targetY, c, quality === 'perfect' ? 32 : 18);
+            ParticleSys.createSparks(this.qte.targetX, this.qte.targetY, c, quality === 'perfect' ? 14 : 8);
         }
 
         if (quality !== 'fail' && quality !== 'early') {
