@@ -5664,18 +5664,29 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 .save-slot-panel {
     width: min(680px, 100%);
     max-height: 88vh;
-    overflow-y: auto;
     padding: 18px;
     display: flex;
     flex-direction: column;
     gap: 12px;
+    /* Panel itself doesn't scroll — only the slot list does. That keeps
+       the title sticky at the top and the DONE button pinned at the
+       bottom so a player with three filled slots can always close the
+       picker without hunting for the scroll handle. */
+    overflow: hidden;
 }
-.save-slot-title { margin: 0; font-family: var(--font-cyber); letter-spacing: 0.18em; }
-.save-slot-sub { margin: 0 0 6px 0; opacity: 0.8; font-size: 0.85rem; }
+.save-slot-title { margin: 0; font-family: var(--font-cyber); letter-spacing: 0.18em; flex-shrink: 0; }
+.save-slot-sub { margin: 0 0 6px 0; opacity: 0.8; font-size: 0.85rem; flex-shrink: 0; }
 .save-slot-list {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
     gap: 12px;
+    /* List takes the remaining vertical room and scrolls internally so
+       the action row stays visible regardless of slot count. min-height:0
+       is required for a flex child to shrink below its content size. */
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px; /* breathing room for the inner scrollbar */
 }
 .save-slot-card {
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -5716,7 +5727,13 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     align-items: center;
     justify-content: center;
 }
-.save-slot-actions { display: flex; justify-content: flex-end; }
+.save-slot-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-shrink: 0;
+    padding-top: 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
 #screen-char-select .char-grid {
     display: grid;
     /* 3 columns × 2 rows for all six classes — every card same size. */
@@ -9583,15 +9600,17 @@ canvas + .game-icon { filter: none; }
 
 /* Main-menu row groupings — keep alt-mode + meta-nav buttons paired
    horizontally so the menu reads as four blocks (primary / modes /
-   meta / chrome) instead of a tall stack. Each row inherits the same
-   max-width as a primary button so the visual rhythm stays tidy. */
+   meta / chrome) instead of a tall stack. Width is constrained to
+   stay clear of the L-bracket frame's vertical legs (each ~48px wide,
+   inset 14px from the screen edge), which would otherwise be visually
+   crossed by full-width buttons at the bottom of the menu. */
 .menu-row {
     display: flex;
     flex-direction: row;
     flex-wrap: wrap;
     gap: 10px;
-    width: 100%;
-    max-width: 320px;
+    width: 80%;
+    max-width: 280px;
     margin: 6px 0;
 }
 .menu-row .btn {
@@ -9607,15 +9626,22 @@ canvas + .game-icon { filter: none; }
     padding-left: 8px;
     padding-right: 8px;
 }
-/* Primary CTAs sit centred and slightly tighter than the run-mode rows. */
+/* Primary CTAs match the row width so the menu reads as a single
+   centred column and stays clear of the bottom L-brackets. */
 .menu-cta {
-    width: 100%;
-    max-width: 320px;
+    width: 80%;
+    max-width: 280px;
     margin: 8px 0;
 }
 .menu-cta-resume {
     border-color: var(--neon-gold);
     color: var(--neon-gold);
+}
+/* Push the menu content above the bottom L-bracket frame so the last
+   button doesn't sit on top of the pink corner accents. */
+#screen-start {
+    padding-top: 60px;
+    padding-bottom: 70px;
 }
 
 /* Glitch/phase-in: clipped wipes + horizontal RGB-split flickers + final
