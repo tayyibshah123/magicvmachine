@@ -938,9 +938,64 @@ const Game = {
             this.mouseY = coords.y;
             this.handleCanvasHover(e.clientX, e.clientY);
         });
-        
+
+        // Mobile long-press → tooltip on canvas-rendered targets (enemy
+        // intents, status icons under HP bars, etc.). Mouse-hover fires
+        // handleCanvasHover from mousemove; on mobile there's no
+        // mousemove without a button, so the tooltip path was unreachable
+        // for thumb players. 500ms hold without movement triggers the
+        // same handler at the touch position; releasing or moving past
+        // 12px cancels and lets the normal tap/drag take over.
+        let canvasLpTimer = null;
+        let canvasLpStartX = 0, canvasLpStartY = 0;
+        this._longPressFired = false;
+        this.canvas.addEventListener('touchstart', (e) => {
+            if (this.qte.active || this.dragState.active) return;
+            const t = e.touches && e.touches[0];
+            if (!t) return;
+            canvasLpStartX = t.clientX;
+            canvasLpStartY = t.clientY;
+            clearTimeout(canvasLpTimer);
+            canvasLpTimer = setTimeout(() => {
+                const coords = getLogicCoords({ clientX: canvasLpStartX, clientY: canvasLpStartY });
+                this.mouseX = coords.x;
+                this.mouseY = coords.y;
+                this.handleCanvasHover(canvasLpStartX, canvasLpStartY);
+                this._longPressFired = true;
+                if (this.haptic) this.haptic('tap');
+            }, 500);
+        }, { passive: true });
+        this.canvas.addEventListener('touchmove', (e) => {
+            if (!canvasLpTimer) return;
+            const t = e.touches && e.touches[0];
+            if (!t) return;
+            if (Math.hypot(t.clientX - canvasLpStartX, t.clientY - canvasLpStartY) > 12) {
+                clearTimeout(canvasLpTimer);
+                canvasLpTimer = null;
+            }
+        }, { passive: true });
+        const cancelCanvasLp = () => {
+            clearTimeout(canvasLpTimer);
+            canvasLpTimer = null;
+            // Hide tooltip shortly after release so the player has a
+            // moment to read it without it lingering forever.
+            if (this._longPressFired) {
+                setTimeout(() => TooltipMgr.hide(), 1500);
+            }
+        };
+        this.canvas.addEventListener('touchend', cancelCanvasLp);
+        this.canvas.addEventListener('touchcancel', cancelCanvasLp);
+
         const handleInteraction = (e) => {
              if (this.inputCooldown > 0) return;
+
+             // Suppress the click that fires after a long-press tooltip
+             // resolved — the player wanted to READ, not commit an
+             // action. Single-shot flag, cleared after one suppress.
+             if (this._longPressFired) {
+                 this._longPressFired = false;
+                 return;
+             }
 
              if (this.qte.active) { this.checkQTE(); return; }
              if (this.dragState.active) return;
@@ -1165,6 +1220,70 @@ const Game = {
             return (Math.random() < p) && (Math.random() < p);
         }
         return Math.random() < p;
+    },
+
+    // Bind a long-press → TooltipMgr.show on a DOM element so mobile
+    // players can read what something does without leaving the screen.
+    // Mouse hover still fires immediately; touch fires after 500ms hold
+    // without movement (cancelled if the touch slides > 12 px). Existing
+    // click/tap handlers stay intact — long-press doesn't suppress them.
+    // Idempotent via element.dataset.lptipBound so re-renders don't
+    // pile up listeners.
+    attachLongPressTooltip(el, getText, opts = {}) {
+        if (!el || el.dataset.lptipBound) return;
+        el.dataset.lptipBound = '1';
+        const delay = opts.delay || 500;
+        const moveCancel = opts.moveCancel || 12;
+        let timer = null;
+        let startX = 0, startY = 0;
+        let active = false;
+        const resolveText = () => {
+            return (typeof getText === 'function') ? getText(el) : getText;
+        };
+        const showAt = (clientX, clientY) => {
+            const text = resolveText();
+            if (!text) return;
+            TooltipMgr.show(text, clientX, clientY - 30);
+            active = true;
+        };
+        // Touch path — long-press semantics
+        el.addEventListener('touchstart', (e) => {
+            const t = e.touches && e.touches[0];
+            if (!t) return;
+            startX = t.clientX;
+            startY = t.clientY;
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                showAt(startX, startY);
+                if (this.haptic) this.haptic('tap');
+            }, delay);
+        }, { passive: true });
+        el.addEventListener('touchmove', (e) => {
+            if (!timer) return;
+            const t = e.touches && e.touches[0];
+            if (!t) return;
+            if (Math.hypot(t.clientX - startX, t.clientY - startY) > moveCancel) {
+                clearTimeout(timer);
+                timer = null;
+            }
+        }, { passive: true });
+        const onEnd = () => {
+            clearTimeout(timer);
+            timer = null;
+            if (active) {
+                setTimeout(() => { TooltipMgr.hide(); active = false; }, 1500);
+            }
+        };
+        el.addEventListener('touchend', onEnd);
+        el.addEventListener('touchcancel', onEnd);
+        // Mouse path — keep desktop hover working
+        if (opts.mouseHover !== false) {
+            el.addEventListener('mouseenter', (e) => {
+                const text = resolveText();
+                if (text) TooltipMgr.show(text, e.clientX, e.clientY);
+            });
+            el.addEventListener('mouseleave', () => TooltipMgr.hide());
+        }
     },
 
     handleCanvasHover(screenX, screenY) {
@@ -2583,6 +2702,11 @@ startQTE(type, x, y, callback, opts) {
         }
 
         TooltipMgr.hide();
+        // Clear the canvas long-press suppression flag on every state
+        // change so a long-press that fired in the previous screen
+        // can't silently drop the next screen's first tap. Single-shot
+        // by design; this just prevents stale persistence.
+        this._longPressFired = false;
 
         this.currentState = newState;
         const activate = (id) => {
