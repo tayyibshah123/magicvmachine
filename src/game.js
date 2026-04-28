@@ -1548,6 +1548,30 @@ startDrag(e, die, el) {
         return { pattern: 'steady', waves: 1 };
     },
 
+    // Trigger the aligned attack VFX at the moment the QTE active phase
+    // begins. Damage application is intentionally skipped here (callback
+    // is null) — the QTE's own callback (executeAction) carries the
+    // actual damage logic, and this flag tells it to skip the redundant
+    // VFX trigger so we don't get two meteors / two slashes / two
+    // glyphs. The aligned VFX is purely the visual cue — its impact
+    // visually coincides with the ring crossing the perfect window.
+    _fireAlignedQteVFX() {
+        const aligned = this.qte && this.qte.alignedVFX;
+        if (!aligned || this.qte.alignedVFXFired) return;
+        if (!this.triggerVFX) return;
+        try {
+            this.triggerVFX(aligned.vfxType, aligned.source, aligned.target, null, aligned.vfxOpts || {});
+        } catch (_) {}
+        this.qte.alignedVFXFired = true;
+        // Hand the executeAction path the info it needs to defer damage
+        // to the VFX impact moment (relevant for meteor-style VFX whose
+        // damage normally fires from an onHit callback). All three are
+        // single-shot — cleared the moment executeAction reads them.
+        this._alignedAttackVfxFired = aligned.vfxType;
+        this._alignedAttackVfxStart = Date.now();
+        this._alignedAttackVfxImpactMs = aligned.impactMs || 400;
+    },
+
     // Pre-attack windup audio — rising sawtooth ramp during the
     // telegraph phase. Pattern decides the base note + sweep range;
     // the rise visually crescendos with the charge orb growing at the
@@ -1646,6 +1670,10 @@ startDrag(e, die, el) {
 
 startQTE(type, x, y, callback, opts) {
         Hints.trigger('first_qte');
+        // Clear any stale aligned-VFX coordination from a prior QTE so a
+        // dropped-mid-execution flag can't make the next executeAction
+        // skip its VFX trigger by mistake.
+        this._alignedAttackVfxFired = null;
         return new Promise(resolve => {
             const now = Date.now();
             this.inputCooldown = 0.6;
@@ -1690,6 +1718,25 @@ startQTE(type, x, y, callback, opts) {
             // telegraph (0.4s) since the player is already in rhythm.
             const TELEGRAPH = 0.9;
 
+            // Aligned-VFX path: the actual attack animation plays during
+            // the active phase, and the ring shrink speed is tuned so its
+            // perfect window crosses target zone at the VFX's impact moment.
+            // Suppresses the in-QTE faux projectile (the real VFX is the
+            // visual cue), and the executeAction callback is told to skip
+            // the redundant VFX trigger so we don't get two meteors.
+            const aligned = (opts && opts.alignedVFX) || null;
+            // Default shrink: 110 px/s. Aligned: tune so (maxRadius -
+            // targetZone) / shrinkSpeed = impactMs. Clamp to a sane range
+            // so very-short VFX don't yield a 1-frame active phase.
+            let shrinkSpeed;
+            if (aligned && aligned.impactMs) {
+                const span = (100 - 30) * qteScale; // maxRadius - targetZone
+                const seconds = Math.max(0.45, Math.min(1.4, aligned.impactMs / 1000));
+                shrinkSpeed = span / seconds;
+            } else {
+                shrinkSpeed = 110 * qteScale;
+            }
+
             this.qte = {
                 id: now,
                 active: true,
@@ -1711,14 +1758,11 @@ startQTE(type, x, y, callback, opts) {
                 maxRadius: 100 * qteScale,
                 radius: 100 * qteScale,
                 qteScale: qteScale,
-                // Slightly relaxed base shrink (was 150) so the player has
-                // time to track the projectile flying in. Combined with
-                // the ±10 px perfect window, perfect still demands a read
-                // — but the moment is now visibly TRACKABLE rather than a
-                // pure-reflex tap on an abstract ring.
-                baseShrinkSpeed: 110 * qteScale,
+                baseShrinkSpeed: shrinkSpeed,
                 warmupTimer: TELEGRAPH,
                 initialWarmup: TELEGRAPH,
+                alignedVFX: aligned,
+                alignedVFXFired: false,
                 callback: callback || resolve
             };
 
@@ -1771,6 +1815,11 @@ startQTE(type, x, y, callback, opts) {
                 // the moment the ring "goes live" so a player who
                 // glanced away during warmup gets snapped back.
                 this._qteFlashOnStart();
+                // Aligned-VFX fire — the actual attack animation begins
+                // RIGHT NOW, concurrent with the active-phase shrink.
+                // Mark `_alignedAttackVfxFired` so executeAction skips
+                // its own duplicate trigger when the QTE resolves.
+                this._fireAlignedQteVFX();
             }
             return;
         }
@@ -1783,6 +1832,7 @@ startQTE(type, x, y, callback, opts) {
             if (this.qte.warmupTimer <= 0) {
                 this.qte.phase = 'active';
                 this._qteFlashOnStart();
+                this._fireAlignedQteVFX();
             }
             return;
         }
@@ -1952,8 +2002,14 @@ startQTE(type, x, y, callback, opts) {
         // ── 0b. FLYING PROJECTILE (active). The attack ITSELF flies
         // from attacker → target as the ring shrinks. Position lerps
         // with shrink progress so projectile arrival = ring-at-target =
-        // the perfect-tap moment. The animation IS the timing cue.
-        if (inActive && this.qte.attackerX !== undefined) {
+        // the perfect-tap moment.
+        //
+        // SUPPRESSED when an aligned VFX has been fired — the real
+        // attack animation (meteor falling, slash arcing, etc.) is now
+        // the timing cue, so a duplicate faux-projectile would just
+        // visually compete with it. The ring still serves as the
+        // precision indicator.
+        if (inActive && this.qte.attackerX !== undefined && !this.qte.alignedVFXFired) {
             const ax = this.qte.attackerX, ay = this.qte.attackerY;
             const span = this.qte.maxRadius - targetZone;
             const tp = (span > 0)
@@ -11354,7 +11410,16 @@ async startTurn() {
                     summoner:     'attack_verdant_lash'
                 };
                 const _vfxKey = _attackVfxByClass[this.player.classId] || (isUpgraded ? 'blade_storm' : 'slash_heavy');
-                this.triggerVFX(_vfxKey, this.player, finalEnemy, null, { upgraded: isUpgraded });
+                // Skip the trigger if the QTE already fired this VFX in
+                // its active-phase start — the aligned-VFX system has
+                // the meteor / slash / glyph already mid-flight, and
+                // re-triggering produces a duplicate. The flag is
+                // single-shot: cleared the moment we read it.
+                if (this._alignedAttackVfxFired === _vfxKey) {
+                    this._alignedAttackVfxFired = null;
+                } else {
+                    this.triggerVFX(_vfxKey, this.player, finalEnemy, null, { upgraded: isUpgraded });
+                }
                 if (!isUpgraded) AudioMgr.playSound('attack');
                 
                 // Class-aware base damage
@@ -11777,7 +11842,19 @@ async startTurn() {
                 }
             }
             else if (type === 'EARTHQUAKE') {
-                this.triggerVFX('earthquake', this.player, this.enemy); 
+                // Skip the duplicate trigger when the QTE already fired
+                // earthquake at active-phase start. Damage timing stays
+                // on its existing 500ms setTimeout (matches the original
+                // earthquake-ring expansion); since the QTE-fired and
+                // executeAction-fired earthquakes share the same 480ms
+                // visual impact, the AoE lands within ~20ms of the
+                // visual rings. Close enough that no further deferral
+                // is needed.
+                if (this._alignedAttackVfxFired === 'earthquake') {
+                    this._alignedAttackVfxFired = null;
+                } else {
+                    this.triggerVFX('earthquake', this.player, this.enemy);
+                }
                 setTimeout(() => {
                     const targets = [this.enemy, ...this._enemyMinions()];
                     let deadEnemy = false;
@@ -11806,16 +11883,12 @@ async startTurn() {
 
             } else if (type === 'METEOR') {
                 const onMeteorHit = () => {
-                    let dmg = isUpgraded ? 60 : 50; // Skill: Starfall (60?) No, list says 50 is fine, keeping 50 for base/upgraded check. Wait, previous list said 50 DMG.
-                    // Actually, I will make upgraded 60 as per standard buff logic if desired, but user said "Keep as is" for Meteor.
-                    // Checking list: METEOR Starfall: 50 DMG. Keep as is.
-                    // So Upgraded stays 50 (base 30).
-                    
-                    dmg = this.calculateCardDamage(dmg, type); 
-                    dmg = Math.floor(dmg * qteMultiplier * chargeMult); 
-                    
+                    let dmg = isUpgraded ? 60 : 50;
+                    dmg = this.calculateCardDamage(dmg, type);
+                    dmg = Math.floor(dmg * qteMultiplier * chargeMult);
+
                     if (finalEnemy.takeDamage(dmg)) {
-                        if (finalEnemy === this.enemy) { 
+                        if (finalEnemy === this.enemy) {
                             this.winCombat();
                         } else {
                             if (this.enemy) this.enemy.minions = this.enemy.minions.filter(m => m !== finalEnemy);
@@ -11825,7 +11898,19 @@ async startTurn() {
                         }
                     }
                 };
-                this.triggerVFX('orbital_strike', this.player, finalEnemy, onMeteorHit);
+                // Aligned-VFX path: orbital_strike was already fired at
+                // QTE active-phase start; the meteor is mid-flight. Skip
+                // the duplicate trigger and schedule the damage callback
+                // to coincide with the visual impact (remaining flight
+                // time = total impact time minus what's already elapsed).
+                if (this._alignedAttackVfxFired === 'orbital_strike') {
+                    const elapsed = Date.now() - (this._alignedAttackVfxStart || Date.now());
+                    const remaining = Math.max(0, (this._alignedAttackVfxImpactMs || 600) - elapsed);
+                    this._alignedAttackVfxFired = null;
+                    setTimeout(onMeteorHit, remaining);
+                } else {
+                    this.triggerVFX('orbital_strike', this.player, finalEnemy, onMeteorHit);
+                }
 
             } else if (type === 'CONSTRICT') {
                  const val = isUpgraded ? 0.25 : 0.5;
@@ -11893,11 +11978,57 @@ async startTurn() {
         }
 
         if (this._isAttackSlot(type)) {
-             this.startQTE('ATTACK', finalEnemy.x, finalEnemy.y, executeAction);
+             // Build the aligned-VFX bundle so the actual attack animation
+             // plays DURING the QTE active phase. The QTE shrink time is
+             // tuned to the VFX's natural impact time so the ring crosses
+             // its perfect window at the exact moment the VFX lands —
+             // tap-on-impact instead of an abstract ring + a separate
+             // post-QTE meteor.
+             const _alignVfx = this._resolveAttackVfx(type, isUpgraded);
+             this.startQTE('ATTACK', finalEnemy.x, finalEnemy.y, executeAction, {
+                 alignedVFX: _alignVfx ? {
+                     vfxType: _alignVfx.vfxType,
+                     impactMs: _alignVfx.impactMs,
+                     source: this.player,
+                     target: finalEnemy,
+                     vfxOpts: _alignVfx.vfxOpts || {}
+                 } : null
+             });
              return;
         }
 
         executeAction();
+    },
+
+    // Map an attack die type → the VFX that will fire on impact + a
+    // best-effort impact time so the QTE active phase can be lined up
+    // with the visual. Returning null means "no aligned VFX, use the
+    // default QTE timing". Each entry is the BASE attack visual; the
+    // executeAction branches re-trigger VFX for damage application,
+    // suppressed via _alignedVfxFired below.
+    _resolveAttackVfx(type, isUpgraded) {
+        // Class-specific basic attack VFX (set 1-1 with classes).
+        const cls = this.player && this.player.classId;
+        const _classVfx = {
+            tactician:    { vfxType: 'attack_pawn_volley',   impactMs: 380 },
+            arcanist:     { vfxType: 'attack_glyph_weave',   impactMs: 460 },
+            bloodstalker: { vfxType: 'attack_sanguine_bite', impactMs: 320 },
+            annihilator:  { vfxType: 'attack_overdrive',     impactMs: 420 },
+            sentinel:     { vfxType: 'attack_bulwark_bash',  impactMs: 340 },
+            summoner:     { vfxType: 'attack_verdant_lash',  impactMs: 400 }
+        };
+        if (this._dieSlot(type) === 'attack' && cls && _classVfx[cls]) {
+            const v = _classVfx[cls];
+            return { vfxType: v.vfxType, impactMs: v.impactMs, vfxOpts: { upgraded: isUpgraded } };
+        }
+        // Skill dice with their own signature VFX.
+        if (type === 'METEOR')     return { vfxType: 'orbital_strike', impactMs: 620 };
+        if (type === 'EARTHQUAKE') return { vfxType: 'earthquake',     impactMs: 480 };
+        // Default fallbacks.
+        if (this._dieSlot(type) === 'attack') {
+            return { vfxType: isUpgraded ? 'blade_storm' : 'slash_heavy', impactMs: 380 };
+        }
+        return null;
     },
 
     // Route each class's signature strike to a unique on-canvas animation.
