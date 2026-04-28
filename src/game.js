@@ -1026,7 +1026,36 @@ const Game = {
                 if (!dragRaf) {
                     dragRaf = requestAnimationFrame(() => {
                         if (this.dragState.ghostElement) {
-                            this.dragState.ghostElement.style.transform = `translate(${cx - 32}px, ${cy - 32}px) scale(1.1) rotate(5deg)`;
+                            // Ghost is offset ABOVE the finger so the player
+                            // can see the die they're dragging instead of
+                            // having it sit under the finger pad. -32 (half
+                            // the ghost width) + an upward Y offset that
+                            // scales with finger size.
+                            const fingerLift = this.dragState.fingerLift || 84;
+                            this.dragState.ghostElement.style.transform =
+                                `translate(${cx - 32}px, ${cy - 32 - fingerLift}px) scale(1.1) rotate(5deg)`;
+                        }
+                        // Live valid-target highlight. Update Game.mouseX/Y
+                        // (canvas-space) so getDropTarget can resolve the
+                        // entity under the finger. If we land on a NEW
+                        // valid target, fire a soft haptic tick + audio
+                        // tick so the player feels the lock-on.
+                        if (this.dragState.active) {
+                            const rect = this.canvas.getBoundingClientRect();
+                            const sx = CONFIG.CANVAS_WIDTH / rect.width;
+                            const sy = CONFIG.CANVAS_HEIGHT / rect.height;
+                            this.mouseX = (cx - rect.left) * sx;
+                            this.mouseY = (cy - rect.top) * sy;
+                            const ent = this.getDropTarget();
+                            const die = this.dragState.die;
+                            const valid = (ent && die && this._isValidDropEntity(die, ent)) ? ent : null;
+                            if (valid !== this.dragState.hoverTarget) {
+                                this.dragState.hoverTarget = valid;
+                                if (valid) {
+                                    if (this.haptic) this.haptic('tap');
+                                    try { AudioMgr.playSound('click', { playbackRate: 1.4, volume: 0.55 }); } catch (_) {}
+                                }
+                            }
                         }
                         dragRaf = null;
                     });
@@ -1331,6 +1360,12 @@ startDrag(e, die, el) {
             if (this.dragState.dieElement) {
                 this.dragState.dieElement.style.opacity = '1';
             }
+            // Clear any lingering hover-target reference from the prior
+            // drag so the canvas-side lock-on ring doesn't briefly draw
+            // on a stale entity before pointermove updates it. Line
+            // 1405 below also resets hoverTarget on the new drag, but
+            // doing it here closes the semantic gap.
+            this.dragState.hoverTarget = null;
         }
         
         this.dragState.active = true;
@@ -1364,11 +1399,20 @@ startDrag(e, die, el) {
         // overrides our inline transform during the first 420ms, pinning the ghost to (0,0).
         ghost.style.animation = 'none';
         
-        // Initial position off-center to see under finger
+        // Lift the ghost above the finger so the player can SEE what
+        // they're dragging instead of the die sitting under the finger
+        // pad. fingerLift is the Y offset; pointermove uses the same
+        // value so the ghost stays anchored above the touch through
+        // the whole drag.
+        const fingerLift = 84;
+        this.dragState.fingerLift = fingerLift;
+        // Reset hover-target tracking so the first pointermove on this
+        // drag fires a fresh haptic tick when crossing a valid entity.
+        this.dragState.hoverTarget = null;
         ghost.style.left = '0';
         ghost.style.top = '0';
-        ghost.style.transform = `translate(${clientX - 32}px, ${clientY - 32}px) scale(1.1) rotate(5deg)`;
-        
+        ghost.style.transform = `translate(${clientX - 32}px, ${clientY - 32 - fingerLift}px) scale(1.1) rotate(5deg)`;
+
         document.body.appendChild(ghost);
         this.dragState.ghostElement = ghost;
 
@@ -1438,6 +1482,12 @@ startDrag(e, die, el) {
         if (this.dragState.dieElement) {
             this.dragState.dieElement.style.opacity = '1';
         }
+
+        // Always clear the hover-target reference at drag end so the
+        // canvas-side lock-on ring stops drawing the moment the drop
+        // resolves. (active=false alone doesn't suppress the ring,
+        // since the render path explicitly reads hoverTarget.)
+        this.dragState.hoverTarget = null;
 
         if (dist < 10) {
             // Tap, not drag — toggle selection. Snap ghost back since no use happened.
@@ -10699,6 +10749,25 @@ async startTurn() {
     _isAttackSlot(type) {
         const s = this._dieSlot(type);
         return s === 'attack' || type === 'METEOR' || type === 'EARTHQUAKE' || type === 'SIGNATURE';
+    },
+
+    // Is `entity` a valid drop target for `die`? Used by the live drag-
+    // hover highlight so the glow only appears when releasing here would
+    // actually play the die. Mirrors the routing inside useDie:
+    //   attack-slot dice (incl. METEOR/EARTHQUAKE/SIGNATURE) → enemy side
+    //   defend-slot + mana-slot dice → player side (heal / shield / mana)
+    //   minion-slot → empty space (no target match required)
+    _isValidDropEntity(die, entity) {
+        if (!die || !entity || entity.currentHp <= 0) return false;
+        const slot = this._dieSlot(die.type);
+        const isEnemySide = (entity instanceof Enemy) ||
+            (entity instanceof Minion && entity.isPlayerSide === false);
+        const isPlayerSide = (entity instanceof Player) ||
+            (entity instanceof Minion && entity.isPlayerSide === true);
+        if (this._isAttackSlot(die.type)) return isEnemySide;
+        if (slot === 'defend' || slot === 'mana') return isPlayerSide;
+        if (slot === 'minion') return false; // minion summons go to empty space
+        return false;
     },
 
     _rerollIntervals: [],
@@ -22091,6 +22160,35 @@ drawEntity(entity) {
                 ctx.fill();
                 ctx.restore();
             }
+        }
+
+        // --- DRAG HOVER HIGHLIGHT — bright lock-on ring on the entity
+        // currently under the finger during an active dice drag, when
+        // releasing here would actually play the die. Keeps the player
+        // from having to read intent icons + die slot + screen layout
+        // to know "is this a legal target?" — the ring says yes.
+        if (this.dragState && this.dragState.active && this.dragState.hoverTarget === entity) {
+            ctx.save();
+            const hoverPulse = 0.7 + Math.sin(time * 12) * 0.3;
+            ctx.strokeStyle = COLORS.GOLD;
+            ctx.shadowColor = COLORS.GOLD;
+            ctx.shadowBlur = 22 + hoverPulse * 10;
+            ctx.lineWidth = 4;
+            ctx.globalAlpha = hoverPulse;
+            ctx.beginPath();
+            ctx.arc(0, 0, entity.radius + 14, 0, Math.PI * 2);
+            ctx.stroke();
+            // Inner reticle dashes that rotate so the lock-on reads
+            // as "active scan" rather than a static ring.
+            ctx.lineWidth = 2;
+            ctx.setLineDash([10, 8]);
+            ctx.lineDashOffset = -time * 24;
+            ctx.globalAlpha = 0.6;
+            ctx.beginPath();
+            ctx.arc(0, 0, entity.radius + 24, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
         }
 
         // --- EMPOWERED VISUAL — persistent buff_allies indicator ---
