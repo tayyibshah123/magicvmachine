@@ -4575,27 +4575,41 @@ triggerPhaseGlitch() {
     haptic(intensity = 'tap') {
         if (this.hapticsEnabled === false) return;
         if (!('vibrate' in navigator)) return;
+        // Throttle — drop a haptic if the previous one fired within
+        // the last 40ms. Without this, stacked events (perfect parry
+        // → riposte → enemy phase, all in one frame) buzz the device
+        // for hundreds of ms continuously and feel like a stutter on
+        // Android. Tap-tier still feels snappy at 40ms refractory.
+        const now = performance.now();
+        if (this._lastHapticAt && (now - this._lastHapticAt) < 40) return;
+        this._lastHapticAt = now;
+        // Palette dropped two never-called keys (select, damage) and
+        // tightened tap to 6ms — bigger savings on battery + perceived
+        // snappiness, since tap is the most-fired key by far. Crit
+        // gets a punchier final pulse so it differentiates from hit.
         const PATTERNS = {
-            tap:      8,
-            select:   15,
+            tap:      6,
             hit:      [20, 30, 20],
             heavy:    [50, 30, 80],
-            crit:     [30, 20, 30],
-            damage:   60,
+            crit:     [25, 15, 40],
             boss:     [50, 30, 80, 30, 50],
             warn:     [40, 60, 40, 60, 40],
             die_use:  [15, 20, 25]
         };
-        try { navigator.vibrate(PATTERNS[intensity] || 8); } catch (e) {}
+        try { navigator.vibrate(PATTERNS[intensity] || 6); } catch (e) {}
     },
 
     bindHapticDelegation() {
-        // One delegated listener for all button-like elements — fires a tap pulse
-        // whenever any .btn, .btn-icon, .btn-circle, .die, .map-node-abs is pressed.
+        // One delegated listener for button-like elements — fires a tap
+        // pulse whenever any .btn, .btn-icon, .btn-circle, .map-node-abs,
+        // .reward-card, etc. is pressed. NOTE: `.die` was removed from
+        // this selector because startDrag fires its own dedicated
+        // 'die_use' haptic on pickup; including dice here meant every
+        // dice press buzzed twice (delegate's tap + die_use stacked).
         document.addEventListener('pointerdown', (e) => {
             const t = e.target;
             if (!t || !t.closest) return;
-            if (t.closest('.btn, .btn-icon, .btn-circle, .die, .map-node-abs, .reward-card, .shop-item, .relic-strip-tile, .char-card, .upgrade-card')) {
+            if (t.closest('.btn, .btn-icon, .btn-circle, .map-node-abs, .reward-card, .shop-item, .relic-strip-tile, .char-card, .upgrade-card')) {
                 this.haptic('tap');
             }
         }, { passive: true });
@@ -5673,7 +5687,11 @@ triggerPhaseGlitch() {
             AudioMgr.playSound('grid_fracture', { playbackRate: 0.85, volume: 0.9 });
             setTimeout(() => { try { AudioMgr.playSound('beam'); } catch (_) {} }, 280);
         } catch (_) {}
-        if (this.haptic) this.haptic('boss');
+        // Sector cinematic is heavy but NOT boss-tier — was firing the
+        // 240ms boss pattern, which made every map → combat transition
+        // feel like a phase change. Heavy (160ms) better matches the
+        // weight of the moment.
+        if (this.haptic) this.haptic('heavy');
         setTimeout(() => host.classList.remove('active'), 1400);
     },
 
