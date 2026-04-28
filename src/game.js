@@ -444,6 +444,11 @@ const Game = {
         attachButtonEvent('btn-save-slots', () => this._openSaveSlotPicker());
         attachButtonEvent('btn-save-slot-close', () => this._closeSaveSlotPicker());
         attachButtonEvent('btn-resume', () => d.getElementById('modal-settings').classList.add('hidden'));
+        // Quick Rules glossary — opens from the settings modal so the
+        // player can look up status / combo / sector / dice / QTE /
+        // class definitions mid-run without abandoning combat.
+        attachButtonEvent('btn-glossary', () => this._openGlossary());
+        attachButtonEvent('btn-glossary-close', () => this._closeGlossary());
         if (!Game._origRandom) Game._origRandom = Math.random;
         attachButtonEvent('btn-start', () => {
             // Audit F7 — when a save exists, the first tap warns that
@@ -4627,6 +4632,136 @@ triggerPhaseGlitch() {
     // game stays paused until they explicitly tap, so nothing is
     // mid-resolution when they re-engage. Overlay scopes inside
     // game-container so it respects the safe-area insets.
+    // Quick Rules glossary — opens from settings with tabbed content
+    // covering every system the player might need to look up mid-run.
+    // Status / Combos / Sectors / Dice / QTE / Classes. Content is
+    // mostly static templates plus a few live pulls (sector mechanics)
+    // so the reference stays in sync with the live game.
+    _openGlossary(initialTab = 'status') {
+        const modal = document.getElementById('modal-glossary');
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        // Tab wiring (idempotent — only bind once via dataset flag).
+        const tabsBar = modal.querySelector('.glossary-tabs');
+        if (tabsBar && !tabsBar.dataset.bound) {
+            tabsBar.dataset.bound = '1';
+            tabsBar.addEventListener('click', (e) => {
+                const btn = e.target.closest('.glossary-tab');
+                if (!btn) return;
+                tabsBar.querySelectorAll('.glossary-tab').forEach(b => b.classList.toggle('active', b === btn));
+                this._renderGlossaryTab(btn.dataset.tab);
+            });
+        }
+        // Default to the requested tab; mark it active.
+        const tabs = modal.querySelectorAll('.glossary-tab');
+        tabs.forEach(b => b.classList.toggle('active', b.dataset.tab === initialTab));
+        this._renderGlossaryTab(initialTab);
+    },
+    _closeGlossary() {
+        const modal = document.getElementById('modal-glossary');
+        if (modal) modal.classList.add('hidden');
+    },
+    _renderGlossaryTab(tab) {
+        const body = document.getElementById('glossary-body');
+        if (!body) return;
+        const sections = this._glossaryContent()[tab] || [];
+        body.innerHTML = sections.map(item => `
+            <div class="glossary-item">
+                <div class="glossary-item-head">
+                    <span class="glossary-item-icon" style="${item.color ? `color:${item.color};text-shadow:0 0 8px ${item.color}` : ''}">${item.icon || '◆'}</span>
+                    <span class="glossary-item-name">${item.name}</span>
+                </div>
+                <div class="glossary-item-body">${item.body}</div>
+            </div>
+        `).join('');
+    },
+    // Build the glossary entries. STATUS pulls structurally from the
+    // existing describeEffect switch (single source of truth). Sectors
+    // pull from SECTOR_MECHANICS so wording always tracks the live
+    // ruleset. Other tabs are static designed copy.
+    _glossaryContent() {
+        // Status entries — synthetic effect objects fed through
+        // describeEffect so the displayed text matches the live tooltip.
+        const mkStatus = (id, displayName, icon, color, val, duration) => {
+            const fakeEff = { id, name: displayName, icon, val: val || 1, duration: duration || 2 };
+            const html = this.describeEffect(fakeEff, null);
+            // describeEffect returns HTML with header + body + turns
+            // line. Strip the header (we render our own) and the
+            // turns line (irrelevant in glossary).
+            const bodyMatch = /<\/strong>\s*<\/strong>?(.*?)(?:<span style="color:#888;|$)/s.exec(html);
+            const stripped = html
+                .replace(/^<strong>[^<]*<\/strong>\s*/, '')
+                .replace(/<span style="color:#888;[^<]*<\/span>\s*/, '')
+                .trim();
+            return { name: displayName, icon, color, body: stripped || 'No additional info.' };
+        };
+        return {
+            status: [
+                mkStatus('weak',       'WEAK',       '🌀', '#6fe8ff', 0.5),
+                mkStatus('frail',      'FRAIL',      '💢', '#ff9cf2'),
+                mkStatus('vulnerable', 'VULNERABLE', '⛓️', '#ff6688'),
+                mkStatus('overcharge', 'OVERCHARGE', '⚡', '#ffaa22', 1),
+                mkStatus('constrict',  'CONSTRICT',  '⛓',  '#bc13fe', 0.5),
+                mkStatus('voodoo',     'VOODOO',     '☠️', '#ff00aa', 150, 3),
+                mkStatus('bleed',      'BLEED',      '🩸', '#ff3344', 5),
+                mkStatus('poison',     'POISON',     '☣',  '#6aff6a', 4),
+            ],
+            combos: [
+                { name: 'FLURRY',       icon: '⚔', color: '#ff3355', body: 'Three or more ATTACK dice on one roll. Final attack hits all enemies for the same damage.' },
+                { name: 'DOUBLE STRIKE',icon: '✕✕', color: '#ff3355', body: 'Two ATTACK dice. The first attack played hits twice.' },
+                { name: 'BULWARK',      icon: '◈', color: '#00f3ff', body: 'Two or more DEFEND dice. Climax fires a hex barrier and a wide shockwave on the player.' },
+                { name: 'OVERFLOW',     icon: '◇', color: '#ffd700', body: 'Two or more MANA dice. Each MANA played in the combo also grants +1 reroll.' },
+                { name: 'SIBLING BOND', icon: '✦', color: '#00ff99', body: 'Two or more MINION dice. Each minion spawned during the combo gets +3 HP.' },
+                { name: 'PINCER',       icon: '◆', color: '#00f3ff', body: 'Tactician class combo: ATTACK + DEFEND + MANA. Reveals enemy intent and grants +1 reroll.' },
+                { name: 'CONVERGENCE',  icon: '◉', color: '#bc13fe', body: 'Arcanist class combo: 3+ MANA dice. Climax grants +2 mana on the spot.' },
+                { name: 'FEEDING FRENZY', icon: '☠', color: '#ff3355', body: 'Bloodstalker class combo: 2 ATTACK + 1 DEFEND. Climax heals 5 HP and lands a finisher.' },
+                { name: 'OVERLOAD',     icon: '✸', color: '#ff8800', body: 'Annihilator class combo: 2 ATTACK + 1 MANA. Next attack deals 50% more damage.' },
+                { name: 'FORTRESS',     icon: '◧', color: '#ffffff', body: 'Sentinel class combo: 3+ DEFEND. Climax adds 5 thorns through the next enemy turn.' },
+                { name: 'WILD PACK',    icon: '🌿', color: '#00ff99', body: 'Summoner class combo: 2 MINION + 1 ATTACK. Every alive minion gains +3 HP / +3 DMG permanently.' }
+            ],
+            sectors: (function () {
+                const out = [];
+                const sm = (typeof SECTOR_MECHANICS !== 'undefined') ? SECTOR_MECHANICS : null;
+                if (sm) {
+                    for (const k of Object.keys(sm)) {
+                        const m = sm[k];
+                        if (!m || !m.label) continue;
+                        out.push({
+                            name: `SECTOR ${k} — ${m.label}`,
+                            icon: '◐',
+                            body: m.desc || 'Standard combat. No active mechanic.'
+                        });
+                    }
+                }
+                return out;
+            })(),
+            dice: [
+                { name: 'ATTACK',  icon: '⚔', color: '#ff3355', body: 'Drag onto an enemy to deal damage. Triggers a timing ring — tap as the ring crosses the gold zone for a CRITICAL (+60% damage).' },
+                { name: 'DEFEND',  icon: '◈', color: '#00f3ff', body: 'Drag onto yourself or an ally to gain shield. Shield absorbs incoming damage before HP and decays at end of turn (carry-over relics aside).' },
+                { name: 'MANA',    icon: '◇', color: '#aa00ff', body: 'Drag onto yourself for +1 mana (or more with class-specific traits). Mana fuels skill dice (METEOR, EARTHQUAKE, etc.).' },
+                { name: 'MINION',  icon: '✦', color: '#00ff99', body: 'Drag onto empty space to summon a minion. Tank hits for you, attack with you. Cap depends on class.' },
+                { name: 'METEOR',  icon: '☄', color: '#bc13fe', body: 'Skill die (mana cost). Drops orbital damage on a target. Heavy single-hit. Triggers a long-window QTE.' },
+                { name: 'SIGNATURE', icon: '★', color: '#ffd700', body: 'Class-unique die. Each class has a different signature, upgraded once per boss kill (Tier 1 → Tier 2 → Tier 3).' }
+            ],
+            qte: [
+                { name: 'CRITICAL TAP', icon: '⚔', color: '#ffd700', body: 'When attacking, a ring shrinks toward a target zone. Tap inside the gold window for a critical (+60% damage). Outside but close = good hit (+15%). Miss = base damage.' },
+                { name: 'PERFECT PARRY', icon: '◈', color: '#ffd700', body: 'When defending, perfect tap fully nullifies the hit AND ripostes 25% of the boss\'s base damage. Good = 40% damage reduction. Miss = full damage.' },
+                { name: 'STEADY',      icon: '─', color: '#ffd700', body: 'Default rhythm — ring shrinks at constant speed. Most regular enemies use this.' },
+                { name: 'ACCELERATE',  icon: '↗', color: '#ff3355', body: 'Slow start, fast finish. Bosses use this — read the wind-up, commit late.' },
+                { name: 'PULSE',       icon: '∿', color: '#ff66dd', body: 'Speed wobbles. Elites + chaotic / observer enemies use this. Stay focused, the rhythm shifts.' },
+                { name: 'CHAIN (multi)', icon: '∞', color: '#00f3ff', body: 'Multi-hit attacks fire N waves in sequence. Tap each wave at the perfect window — final multiplier is the WORST quality across all waves.' }
+            ],
+            classes: [
+                { name: 'TACTICIAN',   icon: '◆', color: '#00f3ff', body: 'Pip Track fills as you play dice. Three pips → spend for +reroll, +shield, or +damage. Class combo: PINCER reveals intent.' },
+                { name: 'ARCANIST',    icon: '◉', color: '#bc13fe', body: 'Glyph cycle (Fire/Ice/Lightning) ticks each turn. Tap when the right glyph is lit for that effect. Mana scales attacks.' },
+                { name: 'BLOODSTALKER',icon: '☠', color: '#ff3355', body: 'Damage taken fills the Blood Pool. Spend for tributes: minor (+reroll), major (attack + bleed), grand (heavy strike + mana + rerolls).' },
+                { name: 'ANNIHILATOR', icon: '✸', color: '#ff8800', body: 'Heat fills as you play dice. Vent in yellow zone for ×1.4 next attack; vent in red zone for AoE blast (5 self-DMG).' },
+                { name: 'SENTINEL',    icon: '◧', color: '#ffffff', body: 'Shield gained fills 3 plates. Full plates = AEGIS PRIMED — next enemy attack is fully nullified.' },
+                { name: 'SUMMONER',    icon: '🌿', color: '#00ff99', body: 'Sacred Grove plots grow from summons. Tap a bloomed plot for a free spirit, or APEX (3 blooms + max minions) for ×2 to every minion.' }
+            ]
+        };
+    },
+
     _showPauseOverlay() {
         let host = document.getElementById('pause-overlay');
         if (!host) {

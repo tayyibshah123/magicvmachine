@@ -2095,6 +2095,127 @@ body.reduced-motion .victory-tally * {
 }
 
 /* =========================================
+   QUICK RULES / GLOSSARY MODAL — accessible from the settings menu.
+   Tabs across the top, scrollable body underneath. Each entry is a
+   header row (icon + name) plus a body paragraph. Pulled from
+   describeEffect + SECTOR_MECHANICS for status/sector tabs.
+   ========================================= */
+/* Outer overlay — positions the modal-glossary card and stacks ABOVE
+   the settings modal (z-index 2000) so the glossary launches without
+   the settings modal capturing taps. Settings stays underneath via
+   the higher z-index. */
+#modal-glossary {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.82);
+    z-index: 2100;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 6vh 12px;
+    box-sizing: border-box;
+    pointer-events: auto;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+#modal-glossary.hidden { display: none; }
+.modal-glossary {
+    width: min(640px, 100%);
+    max-width: 100%;
+    max-height: 86vh;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    gap: 10px;
+}
+.modal-glossary-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.modal-glossary-head h2 {
+    margin: 0;
+    font-family: var(--font-cyber);
+    letter-spacing: 0.18em;
+}
+#btn-glossary-close {
+    font-size: 1.4rem;
+    line-height: 1;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+}
+.glossary-tabs {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--glass-border);
+    -webkit-overflow-scrolling: touch;
+}
+.glossary-tab {
+    flex: 0 0 auto;
+    padding: 12px 14px;
+    min-height: 44px;
+    background: transparent;
+    color: var(--text-dim);
+    border: none;
+    border-bottom: 2px solid transparent;
+    font-family: var(--font-cyber);
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.20em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color 180ms, border-color 180ms;
+    margin-bottom: -1px;
+}
+.glossary-tab:hover  { color: var(--text-muted); }
+.glossary-tab.active {
+    color: var(--neon-blue);
+    border-bottom-color: var(--neon-blue);
+    text-shadow: 0 0 6px rgba(0, 243, 255, 0.45);
+}
+.glossary-body {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-right: 4px;
+}
+.glossary-item {
+    padding: 12px 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.glossary-item:last-child { border-bottom: none; }
+.glossary-item-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+.glossary-item-icon {
+    font-size: 1.3rem;
+    width: 28px;
+    text-align: center;
+}
+.glossary-item-name {
+    font-family: var(--font-cyber);
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    color: var(--neon-gold);
+    font-size: 0.96rem;
+}
+.glossary-item-body {
+    color: var(--text-muted);
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+.glossary-item-body strong { color: #ffe6a8; }
+
+/* =========================================
    PAUSE OVERLAY — fires when the player returns to the tab during a
    live combat. Holds the game until they tap so they don't snap into
    a mid-flight ring / boss attack. Sits inside game-container so the

@@ -884,10 +884,36 @@
                     </div>
 
                     <div class="spacer"></div>
+                    <button id="btn-glossary" class="btn secondary">QUICK RULES</button>
                     <button id="btn-resume" class="btn primary">RESUME</button>
                     <button id="btn-quit" class="btn danger">ABORT RUN</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Quick Rules / Glossary modal — accessible from the settings
+         menu. Tabbed reference (STATUS / COMBOS / SECTORS / DICE /
+         QTE / CLASSES) so a player can look up any system without
+         leaving the run. Content is pulled from runtime data where
+         possible (status from describeEffect, sectors from
+         SECTOR_MECHANICS) so the glossary stays in sync with the
+         live mechanics. -->
+    <div id="modal-glossary" class="modal hidden">
+        <div class="modal-content modal-glossary glass-panel glass-panel--premium">
+            <div class="modal-glossary-head">
+                <h2 class="neon-text-blue">QUICK RULES</h2>
+                <button id="btn-glossary-close" class="btn-icon" aria-label="Close glossary">×</button>
+            </div>
+            <div class="glossary-tabs" role="tablist">
+                <button class="glossary-tab active" data-tab="status">STATUS</button>
+                <button class="glossary-tab" data-tab="combos">COMBOS</button>
+                <button class="glossary-tab" data-tab="sectors">SECTORS</button>
+                <button class="glossary-tab" data-tab="dice">DICE</button>
+                <button class="glossary-tab" data-tab="qte">QTE</button>
+                <button class="glossary-tab" data-tab="classes">CLASSES</button>
+            </div>
+            <div id="glossary-body" class="glossary-body"></div>
         </div>
     </div>
 
