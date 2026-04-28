@@ -1098,12 +1098,11 @@ const Game = {
                 if (!dragRaf) {
                     dragRaf = requestAnimationFrame(() => {
                         if (this.dragState.ghostElement) {
-                            // Ghost is offset ABOVE the finger so the player
-                            // can see the die they're dragging instead of
-                            // having it sit under the finger pad. -32 (half
-                            // the ghost width) + an upward Y offset that
-                            // scales with finger size.
-                            const fingerLift = this.dragState.fingerLift || 84;
+                            // Ghost is centred on the touch point. Use ?? so a
+                            // valid 0 from drag-start isn't mistaken for unset
+                            // by ||, which would have re-applied the legacy
+                            // 84px lift and put the die above the finger.
+                            const fingerLift = this.dragState.fingerLift ?? 0;
                             this.dragState.ghostElement.style.transform =
                                 `translate(${cx - 32}px, ${cy - 32 - fingerLift}px) scale(1.1) rotate(5deg)`;
                         }
@@ -1789,6 +1788,24 @@ startDrag(e, die, el) {
         this._alignedAttackVfxImpactMs = aligned.impactMs || 400;
     },
 
+    // Fire the aligned VFX — but defer by alignedVFXDelayMs when the
+    // shrink-time floor pushed the perfect window past the requested
+    // impactMs. Without the defer the visual lands early, decoupled
+    // from the tap moment.
+    _scheduleAlignedQteVFX() {
+        const delay = (this.qte && this.qte.alignedVFXDelayMs) || 0;
+        if (delay <= 0) { this._fireAlignedQteVFX(); return; }
+        const id = this.qte ? this.qte.id : null;
+        setTimeout(() => {
+            // The QTE could have been resolved (early tap, fail) or a
+            // new one started during the wait. Bail unless the same
+            // ring is still live and we haven't already fired.
+            if (!this.qte || !this.qte.active || this.qte.id !== id) return;
+            if (this.qte.alignedVFXFired) return;
+            this._fireAlignedQteVFX();
+        }, delay);
+    },
+
     // Pre-attack windup audio — rising sawtooth ramp during the
     // telegraph phase. Pattern decides the base note + sweep range;
     // the rise visually crescendos with the charge orb growing at the
@@ -1951,11 +1968,21 @@ startQTE(type, x, y, callback, opts) {
             // Default shrink: 110 px/s. Aligned: tune so (maxRadius -
             // targetZone) / shrinkSpeed = impactMs. Clamp to a sane range
             // so very-short VFX don't yield a 1-frame active phase.
+            //
+            // When the requested impactMs is shorter than the floor (0.45s),
+            // the shrink time is bumped up — but that decouples the VFX
+            // impact from the perfect window: the visual lands first,
+            // then the player still has to wait for the ring to cross.
+            // We compensate by delaying the VFX trigger by the clamp gap,
+            // so the impact-moment ends up sitting AT the perfect window.
             let shrinkSpeed;
+            let vfxDelayMs = 0;
             if (aligned && aligned.impactMs) {
                 const span = (100 - 30) * qteScale; // maxRadius - targetZone
-                const seconds = Math.max(0.45, Math.min(1.4, aligned.impactMs / 1000));
+                const requestedSec = aligned.impactMs / 1000;
+                const seconds = Math.max(0.45, Math.min(1.4, requestedSec));
                 shrinkSpeed = span / seconds;
+                vfxDelayMs = Math.max(0, (seconds - requestedSec) * 1000);
             } else {
                 shrinkSpeed = 110 * qteScale;
             }
@@ -1984,6 +2011,7 @@ startQTE(type, x, y, callback, opts) {
                 initialWarmup: TELEGRAPH,
                 alignedVFX: aligned,
                 alignedVFXFired: false,
+                alignedVFXDelayMs: vfxDelayMs,
                 callback: callback || resolve
             };
 
@@ -2049,7 +2077,7 @@ startQTE(type, x, y, callback, opts) {
                 // RIGHT NOW, concurrent with the active-phase shrink.
                 // Mark `_alignedAttackVfxFired` so executeAction skips
                 // its own duplicate trigger when the QTE resolves.
-                this._fireAlignedQteVFX();
+                this._scheduleAlignedQteVFX();
             }
             return;
         }
@@ -2062,7 +2090,7 @@ startQTE(type, x, y, callback, opts) {
             if (this.qte.warmupTimer <= 0) {
                 this.qte.phase = 'active';
                 this._qteFlashOnStart();
-                this._fireAlignedQteVFX();
+                this._scheduleAlignedQteVFX();
             }
             return;
         }
