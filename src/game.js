@@ -5063,6 +5063,15 @@ triggerPhaseGlitch() {
                 // huge dt. Setting `paused=true` short-circuits the
                 // loop AND any per-frame state advancement on resume.
                 this.paused = true;
+                // Crash-recovery flush — Android may OOM-kill a hidden
+                // app at any moment. Persist whatever the player has
+                // built up since the last natural save boundary so the
+                // next launch can resume mid-combat instead of losing
+                // the run. Only fires during an active run; menu /
+                // char-select / death screens have no run to save.
+                if (this._isInActiveRun && this._isInActiveRun()) {
+                    try { this.saveGame && this.saveGame(); } catch (_) {}
+                }
                 if (AudioMgr.bgm && !AudioMgr.bgm.paused) {
                     AudioMgr._wasPlaying = true;
                     AudioMgr.fadeMusicOut(250);
@@ -5101,6 +5110,28 @@ triggerPhaseGlitch() {
             resumeAudio();
             armResumeOnNextGesture();
         });
+
+        // pagehide fires on actual page-close / app-suspend in browsers
+        // that visibilitychange may not reach (Safari bfcache, some
+        // Android WebView shutdowns). Last-chance save flush — once the
+        // page enters this state nothing else will run, so we don't
+        // bother pausing or fading audio, just persist.
+        window.addEventListener('pagehide', () => {
+            if (this._isInActiveRun && this._isInActiveRun()) {
+                try { this.saveGame && this.saveGame(); } catch (_) {}
+            }
+        });
+    },
+
+    // True when the player is in the middle of a run — there's actual
+    // progress that would be lost on an OOM-kill. Menu, char-select,
+    // and end-of-run screens have nothing worth flushing.
+    _isInActiveRun() {
+        const s = this.currentState;
+        return s === STATE.MAP || s === STATE.COMBAT || s === STATE.REWARD
+            || s === STATE.SHOP || s === STATE.EVENT
+            || s === STATE.TUTORIAL || s === STATE.TUTORIAL_COMBAT
+            || s === STATE.HEX || s === STATE.STORY || s === STATE.COMBAT_WIN;
     },
 
     installErrorBoundary() {
@@ -8292,10 +8323,18 @@ triggerSystemCrash() {
         
         const opts = document.getElementById('event-options');
         opts.innerHTML = '';
-        
-        event.options.forEach(opt => {
+
+        // Class-flavored option goes first when one exists for the
+        // player's class. Marked with .event-option-class so CSS can
+        // tint it in the class colour, signalling "this is yours".
+        const classOpt = (event.classOptions && this.player && this.player.classId)
+            ? event.classOptions[this.player.classId] : null;
+        const renderable = classOpt ? [{ ...classOpt, _class: true }, ...event.options]
+                                    : event.options;
+
+        renderable.forEach(opt => {
             const btn = document.createElement('button');
-            btn.className = 'btn secondary';
+            btn.className = opt._class ? 'btn primary event-option-class' : 'btn secondary';
             btn.innerText = opt.text;
             btn.onclick = () => {
                 const beforeFrags = this.techFragments || 0;

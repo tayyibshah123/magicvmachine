@@ -98,6 +98,43 @@ class Enemy extends Entity {
         this.intentRefreshedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
     }
 
+    // Pick the next boss move from the moves[] pool with two layers of
+    // anti-predictability:
+    //   1. Skip the immediately previous move when more than one option
+    //      exists — kills the worst-case "shield, shield, shield" or
+    //      "attack, attack, attack" runs that pure Math.random() lets
+    //      through ~25% of the time on a 4-move boss.
+    //   2. In phase 2+ (the boss is below threshold HP), bias 60% toward
+    //      aggressive moves (attack / multi_attack / summon / cataclysm)
+    //      so low-HP fights ramp pressure instead of stalling on
+    //      shield/buff turns.
+    _pickBossMove(moves) {
+        if (!moves || moves.length === 0) return null;
+        if (moves.length === 1) return moves[0];
+
+        const last = this._lastBossMove;
+        let pool = moves;
+        if (last) {
+            const filtered = moves.filter(m => m !== last);
+            if (filtered.length > 0) pool = filtered;
+        }
+
+        if (this.phase >= 2) {
+            const aggressive = pool.filter(m =>
+                m === 'attack' || m === 'multi_attack' || m === 'summon' || m === 'cataclysm'
+            );
+            if (aggressive.length > 0 && Math.random() < 0.6) {
+                const pick = aggressive[Math.floor(Math.random() * aggressive.length)];
+                this._lastBossMove = pick;
+                return pick;
+            }
+        }
+
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        this._lastBossMove = pick;
+        return pick;
+    }
+
     generateSingleIntent() {
         // Targeting Logic — slight finisher bias: 50% player, 50% minion,
         // but when minions exist, 70% of the minion-target picks go to the
@@ -191,8 +228,8 @@ class Enemy extends Entity {
             }
 
             const moves = this.bossData.moves;
-            const roll = moves[Math.floor(Math.random() * moves.length)];
-            
+            const roll = this._pickBossMove(moves);
+
             // --- NEW MOVES ---
             if (roll === 'purge') {
                 this.chargingPurge = true;

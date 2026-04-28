@@ -700,39 +700,92 @@ const EVENTS_DB = [
         title: "STRANGE SIGNAL",
         desc: "You intercept an encrypted transmission. It seems to be a distress signal from a rogue AI.",
         options: [
-            { 
+            {
                 text: "Decrypt (-4 HP, +40 Fragments)", // Reduced from 10
-                effect: (g) => { 
-                    g.player.takeDamage(4); 
-                    g.techFragments += 40; 
-                    return "You gained 40 Fragments."; 
-                } 
+                effect: (g) => {
+                    g.player.takeDamage(4);
+                    g.techFragments += 40;
+                    return "You gained 40 Fragments.";
+                }
             },
-            { 
-                text: "Ignore (Leave)", 
-                effect: (g) => { return "You moved on."; } 
+            {
+                text: "Ignore (Leave)",
+                effect: (g) => { return "You moved on."; }
             }
-        ]
+        ],
+        classOptions: {
+            tactician: {
+                text: "Trace the source (+60 Fragments, +1 Reroll Token)",
+                effect: (g) => {
+                    g.techFragments += 60;
+                    g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
+                    return "Source traced. +60 Fragments. +1 Reroll Token.";
+                }
+            },
+            arcanist: {
+                text: "Channel the glyph (-2 Mana, +1 Reroll, +30 Fragments)",
+                effect: (g) => {
+                    g.player.mana = Math.max(0, (g.player.mana || 0) - 2);
+                    g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
+                    g.techFragments += 30;
+                    return "Glyph channeled. +1 Reroll. +30 Fragments.";
+                }
+            },
+            bloodstalker: {
+                text: "Bleed for it (-8 HP, +80 Fragments)",
+                effect: (g) => {
+                    g.player.takeDamage(8);
+                    g.techFragments += 80;
+                    return "Blood paid. +80 Fragments.";
+                }
+            },
+        }
     },
     {
         title: "ABANDONED CACHE",
         desc: "A supply crate sits amidst the rubble.",
         options: [
-            { 
-                text: "Open (+25 Fragments)", 
-                effect: (g) => { 
-                    g.techFragments += 25; 
-                    return "Found 25 Fragments."; 
-                } 
+            {
+                text: "Open (+25 Fragments)",
+                effect: (g) => {
+                    g.techFragments += 25;
+                    return "Found 25 Fragments.";
+                }
             },
-            { 
+            {
                 text: "Salvage Parts (+5 HP)", // Reduced from 15
-                effect: (g) => { 
-                    g.player.heal(5); 
-                    return "Restored 5 HP."; 
-                } 
+                effect: (g) => {
+                    g.player.heal(5);
+                    return "Restored 5 HP.";
+                }
             }
-        ]
+        ],
+        classOptions: {
+            sentinel: {
+                text: "Reinforce armour (+5 Max HP, +5 HP)",
+                effect: (g) => {
+                    g.player.maxHp += 5;
+                    g.player.heal(5);
+                    return "Armour reinforced. +5 Max HP. Healed 5.";
+                }
+            },
+            summoner: {
+                text: "Send a Spirit ahead (+60 Fragments, +5 HP)",
+                effect: (g) => {
+                    g.techFragments += 60;
+                    g.player.heal(5);
+                    return "Spirit returns with the haul. +60 Fragments.";
+                }
+            },
+            annihilator: {
+                text: "Rig a charge (-3 HP, +1 Reroll Token)",
+                effect: (g) => {
+                    g.player.takeDamage(3);
+                    g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
+                    return "Charge rigged. +1 Reroll Token.";
+                }
+            },
+        }
     },
     {
         title: "MALFUNCTIONING FABRICATOR",
@@ -796,17 +849,35 @@ const EVENTS_DB = [
         title: "CORRUPTED NODE",
         desc: "This node is leaking data. You can absorb it, but it will corrupt your max integrity.",
         options: [
-            { 
+            {
                 text: "Absorb (-4 Max HP, +150 Fragments)", // Reduced from 10
-                effect: (g) => { 
+                effect: (g) => {
                     g.player.maxHp -= 4;
                     if (g.player.currentHp > g.player.maxHp) g.player.currentHp = g.player.maxHp;
                     g.techFragments += 150;
                     return "Data absorbed. Integrity compromised.";
-                } 
+                }
             },
             { text: "Purge (+7 HP)", effect: (g) => { g.player.heal(7); return "Node stabilized."; } } // Reduced from 20
-        ]
+        ],
+        classOptions: {
+            bloodstalker: {
+                text: "Drink the corruption (-10 HP, +200 Fragments)",
+                effect: (g) => {
+                    g.player.takeDamage(10);
+                    g.techFragments += 200;
+                    return "Corruption metabolized. +200 Fragments.";
+                }
+            },
+            arcanist: {
+                text: "Catalyse it (+60 Fragments, +2 Mana)",
+                effect: (g) => {
+                    g.techFragments += 60;
+                    g.player.mana = (g.player.mana || 0) + 2;
+                    return "Catalysed. +60 Fragments. +2 Mana.";
+                }
+            },
+        }
     },
     {
         title: "TRAINING SIMULATION",

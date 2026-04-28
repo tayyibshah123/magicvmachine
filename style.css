@@ -2486,6 +2486,15 @@ body.reduced-motion .boss-intro-stripe {
     transition: none !important;
 }
 
+/* Class-flavored event option — appears first in the option list when
+   the active class has a unique reaction to the event. Tinted gold to
+   read as "this one's tuned for you" without overpowering the panel. */
+.event-option-class {
+    border-color: var(--neon-gold) !important;
+    color: var(--neon-gold) !important;
+    box-shadow: 0 0 14px rgba(255, 215, 106, 0.25);
+}
+
 /* Hex Breach result panel — replaces the legacy alert() popup. Sits
    centred over the hex grid with a glass card; .hex-result-win uses
    green accents, .hex-result-fail uses pink. Tap CONTINUE to leave. */
