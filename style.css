@@ -2168,64 +2168,6 @@ body.reduced-motion .sw-update-icon { animation: none; }
    PWA INSTALL — menu pill (visible only when installable) + iOS
    add-to-home-screen instruction modal.
    ========================================= */
-.install-pill {
-    display: inline-flex !important;
-    align-items: center;
-    gap: 8px;
-    border-color: var(--neon-green) !important;
-    color: var(--neon-green) !important;
-    box-shadow: 0 0 16px rgba(0, 255, 153, 0.18);
-}
-.install-pill.hidden { display: none !important; }
-.install-pill .install-icon {
-    font-size: 1.1em;
-    line-height: 1;
-}
-#modal-ios-install {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.82);
-    z-index: 2100;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    box-sizing: border-box;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-}
-#modal-ios-install.hidden { display: none; }
-.ios-install-panel {
-    max-width: 360px;
-    padding: 22px 24px;
-    text-align: left;
-}
-.ios-install-title {
-    margin: 0 0 14px 0;
-    font-family: var(--font-cyber);
-    letter-spacing: 0.18em;
-    text-align: center;
-}
-.ios-install-step {
-    margin: 8px 0;
-    font-family: var(--font-main);
-    font-size: var(--text-sm);
-    line-height: 1.5;
-    color: var(--text-muted);
-}
-.ios-install-step strong { color: var(--neon-blue); }
-.ios-install-icon {
-    display: inline-block;
-    color: var(--neon-blue);
-    font-size: 1.1em;
-    margin: 0 2px;
-}
-#btn-ios-install-close {
-    margin-top: 14px;
-    width: 100%;
-}
 
 /* =========================================
    QUICK RULES / GLOSSARY MODAL — accessible from the settings menu.
@@ -9622,21 +9564,59 @@ canvas + .game-icon { filter: none; }
    with a per-button stagger. */
 #screen-start.menu-entering .btn,
 #screen-start.menu-entering #login-streak,
-#screen-start.menu-entering #btn-load-save {
+#screen-start.menu-entering #btn-load-save,
+#screen-start.menu-entering .menu-row {
     opacity: 0;
     visibility: hidden;
 }
 #screen-start:not(.menu-entering) .btn,
 #screen-start:not(.menu-entering) #login-streak,
-#screen-start:not(.menu-entering) #btn-load-save {
+#screen-start:not(.menu-entering) #btn-load-save,
+#screen-start:not(.menu-entering) .menu-row {
     animation: btn-glitch-in 780ms steps(1, end) both;
 }
-#screen-start:not(.menu-entering) #btn-load-save { animation-delay:  80ms; }
-#screen-start:not(.menu-entering) #btn-start     { animation-delay: 180ms; }
-#screen-start:not(.menu-entering) #btn-challenge { animation-delay: 300ms; }
-#screen-start:not(.menu-entering) #btn-intel     { animation-delay: 420ms; }
-#screen-start:not(.menu-entering) #btn-upgrades  { animation-delay: 540ms; }
-#screen-start:not(.menu-entering) #login-streak  { animation-delay: 620ms; }
+#screen-start:not(.menu-entering) #btn-load-save     { animation-delay:  80ms; }
+#screen-start:not(.menu-entering) #btn-start         { animation-delay: 180ms; }
+#screen-start:not(.menu-entering) .menu-row-modes    { animation-delay: 300ms; }
+#screen-start:not(.menu-entering) .menu-row-meta     { animation-delay: 420ms; }
+#screen-start:not(.menu-entering) #login-streak      { animation-delay: 540ms; }
+
+/* Main-menu row groupings — keep alt-mode + meta-nav buttons paired
+   horizontally so the menu reads as four blocks (primary / modes /
+   meta / chrome) instead of a tall stack. Each row inherits the same
+   max-width as a primary button so the visual rhythm stays tidy. */
+.menu-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 10px;
+    width: 100%;
+    max-width: 320px;
+    margin: 6px 0;
+}
+.menu-row .btn {
+    flex: 1 1 0;
+    margin: 0;
+    min-width: 0;
+}
+.menu-row-meta .btn {
+    /* Meta-nav row — slightly tighter type so SANCTUARY / INTEL / SAVES
+       all fit the row at small viewports. */
+    font-size: clamp(0.78rem, 2.4vw, 0.9rem);
+    letter-spacing: 0.12em;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+/* Primary CTAs sit centred and slightly tighter than the run-mode rows. */
+.menu-cta {
+    width: 100%;
+    max-width: 320px;
+    margin: 8px 0;
+}
+.menu-cta-resume {
+    border-color: var(--neon-gold);
+    color: var(--neon-gold);
+}
 
 /* Glitch/phase-in: clipped wipes + horizontal RGB-split flickers + final
    settle. Uses steps() timing so the glitch frames are crisp, not eased. */
@@ -10905,7 +10885,6 @@ body.high-contrast .neon-border-purple {
    which is fine in normal mode but disastrous in high-contrast. */
 body.high-contrast #modal-settings,
 body.high-contrast #modal-glossary,
-body.high-contrast #modal-ios-install,
 body.high-contrast #save-slot-modal,
 body.high-contrast #custom-run-modal {
     background: rgba(0, 0, 0, 0.96) !important;

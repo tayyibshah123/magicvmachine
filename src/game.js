@@ -1535,12 +1535,12 @@ startDrag(e, die, el) {
         // overrides our inline transform during the first 420ms, pinning the ghost to (0,0).
         ghost.style.animation = 'none';
         
-        // Lift the ghost above the finger so the player can SEE what
-        // they're dragging instead of the die sitting under the finger
-        // pad. fingerLift is the Y offset; pointermove uses the same
-        // value so the ghost stays anchored above the touch through
-        // the whole drag.
-        const fingerLift = 84;
+        // Ghost sits centred on the finger — players reported the prior
+        // 84px upward lift made the die feel disconnected from the touch
+        // point. The selection ring on the source die + the canvas-side
+        // valid-target glow already give enough visual feedback for what
+        // is being dragged; offsetting the ghost itself isn't necessary.
+        const fingerLift = 0;
         this.dragState.fingerLift = fingerLift;
         // Reset hover-target tracking so the first pointermove on this
         // drag fires a fresh haptic tick when crossing a valid entity.
@@ -1644,7 +1644,19 @@ startDrag(e, die, el) {
             this.dragState.die = null;
             this.dragState.dieElement = null;
 
-            if (target || this._dieSlot(dieToUse.type) === 'minion') {
+            // Minion summon dice don't need a target entity, but they DO
+            // need to land in the play area — otherwise dragging one out
+            // and back to the dice tray would still consume it. Treat any
+            // drop outside the canvas bounds as cancelled.
+            const isMinionDie = this._dieSlot(dieToUse.type) === 'minion';
+            let inPlayArea = false;
+            if (isMinionDie && this.canvas) {
+                const cRect = this.canvas.getBoundingClientRect();
+                inPlayArea = clientX >= cRect.left && clientX <= cRect.right
+                          && clientY >= cRect.top  && clientY <= cRect.bottom;
+            }
+
+            if (target || (isMinionDie && inPlayArea)) {
                 // Valid drop — animate the ghost into the target with a brief
                 // scale bounce so the drop has a satisfying "snap" before the
                 // hit VFX takes over. Empty target (MINION summon to any slot)
@@ -4882,12 +4894,6 @@ triggerPhaseGlitch() {
         if (glossary && !glossary.classList.contains('hidden')) {
             const btn = document.getElementById('btn-glossary-close');
             if (btn) btn.click(); else glossary.classList.add('hidden');
-            return true;
-        }
-        const iosInstall = document.getElementById('modal-ios-install');
-        if (iosInstall && !iosInstall.classList.contains('hidden')) {
-            const btn = document.getElementById('btn-ios-install-close');
-            if (btn) btn.click(); else iosInstall.classList.add('hidden');
             return true;
         }
         const settings = document.getElementById('modal-settings');

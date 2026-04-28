@@ -184,9 +184,6 @@
                     <div class="subtitle"></div>
                 </div>
                 <div class="spacer"></div>
-                <!-- CHANGED ID: btn-load-save -->
-                <button id="btn-load-save" class="btn primary hidden" style="border-color: var(--neon-gold); color: var(--neon-gold);">RESUME RUN</button>
-                <button id="btn-save-slots" class="btn secondary">SAVE SLOTS</button>
 
                 <!-- Save Slot picker — modal listing A/B/C with metadata. -->
                 <div id="save-slot-modal" class="save-slot-modal hidden" role="dialog" aria-modal="true">
@@ -200,20 +197,24 @@
                     </div>
                 </div>
 
-                <button id="btn-start" class="btn primary"><span id="btn-start-label">INITIATE RUN</span><span id="btn-start-warn" class="btn-start-warn hidden">DISCARDS CURRENT RUN</span></button>
-                <button id="btn-challenge" class="btn secondary neon-border-gold">CHALLENGE <span id="challenge-status" style="opacity:0.7; font-size:0.85em;"></span></button>
-                <button id="btn-archive" class="btn secondary neon-border-gold hidden">ARCHIVE <span id="archive-status" style="opacity:0.7; font-size:0.85em;"></span></button>
-                <button id="btn-intel" class="btn secondary">INTEL</button>
-                <button id="btn-upgrades" class="btn secondary neon-border-gold">SANCTUARY</button>
-                <!-- PWA install prompt — visible only when the browser
-                     fires beforeinstallprompt (Chrome/Edge Android, desktop
-                     Chrome) OR when the iOS Safari fallback applies.
-                     Tapping triggers the native install dialog or shows
-                     iOS-specific add-to-home-screen instructions. -->
-                <button id="btn-install" class="btn secondary install-pill hidden">
-                    <span class="install-icon" aria-hidden="true">⬇</span>
-                    <span class="install-label">INSTALL APP</span>
-                </button>
+                <!-- Primary actions — RESUME above INITIATE so the in-progress run is the
+                     first thing a returning player sees. -->
+                <button id="btn-load-save" class="btn primary hidden menu-cta menu-cta-resume">RESUME RUN</button>
+                <button id="btn-start" class="btn primary menu-cta"><span id="btn-start-label">INITIATE RUN</span><span id="btn-start-warn" class="btn-start-warn hidden">DISCARDS CURRENT RUN</span></button>
+
+                <!-- Run modes — gold-bordered alt run types in a single row. -->
+                <div class="menu-row menu-row-modes">
+                    <button id="btn-challenge" class="btn secondary neon-border-gold">CHALLENGE <span id="challenge-status" style="opacity:0.7; font-size:0.85em;"></span></button>
+                    <button id="btn-archive" class="btn secondary neon-border-gold hidden">ARCHIVE <span id="archive-status" style="opacity:0.7; font-size:0.85em;"></span></button>
+                </div>
+
+                <!-- Meta nav — sanctuary, codex, save management. Tighter row. -->
+                <div class="menu-row menu-row-meta">
+                    <button id="btn-upgrades" class="btn secondary neon-border-gold">SANCTUARY</button>
+                    <button id="btn-intel" class="btn secondary">INTEL</button>
+                    <button id="btn-save-slots" class="btn secondary">SAVES</button>
+                </div>
+
                 <div id="login-streak" class="login-streak hidden"></div>
                 <div class="version" style="font-family: 'Orbitron'; margin-top: 20px; opacity: 0.5;">ALPHA V1</div>
             </div>
@@ -914,20 +915,7 @@
         </div>
     </div>
 
-    <!-- iOS add-to-home-screen instruction modal. iOS Safari doesn't
-         fire `beforeinstallprompt`, so the install button on iOS opens
-         this manual-step card instead. -->
-    <div id="modal-ios-install" class="modal hidden">
-        <div class="ios-install-panel glass-panel">
-            <h3 class="neon-text-blue ios-install-title">INSTALL ON iOS</h3>
-            <p class="ios-install-step">1. Tap the share button <span class="ios-install-icon" aria-hidden="true">⬆</span> in Safari's bottom bar.</p>
-            <p class="ios-install-step">2. Scroll down and tap <strong>Add to Home Screen</strong>.</p>
-            <p class="ios-install-step">3. Tap <strong>Add</strong>. The icon appears on your home screen.</p>
-            <button id="btn-ios-install-close" class="btn primary">GOT IT</button>
-        </div>
-    </div>
-
-    <!-- Quick Rules / Glossary modal — accessible from the settings
+<!-- Quick Rules / Glossary modal — accessible from the settings
          menu. Tabbed reference (STATUS / COMBOS / SECTORS / DICE /
          QTE / CLASSES) so a player can look up any system without
          leaving the run. Content is pulled from runtime data where
