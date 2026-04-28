@@ -10700,7 +10700,27 @@ async startTurn() {
                     this.player.x, this.player.y - 180, `COMBO: ${name}`, color,
                     { fontSize: 42, vy: -1.2, life: 1.8 }
                 );
+                // Detection-moment impact — combos were silent on detect
+                // beyond the floater, and players regularly missed armed
+                // combos because dice glow alone doesn't draw the eye.
+                // Shockwave + sparks at the player + colour-tinted screen
+                // flash + audio sting so the moment lands with weight.
+                ParticleSys.createShockwave(this.player.x, this.player.y, color, 28);
+                ParticleSys.createSparks(this.player.x, this.player.y, color, 10);
             }
+            if (this.triggerScreenFlash) {
+                // Translate the combo colour into an rgba flash. Combos
+                // share a common "you got something" cue tinted by their
+                // identity colour so a glance teaches the palette over a
+                // few combats (red = attack chain, cyan = defence chain,
+                // gold = mana chain, green = minion chain).
+                const hx = (color || '#ffd700').replace('#', '');
+                const r = parseInt(hx.slice(0, 2), 16);
+                const g = parseInt(hx.slice(2, 4), 16);
+                const b = parseInt(hx.slice(4, 6), 16);
+                this.triggerScreenFlash(`rgba(${r},${g},${b},0.16)`, 200);
+            }
+            try { AudioMgr.playSound('beam'); } catch (_) {}
             if (this.haptic) this.haptic('hit');
         };
 
