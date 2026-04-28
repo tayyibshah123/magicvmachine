@@ -101,7 +101,8 @@ export const ACHIEVEMENTS = [
     { id: 'SPEC_NULL_POINTER',   name: 'Void Specialist',      desc: 'Defeat NULL_POINTER 3 times.',      cat: 'class', frag: 200 },
     { id: 'SPEC_COMPILER',       name: 'Forge Specialist',     desc: 'Defeat THE COMPILER 3 times.',      cat: 'class', frag: 200 },
     { id: 'SPEC_HIVE',           name: 'Hive Specialist',      desc: 'Defeat HIVE PROTOCOL 3 times.',     cat: 'class', frag: 200 },
-    { id: 'SPEC_TESSERACT',      name: 'Source Specialist',    desc: 'Defeat TESSERACT PRIME 3 times.',   cat: 'class', frag: 250 }
+    { id: 'SPEC_TESSERACT',      name: 'Source Specialist',    desc: 'Defeat TESSERACT PRIME 3 times.',   cat: 'class', frag: 250 },
+    { id: 'SPEC_ARCHIVIST',      name: 'Archive Specialist',   desc: 'Defeat THE ARCHIVIST 3 times.',     cat: 'class', frag: 300 }
 ];
 
 let _toastQueue = [];

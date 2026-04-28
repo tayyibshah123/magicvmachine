@@ -160,10 +160,21 @@ const AudioMgr = {
                 const probe = document.createElement('audio');
                 const oggOk = probe.canPlayType && probe.canPlayType('audio/ogg; codecs="vorbis"');
                 const m4aOk = probe.canPlayType && probe.canPlayType('audio/mp4; codecs="mp4a.40.2"');
-                // Prefer M4A when the browser says it's the more reliable option
-                // (e.g. iOS Safari/WKWebView) — but only if we haven't disabled
-                // it (Chrome/Firefox report both equally, keep OGG there).
-                if (m4aOk === 'probably' && oggOk !== 'probably') best = 'm4a';
+                // Capacitor APK ships M4A only (build-www drops the OGG
+                // copies to save ~50% size when the .m4a sibling exists).
+                // Force M4A there regardless of canPlayType reporting both
+                // codecs as 'probably' — otherwise the URL resolves to
+                // .ogg, which doesn't exist in the APK and 404s.
+                const inNativeApk = typeof window !== 'undefined'
+                    && window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function'
+                    && window.Capacitor.isNativePlatform();
+                if (inNativeApk && m4aOk) {
+                    best = 'm4a';
+                } else if (m4aOk === 'probably' && oggOk !== 'probably') {
+                    // iOS Safari / WKWebView path — m4a is the more reliable
+                    // codec, ogg may not be supported at all.
+                    best = 'm4a';
+                }
             } catch (e) { /* keep ogg */ }
             this._preferredFmt = best;
         }

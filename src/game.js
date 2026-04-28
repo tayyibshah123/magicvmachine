@@ -4946,6 +4946,15 @@ triggerPhaseGlitch() {
             if (btn) btn.click(); else saveSlot.classList.add('hidden');
             return true;
         }
+        // Hex Breach result panel — dismiss = same as tapping CONTINUE
+        // (hide + return to Intel). Routes ESC + Android back through
+        // the same exit path as the in-panel button.
+        const hexResult = document.getElementById('hex-result');
+        if (hexResult && !hexResult.classList.contains('hidden')) {
+            hexResult.classList.add('hidden');
+            this.changeState(STATE.INTEL);
+            return true;
+        }
         return false;
     },
 
@@ -9969,45 +9978,88 @@ updateHexBreach(dt) {
         this.hex.acceptingInput = false;
         document.getElementById('hex-status').innerText = "DECRYPTION SUCCESSFUL";
         AudioMgr.playSound('upgrade');
-        
+
         this.encryptedFiles--;
         this.techFragments += 300;
-        
-        const available = LORE_DATABASE.map((_, i) => i).filter(i => !this.unlockedLore.includes(i));
-        let msg = "300 Fragments Acquired.";
 
+        const rewards = [`+300 Fragments`];
         // Custom Run: Silent Chronicle — no lore unlocks this run.
         if (this._customDisableLore) {
-            msg += "\nDATABASE ACCESS DENIED (SILENT CHRONICLE)";
-        } else if (available.length > 0) {
-            const unlockId = available[Math.floor(Math.random() * available.length)];
-            this.unlockedLore.push(unlockId);
-            msg += "\nNEW DATABASE ENTRY UNLOCKED.";
+            rewards.push('Database access denied (Silent Chronicle)');
         } else {
-            msg += "\n(Database Complete)";
+            const available = LORE_DATABASE.map((_, i) => i).filter(i => !this.unlockedLore.includes(i));
+            if (available.length > 0) {
+                const unlockId = available[Math.floor(Math.random() * available.length)];
+                this.unlockedLore.push(unlockId);
+                rewards.push('New database entry unlocked');
+            } else {
+                rewards.push('Database complete');
+            }
         }
 
-        this.saveData(); 
-        
-        setTimeout(() => {
-            alert(msg); 
-            this.changeState(STATE.INTEL);
-        }, 1000);
+        this.saveData();
+        this._showHexResult({ kind: 'win', title: 'DECRYPTION SUCCESSFUL', rewards });
     },
 
     failHexBreach(el) {
         this.hex.acceptingInput = false;
-        el.classList.add('error');
+        if (el) el.classList.add('error');
         AudioMgr.playSound('explosion');
         document.getElementById('hex-status').innerText = "BREACH DETECTED - FILE PURGED";
         document.getElementById('hex-status').className = "neon-text-pink";
-        
+
         this.encryptedFiles--;
         this.saveData();
 
-        setTimeout(() => {
+        this._showHexResult({
+            kind: 'fail',
+            title: 'BREACH DETECTED',
+            rewards: ['Encrypted file purged', 'No fragments awarded']
+        });
+    },
+
+    // Shared result panel for Hex Breach. Replaces the legacy alert()
+    // and the timer-based silent fade-out so the player has a moment to
+    // read the outcome before being yanked back to Intel. Tap CONTINUE
+    // (or wait 4s as a safety net) to leave.
+    _showHexResult({ kind, title, rewards }) {
+        const host = document.getElementById('hex-result');
+        if (!host) {
+            // Fallback: jump back to Intel rather than strand the player.
+            setTimeout(() => this.changeState(STATE.INTEL), 1200);
+            return;
+        }
+        const titleEl = document.getElementById('hex-result-title');
+        const iconEl  = document.getElementById('hex-result-icon');
+        const list    = document.getElementById('hex-result-rewards');
+        const btn     = document.getElementById('btn-hex-result-continue');
+        host.classList.remove('hex-result-win', 'hex-result-fail');
+        host.classList.add(kind === 'win' ? 'hex-result-win' : 'hex-result-fail');
+        if (titleEl) titleEl.textContent = title;
+        if (iconEl)  iconEl.textContent  = kind === 'win' ? '⬡' : '⌧';
+        if (list) {
+            list.innerHTML = '';
+            for (const r of rewards) {
+                const li = document.createElement('li');
+                li.textContent = r;
+                list.appendChild(li);
+            }
+        }
+        const dismiss = () => {
+            host.classList.add('hidden');
             this.changeState(STATE.INTEL);
-        }, 1500);
+        };
+        if (btn) {
+            btn.onclick = dismiss;
+            btn.focus && btn.focus();
+        }
+        // Failsafe — auto-dismiss after 6s so a player who looks away
+        // doesn't get stuck on the result screen. Routed via setTimer
+        // so a state change cleans it up if the player navigates away.
+        this.setTimer(() => {
+            if (!host.classList.contains('hidden')) dismiss();
+        }, 6000);
+        host.classList.remove('hidden');
     },
 
     saveData() {

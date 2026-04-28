@@ -5,7 +5,7 @@
 // Keep in sync with src/version.js — service worker runs in a separate
 // worker context that can't import ES modules, so the version string is
 // duplicated by design. Old caches are deleted on activate.
-const CACHE_NAME = 'mvm-shell-v1-3-0';
+const CACHE_NAME = 'mvm-shell-v1-3-1';
 const SHELL_ASSETS = [
     './',
     './index.html',
@@ -43,6 +43,7 @@ const SHELL_ASSETS = [
     './src/services/achievements.js',
     './src/services/gesture.js',
     './src/services/native-back.js',
+    './src/services/native-splash.js',
     './src/data/matchup-hints.js',
     // SFX samples (v1.2) — precache so offline play has sound from turn 1.
     './sfx/attack.ogg',      './sfx/beam.ogg',         './sfx/buy.ogg',

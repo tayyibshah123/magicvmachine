@@ -97,9 +97,25 @@ function onTouchEnd() {
     active = null;
 }
 
+// On Capacitor Android, the OS-level back gesture (left-edge swipe)
+// already routes through @capacitor/app's backButton event, which we
+// handle in NativeBack → Game.handleBackPress. Running this in-page
+// gesture as well would either fight the OS one or double-fire on a
+// single swipe (in-page dismisses, OS back then sees no modal and
+// opens settings). Skip the gesture there. On web / iOS Safari /
+// non-native browsers, keep it — those platforms have no native
+// equivalent and the user expects the iOS-style swipe-to-back.
+function isNativePlatform() {
+    if (typeof window === 'undefined') return false;
+    const cap = window.Capacitor;
+    if (!cap || typeof cap.isNativePlatform !== 'function') return false;
+    return cap.isNativePlatform();
+}
+
 export const Gesture = {
     init() {
         if (typeof document === 'undefined') return;
+        if (isNativePlatform()) return;
         // passive listeners — we never preventDefault here, so let the
         // browser keep its scroll-jank guarantees.
         document.addEventListener('touchstart', onTouchStart, { passive: true });

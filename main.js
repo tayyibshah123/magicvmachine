@@ -6,6 +6,7 @@ import { Hints } from './src/services/hints.js';
 import { Unlocks } from './src/services/unlocks.js';
 import { Gesture } from './src/services/gesture.js';
 import { NativeBack } from './src/services/native-back.js';
+import { NativeSplash } from './src/services/native-splash.js';
 
 // Detect device perf tier BEFORE Game.init so the game can read `Perf.tier`.
 Perf.detect();
@@ -131,13 +132,28 @@ function wireLandscapeHint() {
     hint.addEventListener('touchstart', dismiss, { passive: true });
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => { Game.init(); wireLandscapeHint(); Gesture.init(); NativeBack.init(); });
-} else {
+function bootGame() {
   Game.init();
   wireLandscapeHint();
   Gesture.init();
   NativeBack.init();
+}
+// Hide the native splash on the first paint after DOMContentLoaded —
+// the intro overlay is part of the document, so by the time the
+// browser has painted once it's already on-screen and the splash can
+// fade out without exposing a blank canvas. Decoupled from Game.init()
+// so an init throw / slow path doesn't strand the splash.
+function dismissNativeSplashOnFirstPaint() {
+  requestAnimationFrame(() => NativeSplash.hide());
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    dismissNativeSplashOnFirstPaint();
+    bootGame();
+  });
+} else {
+  dismissNativeSplashOnFirstPaint();
+  bootGame();
 }
 
 // Register the service worker for offline play (PWA) + handle updates.

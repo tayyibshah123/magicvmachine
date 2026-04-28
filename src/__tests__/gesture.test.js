@@ -7,7 +7,7 @@
 // - dice-drag in progress suppresses the gesture
 // - hack minigame can't be swiped out of
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Gesture } from '../services/gesture.js';
 
 function makeTouch(clientX, clientY) {
@@ -30,6 +30,7 @@ function buildModal(id, hidden = false) {
 
 beforeEach(() => {
     document.body.innerHTML = '';
+    delete window.Capacitor;
     window.Game = { dragState: { active: false } };
     Gesture.init();
 });
@@ -120,5 +121,29 @@ describe('Gesture (edge-swipe back)', () => {
         fire('touchstart', [makeTouch(10, 200)]);
         fire('touchmove',  [makeTouch(85, 205)]);
         expect(called).toBe(true);
+    });
+});
+
+describe('Gesture (native platform skip)', () => {
+    it('does not register touch listeners when Capacitor reports native', async () => {
+        vi.resetModules();
+        window.Capacitor = { isNativePlatform: () => true };
+
+        // Spy on document.addEventListener BEFORE importing the module
+        // so the init's listener registration is observable. Module-level
+        // listeners persist across tests in jsdom, so verifying side
+        // effects via add/dispatch doesn't work — pure spy is reliable.
+        const addSpy = vi.spyOn(document, 'addEventListener');
+        const { Gesture: NativeGesture } = await import('../services/gesture.js');
+        NativeGesture.init();
+
+        const touchCalls = addSpy.mock.calls.filter(
+            ([type]) => type === 'touchstart' || type === 'touchmove'
+                     || type === 'touchend'  || type === 'touchcancel'
+        );
+        expect(touchCalls.length).toBe(0);
+
+        addSpy.mockRestore();
+        delete window.Capacitor;
     });
 });

@@ -8,6 +8,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build:www": "node scripts/build-www.mjs",
+    "compress:music": "node scripts/compress-music.mjs",
     "android:sync": "npm run build:www && npx cap sync android",
     "android:open": "npm run android:sync && npx cap open android"
   },

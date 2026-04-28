@@ -157,13 +157,30 @@
     85%  { transform: rotate(0deg);   opacity: 1.0; }
     100% { transform: rotate(-90deg); opacity: 0.55; }
 }
+/* Tablet sizing — let the portrait column grow to use the bigger
+   viewport. Honor Tab 10 in landscape used to centre a 432×768 column
+   on a ~2000×1200 screen, leaving ~80% of the display blank. With
+   this override, the container scales up to ~88vh while keeping the
+   9:16 aspect, so the game uses real estate on tablets in either
+   orientation without a layout reflow. Phones (max-width 767px) are
+   unaffected — they already fill their viewport. */
+@media (min-width: 768px) and (pointer: coarse) {
+    #game-container {
+        max-width: 720px;
+        max-height: min(1280px, 88vh);
+    }
+}
+
 /* Show when a phone-shaped TOUCH device is held landscape.
    - (pointer: coarse) excludes desktop landscape windows (mouse).
    - (min-aspect-ratio: 16/10) catches phones in landscape (skinny,
-     w/h ≥ 1.6) without blocking tablets. iPad in landscape is ~4:3
-     (w/h ~1.33) so the prompt won't appear — the centred 432px
-     portrait container plays fine on tablet, no rotation needed. */
-@media (orientation: landscape) and (pointer: coarse) and (min-aspect-ratio: 16/10) {
+     w/h ≥ 1.6).
+   - (max-width: 900px) excludes Android tablets like the Honor Tab 10
+     (~2000px wide in landscape, aspect ~1.67, which used to trip the
+     16/10 floor). Phones in landscape stay well under 900px even at
+     6.7" so they still get the rotate prompt; tablets just play
+     centred in a portrait column without being yelled at. */
+@media (orientation: landscape) and (pointer: coarse) and (min-aspect-ratio: 16/10) and (max-width: 900px) {
     #landscape-hint { display: flex; }
 }
 /* Reduced motion: keep the icon static instead of swinging. */
@@ -2468,6 +2485,73 @@ body.reduced-motion .boss-intro-content,
 body.reduced-motion .boss-intro-stripe {
     transition: none !important;
 }
+
+/* Hex Breach result panel — replaces the legacy alert() popup. Sits
+   centred over the hex grid with a glass card; .hex-result-win uses
+   green accents, .hex-result-fail uses pink. Tap CONTINUE to leave. */
+.hex-result {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.78);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 10;
+    padding: 24px;
+    box-sizing: border-box;
+    animation: hex-result-fade 220ms ease-out;
+}
+.hex-result.hidden { display: none; }
+@keyframes hex-result-fade {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+}
+.hex-result-card {
+    max-width: 360px;
+    width: 100%;
+    padding: 22px 24px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    align-items: center;
+}
+.hex-result-icon {
+    font-family: var(--font-cyber);
+    font-size: 3.4rem;
+    line-height: 1;
+    text-shadow: 0 0 18px currentColor;
+}
+.hex-result-title {
+    font-family: var(--font-cyber);
+    letter-spacing: 0.18em;
+    margin: 0;
+    font-size: clamp(1rem, 4vw, 1.3rem);
+}
+.hex-result-rewards {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-family: var(--font-main);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+.hex-result-rewards li {
+    padding: 6px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.03);
+}
+.hex-result-win .hex-result-icon,
+.hex-result-win .hex-result-title { color: var(--neon-green); }
+.hex-result-fail .hex-result-icon,
+.hex-result-fail .hex-result-title { color: var(--neon-pink); }
+.hex-result #btn-hex-result-continue { width: 100%; max-width: 240px; margin-top: 4px; }
 
 /* Class-vs-boss matchup hint — a single tactical line below the slate
    stripe. Visually subordinate to the boss name (smaller, dimmer,
