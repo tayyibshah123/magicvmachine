@@ -922,7 +922,10 @@ body[data-transition-dir] .screen.active {
 .settings-tab {
     letter-spacing: 0.06em;
     font-size: calc(var(--text-xs) * 0.85);
-    padding: 9px 1px;
+    /* Padding 9→14 + min-height 44px so each tab meets the 44px
+       Apple HIG floor; was a tight ~24px tap zone before. */
+    padding: 14px 1px;
+    min-height: 44px;
 }
 .settings-tab:hover { color: var(--text-muted); }
 .settings-tab.active {
@@ -990,7 +993,12 @@ body[data-transition-dir] .screen.active {
     grid-template-columns: 1fr auto;
     align-items: center;
     width: 100%;
-    padding: 10px 4px !important;
+    /* Padding bumped 10→12px so the slim 24px-tall toggle still sits in
+       a ≥ 44px tap zone (12 + 24 + 12 = 48px). The associated <label
+       for=...> takes the 1fr column so tapping anywhere on the row's
+       left half also toggles the control. */
+    padding: 12px 4px !important;
+    min-height: 44px;
     column-gap: 14px;
     row-gap: 6px;
     border-bottom: 1px solid rgba(255,255,255,0.06);
@@ -998,6 +1006,15 @@ body[data-transition-dir] .screen.active {
     font-size: var(--text-base) !important;
     color: var(--text-muted);
     text-align: left;
+}
+/* Stretch the row's text label across the 1fr column so the entire
+   left side is a tap zone for the associated control (label[for=...]
+   already handles the JS). */
+.setting-row > label {
+    display: flex;
+    align-items: center;
+    min-height: 28px;
+    cursor: pointer;
 }
 .settings-pane .setting-row:last-child { border-bottom: none; }
 
@@ -5273,7 +5290,13 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     font-family: var(--font-cyber);
     font-size: 0.75rem;
     letter-spacing: 0.16em;
-    padding: 6px 14px;
+    /* Padding 6→12 vertical + min-height 44px so each chip is a
+       ≥44px round-pill tap target. Was ~24px tall — too tight for
+       a thumb on the menu modal where these live. */
+    padding: 12px 16px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
     border: 1px solid rgba(255, 255, 255, 0.18);
     background: rgba(255, 255, 255, 0.04);
     color: #d8d8e6;
@@ -5336,7 +5359,18 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 .save-slot-meta-row > span:first-child  { color: var(--text-muted); }
 .save-slot-meta-row > span:last-child   { color: #ffe6a8; font-weight: 700; }
 .save-slot-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.save-slot-card-actions .btn { font-size: 0.75rem; padding: 6px 10px; }
+/* Action buttons inside save slot cards (SELECT / WIPE) — were a
+   tight ~20px tall pill, well under the 44px floor. Bumped padding
+   + min-height so tapping a slot to switch saves doesn't require
+   precise aim. */
+.save-slot-card-actions .btn {
+    font-size: 0.78rem;
+    padding: 12px 14px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
 .save-slot-actions { display: flex; justify-content: flex-end; }
 #screen-char-select .char-grid {
     display: grid;
@@ -6304,7 +6338,11 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
 }
 .intel-tab {
     flex: 1;
-    padding: 10px 4px;
+    /* Bumped 10→14 padding + min-height 44px; previously ~33px total
+       (under Apple's 44px floor) on phones where INTEL tabs are
+       primary navigation. */
+    padding: 14px 4px;
+    min-height: 44px;
     background: transparent;
     color: var(--text-dim);
     border: none;
