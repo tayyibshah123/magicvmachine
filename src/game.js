@@ -5385,7 +5385,11 @@ triggerPhaseGlitch() {
             const container = document.getElementById('game-container') || document.body;
             container.appendChild(host);
         }
-        host.style.setProperty('--boss-color', colorHex);
+        // Route the boss-tint colour through Palette.adapt so the
+        // intro slate honours active colorblind modes (e.g. tritanopia
+        // remaps Tesseract Prime gold and Compiler orange away from
+        // each other so they don't collapse in the slate text).
+        host.style.setProperty('--boss-color', Palette.adapt(colorHex));
         host.innerHTML = `
             <div class="boss-intro-bar boss-intro-bar-top"></div>
             <div class="boss-intro-bar boss-intro-bar-bottom"></div>
@@ -5931,7 +5935,10 @@ triggerPhaseGlitch() {
         };
         const sec = this._pendingSector || this.sector || 1;
         const cfg = (typeof SECTOR_CONFIG !== 'undefined' && SECTOR_CONFIG[sec]) || null;
-        const accent = cfg ? cfg.sun[0] : '#00f3ff';
+        // Route palette-able colours through Palette.adapt — backdrop
+        // gradient stops + grid stay raw because they're decorative
+        // dark-tone fills that don't carry meaning.
+        const accent = Palette.adapt(cfg ? cfg.sun[0] : '#00f3ff');
         const top    = cfg ? cfg.bgTop : '#000';
         const mid    = cfg ? cfg.bgMid : '#222';
         const bot    = cfg ? cfg.bgBot : '#000';

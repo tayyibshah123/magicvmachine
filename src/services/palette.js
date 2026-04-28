@@ -31,10 +31,16 @@ const MAPS = {
         '#ff1100': '#ff7722',
         '#ff3333': '#ff8844',
         '#ff6b6b': '#ffb366',
+        '#ff66dd': '#ffaa22', // QTE pulse pattern — magenta → orange
+        '#ff77aa': '#ffaa44', // mirror enemies / mid-pink (also tritan target)
+        '#8f0030': '#aa6600', // MECH_DARK
         '#00ff99': '#00bfff',
-        '#7fff00': '#33bfff',
+        '#7fff00': '#33bfff', // bright lime — single canonical entry
         '#6aff6a': '#66bfff',
+        '#008f55': '#0088aa', // NATURE_DARK
+        '#32cd32': '#33aaff', // hive lime (boss color)
         '#ff6600': '#ffaa22',
+        '#ff4500': '#ff8800', // compiler orange
     },
     // Red weakness — similar to deuter, push pinks toward yellow-orange and
     // greens toward cyan so they don't collapse together.
@@ -48,9 +54,15 @@ const MAPS = {
         '#ff1100': '#ff9900',
         '#ff3333': '#ffa844',
         '#ff6b6b': '#ffc866',
+        '#ff66dd': '#ffbb22', // QTE pulse pattern
+        '#ff77aa': '#ffcc66', // mirror enemies / mid-pink
+        '#8f0030': '#aa7700', // MECH_DARK
         '#00ff99': '#00e5ff',
         '#6aff6a': '#66e5ff',
         '#7fff00': '#33c5ff',
+        '#008f55': '#00aacc', // NATURE_DARK
+        '#32cd32': '#33ccff', // hive lime
+        '#ff4500': '#ff9900', // compiler orange
     },
     // Blue/yellow confusion — shift cyans toward pink and greens toward
     // yellow so they don't bleed into each other.
@@ -63,6 +75,14 @@ const MAPS = {
         '#00ff99': '#d2ff33',
         '#6aff6a': '#d2ff66',
         '#7fff00': '#b2ff33',
+        // GOLD distinct from cyan (which maps to #ff77aa). Use a
+        // warmer pink for golds so victory / boss-tint elements
+        // don't collapse onto the cyan/mana palette in tritan.
+        '#ffd700': '#ff99cc', // GOLD
+        '#ffd76a': '#ffaacc', // gold variant used in cinematics
+        '#ffe6a8': '#ffccdd', // light gold (victory tally)
+        '#32cd32': '#dd44ff', // hive lime → magenta
+        '#7fff00': '#dd66ff', // bright lime
     },
 };
 
