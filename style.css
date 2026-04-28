@@ -1245,10 +1245,13 @@ body[data-transition-dir] .screen.active {
     box-shadow: 0 0 15px rgba(0, 243, 255, 0.3);
     color: #fff; padding: 12px 16px; border-radius: 4px;
     font-family: var(--font-main);
-    font-size: 0.9rem; 
+    /* Pulled from the scaled token so the accessibility text-size
+       slider lifts tooltip readability — was a hardcoded 0.9rem
+       that ignored the slider entirely. */
+    font-size: var(--text-sm);
     z-index: 10000; /* FIX: Ensure it's above everything (Banner is 8000, CRT is 9000) */
     white-space: pre-line; max-width: 250px; text-align: center;
-    pointer-events: none !important; 
+    pointer-events: none !important;
 }
 
 /* Typography */
@@ -1422,9 +1425,11 @@ h2 {
 }
 /* Top-row trim so every button fits the 540px game-container.
    Applied unconditionally — the experience is identical across devices
-   (PC is a 540px preview of the mobile layout). */
-#sector-display { font-size: 0.9rem !important; }
-.turn-display   { font-size: 0.8rem !important; }
+   (PC is a 540px preview of the mobile layout). HUD text uses scaled
+   tokens so the accessibility text-size slider lifts the live sector
+   indicator + turn counter for low-vision players. */
+#sector-display { font-size: var(--text-sm) !important; }
+.turn-display   { font-size: var(--text-xs) !important; }
 .btn-modules-label { display: none; }
 .btn-modules-toggle { padding: 4px 6px !important; gap: 2px; }
 .top-bar .btn-icon { padding: 4px; }
@@ -2166,7 +2171,10 @@ body.reduced-motion .victory-tally * {
     border-bottom: 2px solid transparent;
     font-family: var(--font-cyber);
     font-weight: 700;
-    font-size: 0.78rem;
+    /* Scaled token so glossary tab labels respect the text-size
+       slider. Kept at xs since the tabs are dense + multiple chips
+       fit horizontally — bumping past sm risks horizontal overflow. */
+    font-size: var(--text-xs);
     letter-spacing: 0.20em;
     text-transform: uppercase;
     cursor: pointer;
@@ -2206,11 +2214,13 @@ body.reduced-motion .victory-tally * {
     font-weight: 800;
     letter-spacing: 0.14em;
     color: var(--neon-gold);
-    font-size: 0.96rem;
+    /* Scaled token — accessibility text-size slider raises this in
+       lockstep with the rest of the UI. */
+    font-size: var(--text-base);
 }
 .glossary-item-body {
     color: var(--text-muted);
-    font-size: 0.92rem;
+    font-size: var(--text-sm);
     line-height: 1.5;
 }
 .glossary-item-body strong { color: #ffe6a8; }
