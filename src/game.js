@@ -8303,7 +8303,14 @@ triggerSystemCrash() {
         } catch (e) {
             console.error("Save file corrupted", e);
             this._clearSave();
-            alert("Save file corrupted. Starting new run.");
+            // In-game floating text + log line. Replaces a JS alert() that
+            // hung modally on mobile with no user-facing context.
+            try {
+                ParticleSys.createFloatingText(
+                    CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
+                    'SAVE CORRUPTED — NEW RUN', '#ff3355'
+                );
+            } catch (_) {}
             this.goToCharSelect();
         }
     },
