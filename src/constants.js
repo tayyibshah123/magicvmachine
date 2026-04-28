@@ -554,7 +554,7 @@ const ENEMIES = [
     // Sector 4 (High Security)
     { name: "Praetorian", hp: 160, dmg: 15, sector: 4, shape: 'tank' },
     { name: "Sentinel Orb", hp: 130, dmg: 20, sector: 4, shape: 'drone' },
-    { name: "Phase Stalker", hp: 110, dmg: 25, sector: 4, shape: 'spider' },
+    { name: "Phase Stalker", hp: 110, dmg: 25, sector: 4, shape: 'spider', kind: 'phase_shift' },
     // Sector 4 — expansion (5.2.1)
     { name: "Hive Warden", hp: 130, dmg: 10, sector: 4, shape: 'tank',   kind: 'shielder' },
     { name: "Phage Pod",   hp: 60,  dmg: 15, sector: 4, shape: 'wisp',   kind: 'detonator' },

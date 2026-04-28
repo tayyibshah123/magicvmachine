@@ -273,6 +273,14 @@ class Enemy extends Entity {
         if (this.kind === 'clone') {
             return { type: 'attack', val: this.baseDmg, target: getTarget() };
         }
+        if (this.kind === 'phase_shift') {
+            // Phase Stalker — slips between forms. Damage taken is
+            // resolved in entity.takeDamage where 35% of incoming hits
+            // pass through; here it just attacks at a heavy multiplier
+            // so when it DOES connect it lands harder than its
+            // sector-tier stats imply.
+            return { type: 'attack', val: Math.floor(this.baseDmg * 1.1), target: getTarget() };
+        }
         if (this.kind === 'armored') {
             // Slow & heavy — shields itself on alternate turns.
             this._armoredTick = (this._armoredTick || 0) + 1;

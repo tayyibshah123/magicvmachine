@@ -4905,7 +4905,7 @@ triggerPhaseGlitch() {
             'Ember Swarm':      'low HP each, but there are many.',
             'Praetorian':       'imperial guard. Shield-disciplined.',
             'Sentinel Orb':     'high burst damage in bursts.',
-            'Phase Stalker':    'phases between forms. Half your hits miss.',
+            'Phase Stalker':    'phases mid-strike. 35% of incoming hits pass through.',
             'Hive Warden':      'shields its allies.',
             'Phage Pod':        'detonates, damaging nearby enemies AND you.',
             'Keeper':           'buffs nearby hostiles.',
@@ -21705,6 +21705,42 @@ drawEntity(entity) {
                 ctx.fill();
                 ctx.restore();
             }
+        }
+
+        // --- PHASE-SHIFT VISUAL — incorporeal indicator ---
+        // Phase Stalker (kind === 'phase_shift') flickers between two
+        // ghost-states: a translucent purple aura + a faint duplicate
+        // silhouette offset to one side. Reads as "this thing isn't
+        // fully here" so the 35% miss feels earned, not random.
+        if (entity instanceof Enemy && entity.kind === 'phase_shift') {
+            ctx.save();
+            const flicker = 0.5 + Math.sin(time * 9) * 0.4;
+            const offset = Math.sin(time * 1.7) * 14;
+            // Faint purple silhouette duplicate offset to one side
+            ctx.globalAlpha = 0.22 + flicker * 0.18;
+            ctx.fillStyle = '#bc13fe';
+            ctx.shadowColor = '#bc13fe';
+            ctx.shadowBlur = 18;
+            ctx.beginPath();
+            ctx.arc(offset, 0, entity.radius * 0.85, 0, Math.PI * 2);
+            ctx.fill();
+            // Outer wisp ring — broken arcs that flicker on/off so the
+            // outline reads as "phasing in and out".
+            ctx.globalAlpha = 0.6 + flicker * 0.3;
+            ctx.strokeStyle = '#d070ff';
+            ctx.shadowBlur = 12;
+            ctx.lineWidth = 2;
+            const segs = 5;
+            const segLen = (Math.PI * 2) / segs;
+            for (let i = 0; i < segs; i++) {
+                if (Math.random() < 0.4) continue; // skip random arcs each frame
+                const a0 = i * segLen + time * 0.4;
+                const a1 = a0 + segLen * 0.55;
+                ctx.beginPath();
+                ctx.arc(0, 0, entity.radius + 6, a0, a1);
+                ctx.stroke();
+            }
+            ctx.restore();
         }
 
         // --- DEBUFF VISUALS ---

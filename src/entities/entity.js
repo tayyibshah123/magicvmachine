@@ -113,6 +113,18 @@ class Entity {
             }
         }
 
+        // Phase-shift kind — Phase Stalker. 35% of incoming hits pass
+        // through the entity entirely, mirroring the dossier promise
+        // "phases between forms". Visual cue is the constant flickering
+        // alpha drawn around the entity in the render path so the
+        // player reads "this thing is incorporeal" before attacking.
+        if (this instanceof Enemy && this.kind === 'phase_shift' && actualDmg > 0 && Math.random() < 0.35) {
+            ParticleSys.createFloatingText(this.x, this.y - 80, "PHASE MISS", "#bc13fe");
+            ParticleSys.createSparks(this.x, this.y, "#bc13fe", 10);
+            AudioMgr.playSound('defend');
+            return false;
+        }
+
         let actualDmg = amount;
 
         if (this instanceof Player && this.incomingDamageMult > 1) {
