@@ -136,13 +136,91 @@ if (document.readyState === 'loading') {
   wireLandscapeHint();
 }
 
-// Register the service worker for offline play (PWA)
+// Register the service worker for offline play (PWA) + handle updates.
+// Without an update-aware handler, the SW activates new versions
+// silently and the running tab keeps serving stale cached code until
+// the player manually refreshes. The new flow:
+//   1. Register the SW on window 'load'
+//   2. Watch for `updatefound` on the registration
+//   3. When the installing worker reaches `installed` AND there's an
+//      existing controller (i.e., this is an UPDATE, not a fresh
+//      install), show the #sw-update-banner
+//   4. Refresh button posts SKIP_WAITING + reloads the page
+//   5. controllerchange listener catches the case where the SW
+//      activates without our prompt (e.g., another tab triggered it)
+//      and reloads silently to keep code in sync
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js').catch(err => {
+        navigator.serviceWorker.register('./service-worker.js').then(reg => {
+            // updatefound fires when a new SW is being installed.
+            reg.addEventListener('updatefound', () => {
+                const newWorker = reg.installing;
+                if (!newWorker) return;
+                newWorker.addEventListener('statechange', () => {
+                    // Only show the banner when the new worker is
+                    // INSTALLED and there's already an active
+                    // controller (so this is an update, not first
+                    // install). On first install navigator.serviceWorker
+                    // .controller is null — we don't want to show
+                    // "REFRESH" before the player has even loaded once.
+                    if (newWorker.state === 'installed'
+                        && navigator.serviceWorker.controller) {
+                        showUpdateBanner(reg);
+                    }
+                });
+            });
+            // Periodic background check (every 60s) for new builds
+            // beyond the initial registration check. Important for
+            // installed PWAs that stay open across multiple sessions
+            // — without this, players on long sessions never see
+            // updates until the next cold launch. Skipped while the
+            // tab is hidden so a backgrounded PWA doesn't keep
+            // pinging the server (mobile battery / data usage).
+            setInterval(() => {
+                if (document.visibilityState !== 'visible') return;
+                try { reg.update(); } catch (_) {}
+            }, 60000);
+        }).catch(err => {
             console.warn('Service worker registration failed:', err);
         });
+
+        // controllerchange fires when the active SW is replaced. We
+        // reload the page so the running JS matches the new SW's
+        // cached resources. Guard with a flag so a user-initiated
+        // refresh-via-banner doesn't double-reload.
+        let reloading = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (reloading) return;
+            reloading = true;
+            window.location.reload();
+        });
     });
+}
+
+function showUpdateBanner(reg) {
+    const banner = document.getElementById('sw-update-banner');
+    if (!banner) return;
+    banner.classList.remove('hidden');
+    requestAnimationFrame(() => banner.classList.add('active'));
+    const refreshBtn = document.getElementById('btn-sw-refresh');
+    const dismissBtn = document.getElementById('btn-sw-dismiss');
+    const onRefresh = () => {
+        // Tell the waiting SW to take over. Once it does,
+        // controllerchange fires and the page reloads.
+        if (reg && reg.waiting) {
+            try { reg.waiting.postMessage({ type: 'SKIP_WAITING' }); } catch (_) {}
+        }
+        // Fallback: if the SW didn't respond, force a reload after
+        // a short window so the player isn't stuck staring at the
+        // banner.
+        setTimeout(() => window.location.reload(), 600);
+    };
+    const onDismiss = () => {
+        banner.classList.remove('active');
+        setTimeout(() => banner.classList.add('hidden'), 240);
+    };
+    if (refreshBtn) refreshBtn.addEventListener('click', onRefresh, { once: true });
+    if (dismissBtn) dismissBtn.addEventListener('click', onDismiss, { once: true });
 }
 
 // PWA install prompt. Three-tier handling:

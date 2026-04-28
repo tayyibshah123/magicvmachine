@@ -52,7 +52,10 @@ const SHELL_ASSETS = [
 ];
 
 self.addEventListener('install', event => {
-    self.skipWaiting();
+    // Don't auto-skipWaiting any more — the user-facing update
+    // banner posts {type:'SKIP_WAITING'} when the player taps
+    // REFRESH. That keeps a mid-run player from getting their
+    // tab swapped out from under them by a silent SW update.
     event.waitUntil(
         caches.open(CACHE_NAME).then(cache =>
             // addAll fails atomically — if any asset 404s, the SW won't install.
@@ -60,6 +63,17 @@ self.addEventListener('install', event => {
             Promise.all(SHELL_ASSETS.map(url => cache.add(url).catch(() => null)))
         )
     );
+});
+
+// Listen for the page-side SKIP_WAITING message — fired when the
+// player taps the REFRESH button on the update banner. Replaces the
+// previous unconditional skipWaiting() in install: the new SW now
+// stays in `waiting` state until the player explicitly triggers it,
+// so a long combat session isn't interrupted by a silent reload.
+self.addEventListener('message', event => {
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
 });
 
 self.addEventListener('activate', event => {

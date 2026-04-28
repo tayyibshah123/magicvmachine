@@ -28,6 +28,18 @@
 </head>
 <body>
 
+    <!-- Service-worker update banner — shown when a new build has
+         been cached in the background. Tap REFRESH to replace the
+         currently-running tab with the new code. Self-dismissable
+         with the X button so a player who's mid-run can defer it
+         until they finish. -->
+    <div id="sw-update-banner" class="sw-update-banner hidden" role="status">
+        <span class="sw-update-icon" aria-hidden="true">↻</span>
+        <span class="sw-update-text">New build available</span>
+        <button id="btn-sw-refresh" class="btn-inline">REFRESH</button>
+        <button id="btn-sw-dismiss" class="sw-update-close" aria-label="Dismiss update">×</button>
+    </div>
+
     <!-- Portrait-only blocker. CSS media query at the body level
          shows this when the device is in landscape orientation +
          coarse-pointer (touch). Rotation back to portrait dismisses

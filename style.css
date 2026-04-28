@@ -2100,6 +2100,71 @@ body.reduced-motion .victory-tally * {
 }
 
 /* =========================================
+   SW UPDATE BANNER — top-anchored toast that appears when a new
+   build has been cached in the background. Tap REFRESH to swap the
+   running tab to the new code; tap × to defer until the player
+   chooses to leave their current run.
+   ========================================= */
+.sw-update-banner {
+    position: fixed;
+    top: max(12px, env(safe-area-inset-top, 0px));
+    left: 50%;
+    transform: translateX(-50%) translateY(-110%);
+    z-index: 9000;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--neon-blue);
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(8, 4, 26, 0.96), rgba(20, 8, 42, 0.92));
+    box-shadow: 0 0 22px rgba(0, 243, 255, 0.32), 0 8px 22px rgba(0, 0, 0, 0.6);
+    color: #fff;
+    font-family: var(--font-cyber);
+    font-size: var(--text-xs);
+    letter-spacing: 0.16em;
+    transition: transform 320ms cubic-bezier(.35, .9, .2, 1);
+    max-width: 92vw;
+}
+.sw-update-banner.hidden { display: none; }
+.sw-update-banner.active { transform: translateX(-50%) translateY(0); }
+.sw-update-banner .sw-update-icon {
+    color: var(--neon-blue);
+    font-size: 1.1em;
+    animation: sw-update-spin 2.4s linear infinite;
+}
+.sw-update-banner .sw-update-text { white-space: nowrap; }
+.sw-update-banner .btn-inline {
+    padding: 6px 14px;
+    min-height: 36px;
+    border: 1px solid var(--neon-blue);
+    background: rgba(0, 243, 255, 0.1);
+    color: var(--neon-blue);
+    border-radius: 999px;
+    font-family: var(--font-cyber);
+    font-size: var(--text-xs);
+    letter-spacing: 0.18em;
+    cursor: pointer;
+}
+.sw-update-banner .btn-inline:hover { background: rgba(0, 243, 255, 0.2); }
+.sw-update-banner .sw-update-close {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 1.4rem;
+    line-height: 1;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    padding: 0;
+}
+.sw-update-banner .sw-update-close:hover { color: #fff; }
+@keyframes sw-update-spin {
+    to { transform: rotate(360deg); }
+}
+body.reduced-motion .sw-update-icon { animation: none; }
+
+/* =========================================
    PWA INSTALL — menu pill (visible only when installable) + iOS
    add-to-home-screen instruction modal.
    ========================================= */
