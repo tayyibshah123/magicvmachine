@@ -138,6 +138,15 @@ const AudioMgr = {
     currentTrack: 'synth',
     _lastShuffleIdx: -1,
 
+    // Per-sector synth routing. When the player enters a new sector, lock
+    // the multi-source 'synth' playset to that sector's specific track so
+    // each region of the run has a recognisable theme. Sector 5 wraps to
+    // the same source as Sector 1 (we have 5 sectors but 4 synth tracks).
+    // 'lofi' has a single source — the player explicitly picked the chill
+    // pad, so we don't mess with it.
+    SECTOR_TRACK_IDX: { 1: 0, 2: 1, 3: 2, 4: 3, 5: 0 },
+    _sectorLock: null,
+
     // Pick an alternate file extension for environments that can't play OGG
     // Vorbis (older iOS/WKWebView). Probe the browser once with an <audio>
     // element's canPlayType; cache the result. Returns the candidate URL if
@@ -163,10 +172,16 @@ const AudioMgr = {
     },
 
     // Pick a random source that isn't the one we just played. Falls back to
-    // plain random when the playlist only has one entry.
+    // plain random when the playlist only has one entry. With a sector
+    // lock active, returns that sector's specific source so a track that
+    // ends naturally relooops to itself instead of jumping to a new theme.
     _pickShuffleSrc(sources) {
         if (!sources || sources.length === 0) return null;
         if (sources.length === 1) return sources[0];
+        if (this._sectorLock != null && sources[this._sectorLock]) {
+            this._lastShuffleIdx = this._sectorLock;
+            return sources[this._sectorLock];
+        }
         let idx;
         do { idx = Math.floor(Math.random() * sources.length); }
         while (idx === this._lastShuffleIdx);
@@ -228,6 +243,43 @@ const AudioMgr = {
             this.fadeMusicIn(wasNew ? 900 : 600);
         }
     },
+
+    // Per-sector routing. Lock the synth playset to the sector's specific
+    // source so each sector has its own recognisable theme. lofi (single
+    // source) is left untouched — that's an explicit player choice. Boss
+    // silence wins: if the boss is forcing silence, we don't fight it.
+    //
+    // Idempotent: a second call with the same sector while the right track
+    // is already playing is a no-op, so calling on every node tap is fine.
+    setSectorMusic(sector) {
+        if (this.bossSilence) return;
+        const idx = this.SECTOR_TRACK_IDX[sector];
+        if (idx == null) return;
+        const track = this.TRACKS[this.currentTrack];
+        if (!track || !Array.isArray(track.sources) || track.sources.length < 2) return;
+        if (idx >= track.sources.length) return;
+        if (this._sectorLock === idx) return;
+        this._sectorLock = idx;
+
+        const targetResolved = this._resolveTrackSrc(track.sources[idx]);
+        const wasPlaying = this.bgm && !this.bgm.paused;
+        // Already on the target — the lock is set, but no swap needed.
+        const onTarget = this.bgm && this.bgm.src && this.bgm.src.endsWith(targetResolved.replace(/^\.\//, ''));
+        if (!wasPlaying || onTarget) return;
+
+        // Crossfade: same dance setTrack uses — fade out, tear down,
+        // re-init via startMusic which now picks the locked source.
+        this.fadeMusicOut(350);
+        setTimeout(() => {
+            if (this.bgm) { try { this.bgm.pause(); } catch (e) {} }
+            this.bgm = null;
+            this.startMusic();
+        }, 400);
+    },
+
+    // Drop the sector lock — call when the run ends so the next start
+    // doesn't carry over the prior run's theme into the menu / sanctuary.
+    clearSectorMusic() { this._sectorLock = null; },
 
     // Swap the background track at runtime. Crossfades: old track fades out
     // over 400ms, new track replaces it and fades in over 600ms. Preference

@@ -10014,6 +10014,10 @@ async startCombat(type) {
         Analytics.emit('combat_start', { sector: this.sector, type: type || 'normal' });
         // Kick the sector's ambient drone. Cheap synth loop; stops on win/lose.
         AudioMgr.startSectorAmbient && AudioMgr.startSectorAmbient(this.sector);
+        // Lock the BGM to this sector's track. Idempotent; only swaps if
+        // the sector actually changed AND the player is on the multi-source
+        // synth set (lofi mode is left alone).
+        AudioMgr.setSectorMusic && AudioMgr.setSectorMusic(this.sector);
 
         // Register this run's class signature die (tier follows sector progress)
         this._syncSignatureDie();
@@ -15962,6 +15966,11 @@ drawEffects() {
             this._clearSave();
             document.getElementById('btn-load-save').style.display = 'none';
 
+            // Run ended in victory — release the sector music lock so a
+            // fresh run starts clean instead of inheriting the final
+            // sector's theme on the menu.
+            AudioMgr.clearSectorMusic && AudioMgr.clearSectorMusic();
+
             this.changeState(STATE.ENDING);
             return;
         }
@@ -16419,6 +16428,7 @@ drawEffects() {
 
     gameOver() {
         AudioMgr.stopSectorAmbient && AudioMgr.stopSectorAmbient();
+        AudioMgr.clearSectorMusic && AudioMgr.clearSectorMusic();
         this._activeSectorMech = null;
         const mechPillGO = document.getElementById('sector-mech-pill');
         if (mechPillGO) {
@@ -16734,6 +16744,7 @@ drawEffects() {
 
     quitRun() {
         AudioMgr.bossSilence = false;
+        AudioMgr.clearSectorMusic && AudioMgr.clearSectorMusic();
         this.restoreCombatButtons();
         ClassAbility.endCombat();
         if (Game._origRandom) Math.random = Game._origRandom;
