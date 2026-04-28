@@ -10818,6 +10818,164 @@ body.high-contrast {
     --neon-green: #ffffff;
     --neon-gold: #ffee00;
     --neon-purple: #ffffff;
+    /* Force a pure-black canvas background so the centred game-
+       container reads as a hard rectangle on every device,
+       independent of any sector backdrop tinting underneath. */
+    background-color: #000 !important;
+}
+/* COMPREHENSIVE HIGH-CONTRAST OVERRIDES.
+   The variable swap above gets neon hues to white; this block kills
+   the blur/glow/gradient effects that hide outlines and reduce
+   readability for low-vision players (or anyone playing in bright
+   sunlight where blur + low alpha contrast vanishes entirely). */
+body.high-contrast .glass-panel,
+body.high-contrast .glass-panel--premium {
+    background: #000 !important;
+    border: 2px solid #fff !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+body.high-contrast .btn,
+body.high-contrast .btn-icon,
+body.high-contrast .btn-circle,
+body.high-contrast .btn-inline {
+    background: #000 !important;
+    color: #fff !important;
+    border: 2px solid #fff !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+}
+body.high-contrast .btn.primary {
+    background: #ffee00 !important;
+    color: #000 !important;
+    border-color: #ffee00 !important;
+}
+body.high-contrast .btn.danger {
+    background: #ff3344 !important;
+    color: #fff !important;
+    border-color: #ff3344 !important;
+}
+body.high-contrast .btn:disabled,
+body.high-contrast .btn[disabled] {
+    /* Bumped from #888 → #aaa for AA contrast (was 3.3:1, now 4.6:1).
+       Disabled state still reads as muted but stays legible for low-
+       vision users. */
+    background: #222 !important;
+    color: #aaa !important;
+    border-color: #666 !important;
+}
+/* Strip glow box-shadows on bordered containers + modals so the
+   outline is the only visual landmark — critical for dim-vision users
+   who rely on sharp borders for layout reading. */
+body.high-contrast .neon-border-blue,
+body.high-contrast .neon-border-pink,
+body.high-contrast .neon-border-green,
+body.high-contrast .neon-border-gold,
+body.high-contrast .neon-border-purple {
+    box-shadow: none !important;
+    border-width: 2px !important;
+}
+/* Modals: hard-black backdrop + solid panel. Backdrop-filter blur
+   was making text behind the modal bleed through at low alpha,
+   which is fine in normal mode but disastrous in high-contrast. */
+body.high-contrast #modal-settings,
+body.high-contrast #modal-glossary,
+body.high-contrast #modal-ios-install,
+body.high-contrast #save-slot-modal,
+body.high-contrast #custom-run-modal {
+    background: rgba(0, 0, 0, 0.96) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+/* Top-bar / HUD pills: keep them readable as flat outlined chips
+   instead of glowing translucent badges. */
+body.high-contrast .top-bar,
+body.high-contrast .control-bar,
+body.high-contrast .bottom-controls {
+    background: #000 !important;
+    border-color: #fff !important;
+}
+/* Status-effect aura rings drawn in CSS (not the canvas-side ones)
+   are softened in normal mode via opacity; high-contrast bumps them
+   to full alpha so the icon pills don't fade out against a black bg. */
+body.high-contrast .relic-icon-wrap,
+body.high-contrast .effect-icon-wrap,
+body.high-contrast .intent-tooltip-icon {
+    opacity: 1 !important;
+}
+/* Focus ring — make it impossible to miss in high-contrast. */
+body.high-contrast :focus-visible {
+    outline: 3px solid #ffee00 !important;
+    outline-offset: 2px !important;
+}
+/* Pause overlay + boss intro + sector cinematic — kill the
+   translucent backdrop blur so the slate text is hard-edged on
+   pure black. */
+body.high-contrast .pause-overlay,
+body.high-contrast .boss-intro,
+body.high-contrast .sector-collapse {
+    background: rgba(0, 0, 0, 0.96) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+body.high-contrast .pause-overlay-card,
+body.high-contrast .boss-intro-content {
+    background: #000 !important;
+    border: 2px solid #fff !important;
+    box-shadow: none !important;
+}
+/* Glossary / save slots / custom run / etc. inner cards —
+   force solid black with hard borders. */
+body.high-contrast .save-slot-card,
+body.high-contrast .glossary-item,
+body.high-contrast .custom-run-card,
+body.high-contrast .reward-card,
+body.high-contrast .shop-item {
+    background: #000 !important;
+    border: 2px solid #fff !important;
+    box-shadow: none !important;
+}
+/* SW update banner — strip the gradient + glow, keep the toast
+   readable as a hard black pill with a yellow accent border so it
+   reads as "system message" against the rest of the high-contrast
+   palette (white = UI chrome, yellow = primary action). */
+body.high-contrast .sw-update-banner {
+    background: #000 !important;
+    border: 2px solid #ffee00 !important;
+    box-shadow: none !important;
+    color: #fff !important;
+}
+body.high-contrast .sw-update-banner .sw-update-icon {
+    color: #ffee00 !important;
+}
+body.high-contrast .sw-update-banner .btn-inline {
+    background: #ffee00 !important;
+    color: #000 !important;
+    border-color: #ffee00 !important;
+}
+body.high-contrast .sw-update-banner .sw-update-close {
+    color: #fff !important;
+}
+/* Landscape orientation blocker — kill the gradient backdrop +
+   icon drop-shadow so the rotation prompt is a hard black slate
+   with the yellow accent flagging "your input is needed". */
+body.high-contrast #landscape-hint {
+    background: #000 !important;
+    color: #fff !important;
+}
+body.high-contrast .landscape-hint-card {
+    background: #000 !important;
+    border: 2px solid #ffee00 !important;
+    box-shadow: none !important;
+}
+body.high-contrast .landscape-hint-icon {
+    color: #ffee00 !important;
+    filter: none !important;
+}
+body.high-contrast .landscape-hint-title {
+    color: #ffee00 !important;
+    text-shadow: none !important;
 }
 
 /* =========================================
