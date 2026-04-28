@@ -81,7 +81,12 @@ function hardwareScore() {
     return score;
 }
 
-function runFrameProbe(durationMs = 600) {
+function runFrameProbe(durationMs = 900) {
+    // Bumped 600 → 900ms so the first-launch sample averages over a
+    // longer window (catches single-frame stalls, less swayed by a
+    // cold-start GC pause). Trade-off: detection takes 300ms longer
+    // before the auto-tier downgrade can kick in, but it stays in a
+    // background setTimeout so the player never sees the wait.
     return new Promise((resolve) => {
         let frames = 0;
         const start = performance.now();

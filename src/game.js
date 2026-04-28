@@ -161,12 +161,24 @@ const Game = {
         // bounces back on sustained 58+. Respects user override (no-op if
         // they've pinned a specific tier in Settings).
         Perf.startMonitor();
+        // FPS cap. rAF runs at the display's refresh rate, which is 120Hz
+        // on modern phones — that doubles GPU/battery cost for almost no
+        // visible improvement on this game's animation budget. Lock to 60
+        // by default (consistent feel + ~50% battery savings on 120Hz
+        // panels), and drop to 30 on the low tier so weak devices skip
+        // every other frame's render work entirely.
+        const targetFps = (Perf.tier === 'low') ? 30 : 60;
+        this._targetFrameInterval = 1000 / targetFps;
         // React to tier changes live so active runs pick up the new caps.
         const syncParticleBudget = () => {
             ParticleSys.quality = Perf.particleQuality();
             if (Perf.tier === 'low') ParticleSys.maxParticles = 128;
             else if (Perf.tier === 'mid') ParticleSys.maxParticles = 220;
             else ParticleSys.maxParticles = 384;
+            // Re-tune the FPS cap when the runtime monitor flips tier so
+            // a downgrade also halves the render rate (and an upgrade
+            // restores 60).
+            this._targetFrameInterval = 1000 / ((Perf.tier === 'low') ? 30 : 60);
         };
         // Patch setTier to also call our syncer. Wraps once.
         if (!Perf._patchedTierHook) {
@@ -18030,6 +18042,26 @@ drawEffects() {
     },
 
     loop(timestamp) {
+        // Frame-pacing cap. Skip rendering if we're ahead of the target
+        // interval; just request another rAF and bail. Saves 50% of the
+        // GPU/battery cost on 120Hz displays (mid-to-high-end phones)
+        // since the game's animation budget plateaus at 60fps anyway.
+        // On 'low' tier the cap drops to 30fps so weak devices don't
+        // try to paint every native frame.
+        if (this._targetFrameInterval) {
+            if (!this._lastRenderTime) this._lastRenderTime = timestamp;
+            const elapsed = timestamp - this._lastRenderTime;
+            // Subtract 1ms slack so we don't miss the frame by rounding
+            // (rAF granularity on some browsers is ~1ms).
+            if (elapsed < this._targetFrameInterval - 1) {
+                requestAnimationFrame(this._boundLoop);
+                return;
+            }
+            // Carry the remainder so the cap stays phase-locked to real
+            // time (prevents drift when rAF fires slightly off-cadence).
+            this._lastRenderTime = timestamp - (elapsed % this._targetFrameInterval);
+        }
+
         let dt = (timestamp - this.lastTime) / 1000;
         if (dt > 0.1) dt = 0.1;
 
