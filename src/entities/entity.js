@@ -507,9 +507,17 @@ class Entity {
             // Player-side hit-stop — proportional to damage, capped at 90ms
             const hsMs = Math.min(90, 30 + actualDmg * 1.6);
             if (Game.hitStop) Game.hitStop(hsMs);
-            // Brutal hit (>50% maxHp) → red screen flash
-            if (actualDmg / Math.max(1, this.maxHp) > 0.5 && Game.triggerScreenFlash) {
-                Game.triggerScreenFlash('rgba(255, 40, 80, 0.45)', 260);
+            // Three-tier red screen flash so every hit registers, not
+            // just brutal ones. Was: only > 50% maxHp got a flash; smaller
+            // hits felt like the player was clipping a cube. Now the
+            // flash intensity scales with damage proportion.
+            if (Game.triggerScreenFlash) {
+                const ratio = actualDmg / Math.max(1, this.maxHp);
+                if (ratio > 0.5) Game.triggerScreenFlash('rgba(255, 40, 80, 0.50)', 320);    // brutal
+                else if (ratio > 0.2) Game.triggerScreenFlash('rgba(255, 50, 90, 0.30)', 220); // heavy
+                else if (ratio > 0.05) Game.triggerScreenFlash('rgba(255, 60, 100, 0.18)', 160); // chip
+                // sub-5% (DoT ticks, sector burns) stays unflashed so the
+                // screen doesn't strobe during heat-tile turns.
             }
             // Heavier haptic the bigger the hit — feels physical.
             if (Game.haptic) Game.haptic(actualDmg >= 25 ? 'warn' : actualDmg >= 12 ? 'heavy' : 'hit');

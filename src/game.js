@@ -16090,21 +16090,49 @@ drawEffects() {
         if (!entity) return;
 
         const ctx = this.ctx;
-        
+
         // --- 1. BAR DIMENSIONS ---
         const width = (entity instanceof Minion) ? 96 : 192;
-        const height = 30; 
-        
+        const height = 30;
+
         const x = entity.x - width/2;
-        const y = entity.y - entity.radius - 50; 
-        
+        const y = entity.y - entity.radius - 50;
+
         // Draw Bar Background
         ctx.fillStyle = COLORS.HP_BAR_BG;
         ctx.fillRect(x, y, width, height);
-        
+
         // Calculate & Draw HP Fill
         const pct = Math.max(0, entity.currentHp / entity.maxHp);
         const isPlayerSide = (entity instanceof Player || (entity instanceof Minion && entity.isPlayerSide));
+
+        // Bleed-tear (Hollow-Knight-style HP shadow). Track a lagged copy
+        // of currentHp on the entity itself; on damage it stays high
+        // briefly, exposing a red ribbon between the lagged value and the
+        // real value. Catches up at ~80 HP/sec so big hits read as
+        // ~250ms of visible loss; tiny hits are barely perceptible.
+        if (typeof entity._displayHp !== 'number') entity._displayHp = entity.currentHp;
+        const dt = 1 / 60;
+        if (entity._displayHp > entity.currentHp) {
+            const decay = Math.max(40, entity.maxHp * 0.6) * dt; // HP/sec, scaled by maxHp
+            entity._displayHp = Math.max(entity.currentHp, entity._displayHp - decay);
+        } else if (entity._displayHp < entity.currentHp) {
+            // Heal — snap up so the real value isn't lagged on heal too.
+            entity._displayHp = entity.currentHp;
+        }
+        const lagPct = Math.max(0, entity._displayHp / entity.maxHp);
+
+        // Draw the bleed ribbon FIRST (behind the live HP fill).
+        if (lagPct > pct + 0.001) {
+            const tearGrad = ctx.createLinearGradient(x, y, x, y + height);
+            tearGrad.addColorStop(0, 'rgba(255, 70, 100, 0.95)');
+            tearGrad.addColorStop(1, 'rgba(180, 30, 60, 0.85)');
+            ctx.fillStyle = tearGrad;
+            ctx.shadowColor = '#ff3355';
+            ctx.shadowBlur = 12;
+            ctx.fillRect(x, y, width * lagPct, height);
+            ctx.shadowBlur = 0;
+        }
 
         ctx.fillStyle = isPlayerSide ? COLORS.NATURE_LIGHT : COLORS.MECH_LIGHT;
 
@@ -16119,10 +16147,10 @@ drawEffects() {
         ctx.shadowBlur = isCritical ? 24 : 10;
         ctx.fillRect(x, y, width * pct, height);
         ctx.shadowBlur = 0;
-        
+
         // Border
         ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2; 
+        ctx.lineWidth = 2;
         ctx.strokeRect(x, y, width, height);
 
         // --- 2. HP TEXT ---
