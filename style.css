@@ -8731,10 +8731,38 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
 }
 .turn-summary-popup.hidden { display: none; }
 .turn-summary-popup.active { opacity: 1; transform: translate(-50%, 0); }
-.turn-summary-popup .ts-dealt { color: var(--neon-blue); text-shadow: 0 0 6px var(--neon-blue); }
-.turn-summary-popup .ts-taken { color: var(--neon-pink); text-shadow: 0 0 6px var(--neon-pink); }
-.turn-summary-popup .ts-meta  { color: var(--neon-gold); text-shadow: 0 0 6px var(--neon-gold); }
-.turn-summary-popup .ts-sep   { padding: 0 10px; color: rgba(255,255,255,0.3); }
+/* Chip layout — each stat is its own coloured pill so the row reads as
+   a dashboard at a glance, not a comma-string. Auto-wraps to two lines
+   on narrow phones when 4+ chips are present. */
+.turn-summary-popup {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 6px 10px;
+    white-space: normal;
+    max-width: min(420px, 92vw);
+}
+.turn-summary-popup .ts-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.32);
+    font-weight: 700;
+}
+.turn-summary-popup .ts-icon {
+    font-size: 0.95em;
+    opacity: 0.9;
+    line-height: 1;
+}
+.turn-summary-popup .ts-dealt    { color: var(--neon-blue);  text-shadow: 0 0 6px var(--neon-blue); }
+.turn-summary-popup .ts-taken    { color: var(--neon-pink);  text-shadow: 0 0 6px var(--neon-pink); }
+.turn-summary-popup .ts-healed   { color: #5add6a;           text-shadow: 0 0 6px rgba(90, 221, 106, 0.7); }
+.turn-summary-popup .ts-shield   { color: #88eaff;           text-shadow: 0 0 6px rgba(136, 234, 255, 0.7); }
+.turn-summary-popup .ts-rerolls  { color: var(--neon-gold);  text-shadow: 0 0 6px var(--neon-gold); }
 
 /* Daily Run chip — visible during seeded runs */
 .daily-run-chip {

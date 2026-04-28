@@ -4772,7 +4772,16 @@ triggerPhaseGlitch() {
     // End-of-turn summary popup — DOM-based, ephemeral
     showTurnSummary() {
         const s = this.turnStats;
-        if (!s || (s.dmgDealt === 0 && s.dmgTaken === 0)) return; // skip empty turns
+        if (!s) return;
+        // Skip turns where literally nothing happened. Old gate only
+        // checked dmg either way — a turn that only healed or only
+        // generated shield was silently dropped, so support builds saw
+        // no summary on key turns. Now any meaningful tracked beat
+        // (damage in or out, heal, shield gain, rerolls used) shows.
+        const hasContent = s.dmgDealt > 0 || s.dmgTaken > 0
+            || s.healed > 0 || s.shieldGained > 0 || s.rerollsUsed > 0;
+        if (!hasContent) return;
+
         let host = document.getElementById('turn-summary-popup');
         if (!host) {
             host = document.createElement('div');
@@ -4780,18 +4789,26 @@ triggerPhaseGlitch() {
             host.className = 'turn-summary-popup';
             document.body.appendChild(host);
         }
+        // Per-stat chips with leading icon glyphs so the row reads as a
+        // dashboard at a glance instead of a comma-soup string. Each
+        // chip is independently styled so colour-coding stays intact
+        // when the row gets long.
+        const chip = (cls, icon, val, label) =>
+            `<span class="ts-chip ${cls}"><span class="ts-icon">${icon}</span>${val} ${label}</span>`;
         const parts = [];
-        if (s.dmgDealt > 0) parts.push(`<span class="ts-dealt">+${s.dmgDealt} DMG dealt</span>`);
-        if (s.dmgTaken > 0) parts.push(`<span class="ts-taken">-${s.dmgTaken} HP</span>`);
-        if (this.rerolls > 0) parts.push(`<span class="ts-meta">${this.rerolls} reroll${this.rerolls === 1 ? '' : 's'} banked</span>`);
-        host.innerHTML = parts.join('<span class="ts-sep">·</span>');
+        if (s.dmgDealt > 0)     parts.push(chip('ts-dealt',    '⚔',  `+${s.dmgDealt}`, 'DMG'));
+        if (s.dmgTaken > 0)     parts.push(chip('ts-taken',    '◇',  `-${s.dmgTaken}`, 'HP'));
+        if (s.healed > 0)       parts.push(chip('ts-healed',   '+',  `+${s.healed}`,   'HEAL'));
+        if (s.shieldGained > 0) parts.push(chip('ts-shield',   '◈',  `+${s.shieldGained}`, 'SH'));
+        if (s.rerollsUsed > 0)  parts.push(chip('ts-rerolls',  '↻',  s.rerollsUsed,    `reroll${s.rerollsUsed === 1 ? '' : 's'}`));
+        host.innerHTML = parts.join('');
         host.classList.remove('hidden');
         host.classList.add('active');
         clearTimeout(this._summaryTimer);
         this._summaryTimer = setTimeout(() => {
             host.classList.remove('active');
             setTimeout(() => host.classList.add('hidden'), 250);
-        }, 1100);
+        }, 1300);
     },
 
     // Pipe combat events into the combat-log service. Entity.js calls this.
@@ -10188,7 +10205,7 @@ async startTurn() {
         this._duskPopThisTurn = false;
         this._tickSealedDie();
         // Per-turn stats for end-of-turn summary popup
-        this.turnStats = { dmgDealt: 0, dmgTaken: 0, rerollsUsed: 0, healed: 0 };
+        this.turnStats = { dmgDealt: 0, dmgTaken: 0, rerollsUsed: 0, healed: 0, shieldGained: 0 };
         // Relic: IRON VAULT — carry up to 50 shield into the next turn.
         if (this.player.hasRelic && this.player.hasRelic('iron_vault')) {
             const carried = Math.min(50, this.player.shield || 0);
@@ -12598,6 +12615,10 @@ async startTurn() {
         }
 
         // Apply Cost
+        // Per-turn reroll accumulator for the end-of-turn summary —
+        // counts every reroll regardless of how it was paid (banked,
+        // QTE token, blood, free-via-Dice-Cache, fracture, silence).
+        if (this.turnStats) this.turnStats.rerollsUsed = (this.turnStats.rerollsUsed || 0) + 1;
         if (qteTokenSpent) {
             this.player.qteRerolls = Math.max(0, (this.player.qteRerolls || 0) - 1);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "QTE REROLL", "#ffcc00");

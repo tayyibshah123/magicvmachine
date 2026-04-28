@@ -691,10 +691,23 @@ class Entity {
                 if (actualDmg >= 250) window.Achievements.unlock('BIG_HIT_250');
             }
         }
-        // Per-turn stats for end-of-turn summary
+        // Per-turn stats for end-of-turn summary. Old gate
+        // (`source instanceof Player && killedTargetIsHostile`) only
+        // counted damage on the killing blow — every non-fatal hit was
+        // unrecorded, so the summary read +0 DMG on turns the player
+        // poured 60+ damage into a boss without finishing it. Now
+        // counts ALL player-side outgoing damage (player + player-side
+        // minions) against ALL hostile targets (Enemy + enemy-side
+        // minions), regardless of whether the hit killed.
         if (Game.turnStats) {
             if (this instanceof Player && actualDmg > 0) Game.turnStats.dmgTaken += actualDmg;
-            if (source instanceof Player && killedTargetIsHostile && actualDmg > 0) Game.turnStats.dmgDealt += actualDmg;
+            const sourceIsPlayerSide = (source instanceof Player) ||
+                (source instanceof Minion && source.isPlayerSide === true);
+            const targetIsHostile = (this instanceof Enemy) ||
+                (this instanceof Minion && this.isPlayerSide === false);
+            if (sourceIsPlayerSide && targetIsHostile && actualDmg > 0) {
+                Game.turnStats.dmgDealt += actualDmg;
+            }
         }
 
         return this.currentHp <= 0;
@@ -756,6 +769,11 @@ class Entity {
         AudioMgr.playSound('mana');
         if (Player && this instanceof Player && actualHeal > 0) {
             Hints.trigger('first_heal');
+            // Per-turn heal accumulator for the end-of-turn summary so
+            // healing-build runs see their recovery beat called out
+            // alongside damage. Was tracked-but-never-written — dead
+            // field on turnStats until now.
+            if (Game.turnStats) Game.turnStats.healed += actualHeal;
         }
 
         if (overheal > 0) {
@@ -801,6 +819,13 @@ class Entity {
         // startShield trait) doesn't pre-charge the glyph widget on combat open.
         if (!silent && this instanceof Player && amount > 0) {
             ClassAbility.onEvent('shield_gained', { amount });
+            // Per-turn shield accumulator for the end-of-turn summary so
+            // shield-build runs see their plate stack called out
+            // alongside damage / heal. `silent` writes are skipped
+            // because they're combat-start setup, not a turn beat.
+            if (Game && Game.turnStats) {
+                Game.turnStats.shieldGained = (Game.turnStats.shieldGained || 0) + amount;
+            }
         }
         // Relic: KINETIC BATTERY — every 3 shields gained → +1 Reroll.
         if (!silent && this instanceof Player && amount > 0 && this.hasRelic('kinetic_battery') && Game) {
