@@ -14387,7 +14387,17 @@ drawEffects() {
                 m.spawnTimer = 1.0;
                 this.enemy.minions.push(m);
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "GLITCH SPAWNED", "#ff00ff");
+                // Full summon impact — rift opens at the spawn point with
+                // shockwave + sparks + materialize VFX so the new minion
+                // visibly arrives, not just appears in the line. Audio
+                // upgraded from mana sting to a layered grid_fracture +
+                // mana so the summon reads as a corrupted intrusion.
+                ParticleSys.createShockwave(m.x, m.y, '#ff00ff', 36);
+                ParticleSys.createSparks(m.x, m.y, '#ff00ff', 16);
+                if (this.triggerVFX) this.triggerVFX('materialize', null, m);
+                if (this.shake) this.shake(8);
                 AudioMgr.playSound('mana');
+                AudioMgr.playSound('grid_fracture');
             }
             else if (intent.type === 'summon_void') {
                 if (this.enemy.minions.length < 2) {
@@ -14399,8 +14409,12 @@ drawEffects() {
                     m.spawnTimer = 1.0;
                     this.enemy.minions.push(m);
                     ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "VOID SPAWN", "#ff00ff");
-                    ParticleSys.createShockwave(this.enemy.x, this.enemy.y + 80, '#ff00ff', 24);
+                    ParticleSys.createShockwave(m.x, m.y, '#ff00ff', 36);
+                    ParticleSys.createSparks(m.x, m.y, '#ff00ff', 14);
+                    if (this.triggerVFX) this.triggerVFX('materialize', null, m);
+                    if (this.shake) this.shake(6);
                     AudioMgr.playSound('mana');
+                    AudioMgr.playSound('grid_fracture');
                 }
             }
 
@@ -14710,16 +14724,24 @@ drawEffects() {
                 if(this.enemy.minions.length < 2) {
                     const tier = this.enemy.isBoss ? 3 : (this.enemy.isElite ? 2 : 1);
                     const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false, tier);
-                    m.spawnTimer = 1.0; 
-                    
+                    m.spawnTimer = 1.0;
+
                     // Apply sector scaling to summons
                     const ascensionMult = 1 + (this.corruptionLevel * 0.2);
                     m.maxHp = Math.floor(m.maxHp * ascensionMult);
                     m.currentHp = m.maxHp;
                     m.dmg = Math.floor(m.dmg * ascensionMult);
-                    
+
                     this.enemy.minions.push(m);
                     ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "REINFORCING", "#fff");
+                    // Generic enemy reinforcements get the same materialize
+                    // burst as the special summons — keeps every "a new
+                    // enemy entered the field" moment legible at the same
+                    // visual fidelity, regardless of summon type.
+                    ParticleSys.createShockwave(m.x, m.y, '#88eaff', 32);
+                    ParticleSys.createSparks(m.x, m.y, '#88eaff', 12);
+                    if (this.triggerVFX) this.triggerVFX('materialize', null, m);
+                    if (this.shake) this.shake(5);
                     AudioMgr.playSound('mana');
                 }
             }

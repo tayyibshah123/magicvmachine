@@ -730,6 +730,21 @@ class Entity {
         this.currentHp = Math.min(this.maxHp, this.currentHp + actualHeal);
 
         ParticleSys.createFloatingText(this.x, this.y - 80, "+" + actualHeal, '#0f0');
+        // Heal-moment impact — the bare floater + 'mana' sting was easy
+        // to miss in the middle of combat noise, so even a 30-HP relief
+        // from a Nano-Repair landed as nearly silent. Now spawns a
+        // green shockwave + sparks burst scaled to the heal magnitude
+        // (bigger heal = louder visual). Skipped on zero-effective heal
+        // so a constrict-blocked attempt doesn't fake a celebration.
+        if (actualHeal > 0) {
+            const healSize = Math.min(38, 14 + Math.floor(actualHeal / 2));
+            const sparkCount = Math.min(18, 6 + Math.floor(actualHeal / 4));
+            ParticleSys.createShockwave(this.x, this.y, '#00ff66', healSize);
+            ParticleSys.createSparks(this.x, this.y, '#00ff66', sparkCount);
+            // Tier audio — small heals keep the soft mana ping; bigger
+            // recoveries get an extra upgrade-style sting layered on top.
+            if (actualHeal >= 10) AudioMgr.playSound('upgrade');
+        }
         AudioMgr.playSound('mana');
         if (Player && this instanceof Player && actualHeal > 0) {
             Hints.trigger('first_heal');
