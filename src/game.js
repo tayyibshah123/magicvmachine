@@ -4850,42 +4850,110 @@ triggerPhaseGlitch() {
         }, { passive: true });
     },
 
+    // Close the topmost visible modal/overlay. Single-source the priority
+    // order so the ESC key, the Android hardware back button, and the
+    // edge-swipe gesture (loosely) all behave identically. Returns true
+    // when something was dismissed so callers can decide whether to
+    // suppress the default action (preventDefault / exitApp).
+    //
+    // Order matters: hack minigame goes first because it's the only
+    // overlay where dismiss has special "abort" semantics, and a player
+    // stuck in a maze should always be able to back out.
+    dismissOpenOverlay() {
+        const hackOverlay = document.getElementById('hack-minigame-overlay');
+        if (hackOverlay && !hackOverlay.classList.contains('hidden')) {
+            const resultEl = document.getElementById('hack-result');
+            if (resultEl) resultEl.textContent = 'ABORTED';
+            hackOverlay.classList.add('hidden');
+            hackOverlay.classList.remove('is-hard');
+            return true;
+        }
+        const npcModal = document.getElementById('sanctuary-npc-modal');
+        if (npcModal && !npcModal.classList.contains('hidden')) {
+            this.closeSanctuaryNPC && this.closeSanctuaryNPC();
+            return true;
+        }
+        const charDetail = document.getElementById('char-detail-overlay');
+        if (charDetail && !charDetail.classList.contains('hidden')) {
+            this.closeCharDetail && this.closeCharDetail();
+            return true;
+        }
+        const glossary = document.getElementById('modal-glossary');
+        if (glossary && !glossary.classList.contains('hidden')) {
+            const btn = document.getElementById('btn-glossary-close');
+            if (btn) btn.click(); else glossary.classList.add('hidden');
+            return true;
+        }
+        const iosInstall = document.getElementById('modal-ios-install');
+        if (iosInstall && !iosInstall.classList.contains('hidden')) {
+            const btn = document.getElementById('btn-ios-install-close');
+            if (btn) btn.click(); else iosInstall.classList.add('hidden');
+            return true;
+        }
+        const settings = document.getElementById('modal-settings');
+        if (settings && !settings.classList.contains('hidden')) {
+            settings.classList.add('hidden');
+            return true;
+        }
+        const loadout = document.getElementById('loadout-modal');
+        if (loadout && !loadout.classList.contains('hidden')) {
+            const btn = document.getElementById('btn-loadout-close');
+            if (btn) btn.click(); else loadout.classList.add('hidden');
+            return true;
+        }
+        const customRun = document.getElementById('custom-run-modal');
+        if (customRun && !customRun.classList.contains('hidden')) {
+            this._closeCustomRunModal && this._closeCustomRunModal();
+            return true;
+        }
+        const saveSlot = document.getElementById('save-slot-modal');
+        if (saveSlot && !saveSlot.classList.contains('hidden')) {
+            const btn = document.getElementById('btn-save-slot-close');
+            if (btn) btn.click(); else saveSlot.classList.add('hidden');
+            return true;
+        }
+        return false;
+    },
+
+    // Android hardware back press. Returns true if handled (modal closed
+    // OR pause-settings opened); false means the OS should close the app.
+    // Mid-run with no modal open opens settings — the same fallback ESC
+    // gives — so the player gets a graceful pause instead of a crash-out.
+    handleBackPress() {
+        if (this.dismissOpenOverlay()) return true;
+        const inActiveRun = this.player && this.currentState !== STATE.MENU
+            && this.currentState !== STATE.CHAR_SELECT
+            && this.currentState !== STATE.BOOT
+            && this.currentState !== STATE.META
+            && this.currentState !== STATE.INTEL
+            && this.currentState !== STATE.ACHIEVEMENTS
+            && this.currentState !== STATE.CODEX
+            && this.currentState !== STATE.GAMEOVER
+            && this.currentState !== STATE.ENDING
+            && this.currentState !== STATE.VICTORY;
+        if (inActiveRun) {
+            const settings = document.getElementById('modal-settings');
+            if (settings) {
+                settings.classList.remove('hidden');
+                return true;
+            }
+        }
+        return false;
+    },
+
     bindKeyboardShortcuts() {
         window.addEventListener('keydown', (e) => {
             // Don't interfere when user is typing in inputs or modal is blocking
             if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
 
-            // Escape → close the topmost modal in priority order, or toggle
-            // settings if nothing else is open. Sanctuary NPC / hack minigame
-            // take priority so the player can't get trapped inside them.
+            // Escape → close the topmost modal in priority order, or open
+            // settings if nothing else is open. Routes through the shared
+            // dismissOpenOverlay() so ESC, edge-swipe, and Android back
+            // all behave identically.
             if (e.key === 'Escape') {
-                const npcModal = document.getElementById('sanctuary-npc-modal');
-                if (npcModal && !npcModal.classList.contains('hidden')) {
-                    this.closeSanctuaryNPC && this.closeSanctuaryNPC();
-                    e.preventDefault();
-                    return;
-                }
-                const hackOverlay = document.getElementById('hack-minigame-overlay');
-                if (hackOverlay && !hackOverlay.classList.contains('hidden')) {
-                    // Treat ESC during hack as a failure — the maze timer is
-                    // already running and the shop state must resolve either way.
-                    // Dispatch a synthetic "lockout" to stop the RAF loop and
-                    // close cleanly without leaving the shop stranded.
-                    const resultEl = document.getElementById('hack-result');
-                    if (resultEl) resultEl.textContent = 'ABORTED';
-                    hackOverlay.classList.add('hidden');
-                    hackOverlay.classList.remove('is-hard');
-                    e.preventDefault();
-                    return;
-                }
-                const charDetail = document.getElementById('char-detail-overlay');
-                if (charDetail && !charDetail.classList.contains('hidden')) {
-                    this.closeCharDetail && this.closeCharDetail();
-                    e.preventDefault();
-                    return;
-                }
+                if (this.dismissOpenOverlay()) { e.preventDefault(); return; }
                 const modal = document.getElementById('modal-settings');
-                if (modal) modal.classList.toggle('hidden');
+                if (modal) modal.classList.remove('hidden');
                 e.preventDefault();
                 return;
             }

@@ -5,6 +5,7 @@ import { ParticleSys } from './src/effects/particles.js';
 import { Hints } from './src/services/hints.js';
 import { Unlocks } from './src/services/unlocks.js';
 import { Gesture } from './src/services/gesture.js';
+import { NativeBack } from './src/services/native-back.js';
 
 // Detect device perf tier BEFORE Game.init so the game can read `Perf.tier`.
 Perf.detect();
@@ -131,11 +132,12 @@ function wireLandscapeHint() {
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => { Game.init(); wireLandscapeHint(); Gesture.init(); });
+  document.addEventListener('DOMContentLoaded', () => { Game.init(); wireLandscapeHint(); Gesture.init(); NativeBack.init(); });
 } else {
   Game.init();
   wireLandscapeHint();
   Gesture.init();
+  NativeBack.init();
 }
 
 // Register the service worker for offline play (PWA) + handle updates.
