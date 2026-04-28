@@ -2,7 +2,6 @@
   "appId": "uk.co.tayyibshah.magicvmachine",
   "appName": "Magic v Machine",
   "webDir": "www",
-  "bundledWebRuntime": false,
   "android": {
     "allowMixedContent": false,
     "captureInput": true,
