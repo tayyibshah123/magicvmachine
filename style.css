@@ -96,34 +96,78 @@
     -webkit-touch-callout: none;
 }
 
-/* Landscape rotation hint — visible only on landscape phones. Tap to dismiss. */
+/* =========================================
+   ORIENTATION LOCK — full-screen blocker shown when a touch device
+   is held in landscape. Game plays in portrait only; coarse-pointer
+   media query excludes desktop landscape windows so a 1920×1080
+   browser doesn't get the rotation prompt. Rotation back to portrait
+   auto-dismisses (CSS-driven, no JS state to clear).
+   ========================================= */
 #landscape-hint {
     display: none;
     position: fixed;
     inset: 0;
     z-index: 99999;
-    background: rgba(0, 0, 0, 0.92);
-    color: var(--neon-blue);
+    /* Block all interaction with the game underneath. */
+    pointer-events: auto;
+    background: linear-gradient(180deg, #050011 0%, #0a0220 100%);
+    color: #00f3ff;
     font-family: 'Orbitron', sans-serif;
-    font-size: 1.2rem;
-    letter-spacing: 0.12em;
     align-items: center;
     justify-content: center;
     text-align: center;
-    cursor: pointer;
 }
-#landscape-hint span {
-    text-shadow: 0 0 16px var(--neon-blue);
-    animation: landscape-pulse 2s ease-in-out infinite;
+.landscape-hint-card {
+    padding: 28px 36px;
+    border: 1px solid rgba(0, 243, 255, 0.4);
+    border-radius: 14px;
+    background: rgba(8, 4, 24, 0.86);
+    box-shadow:
+        0 0 36px rgba(0, 243, 255, 0.32),
+        0 12px 36px rgba(0, 0, 0, 0.6);
+    max-width: 88vw;
 }
-@keyframes landscape-pulse {
-    0%, 100% { opacity: 0.7; }
-    50%      { opacity: 1; }
+.landscape-hint-icon {
+    width: 88px;
+    height: 88px;
+    color: #00f3ff;
+    filter: drop-shadow(0 0 14px rgba(0, 243, 255, 0.55));
+    animation: landscape-icon-spin 2.4s ease-in-out infinite;
+    margin-bottom: 14px;
 }
-@media (orientation: landscape) and (max-height: 600px) {
-    #landscape-hint:not(.dismissed) { display: flex; }
+.landscape-hint-title {
+    font-size: clamp(1.3rem, 4.5vh, 2rem);
+    font-weight: 900;
+    letter-spacing: 0.22em;
+    color: #00f3ff;
+    text-shadow:
+        0 0 14px rgba(0, 243, 255, 0.6),
+        0 0 30px rgba(0, 243, 255, 0.4);
+    margin-bottom: 8px;
 }
-#landscape-hint.dismissed { display: none !important; }
+.landscape-hint-sub {
+    font-size: clamp(0.85rem, 3vh, 1rem);
+    letter-spacing: 0.16em;
+    color: rgba(255, 255, 255, 0.78);
+}
+@keyframes landscape-icon-spin {
+    0%   { transform: rotate(-90deg); opacity: 0.55; }
+    35%  { transform: rotate(-90deg); opacity: 1.0; }
+    50%  { transform: rotate(0deg);   opacity: 1.0; }
+    85%  { transform: rotate(0deg);   opacity: 1.0; }
+    100% { transform: rotate(-90deg); opacity: 0.55; }
+}
+/* Show when a phone-shaped TOUCH device is held landscape.
+   - (pointer: coarse) excludes desktop landscape windows (mouse).
+   - (min-aspect-ratio: 16/10) catches phones in landscape (skinny,
+     w/h ≥ 1.6) without blocking tablets. iPad in landscape is ~4:3
+     (w/h ~1.33) so the prompt won't appear — the centred 432px
+     portrait container plays fine on tablet, no rotation needed. */
+@media (orientation: landscape) and (pointer: coarse) and (min-aspect-ratio: 16/10) {
+    #landscape-hint { display: flex; }
+}
+/* Reduced motion: keep the icon static instead of swinging. */
+body.reduced-motion .landscape-hint-icon { animation: none; }
 
 /* Keyboard accessibility — always-visible focus ring */
 :focus { outline: none; } /* clear default */

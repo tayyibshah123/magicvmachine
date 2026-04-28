@@ -148,6 +148,17 @@ const Game = {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d', { alpha: false });
 
+        // Best-effort portrait orientation lock. Only succeeds in PWA /
+        // fullscreen contexts (browsers refuse from a plain tab); if it
+        // throws / rejects we silently fall back to the CSS-driven
+        // landscape blocker. Wrapped in try/catch because Safari iOS
+        // throws synchronously when the API is missing.
+        try {
+            if (screen && screen.orientation && typeof screen.orientation.lock === 'function') {
+                screen.orientation.lock('portrait').catch(() => {});
+            }
+        } catch (_) { /* unsupported */ }
+
         // Pick up any colorblind class the settings loader already painted
         // onto <body> so canvas VFX match DOM UI on the first frame.
         Palette.syncFromBody();

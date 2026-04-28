@@ -28,8 +28,27 @@
 </head>
 <body>
 
-    <div id="landscape-hint">
-        <span>&#x21bb; Rotate for best experience</span>
+    <!-- Portrait-only blocker. CSS media query at the body level
+         shows this when the device is in landscape orientation +
+         coarse-pointer (touch). Rotation back to portrait dismisses
+         automatically; no JS dismiss handler so the message can't
+         be permanently silenced. -->
+    <div id="landscape-hint" aria-live="polite" role="alertdialog" aria-modal="true">
+        <div class="landscape-hint-card">
+            <svg class="landscape-hint-icon" viewBox="0 0 64 64" aria-hidden="true">
+                <rect x="22" y="6" width="20" height="36" rx="3"
+                    fill="none" stroke="currentColor" stroke-width="3"/>
+                <circle cx="32" cy="38" r="1.5" fill="currentColor"/>
+                <path d="M 6 28 Q 6 18 16 18 L 22 18"
+                    fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round"/>
+                <path d="M 22 18 L 18 14 M 22 18 L 18 22"
+                    fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round"/>
+            </svg>
+            <div class="landscape-hint-title">ROTATE DEVICE</div>
+            <div class="landscape-hint-sub">Magic v Machine plays in portrait.</div>
+        </div>
     </div>
     <div id="game-container">
         <!-- Main Game Canvas -->
