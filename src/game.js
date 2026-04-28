@@ -4931,7 +4931,7 @@ triggerPhaseGlitch() {
         if (byName) return `${name}: ${byName}`;
 
         const BY_KIND = {
-            mirror:       'reflects your attacks back at you.',
+            mirror:       'reflects 40% of incoming damage. Squad mirrors with it.',
             swarm:        'summons reinforcements.',
             aoe_sweep:    'sweeping AoE. Hits the whole line.',
             frost:        'applies chill on contact.',
@@ -21657,6 +21657,54 @@ drawEntity(entity) {
                 }
             }
             ctx.restore();
+        }
+
+        // --- MIRROR-KIND VISUAL — passive reflect indicator ---
+        // Shown for mirror-kind enemies AND their minions so the player
+        // reads "this thing reflects" before committing the attack.
+        // Two pieces: a glassy translucent disc fill (the mirror surface)
+        // and an orbiting shimmer dot (the catch-light). Subtle so it
+        // doesn't fight the entity sprite, distinct from any debuff aura.
+        {
+            const isMirrorEnemy = (entity instanceof Enemy && entity.kind === 'mirror');
+            const isMirrorMinion = (entity instanceof Minion && entity.isPlayerSide === false &&
+                this.enemy && this.enemy.kind === 'mirror');
+            if (isMirrorEnemy || isMirrorMinion) {
+                ctx.save();
+                // Translucent mirror plate — pale-blue radial gradient
+                // gives the entity a "reflective surface" sheen without
+                // a hard ring outline.
+                const r = entity.radius * 1.05;
+                const grad = ctx.createRadialGradient(0, 0, r * 0.4, 0, 0, r);
+                grad.addColorStop(0, 'rgba(180, 235, 255, 0.20)');
+                grad.addColorStop(0.65, 'rgba(120, 200, 255, 0.08)');
+                grad.addColorStop(1, 'rgba(120, 200, 255, 0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(0, 0, r, 0, Math.PI * 2);
+                ctx.fill();
+                // Orbiting shimmer arc — short bright crescent that
+                // sweeps around the entity, mimicking light catching a
+                // mirror surface. Reads as "alive" / "pristine glass".
+                const sweep = (time * 1.2) % (Math.PI * 2);
+                ctx.strokeStyle = 'rgba(220, 245, 255, 0.85)';
+                ctx.shadowColor = '#cfe9ff';
+                ctx.shadowBlur = 10;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 0, r + 3, sweep, sweep + 0.55);
+                ctx.stroke();
+                // Small fixed pip on the opposite side — second highlight
+                // sells the curved-glass illusion.
+                ctx.beginPath();
+                ctx.arc(Math.cos(sweep + Math.PI) * (r * 0.55),
+                        Math.sin(sweep + Math.PI) * (r * 0.45),
+                        2 + Math.sin(time * 5) * 0.4, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.shadowBlur = 6;
+                ctx.fill();
+                ctx.restore();
+            }
         }
 
         // --- DEBUFF VISUALS ---

@@ -574,6 +574,28 @@ class Entity {
             if (source.takeDamage(reflect)) _resolveEnemyKill(source);
         }
 
+        // Mirror kind — passive reflect on the entity itself AND on any
+        // enemy minion whose parent is a mirror-kind enemy (so the
+        // reflection trait propagates to the squad). The reflect plate
+        // sends 40% of incoming damage back at the source. Visual cue
+        // is the constant mirror shimmer drawn around the entity in
+        // the render path so the player can read "this thing reflects"
+        // before committing the attack.
+        const _isMirrorEntity = (this instanceof Enemy && this.kind === 'mirror') ||
+            (Minion && this instanceof Minion && this.isPlayerSide === false &&
+             Game && Game.enemy && Game.enemy.kind === 'mirror');
+        if (_isMirrorEntity && actualDmg > 0 && source && source !== this && !source._mirrorReflecting) {
+            const reflect = Math.max(1, Math.floor(actualDmg * 0.4));
+            ParticleSys.createFloatingText(this.x, this.y - 130, `MIRROR ${reflect}`, "#88eaff");
+            ParticleSys.createSparks(this.x, this.y, "#88eaff", 14);
+            ParticleSys.createShockwave(this.x, this.y, "#88eaff", 22);
+            // Tag the source so the reflected damage can't bounce
+            // recursively (mirror -> source -> source's mirror -> …).
+            source._mirrorReflecting = true;
+            try { if (source.takeDamage(reflect, this)) _resolveEnemyKill(source); }
+            finally { source._mirrorReflecting = false; }
+        }
+
         // Elite affix: Vampiric — heals for 50% of damage it deals.
         if (source instanceof Enemy && source.affixes && source.affixes.includes('Vampiric') && actualDmg > 0) {
             const heal = Math.max(1, Math.floor(actualDmg * 0.5));
