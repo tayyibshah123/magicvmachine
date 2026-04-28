@@ -2212,6 +2212,17 @@ body.reduced-motion .pause-overlay-title {
     0%, 100% { filter: brightness(1.0); }
     50%      { filter: brightness(1.25); }
 }
+/* Reduced motion: keep the slate visible but kill the brightness
+   pulse + bar slide animations. The text + colour-coding still
+   communicate "boss arrival" without the cinematic motion. */
+body.reduced-motion .boss-intro-name {
+    animation: none;
+}
+body.reduced-motion .boss-intro-bar,
+body.reduced-motion .boss-intro-content,
+body.reduced-motion .boss-intro-stripe {
+    transition: none !important;
+}
 
 /* =========================================
    PRE-COMBAT INTEL CRAWL — full-width scanline strip that slides

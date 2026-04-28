@@ -1793,11 +1793,23 @@ startDrag(e, die, el) {
         } catch (_) {}
     },
 
+    // Single source of truth for reduced-motion checks across all
+    // JS-driven motion paths (shake, screen flash, chromatic pulse,
+    // QTE label scaling, etc.). The body.reduced-motion class is
+    // toggled by the settings panel + auto-applied if the OS-level
+    // prefers-reduced-motion media query matches at boot.
+    _isReducedMotion() {
+        return document.body.classList.contains('reduced-motion');
+    },
+
     // Briefly apply a hue-rotate / saturate canvas filter to sell the
     // moment of a perfect resolve. Cheap (CSS filter on the canvas
     // element, no per-pixel work) and reads as the "world snaps for a
-    // beat" effect that Clair Obscur uses on parries.
+    // beat" effect that Clair Obscur uses on parries. Skipped entirely
+    // under reduced motion — the saturate + hue shift is mildly
+    // disorienting and adds nothing essential to gameplay legibility.
     _qteChromaticPulse(durationMs = 240) {
+        if (this._isReducedMotion()) return;
         const cv = this.canvas || document.getElementById('gameCanvas');
         if (!cv) return;
         const prev = cv.style.filter;
@@ -2416,6 +2428,10 @@ startQTE(type, x, y, callback, opts) {
             scaleBoost = 1 + Math.sin(this.qte.elapsed * 24) * 0.12;
         }
 
+        // Reduced motion: skip the per-frame scale-bounce (warmup
+        // breathe, perfect-window pulse, wave_break pop). Text stays
+        // legible at its base size with no oscillation.
+        if (this._isReducedMotion && this._isReducedMotion()) scaleBoost = 1;
         ctx.font = `bold ${Math.round(txtSize * scaleBoost)}px 'Orbitron'`;
         ctx.strokeText(txt, targetX, txtY);
         ctx.fillText(txt, targetX, txtY);
@@ -5069,8 +5085,25 @@ triggerPhaseGlitch() {
         this.shake(Math.round(mag * q));
     },
 
-    // Screen-flash overlay for perfect QTEs / dramatic moments
+    // Screen-flash overlay for perfect QTEs / dramatic moments. Under
+    // reduced motion the alpha is dampened and the duration shortened
+    // so the flash still serves as a feedback cue without strobing the
+    // viewport. Important: alpha is parsed out of the rgba string so
+    // we don't break colour-tinted flashes that came from boss-phase
+    // / pattern-specific code paths.
     triggerScreenFlash(color = 'rgba(255,255,255,0.4)', durationMs = 220) {
+        if (this._isReducedMotion()) {
+            // Halve the alpha by replacing the last channel in rgba(...).
+            const m = /rgba?\(([^)]+)\)/.exec(color || '');
+            if (m) {
+                const parts = m[1].split(',').map(s => s.trim());
+                if (parts.length === 4) {
+                    parts[3] = (parseFloat(parts[3]) * 0.5).toString();
+                    color = `rgba(${parts.join(', ')})`;
+                }
+            }
+            durationMs = Math.min(durationMs, 140);
+        }
         this.screenFlashColor = color;
         this.screenFlashUntil = performance.now() + durationMs;
         this.screenFlashStart = performance.now();
@@ -16559,7 +16592,15 @@ drawEffects() {
         this.changeState(STATE.MENU);
     },
     
-    shake(amount) { this.shakeTime = amount; },
+    // Camera shake. Foundational for damage feedback; everything in
+    // shakeFromDamage and direct shake() calls funnels through here.
+    // Under reduced motion the magnitude is scaled to 25% — players
+    // still get a sense of impact without the vestibular punch that
+    // a full 28-tile brutal-hit shake would cause.
+    shake(amount) {
+        if (this._isReducedMotion()) amount = Math.round(amount * 0.25);
+        this.shakeTime = amount;
+    },
     updateHUD() {},
 
     updateMinionPositions() {
