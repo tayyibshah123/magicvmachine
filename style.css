@@ -1856,6 +1856,104 @@ body.reduced-motion .sector-collapse.active { animation: none !important; opacit
 }
 
 /* =========================================
+   BOSS INTRO CINEMATIC — sweeps in 1.5s before the intel crawl on
+   sector boss combat start. Two black bars zoom in from top + bottom
+   (cinemascope), the boss-name slate animates up in the gap, the boss
+   colour tints a stripe for identity, and a heavy audio sting layers
+   on top. CSS-only animation keeps the JS side clean.
+   ========================================= */
+.boss-intro {
+    position: absolute;
+    inset: 0;
+    z-index: 90;
+    pointer-events: none;
+    overflow: hidden;
+    --boss-color: #ff3355;
+}
+.boss-intro.hidden { display: none; }
+.boss-intro-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 38%;
+    background: linear-gradient(180deg, rgba(0,0,0,0.96) 0%, rgba(0,0,0,0.94) 70%, rgba(0,0,0,0.0) 100%);
+    transform: translateY(-100%);
+    transition: transform 360ms cubic-bezier(.65, 0, .35, 1);
+}
+.boss-intro-bar-top    { top: 0; }
+.boss-intro-bar-bottom {
+    bottom: 0;
+    background: linear-gradient(0deg, rgba(0,0,0,0.96) 0%, rgba(0,0,0,0.94) 70%, rgba(0,0,0,0.0) 100%);
+    transform: translateY(100%);
+}
+.boss-intro.active .boss-intro-bar-top    { transform: translateY(0); }
+.boss-intro.active .boss-intro-bar-bottom { transform: translateY(0); }
+.boss-intro.settle .boss-intro-bar-top    { transform: translateY(-30%); }
+.boss-intro.settle .boss-intro-bar-bottom { transform: translateY(30%); }
+
+.boss-intro-content {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    opacity: 0;
+    transform: translateY(20px) scale(0.96);
+    transition: opacity 320ms ease-out 200ms, transform 460ms cubic-bezier(.35, .9, .2, 1) 200ms;
+    text-align: center;
+    padding: 0 24px;
+}
+.boss-intro.active .boss-intro-content {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+.boss-intro-tag {
+    font-family: var(--font-cyber);
+    font-size: 0.78rem;
+    letter-spacing: 0.32em;
+    color: rgba(255, 255, 255, 0.6);
+}
+.boss-intro-name {
+    font-family: var(--font-cyber);
+    font-size: clamp(1.8rem, 8vw, 3.4rem);
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    color: var(--boss-color);
+    text-shadow:
+        0 0 18px var(--boss-color),
+        0 0 38px var(--boss-color),
+        0 2px 4px rgba(0, 0, 0, 0.8);
+    line-height: 1.05;
+    animation: boss-intro-pulse 1.6s ease-in-out infinite;
+}
+.boss-intro-subtitle {
+    font-family: var(--font-cyber);
+    font-size: clamp(0.7rem, 3vw, 1rem);
+    letter-spacing: 0.32em;
+    color: #fff;
+    opacity: 0.78;
+    text-shadow: 0 0 8px var(--boss-color), 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.boss-intro-stripe {
+    width: 60%;
+    max-width: 320px;
+    height: 3px;
+    margin-top: 14px;
+    background: linear-gradient(90deg, transparent, var(--boss-color), transparent);
+    box-shadow: 0 0 18px var(--boss-color);
+    transform: scaleX(0);
+    transform-origin: center;
+    transition: transform 600ms cubic-bezier(.65, 0, .35, 1) 300ms;
+}
+.boss-intro.active .boss-intro-stripe { transform: scaleX(1); }
+@keyframes boss-intro-pulse {
+    0%, 100% { filter: brightness(1.0); }
+    50%      { filter: brightness(1.25); }
+}
+
+/* =========================================
    PRE-COMBAT INTEL CRAWL — full-width scanline strip that slides
    down from the top of the combat area. Replaces the old bordered
    "encounter" card for a lighter, more cinematic dossier beat.

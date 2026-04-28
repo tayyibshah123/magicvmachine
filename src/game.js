@@ -4821,6 +4821,68 @@ triggerPhaseGlitch() {
         await this.showPhaseBanner(enemy.name, subtitle, 'boss');
     },
 
+    // Boss intro cinematic — 1.5s slate that fires before the intel
+    // crawl on sector boss combat start. Two black bars sweep in from
+    // top + bottom (cinemascope), the boss name + subtitle slate
+    // animates up between them, the boss colour pulses behind, and a
+    // heavy three-layer audio sting (siren + grid_fracture pitched +
+    // explosion) lands on the slate. The intel crawl follows once the
+    // bars retreat, so the boss-name moment doesn't compete with the
+    // dossier line.
+    _showBossIntro(enemy) {
+        if (!enemy) return;
+        const colorHex = (enemy.bossData && enemy.bossData.color) || '#ff3355';
+        const subtitle = (enemy.bossData && enemy.bossData.subtitle) || 'BOSS';
+        const sector = this.sector || 1;
+
+        let host = document.getElementById('boss-intro');
+        if (!host) {
+            host = document.createElement('div');
+            host.id = 'boss-intro';
+            host.className = 'boss-intro hidden';
+            const container = document.getElementById('game-container') || document.body;
+            container.appendChild(host);
+        }
+        host.style.setProperty('--boss-color', colorHex);
+        host.innerHTML = `
+            <div class="boss-intro-bar boss-intro-bar-top"></div>
+            <div class="boss-intro-bar boss-intro-bar-bottom"></div>
+            <div class="boss-intro-content">
+                <div class="boss-intro-tag">// SECTOR ${sector} BOSS</div>
+                <div class="boss-intro-name">${enemy.name}</div>
+                <div class="boss-intro-subtitle">${subtitle}</div>
+                <div class="boss-intro-stripe" aria-hidden="true"></div>
+            </div>
+        `;
+        host.classList.remove('hidden');
+        // Layered audio sting: siren marker, grid_fracture pitched
+        // down for weight, explosion to land the moment.
+        try {
+            AudioMgr.playSound('siren');
+            setTimeout(() => { try { AudioMgr.playSound('grid_fracture', { playbackRate: 0.7, volume: 1.0 }); } catch (_) {} }, 220);
+            setTimeout(() => { try { AudioMgr.playSound('explosion'); } catch (_) {} }, 600);
+        } catch (_) {}
+        if (this.haptic) this.haptic('boss');
+        // Screen flash in the boss colour right as the slate lands.
+        if (this.triggerScreenFlash) {
+            const hx = colorHex.replace('#', '');
+            const r = parseInt(hx.slice(0, 2), 16);
+            const g = parseInt(hx.slice(2, 4), 16);
+            const b = parseInt(hx.slice(4, 6), 16);
+            setTimeout(() => this.triggerScreenFlash(`rgba(${r},${g},${b},0.36)`, 320), 480);
+        }
+        requestAnimationFrame(() => host.classList.add('active'));
+        setTimeout(() => host.classList.add('settle'), 720);
+        setTimeout(() => {
+            host.classList.remove('active');
+            host.classList.remove('settle');
+            setTimeout(() => host.classList.add('hidden'), 600);
+            // Slate has retreated — fire the standard intel crawl so
+            // the dossier line still gets its moment without overlap.
+            try { this._showCombatBriefing(enemy); } catch (_) {}
+        }, 1700);
+    },
+
     // Pre-combat Intel crawl. A short dossier line slides down from the
     // top over a scan-line strip, lingers, then retreats. Replaces the old
     // bordered "encounter" card — less intrusive, more cinematic.
@@ -9418,7 +9480,16 @@ async startCombat(type) {
         // interrupted. Class briefing moved to AFTER state transitions to
         // COMBAT so it never renders while the sector map is still visible.
         if (this.currentState !== STATE.TUTORIAL_COMBAT) {
-            try { this._showCombatBriefing(this.enemy); } catch (e) { /* swallow */ }
+            // Boss fights get a dedicated intro slate BEFORE the intel
+            // crawl. Hits with a black-bar zoom, the boss name + title,
+            // a pulse on the boss colour, and a heavy audio sting so
+            // every sector boss feels like a moment, not just another
+            // combat. Briefing follows once the slate has retreated.
+            if (this.enemy.isBoss) {
+                try { this._showBossIntro(this.enemy); } catch (e) {}
+            } else {
+                try { this._showCombatBriefing(this.enemy); } catch (e) {}
+            }
         }
 
         // Custom Run: Soft Bosses — boss HP globally reduced. Applied
