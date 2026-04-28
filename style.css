@@ -2100,6 +2100,69 @@ body.reduced-motion .victory-tally * {
 }
 
 /* =========================================
+   PWA INSTALL — menu pill (visible only when installable) + iOS
+   add-to-home-screen instruction modal.
+   ========================================= */
+.install-pill {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 8px;
+    border-color: var(--neon-green) !important;
+    color: var(--neon-green) !important;
+    box-shadow: 0 0 16px rgba(0, 255, 153, 0.18);
+}
+.install-pill.hidden { display: none !important; }
+.install-pill .install-icon {
+    font-size: 1.1em;
+    line-height: 1;
+}
+#modal-ios-install {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.82);
+    z-index: 2100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    box-sizing: border-box;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+#modal-ios-install.hidden { display: none; }
+.ios-install-panel {
+    max-width: 360px;
+    padding: 22px 24px;
+    text-align: left;
+}
+.ios-install-title {
+    margin: 0 0 14px 0;
+    font-family: var(--font-cyber);
+    letter-spacing: 0.18em;
+    text-align: center;
+}
+.ios-install-step {
+    margin: 8px 0;
+    font-family: var(--font-main);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+.ios-install-step strong { color: var(--neon-blue); }
+.ios-install-icon {
+    display: inline-block;
+    color: var(--neon-blue);
+    font-size: 1.1em;
+    margin: 0 2px;
+}
+#btn-ios-install-close {
+    margin-top: 14px;
+    width: 100%;
+}
+
+/* =========================================
    QUICK RULES / GLOSSARY MODAL — accessible from the settings menu.
    Tabs across the top, scrollable body underneath. Each entry is a
    header row (icon + name) plus a body paragraph. Pulled from

@@ -192,6 +192,15 @@
                 <button id="btn-archive" class="btn secondary neon-border-gold hidden">ARCHIVE <span id="archive-status" style="opacity:0.7; font-size:0.85em;"></span></button>
                 <button id="btn-intel" class="btn secondary">INTEL</button>
                 <button id="btn-upgrades" class="btn secondary neon-border-gold">SANCTUARY</button>
+                <!-- PWA install prompt — visible only when the browser
+                     fires beforeinstallprompt (Chrome/Edge Android, desktop
+                     Chrome) OR when the iOS Safari fallback applies.
+                     Tapping triggers the native install dialog or shows
+                     iOS-specific add-to-home-screen instructions. -->
+                <button id="btn-install" class="btn secondary install-pill hidden">
+                    <span class="install-icon" aria-hidden="true">⬇</span>
+                    <span class="install-label">INSTALL APP</span>
+                </button>
                 <div id="login-streak" class="login-streak hidden"></div>
                 <div class="version" style="font-family: 'Orbitron'; margin-top: 20px; opacity: 0.5;">ALPHA V1</div>
             </div>
@@ -889,6 +898,19 @@
                     <button id="btn-quit" class="btn danger">ABORT RUN</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- iOS add-to-home-screen instruction modal. iOS Safari doesn't
+         fire `beforeinstallprompt`, so the install button on iOS opens
+         this manual-step card instead. -->
+    <div id="modal-ios-install" class="modal hidden">
+        <div class="ios-install-panel glass-panel">
+            <h3 class="neon-text-blue ios-install-title">INSTALL ON iOS</h3>
+            <p class="ios-install-step">1. Tap the share button <span class="ios-install-icon" aria-hidden="true">⬆</span> in Safari's bottom bar.</p>
+            <p class="ios-install-step">2. Scroll down and tap <strong>Add to Home Screen</strong>.</p>
+            <p class="ios-install-step">3. Tap <strong>Add</strong>. The icon appears on your home screen.</p>
+            <button id="btn-ios-install-close" class="btn primary">GOT IT</button>
         </div>
     </div>
 
