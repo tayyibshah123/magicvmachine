@@ -795,6 +795,20 @@ class Entity {
         const existing = this.effects.find(e => e.id === id);
         const name = displayName || id.toUpperCase();
 
+        // Per-effect signature colour. Mirrors the aura ring palette in
+        // game.js so the burst at application matches the persistent
+        // ring drawn around the entity afterwards.
+        const FX_COLOR = {
+            bleed:      '#ff3344',
+            poison:     '#6aff6a',
+            constrict:  '#bc13fe',
+            frail:      '#ff9cf2',
+            overcharge: '#ffaa22',
+            voodoo:     '#ff00aa',
+            weak:       '#6fe8ff'
+        };
+        const fxColor = FX_COLOR[id] || '#ff00ff';
+
         if (existing) {
             existing.duration = Math.max(existing.duration, duration);
 
@@ -804,7 +818,8 @@ class Entity {
 
             if (id === 'constrict') {
                 existing.val = existing.val * val;
-                ParticleSys.createFloatingText(this.x, this.y - 120, "EFFECT STACKED", "#ff00ff");
+                ParticleSys.createFloatingText(this.x, this.y - 120, "EFFECT STACKED", fxColor);
+                ParticleSys.createSparks(this.x, this.y, fxColor, 8);
             }
             else if (id === 'weak') {
                  if (val < existing.val) existing.val = val;
@@ -816,8 +831,11 @@ class Entity {
                 const cap = 3;
                 existing.stacks = Math.min(cap, (existing.stacks || 1) + 1);
                 if (val > existing.val) existing.val = val;
-                const stackColor = id === 'poison' ? '#88ff00' : '#ff3333';
-                ParticleSys.createFloatingText(this.x, this.y - 120, `${name} x${existing.stacks}`, stackColor);
+                ParticleSys.createFloatingText(this.x, this.y - 120, `${name} x${existing.stacks}`, fxColor);
+                // Stack-up burst — louder visual the more stacks land so a
+                // 3-stack bleed reads as a real threat, not a small tick.
+                ParticleSys.createShockwave(this.x, this.y, fxColor, 18 + existing.stacks * 4);
+                ParticleSys.createSparks(this.x, this.y, fxColor, 6 + existing.stacks * 2);
             }
             else {
                  if (val > existing.val) existing.val = val;
@@ -826,7 +844,14 @@ class Entity {
             const eff = { id, duration, val, icon, desc, name: name };
             if (id === 'bleed' || id === 'poison') eff.stacks = 1;
             this.effects.push(eff);
-            ParticleSys.createFloatingText(this.x, this.y - 100, name, '#ff00ff');
+            // Fresh application — louder than a refresh. Shockwave +
+            // sparks + floater all in the effect's signature colour so
+            // every debuff landing reads as a deliberate moment, not a
+            // silent state change. Applies on player AND enemy targets.
+            ParticleSys.createShockwave(this.x, this.y, fxColor, 26);
+            ParticleSys.createSparks(this.x, this.y, fxColor, 12);
+            ParticleSys.createFloatingText(this.x, this.y - 100, name, fxColor);
+            try { AudioMgr.playSound(id === 'bleed' || id === 'poison' ? 'click' : 'hex_barrier'); } catch (_) {}
         }
 
         // If this debuff changes outgoing damage (weak) or healing (constrict)
