@@ -9493,11 +9493,44 @@ async startCombat(type) {
             }
             if (sectorMech.enemyShieldBonus && !this.enemy.isBoss) {
                 this.enemy.shield = (this.enemy.shield || 0) + sectorMech.enemyShieldBonus;
+                // Frost Field — make the shield grant visible. Without
+                // this, S2 enemies just spawned with extra shield and
+                // the player had no idea why their first hit didn't
+                // land hard. Pale-blue burst on each affected entity
+                // + a soft sector-mech-name floater.
+                ParticleSys.createShockwave(this.enemy.x, this.enemy.y, '#88eaff', 26);
+                ParticleSys.createSparks(this.enemy.x, this.enemy.y, '#88eaff', 10);
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 80, `+${sectorMech.enemyShieldBonus} CRYO`, '#88eaff');
                 if (Array.isArray(this.enemy.minions)) {
                     this.enemy.minions.forEach(m => {
-                        if (m) m.shield = (m.shield || 0) + sectorMech.enemyShieldBonus;
+                        if (!m) return;
+                        m.shield = (m.shield || 0) + sectorMech.enemyShieldBonus;
+                        ParticleSys.createShockwave(m.x, m.y, '#88eaff', 18);
+                        ParticleSys.createFloatingText(m.x, m.y - 60, `+${sectorMech.enemyShieldBonus}`, '#88eaff');
                     });
                 }
+                try { AudioMgr.playSound('hex_barrier'); } catch (_) {}
+            }
+            // Hive Resonance — minions hit harder. Apply a persistent
+            // empowered ring on every player-side AND enemy-side minion
+            // alive at combat start so the buff is visible on every
+            // entity it boosts. The S4 mechanic was completely silent
+            // before — players never noticed why minion damage felt
+            // harder until they died to it.
+            if (sectorMech.minionDmgMult && sectorMech.minionDmgMult > 1) {
+                const stacks = Math.max(1, Math.round((sectorMech.minionDmgMult - 1) * 10));
+                const tagAlly = (m) => {
+                    if (!m) return;
+                    m._hiveResonance = true;
+                    m._empoweredStacks = (m._empoweredStacks || 0) + stacks;
+                    ParticleSys.createShockwave(m.x, m.y, '#7fff00', 22);
+                    ParticleSys.createSparks(m.x, m.y, '#7fff00', 10);
+                };
+                if (Array.isArray(this.enemy.minions)) this.enemy.minions.forEach(tagAlly);
+                if (this.player && Array.isArray(this.player.minions)) this.player.minions.forEach(tagAlly);
+                ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, 120, 'HIVE RESONANCE — MINIONS +20% DMG', '#7fff00');
+                if (this.triggerScreenFlash) this.triggerScreenFlash('rgba(127, 255, 0, 0.18)', 220);
+                try { AudioMgr.playSound('upgrade'); } catch (_) {}
             }
         } else {
             this._activeSectorMech = null;
@@ -10277,7 +10310,17 @@ async startTurn() {
         if (!peek && this._activeSectorMech && this._activeSectorMech.damageNoiseRange && this._dieSlot(type) === 'attack' && dmg > 0) {
             const r = this._activeSectorMech.damageNoiseRange;
             const noise = 1 + ((Math.random() * 2 - 1) * r);
+            const before = dmg;
             dmg = Math.max(1, Math.floor(dmg * noise));
+            // Reality Glitch was silent — players got mystery low/high rolls
+            // with no clue WHY. Floater the percentage delta on the target
+            // so the random read is part of the loop, not a phantom bug.
+            const tgt = this.enemy;
+            if (tgt && dmg !== before) {
+                const pct = Math.round((dmg / before - 1) * 100);
+                const sign = pct >= 0 ? '+' : '';
+                ParticleSys.createFloatingText(tgt.x, tgt.y - 110, `GLITCH ${sign}${pct}%`, '#bc13fe');
+            }
         }
 
         return dmg;
@@ -11175,6 +11218,18 @@ async startTurn() {
 
 	gainMana(amount) {
         this.player.mana += amount;
+        // Mana gain was silent — relics like Mana Syphon, Shard Reactor
+        // and Dervish Mode floated their own custom text, but the base
+        // gainMana path (turn-start tick, MANA dice, SOUL BATTERY heal,
+        // class arcanist resonance, etc.) had no feedback. Players
+        // could miss when their pool actually went up. Single floater
+        // + soft sting unifies all callers, with the existing mana
+        // dice burst (createClassBurst) still firing on top.
+        if (amount > 0 && this.player) {
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 80, `+${amount} MANA`, '#aa00ff');
+            ParticleSys.createSparks(this.player.x, this.player.y - 30, '#aa00ff', 5);
+            try { AudioMgr.playSound('mana'); } catch (_) {}
+        }
         if (this.player.hasRelic('recycle_bin')) {
             if (this.recycleBinCount < 5) {
                 this.player.heal(1);
@@ -14076,14 +14131,22 @@ drawEffects() {
             const burn = this._activeSectorMech.playerHeatDmg;
             this.player.takeDamage(burn, null, true, /*bypassShield*/ true);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 120, `HEAT -${burn}`, '#ff6600');
+            ParticleSys.createSparks(this.player.x, this.player.y, '#ff6600', 8);
             if (Array.isArray(this.player.minions) && this.player.minions.length > 0) {
                 this.player.minions.forEach(m => {
                     if (!m || m.currentHp <= 0) return;
                     m.takeDamage(burn, null, true, /*bypassShield*/ true);
                     ParticleSys.createFloatingText(m.x, m.y - 60, `HEAT -${burn}`, '#ff6600');
+                    ParticleSys.createSparks(m.x, m.y, '#ff6600', 5);
                 });
                 this.player.minions = this.player.minions.filter(m => m && m.currentHp > 0);
             }
+            // Heat tile tick gets a tiny shake + audio so the chip
+            // erosion has event-quality, not ambient. Same upgrade as
+            // the boss-phase chip ticks below — keeps every "the world
+            // is hurting you" moment legible at the same fidelity.
+            if (this.shake) this.shake(3);
+            try { AudioMgr.playSound('zap'); } catch (_) {}
         }
         // Boss phase chip-damage ticks (§5.3.1). These fire at end-of-player-
         // turn so the player sees the damage before the enemy phase banner
@@ -14096,12 +14159,18 @@ drawEffects() {
             if (typeof overheat === 'number' && overheat > 0 && this.enemy.name === 'THE COMPILER') {
                 this.player.takeDamage(overheat, this.enemy, true, /*bypassShield*/ true);
                 ParticleSys.createFloatingText(this.player.x, this.player.y - 120, `OVERHEAT -${overheat}`, '#ff4500');
+                ParticleSys.createSparks(this.player.x, this.player.y, '#ff4500', 8);
+                if (this.shake) this.shake(4);
+                try { AudioMgr.playSound('zap'); } catch (_) {}
             }
             // NULL_POINTER P3 — reality shatters; the world bleeds the operator.
             const shatter = this.enemy.realityShatterDmg;
             if (typeof shatter === 'number' && shatter > 0 && this.enemy.name === 'NULL_POINTER' && this.player.currentHp > 0) {
                 this.player.takeDamage(shatter, this.enemy, true, /*bypassShield*/ true);
                 ParticleSys.createFloatingText(this.player.x, this.player.y - 140, `SHATTER -${shatter}`, '#bc13fe');
+                ParticleSys.createSparks(this.player.x, this.player.y, '#bc13fe', 10);
+                if (this.shake) this.shake(5);
+                try { AudioMgr.playSound('grid_fracture'); } catch (_) {}
             }
             // If the chip ticks killed the player, gameOver has already moved
             // state — bail before kicking the enemy phase.
