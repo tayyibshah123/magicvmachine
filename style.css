@@ -221,7 +221,18 @@ html, body {
     color-scheme: dark;
 }
 body {
-    margin: 0; padding: 0;
+    margin: 0;
+    /* Padding kept on safe-area insets so the centred game-container is
+       pushed clear of iOS Dynamic Island / Android camera cutouts on
+       devices where the container reaches viewport edges. The earlier
+       `padding: 0` here silently overrode the html-level safe-area
+       insets and left edge-pinned UI sitting under the notch on tall
+       phones with the container at full width. */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    box-sizing: border-box;
     background-color: var(--bg-color);
     color: #fff;
     font-family: var(--font-main);
@@ -1771,31 +1782,132 @@ h2 {
 }
 body.reduced-motion #gameCanvas.cinematic-pan { animation: none !important; }
 
-/* Full-screen sector-transition collapse: rapid fade-in of a scanline curtain
-   that sweeps through the screen as the map re-renders. */
+/* Sector transition cinematic — establishing slate that paints the new
+   sector's palette + name + sub-tag during the 1.4s map-redraw window.
+   Layered: gradient backdrop, scanline grid, content slate. The whole
+   overlay slides in/out with the existing collapse cadence so callers
+   keep their map-redraw timing.
+   ========================================= */
 .sector-collapse {
+    --sec-accent: #00f3ff;
+    --sec-top: #11023d;
+    --sec-mid: #3c0855;
+    --sec-bot: #050015;
+    --sec-grid: #00f3ff55;
     position: fixed;
     inset: 0;
     pointer-events: none;
     z-index: 9800;
-    background:
-        repeating-linear-gradient(to bottom,
-            rgba(0, 243, 255, 0.08) 0 2px,
-            transparent 2px 6px),
-        linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.9) 45%, rgba(0,0,0,0) 100%);
     opacity: 0;
     transform: translateY(-100%);
+    overflow: hidden;
+}
+.sector-collapse-bg {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg,
+        var(--sec-top) 0%,
+        var(--sec-mid) 50%,
+        var(--sec-bot) 100%);
+}
+.sector-collapse-grid {
+    position: absolute;
+    inset: 0;
+    background:
+        repeating-linear-gradient(to bottom,
+            var(--sec-grid) 0 1px,
+            transparent 1px 6px),
+        repeating-linear-gradient(to right,
+            var(--sec-grid) 0 1px,
+            transparent 1px 32px);
+    opacity: 0.45;
+    mix-blend-mode: screen;
+}
+.sector-collapse-content {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 24px;
+    text-align: center;
+    color: #fff;
+}
+.sector-collapse-num {
+    font-family: var(--font-cyber);
+    font-size: 0.95rem;
+    letter-spacing: 0.42em;
+    color: rgba(255, 255, 255, 0.65);
+    transform: translateY(8px);
+    opacity: 0;
+    animation: sector-cinema-fade 0.65s cubic-bezier(.35,.9,.2,1) 0.18s forwards;
+}
+.sector-collapse-num .num {
+    color: var(--sec-accent);
+    font-size: 1.2rem;
+    text-shadow: 0 0 10px var(--sec-accent);
+    margin-left: 4px;
+}
+.sector-collapse-name {
+    font-family: var(--font-cyber);
+    font-size: clamp(1.6rem, 7vw, 3rem);
+    font-weight: 900;
+    letter-spacing: 0.20em;
+    color: #fff;
+    text-shadow:
+        0 0 18px var(--sec-accent),
+        0 0 38px var(--sec-accent),
+        0 2px 6px rgba(0, 0, 0, 0.85);
+    transform: translateY(14px) scale(0.96);
+    opacity: 0;
+    animation: sector-cinema-rise 0.7s cubic-bezier(.35,.9,.2,1) 0.30s forwards;
+}
+.sector-collapse-stripe {
+    width: 56%;
+    max-width: 280px;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, var(--sec-accent), transparent);
+    box-shadow: 0 0 14px var(--sec-accent);
+    transform: scaleX(0);
+    transform-origin: center;
+    margin-top: 10px;
+    animation: sector-cinema-stripe 0.6s cubic-bezier(.65,0,.35,1) 0.45s forwards;
+}
+.sector-collapse-tag {
+    font-family: var(--font-cyber);
+    font-size: 0.82rem;
+    letter-spacing: 0.28em;
+    color: rgba(255, 255, 255, 0.7);
+    margin-top: 8px;
+    transform: translateY(10px);
+    opacity: 0;
+    animation: sector-cinema-fade 0.55s ease-out 0.55s forwards;
 }
 .sector-collapse.active {
     animation: sector-collapse 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 @keyframes sector-collapse {
     0%   { opacity: 0; transform: translateY(-100%); }
-    35%  { opacity: 1; transform: translateY(0); }
-    65%  { opacity: 1; transform: translateY(0); }
-    100% { opacity: 0; transform: translateY(100%); }
+    20%  { opacity: 1; transform: translateY(0); }
+    72%  { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(60%); }
 }
-body.reduced-motion .sector-collapse.active { animation: none !important; opacity: 0; }
+@keyframes sector-cinema-fade {
+    to { transform: translateY(0); opacity: 1; }
+}
+@keyframes sector-cinema-rise {
+    to { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes sector-cinema-stripe {
+    to { transform: scaleX(1); }
+}
+body.reduced-motion .sector-collapse.active,
+body.reduced-motion .sector-collapse * {
+    animation: none !important;
+    opacity: 0 !important;
+}
 
 /* =========================================
    ADAPTIVE-MODE TOAST — shown the first time Assist turns on.
@@ -1853,6 +1965,72 @@ body.reduced-motion .sector-collapse.active { animation: none !important; opacit
     width: 30px; height: 30px;
     cursor: pointer;
     padding: 0;
+}
+
+/* =========================================
+   VICTORY FRAGMENT TALLY — animated counter banner that fires the
+   moment combat ends. Ticks 0 → final fragment count over ~640ms
+   with per-tick clicks and a final 'upgrade' sting. Anchored to the
+   top of the game container so it doesn't fight the death-blow VFX
+   fanfare at the centre.
+   ========================================= */
+.victory-tally {
+    position: absolute;
+    top: 64px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-12px);
+    z-index: 95;
+    pointer-events: none;
+    padding: 10px 22px 12px;
+    border: 1px solid rgba(255, 215, 0, 0.55);
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(20, 14, 0, 0.86), rgba(40, 24, 0, 0.78));
+    box-shadow: 0 0 26px rgba(255, 215, 0, 0.32), 0 6px 24px rgba(0, 0, 0, 0.6);
+    text-align: center;
+    opacity: 0;
+    transition: opacity 240ms ease-out, transform 360ms cubic-bezier(.35,.9,.2,1);
+    min-width: 168px;
+}
+.victory-tally.hidden { display: none; }
+.victory-tally.active {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+.victory-tally-label {
+    font-family: var(--font-cyber);
+    font-size: 0.72rem;
+    letter-spacing: 0.32em;
+    color: rgba(255, 215, 0, 0.78);
+    margin-bottom: 4px;
+}
+.victory-tally-num {
+    font-family: var(--font-cyber);
+    font-weight: 900;
+    font-size: 2.2rem;
+    color: #ffd76a;
+    text-shadow: 0 0 14px rgba(255, 215, 0, 0.6), 0 0 30px rgba(255, 215, 0, 0.35);
+    line-height: 1;
+    letter-spacing: 0.04em;
+    transform: scale(1);
+    transition: transform 220ms cubic-bezier(.35,.9,.2,1);
+}
+.victory-tally.settle .victory-tally-num {
+    transform: scale(1.12);
+    text-shadow: 0 0 22px rgba(255, 230, 168, 0.85), 0 0 44px rgba(255, 215, 0, 0.55);
+}
+.victory-tally-bar {
+    margin-top: 8px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.85), transparent);
+    transform: scaleX(0);
+    transform-origin: center;
+    transition: transform 640ms cubic-bezier(.65,0,.35,1);
+}
+.victory-tally.active .victory-tally-bar { transform: scaleX(1); }
+body.reduced-motion .victory-tally,
+body.reduced-motion .victory-tally * {
+    transition: none !important;
+    animation: none !important;
 }
 
 /* =========================================

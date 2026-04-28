@@ -4833,6 +4833,60 @@ triggerPhaseGlitch() {
         await this.showPhaseBanner(enemy.name, subtitle, 'boss');
     },
 
+    // Victory fragment-tally banner — counter ticks up from 0 to the
+    // earned amount over ~640ms with a per-tick click and a final
+    // 'upgrade' sting. Banner fades out 1.4s after the count finishes.
+    // Cancels and reuses any prior in-flight banner so chained kills
+    // don't pile up overlapping counters.
+    _showVictoryTally(amount) {
+        let host = document.getElementById('victory-tally');
+        if (!host) {
+            host = document.createElement('div');
+            host.id = 'victory-tally';
+            host.className = 'victory-tally hidden';
+            const container = document.getElementById('game-container') || document.body;
+            container.appendChild(host);
+        }
+        if (this._victoryTallyTimer) clearInterval(this._victoryTallyTimer);
+        if (this._victoryTallyHide) clearTimeout(this._victoryTallyHide);
+        host.innerHTML = `
+            <div class="victory-tally-label">FRAGMENTS</div>
+            <div class="victory-tally-num">+0</div>
+            <div class="victory-tally-bar"></div>
+        `;
+        host.classList.remove('hidden');
+        requestAnimationFrame(() => host.classList.add('active'));
+        const numEl = host.querySelector('.victory-tally-num');
+        const total = Math.max(1, Math.round(amount));
+        const durationMs = 640;
+        const stepMs = 32;        // ~20 ticks for a 640ms count
+        const steps = Math.max(8, Math.floor(durationMs / stepMs));
+        let i = 0;
+        this._victoryTallyTimer = setInterval(() => {
+            i++;
+            const t = Math.min(1, i / steps);
+            // Ease-out curve so the counter accelerates then settles.
+            const eased = 1 - Math.pow(1 - t, 2.4);
+            const cur = Math.floor(total * eased);
+            numEl.textContent = `+${cur}`;
+            // Tick audio every other step (keeps the count audible without
+            // becoming a buzz at 30 ticks/sec on long counts).
+            if (i % 2 === 0) { try { AudioMgr.playSound('click', { playbackRate: 1.15, volume: 0.6 }); } catch (_) {} }
+            if (t >= 1) {
+                clearInterval(this._victoryTallyTimer);
+                this._victoryTallyTimer = null;
+                numEl.textContent = `+${total}`;
+                host.classList.add('settle');
+                try { AudioMgr.playSound('upgrade'); } catch (_) {}
+            }
+        }, stepMs);
+        this._victoryTallyHide = setTimeout(() => {
+            host.classList.remove('active');
+            host.classList.remove('settle');
+            setTimeout(() => host.classList.add('hidden'), 320);
+        }, durationMs + 1200);
+    },
+
     // Boss intro cinematic — 1.5s slate that fires before the intel
     // crawl on sector boss combat start. Two black bars sweep in from
     // top + bottom (cinemascope), the boss name + subtitle slate
@@ -5367,8 +5421,13 @@ triggerPhaseGlitch() {
         setTimeout(() => cv.classList.remove('cinematic-pan'), durationMs);
     },
 
-    // Sector transition — brief full-screen "collapse" overlay before the
-    // map re-renders with the new sector's backdrop.
+    // Sector transition cinematic — a 1.4s establishing slate the player
+    // sees the moment they enter a new sector. Old version was a flat
+    // black fade; new version layers the sector's colour palette,
+    // sector number, sector name, and a sub-tag so the change of zone
+    // feels like a place, not just a state flip. Falls through to the
+    // existing collapse animation underneath so the map redraw timing
+    // is unchanged for callers.
     triggerSectorCollapse() {
         let host = document.getElementById('sector-collapse-overlay');
         if (!host) {
@@ -5377,9 +5436,53 @@ triggerPhaseGlitch() {
             host.className = 'sector-collapse';
             document.body.appendChild(host);
         }
+        // Look up the sector identity. Use `_pendingSector` if a caller
+        // set it ahead of time (mid-flight transition), otherwise the
+        // current `this.sector`.
+        const SECTOR_NAMES = {
+            1: 'DOWNTOWN GLASS',
+            2: 'CRYO DOCKS',
+            3: 'FOUNDRY RAVINE',
+            4: 'HIVE VECTORS',
+            5: 'THE SOURCE'
+        };
+        const SECTOR_TAGS = {
+            1: 'Standard Ops',
+            2: 'Frost Field',
+            3: 'Heat Tiles',
+            4: 'Hive Resonance',
+            5: 'Reality Glitch'
+        };
+        const sec = this._pendingSector || this.sector || 1;
+        const cfg = (typeof SECTOR_CONFIG !== 'undefined' && SECTOR_CONFIG[sec]) || null;
+        const accent = cfg ? cfg.sun[0] : '#00f3ff';
+        const top    = cfg ? cfg.bgTop : '#000';
+        const mid    = cfg ? cfg.bgMid : '#222';
+        const bot    = cfg ? cfg.bgBot : '#000';
+        const grid   = cfg ? cfg.grid  : '#00f3ff55';
+        host.style.setProperty('--sec-accent', accent);
+        host.style.setProperty('--sec-top', top);
+        host.style.setProperty('--sec-mid', mid);
+        host.style.setProperty('--sec-bot', bot);
+        host.style.setProperty('--sec-grid', grid);
+        host.innerHTML = `
+            <div class="sector-collapse-bg"></div>
+            <div class="sector-collapse-grid"></div>
+            <div class="sector-collapse-content">
+                <div class="sector-collapse-num">SECTOR <span class="num">${sec}</span></div>
+                <div class="sector-collapse-name">${SECTOR_NAMES[sec] || ''}</div>
+                <div class="sector-collapse-stripe" aria-hidden="true"></div>
+                <div class="sector-collapse-tag">// ${SECTOR_TAGS[sec] || ''}</div>
+            </div>
+        `;
         host.classList.remove('active');
         void host.offsetWidth;
         host.classList.add('active');
+        try {
+            AudioMgr.playSound('grid_fracture', { playbackRate: 0.85, volume: 0.9 });
+            setTimeout(() => { try { AudioMgr.playSound('beam'); } catch (_) {} }, 280);
+        } catch (_) {}
+        if (this.haptic) this.haptic('boss');
         setTimeout(() => host.classList.remove('active'), 1400);
     },
 
@@ -15440,6 +15543,11 @@ drawEffects() {
             }
         }
         this.techFragments += frags;
+        // Victory tally — animated fragment counter that ticks from 0 →
+        // final amount over ~640ms with a per-tick click. Replaces the
+        // moment of "fragments silently appear in the HUD" with a
+        // satisfying counter-up beat the player can SEE earned.
+        if (frags > 0) this._showVictoryTally(frags);
         // Corrupted: VOID SIPHON — killing an enemy grants +1 Max Mana.
         if (this.player.hasRelic('c_void_siphon')) {
             const stacks = this.stackCount('c_void_siphon');
