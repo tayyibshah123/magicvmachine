@@ -25,6 +25,7 @@ import { SaveSync } from './services/save-sync.js';
 import { Onboarding } from './services/onboarding.js';
 import { ClassBriefing } from './services/class-briefing.js';
 import { Perf } from './services/perf.js';
+import { getMatchupHint } from './data/matchup-hints.js';
 
 registerEntityClasses(Player, Minion, Enemy);
 
@@ -5390,6 +5391,15 @@ triggerPhaseGlitch() {
         // remaps Tesseract Prime gold and Compiler orange away from
         // each other so they don't collapse in the slate text).
         host.style.setProperty('--boss-color', Palette.adapt(colorHex));
+        // Class-vs-boss matchup hint: a one-line tactical reminder so a
+        // returning player isn't relearning the matchup from the slate
+        // alone. Falls back to empty string when no hint exists (e.g.
+        // the Archivist, whose mechanics rotate per fight).
+        const classId = this.player && this.player.classId;
+        const hintText = getMatchupHint(classId, sector) || '';
+        const hintMarkup = hintText
+            ? `<div class="boss-intro-hint">${hintText}</div>`
+            : '';
         host.innerHTML = `
             <div class="boss-intro-bar boss-intro-bar-top"></div>
             <div class="boss-intro-bar boss-intro-bar-bottom"></div>
@@ -5398,6 +5408,7 @@ triggerPhaseGlitch() {
                 <div class="boss-intro-name">${enemy.name}</div>
                 <div class="boss-intro-subtitle">${subtitle}</div>
                 <div class="boss-intro-stripe" aria-hidden="true"></div>
+                ${hintMarkup}
             </div>
         `;
         host.classList.remove('hidden');

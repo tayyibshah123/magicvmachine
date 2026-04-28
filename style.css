@@ -2527,6 +2527,30 @@ body.reduced-motion .boss-intro-stripe {
     transition: none !important;
 }
 
+/* Class-vs-boss matchup hint — a single tactical line below the slate
+   stripe. Visually subordinate to the boss name (smaller, dimmer,
+   readable max-width) so it reads as "advice", not the moment. Fades
+   in just after the stripe finishes drawing. */
+.boss-intro-hint {
+    margin-top: 14px;
+    font-family: var(--font-cyber);
+    font-size: clamp(0.7rem, 2.4vw, 0.92rem);
+    line-height: 1.45;
+    letter-spacing: 0.04em;
+    color: #cfe9ff;
+    opacity: 0;
+    max-width: 32ch;
+    text-align: center;
+    padding: 0 12px;
+    text-shadow: 0 0 6px var(--boss-color), 0 1px 2px rgba(0, 0, 0, 0.85);
+    transition: opacity 420ms ease-out 600ms;
+}
+.boss-intro.active .boss-intro-hint { opacity: 0.92; }
+body.reduced-motion .boss-intro-hint {
+    transition: none !important;
+    opacity: 0.92;
+}
+
 /* =========================================
    PRE-COMBAT INTEL CRAWL — full-width scanline strip that slides
    down from the top of the combat area. Replaces the old bordered
