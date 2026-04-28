@@ -2051,6 +2051,71 @@ body.reduced-motion .victory-tally * {
 }
 
 /* =========================================
+   PAUSE OVERLAY — fires when the player returns to the tab during a
+   live combat. Holds the game until they tap so they don't snap into
+   a mid-flight ring / boss attack. Sits inside game-container so the
+   safe-area insets propagate.
+   ========================================= */
+.pause-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 95;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(2, 0, 12, 0.78);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    opacity: 0;
+    transition: opacity 240ms ease-out;
+    cursor: pointer;
+}
+.pause-overlay.hidden { display: none; }
+.pause-overlay.active { opacity: 1; }
+.pause-overlay-card {
+    text-align: center;
+    padding: 24px 36px;
+    border: 1px solid rgba(0, 243, 255, 0.4);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(10, 8, 28, 0.92), rgba(20, 6, 36, 0.86));
+    box-shadow: 0 0 32px rgba(0, 243, 255, 0.32), 0 12px 36px rgba(0, 0, 0, 0.7);
+}
+.pause-overlay-tag {
+    font-family: var(--font-cyber);
+    font-size: 0.78rem;
+    letter-spacing: 0.32em;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 6px;
+}
+.pause-overlay-title {
+    font-family: var(--font-cyber);
+    font-weight: 900;
+    font-size: clamp(2.2rem, 9vw, 3.4rem);
+    letter-spacing: 0.16em;
+    color: var(--neon-blue);
+    text-shadow:
+        0 0 18px var(--neon-blue),
+        0 0 38px var(--neon-blue),
+        0 2px 6px rgba(0, 0, 0, 0.85);
+    line-height: 1;
+    margin: 4px 0 12px 0;
+    animation: pause-overlay-pulse 1.8s ease-in-out infinite;
+}
+.pause-overlay-sub {
+    font-family: var(--font-cyber);
+    font-size: 0.9rem;
+    letter-spacing: 0.28em;
+    color: rgba(255, 255, 255, 0.78);
+}
+@keyframes pause-overlay-pulse {
+    0%, 100% { filter: brightness(1.0); }
+    50%      { filter: brightness(1.25); }
+}
+body.reduced-motion .pause-overlay-title {
+    animation: none;
+}
+
+/* =========================================
    BOSS INTRO CINEMATIC — sweeps in 1.5s before the intel crawl on
    sector boss combat start. Two black bars zoom in from top + bottom
    (cinemascope), the boss-name slate animates up in the gap, the boss

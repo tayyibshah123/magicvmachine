@@ -1965,13 +1965,24 @@ startQTE(type, x, y, callback, opts) {
             // 420ms wave break = ~2s. Tutorial × 0.45 on active pushes
             // that to ~2.6s. 2400ms per wave keeps a healthy margin.
             const failsafeMs = 7000 + (pat.waves - 1) * 2400;
-            setTimeout(() => {
+            const tryFailsafe = () => {
+                // Defer if paused — the setTimeout fires in real-world
+                // time, but the QTE itself is frozen by the loop's
+                // pause gate. Without this defer, a tab-switch longer
+                // than failsafeMs would auto-fail the QTE while the
+                // player was away. Re-checks once per second until
+                // the game is no longer paused.
+                if (this.paused) {
+                    setTimeout(tryFailsafe, 1000);
+                    return;
+                }
                 if (this.qte.active && this.qte.id === now &&
                    (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT)) {
                     console.log("QTE Failsafe Triggered");
                     this.resolveQTE('fail');
                 }
-            }, failsafeMs);
+            };
+            setTimeout(tryFailsafe, failsafeMs);
         });
     },
 
@@ -2707,6 +2718,18 @@ startQTE(type, x, y, callback, opts) {
         // can't silently drop the next screen's first tap. Single-shot
         // by design; this just prevents stale persistence.
         this._longPressFired = false;
+        // Clear the visibility-pause flag + hide its overlay on every
+        // state change. Without this, a state transition that fires
+        // during a pause (gameOver, async win → reward, etc.) would
+        // inherit `paused = true` and leave the new screen frozen.
+        if (this.paused) {
+            this.paused = false;
+            const pauseHost = document.getElementById('pause-overlay');
+            if (pauseHost) {
+                pauseHost.classList.remove('active');
+                pauseHost.classList.add('hidden');
+            }
+        }
 
         this.currentState = newState;
         const activate = (id) => {
@@ -4572,6 +4595,55 @@ triggerPhaseGlitch() {
             '</div>';
     },
 
+    // Build (lazily) and show the TAP TO RESUME overlay. Used after
+    // the player returns to the tab during an active combat — the
+    // game stays paused until they explicitly tap, so nothing is
+    // mid-resolution when they re-engage. Overlay scopes inside
+    // game-container so it respects the safe-area insets.
+    _showPauseOverlay() {
+        let host = document.getElementById('pause-overlay');
+        if (!host) {
+            host = document.createElement('div');
+            host.id = 'pause-overlay';
+            host.className = 'pause-overlay hidden';
+            host.innerHTML = `
+                <div class="pause-overlay-card">
+                    <div class="pause-overlay-tag">// SYSTEM PAUSED</div>
+                    <div class="pause-overlay-title">PAUSED</div>
+                    <div class="pause-overlay-sub">TAP ANYWHERE TO RESUME</div>
+                </div>
+            `;
+            const container = document.getElementById('game-container') || document.body;
+            container.appendChild(host);
+            // Resume on any tap on the overlay. Stop propagation so the
+            // tap doesn't leak through to canvas / dice tray below.
+            const resume = (e) => {
+                if (e) e.stopPropagation();
+                this._hidePauseOverlay();
+            };
+            host.addEventListener('click', resume);
+            host.addEventListener('touchstart', resume, { passive: false });
+        }
+        host.classList.remove('hidden');
+        requestAnimationFrame(() => host.classList.add('active'));
+        // Keep paused until the user dismisses; don't auto-resume on a
+        // timer — the explicit gate is the whole point.
+        this.paused = true;
+    },
+    _hidePauseOverlay() {
+        const host = document.getElementById('pause-overlay');
+        if (host) {
+            host.classList.remove('active');
+            setTimeout(() => host.classList.add('hidden'), 250);
+        }
+        this.paused = false;
+        // Audio fade-in only re-fires if music was playing pre-pause.
+        if (AudioMgr._wasPlaying && AudioMgr.musicEnabled) {
+            AudioMgr.fadeMusicIn(500);
+            AudioMgr._wasPlaying = false;
+        }
+    },
+
     haptic(intensity = 'tap') {
         if (this.hapticsEnabled === false) return;
         if (!('vibrate' in navigator)) return;
@@ -4709,6 +4781,14 @@ triggerPhaseGlitch() {
 
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
+                // Auto-pause: freeze the main loop so animations / sleep
+                // chains / particle ticks don't try to advance while the
+                // tab is suspended. rAF stops on its own when the tab
+                // is hidden, but timers / sleeps / async callbacks
+                // continue running and would resume mid-action with a
+                // huge dt. Setting `paused=true` short-circuits the
+                // loop AND any per-frame state advancement on resume.
+                this.paused = true;
                 if (AudioMgr.bgm && !AudioMgr.bgm.paused) {
                     AudioMgr._wasPlaying = true;
                     AudioMgr.fadeMusicOut(250);
@@ -4716,7 +4796,19 @@ triggerPhaseGlitch() {
             } else {
                 resumeAudio();
                 armResumeOnNextGesture();
-                if (AudioMgr._wasPlaying && AudioMgr.musicEnabled) {
+                // During COMBAT or TUTORIAL_COMBAT, surface a "TAP TO
+                // RESUME" gate so an interrupted player doesn't snap
+                // back into a live ring / boss attack. Other screens
+                // (menu, map, shop) can resume seamlessly — they're
+                // not time-pressured.
+                const inCombat = (this.currentState === STATE.COMBAT
+                    || this.currentState === STATE.TUTORIAL_COMBAT);
+                if (inCombat) {
+                    this._showPauseOverlay();
+                } else {
+                    this.paused = false;
+                }
+                if (AudioMgr._wasPlaying && AudioMgr.musicEnabled && !this.paused) {
                     AudioMgr.fadeMusicIn(500);
                     AudioMgr._wasPlaying = false;
                 }
@@ -18382,6 +18474,20 @@ drawEffects() {
     },
 
     loop(timestamp) {
+        // Pause gate. When `paused` is true (visibility loss + still
+        // inside combat awaiting a TAP TO RESUME, or any future manual
+        // pause path) we just reschedule rAF without doing any of the
+        // per-frame work. Keeps animations from advancing, particle
+        // budgets from ticking, and the FPS-cap timestamp from drift.
+        // On resume, rebase lastTime so the dt cap doesn't flag the
+        // gap as a 0.1s frame.
+        if (this.paused) {
+            this.lastTime = timestamp;
+            this._lastRenderTime = timestamp;
+            requestAnimationFrame(this._boundLoop);
+            return;
+        }
+
         // Frame-pacing cap. Skip rendering if we're ahead of the target
         // interval; just request another rAF and bail. Saves 50% of the
         // GPU/battery cost on 120Hz displays (mid-to-high-end phones)
