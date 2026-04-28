@@ -14451,21 +14451,57 @@ drawEffects() {
                 if (t && t.currentHp > 0 && typeof t.heal === 'function') {
                     t.heal(intent.val);
                     this.triggerVFX && this.triggerVFX('beam', this.enemy, t);
+                    // Per-target heal flash so the support reads at the
+                    // recipient, not just on the healer. Was previously
+                    // only a beam VFX + floater on the source — players
+                    // had to track which ally was now healthier by
+                    // watching HP bars.
+                    ParticleSys.createShockwave(t.x, t.y, '#7fff00', 26);
+                    ParticleSys.createSparks(t.x, t.y, '#7fff00', 12);
+                    ParticleSys.createFloatingText(t.x, t.y - 80, `+${intent.val}`, '#7fff00');
                 }
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, "MEND LINK", "#7fff00");
+                AudioMgr.playSound('mana');
                 continue;
             }
             else if (intent.type === 'shield_ally') {
                 const allies = [...(this.enemy.minions || [])];
-                allies.forEach(a => a.addShield && a.addShield(intent.val));
+                allies.forEach(a => {
+                    if (!a || !a.addShield) return;
+                    a.addShield(intent.val);
+                    // Per-ally shield raise: hex barrier on each recipient
+                    // so the player sees WHICH allies got the +shield —
+                    // critical for picking which target to focus next
+                    // turn instead of guessing.
+                    if (this.triggerVFX) this.triggerVFX('hex_barrier', null, a);
+                    ParticleSys.createFloatingText(a.x, a.y - 70, `+${intent.val} SH`, COLORS.SHIELD);
+                });
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, `WARDED +${intent.val}`, COLORS.SHIELD);
+                AudioMgr.playSound('hex_barrier');
                 continue;
             }
             else if (intent.type === 'buff_allies') {
                 // Permanent +dmg buff to every enemy-side combatant this combat.
                 const pool = [this.enemy, ...(this.enemy.minions || [])];
-                pool.forEach(a => { if (a && a.baseDmg !== undefined) a.baseDmg += intent.val; });
+                pool.forEach(a => {
+                    if (!a || a.baseDmg === undefined) return;
+                    a.baseDmg += intent.val;
+                    // Persistent empowered marker — the entity render
+                    // path reads `_empoweredStacks` to draw an orange
+                    // glow ring around buffed enemies for the rest of
+                    // the combat. Prevents "this enemy was buffed last
+                    // turn and now hits harder for unclear reasons".
+                    a._empoweredStacks = (a._empoweredStacks || 0) + intent.val;
+                    // Per-ally activation burst so the moment the buff
+                    // lands is visible on every recipient, not just on
+                    // the buffer's floater.
+                    ParticleSys.createShockwave(a.x, a.y, '#ffd76a', 28);
+                    ParticleSys.createSparks(a.x, a.y, '#ffd76a', 12);
+                    ParticleSys.createFloatingText(a.x, a.y - 70, `+${intent.val} DMG`, '#ffd76a');
+                });
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, `EMPOWER +${intent.val} DMG`, "#ffd76a");
+                AudioMgr.playSound('upgrade');
+                if (this.triggerScreenFlash) this.triggerScreenFlash('rgba(255, 215, 106, 0.18)', 200);
                 continue;
             }
             else if (intent.type === 'shield_strip_attack') {
@@ -21703,6 +21739,37 @@ drawEntity(entity) {
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
                 ctx.shadowBlur = 6;
                 ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // --- EMPOWERED VISUAL — persistent buff_allies indicator ---
+        // Enemies hit by buff_allies wear an orange glow ring for the
+        // rest of the combat so the player can identify which targets
+        // are now hitting harder. The stack count drives ring intensity
+        // (more stacks = brighter, thicker) so a multi-buffed Praetorian
+        // reads as the priority focus.
+        if (entity instanceof Enemy || (entity instanceof Minion && entity.isPlayerSide === false)) {
+            const stacks = entity._empoweredStacks || 0;
+            if (stacks > 0) {
+                ctx.save();
+                const pulse = 0.6 + Math.sin(time * 4.5) * 0.3;
+                const intensity = Math.min(1, stacks / 6); // soft cap visual at 6 stacks
+                ctx.globalAlpha = (0.45 + intensity * 0.35) * pulse;
+                ctx.strokeStyle = '#ffd76a';
+                ctx.shadowColor = '#ffd76a';
+                ctx.shadowBlur = 14 + intensity * 12;
+                ctx.lineWidth = 2 + intensity * 2;
+                ctx.beginPath();
+                ctx.arc(0, 0, entity.radius + 10, 0, Math.PI * 2);
+                ctx.stroke();
+                // Inner companion ring at slightly faster pulse so the
+                // double-ring reads as "stacked empowerment".
+                ctx.globalAlpha = pulse * 0.4;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(0, 0, entity.radius + 4, time * 0.6, time * 0.6 + Math.PI * 1.4);
+                ctx.stroke();
                 ctx.restore();
             }
         }
