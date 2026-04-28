@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Maskable variant — content is inset 20% from each edge so a
+       browser crop (circle / squircle / rounded-square mask) leaves
+       the iconic "M v M" intact. Background fills the full canvas. -->
+  <defs>
+    <linearGradient id="bgGradM" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0220"/>
+      <stop offset="100%" stop-color="#050011"/>
+    </linearGradient>
+    <linearGradient id="strokeGradM" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f3ff"/>
+      <stop offset="100%" stop-color="#ff5eb9"/>
+    </linearGradient>
+    <filter id="neonBlurM" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+  </defs>
+
+  <!-- Full-bleed backdrop (no rounded corners — let the OS mask it) -->
+  <rect width="512" height="512" fill="url(#bgGradM)"/>
+
+  <!-- Inner safe-zone hex (≈ 60% of canvas, leaves margin for mask crop) -->
+  <g filter="url(#neonBlurM)" opacity="0.5">
+    <polygon points="256,128 374,196 374,316 256,384 138,316 138,196"
+      fill="none" stroke="#00f3ff" stroke-width="5"/>
+  </g>
+  <polygon points="256,128 374,196 374,316 256,384 138,316 138,196"
+    fill="none" stroke="url(#strokeGradM)" stroke-width="3"/>
+
+  <!-- Left M (cyan), tightened to safe zone -->
+  <g filter="url(#neonBlurM)" opacity="0.7">
+    <path d="M 168 308 L 168 208 L 208 256 L 248 208 L 248 308"
+      fill="none" stroke="#00f3ff" stroke-width="18"
+      stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <path d="M 168 308 L 168 208 L 208 256 L 248 208 L 248 308"
+    fill="none" stroke="#00f3ff" stroke-width="11"
+    stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Centre v -->
+  <g filter="url(#neonBlurM)" opacity="0.65">
+    <path d="M 240 232 L 256 282 L 272 232"
+      fill="none" stroke="#ffffff" stroke-width="10"
+      stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <path d="M 240 232 L 256 282 L 272 232"
+    fill="none" stroke="#ffffff" stroke-width="6"
+    stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Right M (pink), tightened to safe zone -->
+  <g filter="url(#neonBlurM)" opacity="0.7">
+    <path d="M 264 308 L 264 208 L 304 256 L 344 208 L 344 308"
+      fill="none" stroke="#ff5eb9" stroke-width="18"
+      stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <path d="M 264 308 L 264 208 L 304 256 L 344 208 L 344 308"
+    fill="none" stroke="#ff5eb9" stroke-width="11"
+    stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
