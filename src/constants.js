@@ -519,7 +519,7 @@ const DICE_UPGRADES = {
 
     // ─── SHARED SKILL UPGRADES (unchanged) ───
     EARTHQUAKE:      { name: "Cataclysm",      desc: "Deal 12 DMG to ALL. Apply WEAK.\n[QTE]: Crit x1.3.", cost: 225, icon: ICONS.upgCataclysm },
-    METEOR:          { name: "Starfall",       desc: "Deal 50 DMG. [QTE]: Crit x1.3.", cost: 350, icon: ICONS.upgStarfall },
+    METEOR:          { name: "Starfall",       desc: "3-hit chain: 30 DMG per part.\n[Chain QTE]: each part crits x1.6.", cost: 350, icon: ICONS.upgStarfall },
     CONSTRICT:       { name: "Digital Rot",    desc: "Reduce Atk/Heal by 75% for 4 turns.", cost: 250, icon: ICONS.upgDigitalRot },
     VOODOO:          { name: "Void Curse",     desc: "Apply Curse: After 3 turns, 150 Base DMG (50% chance for 500).", cost: 350, icon: ICONS.upgVoid },
     OVERCHARGE:      { name: "Hyper Beam",     desc: "Enemy takes +100% Damage from all sources (3 turns).", cost: 300, icon: ICONS.upgHyperBeam },

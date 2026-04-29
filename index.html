@@ -181,6 +181,7 @@
                         <span class="title-frame-badge" id="title-frame-badge">ARCHIVIST SLAIN</span>
                     </div>
                     <h1 class="title">MAGIC <span class="vs">v</span> MACHINE</h1>
+                    <div class="title-energy-bars" aria-hidden="true"></div>
                     <div class="subtitle"></div>
                 </div>
                 <div class="spacer"></div>
@@ -406,13 +407,22 @@
                 </div>
 
                 <div id="intel-tabs" class="intel-tabs" role="tablist">
-                    <button class="intel-tab active" data-intel-tab="dossier" role="tab">DOSSIER</button>
+                    <button class="intel-tab active" data-intel-tab="cipher" role="tab">CIPHER</button>
+                    <button class="intel-tab" data-intel-tab="dossier" role="tab">DOSSIER</button>
                     <button class="intel-tab" data-intel-tab="chronicle" role="tab">CHRONICLE</button>
-                    <button class="intel-tab" data-intel-tab="cipher" role="tab">CIPHER</button>
+                </div>
+
+                <!-- CIPHER pane — chapter-grouped lore (default tab) -->
+                <div class="intel-pane active" data-intel-pane="cipher">
+                    <div class="intel-cipher-header">
+                        <span class="intel-cipher-progress" id="intel-cipher-progress">0 / 0 decrypted</span>
+                        <button id="btn-decrypt" class="btn primary neon-border-pink intel-cipher-btn">DECRYPT FILE</button>
+                    </div>
+                    <div id="intel-cipher-chapters" class="intel-cipher-chapters"></div>
                 </div>
 
                 <!-- DOSSIER pane — progressive enemy unlocks -->
-                <div class="intel-pane active" data-intel-pane="dossier">
+                <div class="intel-pane" data-intel-pane="dossier">
                     <div id="intel-dossier" class="intel-dossier"></div>
                     <div id="intel-dossier-empty" class="intel-empty" style="display: none;">
                         No targets logged yet. First kills will appear here.
@@ -427,15 +437,6 @@
                     <div id="intel-chronicle-empty" class="intel-empty" style="display: none;">
                         No runs logged yet. Every run, win or loss, appears here for review.
                     </div>
-                </div>
-
-                <!-- CIPHER pane — chapter-grouped lore -->
-                <div class="intel-pane" data-intel-pane="cipher">
-                    <div class="intel-cipher-header">
-                        <span class="intel-cipher-progress" id="intel-cipher-progress">0 / 0 decrypted</span>
-                        <button id="btn-decrypt" class="btn primary neon-border-pink intel-cipher-btn">DECRYPT FILE</button>
-                    </div>
-                    <div id="intel-cipher-chapters" class="intel-cipher-chapters"></div>
                 </div>
 
                 <div class="spacer"></div>

@@ -292,6 +292,52 @@ const AudioMgr = {
     // doesn't carry over the prior run's theme into the menu / sanctuary.
     clearSectorMusic() { this._sectorLock = null; },
 
+    // Beat-phase helper for visual rhythm sync (e.g. menu title pulse).
+    // Anchors to the bgm element's currentTime so a tab-resumed track or
+    // a cross-faded swap stays in step with the beat. Falls back to
+    // performance.now() when bgm is null/paused so the pulse keeps
+    // breathing even with music muted.
+    //
+    // Returns { phase, beatPulse, barPulse, energy }:
+    //   phase     — 0..1 within the current beat (linear)
+    //   beatPulse — 0..1 attack-decay envelope (sharp 0→1→0 each beat)
+    //   barPulse  — 0..1 envelope on every 4th beat (downbeat accent)
+    //   energy    — 0..1 ambient drift (1.5s sine) for non-rhythmic glow
+    //
+    // bpm defaults to 120 (≈ menu/synth tempo). Pass an override per track
+    // if you have one. Cheap — math only, no audio analysis.
+    getBeatPhase(bpm = 120) {
+        const period = 60 / bpm;
+        let t;
+        // Guard against NaN/Infinity from a transient bgm state (e.g. a
+        // freshly-loaded element that hasn't computed currentTime yet) —
+        // without isFinite, the modulo cascades NaN through every
+        // returned value and silently freezes any CSS animation that
+        // reads them.
+        if (this.bgm && !this.bgm.paused
+            && Number.isFinite(this.bgm.currentTime)
+            && this.bgm.currentTime >= 0) {
+            t = this.bgm.currentTime;
+        } else {
+            t = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+        }
+        const phase = (t % period) / period;
+        // Attack-decay shape: ramps 0→1 in first 12% of the beat, then
+        // decays exponentially. Reads as a sharp "kick" each beat.
+        let beatPulse;
+        if (phase < 0.12) {
+            beatPulse = phase / 0.12;
+        } else {
+            beatPulse = Math.max(0, Math.exp(-(phase - 0.12) * 5.5));
+        }
+        // Bar pulse — same shape, fires only on downbeats (every 4th).
+        const barIdx = Math.floor(t / period) % 4;
+        const barPulse = (barIdx === 0) ? beatPulse : 0;
+        // Ambient breath — 1.5s sine, never stops.
+        const energy = 0.5 + 0.5 * Math.sin(t * (Math.PI * 2 / 1.5));
+        return { phase, beatPulse, barPulse, energy };
+    },
+
     // Swap the background track at runtime. Crossfades: old track fades out
     // over 400ms, new track replaces it and fades in over 600ms. Preference
     // persists so subsequent launches load the player's choice.

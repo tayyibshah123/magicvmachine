@@ -5746,86 +5746,232 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 .custom-run-preset:active { transform: translateY(1px); }
 #btn-custom-run:disabled  { opacity: 0.45; cursor: not-allowed; }
 
-/* Save slot picker — modal listing A/B/C with metadata + select/wipe. */
+/* Save slot picker — modal listing A/B/C with metadata + select/wipe.
+   Phone-first: three compact cards fit on a single 600px-tall viewport
+   without scrolling. Each card uses an inline 2-col metadata grid so
+   the vertical footprint is roughly half the original stacked-rows
+   layout, which used to push slot C below the visible viewport. */
 .save-slot-modal {
-    position: fixed; inset: 0; z-index: 200;
+    /* z-index 9500 — above combat banners (8000) and the CRT overlay
+       (9000) so a slot picker opened from the menu can't be visually
+       obscured by a transient banner mid-fade. Stays below tooltips
+       (10000) which always trump everything else. */
+    position: fixed; inset: 0; z-index: 9500;
     display: flex; align-items: center; justify-content: center;
-    background: rgba(0, 0, 0, 0.65);
-    padding: 16px;
+    background: rgba(0, 0, 0, 0.78);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    padding: 12px;
 }
 .save-slot-modal.hidden { display: none; }
 .save-slot-panel {
-    width: min(680px, 100%);
-    max-height: 88vh;
-    padding: 18px;
+    width: min(560px, 100%);
+    max-height: 92vh;
+    padding: 16px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    /* Panel itself doesn't scroll — only the slot list does. That keeps
-       the title sticky at the top and the DONE button pinned at the
-       bottom so a player with three filled slots can always close the
-       picker without hunting for the scroll handle. */
+    gap: 10px;
+    /* Panel itself doesn't scroll — only the slot list does. Title
+       stays at the top and DONE pinned at the bottom. */
     overflow: hidden;
+    border: 1px solid rgba(0, 243, 255, 0.32);
+    box-shadow:
+        0 0 28px rgba(0, 243, 255, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
-.save-slot-title { margin: 0; font-family: var(--font-cyber); letter-spacing: 0.18em; flex-shrink: 0; }
-.save-slot-sub { margin: 0 0 6px 0; opacity: 0.8; font-size: 0.85rem; flex-shrink: 0; }
+.save-slot-title {
+    margin: 0;
+    font-family: var(--font-cyber);
+    letter-spacing: 0.22em;
+    font-size: 1.05rem;
+    flex-shrink: 0;
+    text-align: center;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(0, 243, 255, 0.18);
+}
+.save-slot-sub {
+    margin: 0;
+    opacity: 0.65;
+    font-size: 0.72rem;
+    flex-shrink: 0;
+    text-align: center;
+    letter-spacing: 0.06em;
+}
 .save-slot-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
-    gap: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
     /* List takes the remaining vertical room and scrolls internally so
        the action row stays visible regardless of slot count. min-height:0
        is required for a flex child to shrink below its content size. */
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    padding-right: 4px; /* breathing room for the inner scrollbar */
+    padding-right: 4px;
 }
 .save-slot-card {
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 8px;
-    padding: 12px;
-    background: rgba(255, 255, 255, 0.03);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    padding: 10px 12px;
+    background: linear-gradient(180deg, rgba(10, 18, 32, 0.5), rgba(4, 8, 18, 0.65));
+    display: grid;
+    /* Three compact rows: head | body | actions. Body content is
+       horizontal, so each card takes ~110-130px vertical. */
+    grid-template-rows: auto auto auto;
+    gap: 6px;
+    transition: border-color 160ms, box-shadow 160ms, transform 160ms;
 }
-.save-slot-card.active { border-color: var(--neon-gold); background: rgba(255, 215, 106, 0.06); }
+.save-slot-card.active {
+    border-color: var(--neon-gold);
+    background: linear-gradient(180deg, rgba(40, 30, 8, 0.6), rgba(20, 14, 4, 0.7));
+    box-shadow:
+        0 0 14px rgba(255, 215, 106, 0.22),
+        inset 0 1px 0 rgba(255, 215, 106, 0.16);
+}
+@media (hover: hover) {
+    .save-slot-card:hover { transform: translateY(-1px); border-color: rgba(0, 243, 255, 0.4); }
+    .save-slot-card.active:hover { border-color: var(--neon-gold); }
+}
 .save-slot-head {
-    display: flex; justify-content: space-between; align-items: center;
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: var(--font-cyber);
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+    padding-bottom: 4px;
+}
+.save-slot-letter {
+    font-weight: 800;
+    letter-spacing: 0.22em;
+    color: #ffd76a;
+    font-size: 0.95rem;
+    text-shadow: 0 0 6px rgba(255, 215, 106, 0.4);
+}
+.save-slot-active-tag {
+    font-size: 0.62rem;
+    color: #5ad864;
+    letter-spacing: 0.18em;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: rgba(90, 216, 100, 0.08);
+    border: 1px solid rgba(90, 216, 100, 0.3);
+}
+.save-slot-active-tag.dim {
+    color: rgba(180, 200, 220, 0.4);
+    background: transparent;
+    border-color: rgba(180, 200, 220, 0.12);
+}
+.save-slot-body { font-size: 0.78rem; color: var(--text-muted); min-width: 0; }
+.save-slot-empty {
+    font-style: italic;
+    opacity: 0.55;
+    padding: 10px 4px;
+    font-size: 0.85rem;
+}
+/* Mode tag — a small pill above the metadata grid that flashes the
+   run type. Color-coded so STORY / CHALLENGE / ARCHIVE read at a
+   glance without parsing a metadata row. */
+.save-slot-mode-tag {
+    display: inline-block;
+    font-family: var(--font-cyber);
+    font-size: 0.58rem;
+    letter-spacing: 0.22em;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 3px;
+    margin-bottom: 4px;
+    background: rgba(0, 243, 255, 0.1);
+    color: var(--neon-blue);
+    border: 1px solid rgba(0, 243, 255, 0.4);
+}
+.save-slot-mode-challenge {
+    background: rgba(255, 215, 106, 0.1);
+    color: #ffd76a;
+    border-color: rgba(255, 215, 106, 0.45);
+}
+.save-slot-mode-archive {
+    background: rgba(255, 0, 153, 0.1);
+    color: #ff66cc;
+    border-color: rgba(255, 0, 153, 0.45);
+}
+/* Compact 2x2 metadata grid — same data as before but in a horizontal
+   block instead of five stacked rows. Roughly halves the card height. */
+.save-slot-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4px 14px;
     font-family: var(--font-cyber);
 }
-.save-slot-letter      { font-weight: 800; letter-spacing: 0.18em; color: #ffd76a; }
-.save-slot-active-tag  { font-size: 0.7rem; color: #5ad864; letter-spacing: 0.16em; }
-.save-slot-body { font-size: 0.85rem; color: var(--text-muted); }
-.save-slot-empty { font-style: italic; opacity: 0.6; }
-.save-slot-meta-row {
-    display: flex; justify-content: space-between; gap: 8px;
-    font-family: var(--font-cyber); letter-spacing: 0.04em;
+.save-slot-meta-cell {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
     border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
     padding: 2px 0;
+    gap: 6px;
+    min-width: 0;
 }
-.save-slot-meta-row > span:first-child  { color: var(--text-muted); }
-.save-slot-meta-row > span:last-child   { color: #ffe6a8; font-weight: 700; }
-.save-slot-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-/* Action buttons inside save slot cards (SELECT / WIPE) — were a
-   tight ~20px tall pill, well under the 44px floor. Bumped padding
-   + min-height so tapping a slot to switch saves doesn't require
-   precise aim. */
-.save-slot-card-actions .btn {
+.save-slot-meta-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    color: rgba(180, 200, 220, 0.55);
+    flex-shrink: 0;
+}
+.save-slot-meta-val {
     font-size: 0.78rem;
-    padding: 12px 14px;
-    min-height: 44px;
+    color: #ffe6a8;
+    font-weight: 700;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+@media (max-width: 420px) {
+    /* Single-column meta grid on the narrowest phones so values don't
+       collide with labels. */
+    .save-slot-meta-grid { grid-template-columns: 1fr; gap: 2px 0; }
+}
+.save-slot-card-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 2px;
+}
+/* Action buttons sized for thumb tap (≥44px) but visually compact —
+   SELECT takes the wider share, WIPE is a tight secondary. */
+.save-slot-card-actions .btn {
+    font-size: 0.72rem;
+    padding: 10px 12px;
+    min-height: 40px;
+    flex: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    letter-spacing: 0.14em;
+    margin: 0;
+    width: auto;
+}
+.save-slot-card-actions .save-slot-wipe {
+    flex: 0 0 auto;
+    min-width: 70px;
+    color: rgba(255, 120, 150, 0.85);
+    border-color: rgba(255, 0, 85, 0.3);
+}
+.save-slot-card-actions .save-slot-wipe:hover {
+    color: #ff5577;
+    border-color: var(--neon-pink);
+    background: rgba(255, 0, 85, 0.08);
 }
 .save-slot-actions {
     display: flex;
-    justify-content: flex-end;
+    justify-content: center;
     flex-shrink: 0;
-    padding-top: 4px;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding-top: 6px;
+    border-top: 1px solid rgba(0, 243, 255, 0.18);
+}
+.save-slot-actions .btn {
+    margin: 0;
+    width: 100%;
+    max-width: 240px;
+    min-height: 44px;
 }
 #screen-char-select .char-grid {
     display: grid;
@@ -6872,63 +7018,136 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
 .intel-beast-tier-seasoned  { color: var(--neon-gold); }
 .intel-beast-tier-veteran   { color: var(--neon-pink); }
 
-/* Chronicle — scrollable list of recent runs */
+/* Chronicle — scrollable list of recent runs.
+   IMPORTANT: never use cqh units here. The intel-pane has no
+   `container-type` declared, so cqh resolved to 0 on most browsers and
+   the run list collapsed to a 0px tall scroll box at the top of the
+   pane — which read as "the top is clipped". The screen itself is
+   already overflow-y: auto, so let the content flow naturally and only
+   cap the list's max-height for very long histories. */
 .intel-chronicle {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    max-height: 50cqh;
+    gap: 10px;
+    max-height: min(60vh, 720px);
     overflow-y: auto;
-    padding: 4px;
+    /* `overscroll-behavior: contain` stops a touch scroll inside the
+       run list from bubbling up to scroll the parent screen — without
+       it, an overscroll on iOS bounces the entire intel page. */
+    overscroll-behavior: contain;
+    width: min(680px, 100%);
+    margin: 0 auto;
+    /* Inset cyber border + soft inner gradient — gives the run history
+       its own visual chamber so it doesn't feel like loose rows under
+       the filter pills. */
+    border: 1px solid rgba(0, 243, 255, 0.18);
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(8, 14, 26, 0.55), rgba(2, 6, 14, 0.7));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 0 24px rgba(0, 243, 255, 0.06);
+    padding: 10px;
 }
 .intel-chronicle-row {
     display: grid;
-    grid-template-columns: 58px 1fr auto;
+    grid-template-columns: 64px 1fr auto;
     align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
+    gap: 12px;
+    padding: 12px 14px;
     border-left: 3px solid transparent;
-    background: linear-gradient(90deg, rgba(10, 20, 40, 0.5), rgba(5, 10, 22, 0.6));
-    border-radius: 4px;
+    background: linear-gradient(90deg, rgba(10, 20, 40, 0.55), rgba(5, 10, 22, 0.55));
+    border-radius: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    border-right: 1px solid rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+    position: relative;
+    overflow: hidden;
 }
-.intel-chronicle-row.run-won  { border-left-color: var(--neon-gold); }
-.intel-chronicle-row.run-lost { border-left-color: var(--neon-pink); }
+.intel-chronicle-row::before {
+    /* Faint diagonal scanline texture so each row reads as a "data
+       packet" card instead of a flat rectangle. */
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        repeating-linear-gradient(135deg,
+            rgba(255, 255, 255, 0.02) 0 1px,
+            transparent 1px 8px);
+    pointer-events: none;
+}
+.intel-chronicle-row.run-won  {
+    border-left-color: var(--neon-gold);
+    box-shadow: -3px 0 14px -6px rgba(255, 215, 0, 0.45);
+}
+.intel-chronicle-row.run-lost {
+    border-left-color: var(--neon-pink);
+    box-shadow: -3px 0 14px -6px rgba(255, 0, 85, 0.45);
+}
+@media (hover: hover) {
+    .intel-chronicle-row:hover {
+        transform: translateX(2px);
+        border-top-color: rgba(0, 243, 255, 0.22);
+        border-right-color: rgba(0, 243, 255, 0.22);
+        border-bottom-color: rgba(0, 243, 255, 0.22);
+    }
+}
 .intel-chronicle-result {
     font-family: var(--font-cyber);
     font-weight: 900;
-    font-size: 0.76rem;
-    letter-spacing: 0.2em;
+    font-size: 0.78rem;
+    letter-spacing: 0.18em;
     color: var(--text-muted);
+    text-align: center;
+    padding: 6px 4px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
-.run-won  .intel-chronicle-result { color: var(--neon-gold); text-shadow: 0 0 6px rgba(255, 215, 0, 0.5); }
-.run-lost .intel-chronicle-result { color: var(--neon-pink); text-shadow: 0 0 6px rgba(255, 0, 85, 0.5); }
-.intel-chronicle-main { text-align: left; }
+.run-won  .intel-chronicle-result {
+    color: var(--neon-gold);
+    text-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
+    background: rgba(255, 215, 0, 0.08);
+    border-color: rgba(255, 215, 0, 0.35);
+}
+.run-lost .intel-chronicle-result {
+    color: var(--neon-pink);
+    text-shadow: 0 0 8px rgba(255, 0, 85, 0.6);
+    background: rgba(255, 0, 85, 0.08);
+    border-color: rgba(255, 0, 85, 0.35);
+}
+.intel-chronicle-main { text-align: left; min-width: 0; }
 .intel-chronicle-class {
     font-family: var(--font-cyber);
     font-weight: 700;
     font-size: 0.95rem;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.12em;
     color: #fff;
+    text-shadow: 0 0 6px rgba(0, 243, 255, 0.2);
 }
 .intel-chronicle-meta {
     font-family: var(--font-main);
-    font-size: 0.76rem;
+    font-size: 0.78rem;
     color: var(--text-muted);
-    margin-top: 2px;
+    margin-top: 3px;
+    letter-spacing: 0.04em;
 }
 .intel-chronicle-cause {
     font-family: var(--font-main);
     font-size: 0.72rem;
     color: var(--neon-pink-text);
-    margin-top: 2px;
+    margin-top: 3px;
+    font-style: italic;
+    opacity: 0.85;
 }
 .intel-chronicle-aside {
     font-family: var(--font-main);
-    font-size: 0.7rem;
+    font-size: 0.72rem;
     color: var(--text-dim);
     text-align: right;
-    letter-spacing: 0.05em;
-    line-height: 1.3;
+    letter-spacing: 0.06em;
+    line-height: 1.4;
+    white-space: nowrap;
 }
 
 .lore-node {
@@ -9701,23 +9920,39 @@ canvas + .game-icon { filter: none; }
     display: flex;
     flex-direction: row;
     flex-wrap: wrap;
-    gap: 10px;
-    width: 80%;
-    max-width: 280px;
+    gap: 8px;
+    width: 88%;
+    max-width: 340px;
     margin: 6px 0;
 }
 .menu-row .btn {
     flex: 1 1 0;
     margin: 0;
     min-width: 0;
+    /* Labels must NEVER wrap inside meta-row buttons — three short words
+       (SANCTUARY / INTEL / SAVES) wrapping mid-letter looks broken. Allow
+       horizontal scaling instead via tightened spacing + responsive font.
+       Use ellipsis on overflow so truncation is visible to the player
+       (silent clip would just look like a styling glitch). */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .menu-row-meta .btn {
-    /* Meta-nav row — slightly tighter type so SANCTUARY / INTEL / SAVES
-       all fit the row at small viewports. */
-    font-size: clamp(0.78rem, 2.4vw, 0.9rem);
-    letter-spacing: 0.12em;
-    padding-left: 8px;
-    padding-right: 8px;
+    /* Meta-nav row — text-fit on the narrowest phones. Min font bumped
+       0.62 → 0.7rem (≈11px) so SANCTUARY stays legible at 320px width;
+       below that threshold ellipsis kicks in. Padding 4px keeps the
+       inner content rect wider than the longest label. */
+    font-size: clamp(0.7rem, 2.6vw, 0.85rem);
+    letter-spacing: 0.06em;
+    padding: 14px 4px;
+}
+.menu-row-modes .btn {
+    /* Same nowrap + responsive scale rule for the run-modes row so
+       CHALLENGE / ARCHIVE labels stay on one line. */
+    font-size: clamp(0.72rem, 2.6vw, 0.95rem);
+    letter-spacing: 0.08em;
+    padding: 14px 6px;
 }
 /* Primary CTAs match the row width so the menu reads as a single
    centred column and stays clear of the bottom L-brackets. */
@@ -9817,51 +10052,242 @@ body.reduced-motion #screen-start #btn-load-save {
     to   { opacity: 1; }
 }
 
-/* Title — add a pulsing halo behind it */
+/* Title — pulsing halo behind it. The beat var (--title-beat, written by
+   game.js menu-pulse rAF using AudioMgr.getBeatPhase) drives the kick
+   each beat; the ambient halo keyframes provide the slow drift.
+   `--title-beat` is 0..1 (sharp 0→1→0 envelope every beat). */
 #screen-start .glow-container {
     position: relative;
     z-index: 2;
+    --title-beat: 0;
+    --title-energy: 0.5;
 }
 #screen-start .glow-container::before {
     content: '';
     position: absolute;
     left: 50%; top: 50%;
     width: 140%; height: 260%;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%) scale(calc(0.92 + var(--title-beat) * 0.22));
     background: radial-gradient(ellipse,
-        rgba(0, 243, 255, 0.28) 0%,
-        rgba(255, 0, 85, 0.18) 30%,
-        rgba(188, 19, 254, 0.08) 55%,
+        rgba(0, 243, 255, 0.32) 0%,
+        rgba(255, 0, 85, 0.22) 30%,
+        rgba(188, 19, 254, 0.10) 55%,
         transparent 75%);
     mix-blend-mode: screen;
     pointer-events: none;
     z-index: -1;
     filter: blur(20px);
+    opacity: calc(0.55 + var(--title-beat) * 0.45);
+    transition: transform 80ms ease-out, opacity 80ms ease-out;
     animation: menu-title-halo 4.5s ease-in-out infinite;
 }
+/* Second halo layer — wider, slower, magenta core. Adds depth so the
+   title sits in a "bigger" pocket of light even when the beat is idle. */
+#screen-start .glow-container::after {
+    content: '';
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 180%; height: 320%;
+    transform: translate(-50%, -50%) scale(calc(0.88 + var(--title-beat) * 0.16));
+    background: radial-gradient(ellipse,
+        rgba(255, 0, 153, 0.22) 0%,
+        rgba(188, 19, 254, 0.14) 35%,
+        transparent 70%);
+    mix-blend-mode: screen;
+    pointer-events: none;
+    z-index: -2;
+    filter: blur(36px);
+    opacity: calc(0.35 + var(--title-beat) * 0.5);
+    transition: transform 120ms ease-out, opacity 120ms ease-out;
+}
 @keyframes menu-title-halo {
-    0%, 100% { transform: translate(-50%, -50%) scale(0.92); opacity: 0.55; }
-    50%      { transform: translate(-50%, -50%) scale(1.08); opacity: 1; }
+    0%, 100% { background-position: 0% 0%; }
+    50%      { background-position: 0% 100%; }
 }
 
-/* Main menu title — adopts the intro's neon pulse so the two screens share
-   a consistent identity. Preserves the gradient fill set in h1.title. */
+/* Main menu title — beat-reactive. The base sits at scale(1); each beat
+   bumps scale + drop-shadow intensity via the --title-beat var written
+   by the rAF loop. text-flicker stays for incidental cyberpunk feel. */
 #screen-start h1.title {
+    --title-beat: 0;
+    /* Min 1.9rem so "MAGIC v MACHINE" (with letter-spacing 4-5.5px) fits
+       on a single line down to 320px viewports — old 2.4rem min wrapped
+       at the iPhone SE width. Max stays 4.2rem on tablet+. */
+    font-size: clamp(1.9rem, 8.2vw, 4.2rem);
+    transform: scale(calc(1 + var(--title-beat) * 0.07));
+    transform-origin: center center;
+    transition: transform 70ms cubic-bezier(0.2, 0.9, 0.3, 1);
     animation:
         text-flicker 5s infinite,
-        menu-title-pulse 3.2s ease-in-out infinite;
+        menu-title-glow 3.2s ease-in-out infinite;
+    will-change: transform, filter;
+    position: relative;
+    /* Prevent the title from wrapping mid-line — the brand wordmark
+       must stay on one row. Tighten letter-spacing in the keyframes
+       provides breathing room without breaking the line. */
+    white-space: nowrap;
 }
-@keyframes menu-title-pulse {
+/* Beat-driven glow stacks on top of the ambient menu-title-glow so the
+   kick reads as an extra punch on every beat instead of replacing the
+   ambient pulse. drop-shadow values scale with --title-beat. */
+#screen-start h1.title {
+    filter:
+        drop-shadow(0 0 calc(8px + var(--title-beat) * 14px) rgba(0, 243, 255, calc(0.6 + var(--title-beat) * 0.4)))
+        drop-shadow(0 0 calc(14px + var(--title-beat) * 24px) rgba(188, 19, 254, calc(0.35 + var(--title-beat) * 0.45)))
+        drop-shadow(0 0 calc(0px + var(--title-beat) * 30px) rgba(255, 0, 85, calc(var(--title-beat) * 0.5)));
+}
+@keyframes menu-title-glow {
+    0%, 100% { letter-spacing: 4px; }
+    50%      { letter-spacing: 5.5px; }
+}
+
+/* Animated scanline that sweeps across the title every ~3s — adds a
+   "live readout" feel without distracting from the text. Renders BEHIND
+   the gradient text (z-index: -1) so the wordmark stays primary; the
+   scanline shows through the transparent letter shapes thanks to
+   `-webkit-text-fill-color: transparent` on the title. mix-blend-mode
+   adds a subtle bloom on the surrounding glow halos. */
+#screen-start h1.title::before {
+    content: '';
+    position: absolute;
+    inset: -6% -2%;
+    background: linear-gradient(180deg,
+        transparent 0%,
+        transparent 45%,
+        rgba(0, 243, 255, 0.55) 49%,
+        rgba(255, 255, 255, 0.85) 50%,
+        rgba(0, 243, 255, 0.55) 51%,
+        transparent 55%,
+        transparent 100%);
+    mix-blend-mode: screen;
+    pointer-events: none;
+    opacity: 0.6;
+    animation: title-scanline 3.2s linear infinite;
+    z-index: -1;
+}
+@keyframes title-scanline {
+    0%   { transform: translateY(-110%); opacity: 0; }
+    8%   { opacity: 0.85; }
+    50%  { opacity: 0.7; }
+    92%  { opacity: 0.85; }
+    100% { transform: translateY(110%); opacity: 0; }
+}
+
+/* The "v" separator — glitch flicker so the centerpiece of the title
+   feels alive between beats. Color-shifts pink → cyan → white. */
+#screen-start h1.title .vs {
+    animation: vs-glitch 2.4s steps(8, end) infinite;
+}
+@keyframes vs-glitch {
     0%, 100% {
-        filter:
-            drop-shadow(0 0 8px rgba(0, 243, 255, 0.6))
-            drop-shadow(0 0 14px rgba(188, 19, 254, 0.35));
+        color: var(--neon-pink);
+        -webkit-text-fill-color: var(--neon-pink);
+        text-shadow: 0 0 18px var(--neon-pink), 0 0 32px rgba(255, 0, 153, 0.6);
+        transform: translate(0, 0);
     }
-    50% {
-        filter:
-            drop-shadow(0 0 14px rgba(0, 243, 255, 0.9))
-            drop-shadow(0 0 26px rgba(188, 19, 254, 0.6))
-            drop-shadow(0 0 40px rgba(255, 0, 85, 0.35));
+    12% {
+        color: var(--neon-blue);
+        -webkit-text-fill-color: var(--neon-blue);
+        text-shadow: 2px 0 0 #ff00aa, -2px 0 0 #00f3ff;
+        transform: translate(-1px, 1px);
+    }
+    18% {
+        color: #fff;
+        -webkit-text-fill-color: #fff;
+        text-shadow: 0 0 26px #fff, 0 0 40px var(--neon-pink);
+        transform: translate(2px, -1px);
+    }
+    24% {
+        color: var(--neon-pink);
+        -webkit-text-fill-color: var(--neon-pink);
+        text-shadow: 0 0 14px var(--neon-pink);
+        transform: translate(0, 0);
+    }
+    62% {
+        color: var(--neon-pink);
+        -webkit-text-fill-color: var(--neon-pink);
+        transform: translate(0, 0);
+    }
+    66% {
+        color: #fff;
+        -webkit-text-fill-color: #fff;
+        text-shadow: -3px 0 0 #00f3ff, 3px 0 0 #ff00aa;
+        transform: translate(0, -1px);
+    }
+}
+
+/* Energy bars radiating from the title's left + right edges. Stacked
+   pseudo-elements on .glow-container draw two thin gradient sweeps
+   that pulse with the beat; the var-driven opacity hooks them into
+   the music. Pure CSS — no DOM additions. */
+#screen-start .title-energy-bars {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+}
+#screen-start .title-energy-bars::before,
+#screen-start .title-energy-bars::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    height: 2px;
+    width: 40%;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(0, 243, 255, 0.0) 8%,
+        rgba(0, 243, 255, 0.85) 50%,
+        rgba(255, 0, 153, 0.85) 80%,
+        transparent 100%);
+    transform: translateY(-50%);
+    opacity: calc(0.35 + var(--title-beat, 0) * 0.65);
+    filter: blur(0.5px) drop-shadow(0 0 6px var(--neon-blue));
+    transition: opacity 60ms ease-out;
+}
+#screen-start .title-energy-bars::before {
+    left: -10%;
+    animation: title-energy-left 4.8s ease-in-out infinite;
+}
+#screen-start .title-energy-bars::after {
+    right: -10%;
+    background: linear-gradient(270deg,
+        transparent 0%,
+        rgba(255, 0, 153, 0.0) 8%,
+        rgba(255, 0, 153, 0.85) 50%,
+        rgba(0, 243, 255, 0.85) 80%,
+        transparent 100%);
+    animation: title-energy-right 4.8s ease-in-out infinite;
+}
+@keyframes title-energy-left {
+    0%, 100% { transform: translateY(-50%) translateX(-30%); }
+    50%      { transform: translateY(-50%) translateX(0%); }
+}
+@keyframes title-energy-right {
+    0%, 100% { transform: translateY(-50%) translateX(30%); }
+    50%      { transform: translateY(-50%) translateX(0%); }
+}
+
+body.reduced-motion #screen-start h1.title,
+body.reduced-motion #screen-start .glow-container::before,
+body.reduced-motion #screen-start .glow-container::after,
+body.reduced-motion #screen-start h1.title::before,
+body.reduced-motion #screen-start h1.title .vs,
+body.reduced-motion #screen-start .title-energy-bars::before,
+body.reduced-motion #screen-start .title-energy-bars::after {
+    animation: none !important;
+    transform: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+    #screen-start h1.title,
+    #screen-start .glow-container::before,
+    #screen-start .glow-container::after,
+    #screen-start h1.title::before,
+    #screen-start h1.title .vs,
+    #screen-start .title-energy-bars::before,
+    #screen-start .title-energy-bars::after {
+        animation: none !important;
+        transform: none !important;
     }
 }
 
@@ -12104,57 +12530,91 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
 .intel-chronicle-stats {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
+    gap: 10px;
     width: min(680px, 100%);
-    margin: 0 auto 10px;
+    margin: 0 auto 12px;
 }
 .intel-chronicle-stat {
     text-align: center;
-    padding: 8px 6px;
-    border-radius: 8px;
-    background: rgba(0, 243, 255, 0.05);
-    border: 1px solid rgba(0, 243, 255, 0.18);
+    padding: 12px 8px;
+    border-radius: 10px;
+    background:
+        linear-gradient(180deg, rgba(0, 243, 255, 0.10), rgba(0, 243, 255, 0.02));
+    border: 1px solid rgba(0, 243, 255, 0.28);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.06),
+        0 0 14px rgba(0, 243, 255, 0.10);
+    position: relative;
+    overflow: hidden;
+}
+.intel-chronicle-stat::before {
+    /* Top neon accent line — same HUD-terminal feel as the menu CTAs. */
+    content: '';
+    position: absolute;
+    top: 0; left: 12px; right: 12px;
+    height: 1px;
+    background: linear-gradient(90deg,
+        transparent, var(--neon-blue) 50%, transparent);
+    opacity: 0.7;
 }
 .intel-chronicle-stat-label {
     font-family: 'Orbitron', monospace;
-    font-size: 0.55rem;
-    letter-spacing: 0.2em;
-    color: rgba(180, 210, 230, 0.6);
+    font-size: 0.58rem;
+    letter-spacing: 0.22em;
+    color: rgba(180, 220, 240, 0.7);
 }
 .intel-chronicle-stat-value {
     font-family: 'Orbitron', monospace;
-    font-size: 1.1rem;
+    font-size: 1.25rem;
     color: #fff;
-    margin-top: 2px;
+    margin-top: 4px;
+    text-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
+    letter-spacing: 0.05em;
 }
 .intel-chronicle-filters {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
     width: min(680px, 100%);
-    margin: 0 auto 10px;
+    margin: 0 auto 14px;
     justify-content: center;
+    padding: 4px 0;
 }
 .intel-chronicle-filter {
     font-family: 'Orbitron', monospace;
-    font-size: 0.6rem;
+    font-size: 0.66rem;
+    font-weight: 700;
     letter-spacing: 0.18em;
-    padding: 4px 10px;
+    padding: 7px 14px;
     border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    background: transparent;
-    color: rgba(220, 235, 245, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(0, 0, 0, 0.25);
+    color: rgba(220, 235, 245, 0.72);
     cursor: pointer;
+    transition: color 160ms, border-color 160ms, background 160ms, box-shadow 160ms;
+    min-height: 32px;
 }
-.intel-chronicle-filter:hover { color: #fff; border-color: var(--neon-blue); }
+.intel-chronicle-filter:hover {
+    color: #fff;
+    border-color: var(--neon-blue);
+    box-shadow: 0 0 8px rgba(0, 243, 255, 0.3);
+}
 .intel-chronicle-filter.active {
-    background: var(--neon-blue);
+    background: linear-gradient(180deg, var(--neon-blue), #00b9d4);
     color: #001020;
     border-color: var(--neon-blue);
+    box-shadow:
+        0 0 12px rgba(0, 243, 255, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 @media (max-width: 640px) {
-    .intel-chronicle-stats { grid-template-columns: repeat(2, 1fr); }
-    .intel-chronicle-stat-value { font-size: 0.95rem; }
+    .intel-chronicle-stats { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .intel-chronicle-stat-value { font-size: 1.05rem; }
+    .intel-chronicle-stat { padding: 10px 6px; }
+    .intel-chronicle-filter { font-size: 0.6rem; padding: 6px 10px; letter-spacing: 0.14em; }
+    .intel-chronicle-row { grid-template-columns: 50px 1fr auto; gap: 10px; padding: 10px; }
+    .intel-chronicle-class { font-size: 0.88rem; }
+    .intel-chronicle-aside { font-size: 0.66rem; }
 }
 
 .intel-cipher-header {

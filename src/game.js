@@ -2012,6 +2012,14 @@ startQTE(type, x, y, callback, opts) {
                 alignedVFX: aligned,
                 alignedVFXFired: false,
                 alignedVFXDelayMs: vfxDelayMs,
+                // Per-wave hook for chain attacks (e.g. Starfall): fires
+                // once per wave with that wave's own quality + multiplier
+                // so each part of the chain can deal its own damage,
+                // instead of the chain collapsing to a single worst-of
+                // multiplier on the final tap. Opt-in — single-wave QTEs
+                // and existing chain QTEs that don't pass it keep the old
+                // worst-of-waves behaviour.
+                perWaveCallback: (opts && opts.onWave) || null,
                 callback: callback || resolve
             };
 
@@ -2551,6 +2559,28 @@ startQTE(type, x, y, callback, opts) {
         // moment the player misses.
         if (this.qte.waveTotal > 1 && this.qte.active) {
             this.qte.waveQualities.push(quality);
+
+            // Per-wave damage hook (chain attacks). Each wave gets its
+            // own multiplier — perfect on this wave damages with 1.6×,
+            // a missed wave deals 0× (no damage from that part). The
+            // chain breaks on fail/early just like before, so subsequent
+            // waves never fire.
+            if (this.qte.perWaveCallback) {
+                let waveMult = 0;
+                if (quality !== 'fail' && quality !== 'early') {
+                    if (this.qte.type === 'ATTACK') {
+                        waveMult = quality === 'perfect' ? 1.6
+                                 : quality === 'good'    ? 1.15
+                                 : 0;
+                    } else {
+                        waveMult = quality === 'perfect' ? 0.0
+                                 : quality === 'good'    ? 0.6
+                                 : 1.0;
+                    }
+                }
+                try { this.qte.perWaveCallback(quality, this.qte.waveIdx, waveMult); } catch (_) {}
+            }
+
             const isLast = (this.qte.waveIdx >= this.qte.waveTotal - 1);
             const broke = (quality === 'fail' || quality === 'early');
             if (!isLast && !broke) {
@@ -2736,7 +2766,50 @@ startQTE(type, x, y, callback, opts) {
         if (cb) cb(multiplier);
     },
 
+    // Menu music-pulse loop. Drives a CSS variable on the title that
+    // CSS uses to scale + glow on the beat. Anchored to bgm.currentTime
+    // via AudioMgr.getBeatPhase so the visual stays in step with the
+    // actual audio (or a time fallback when bgm is muted/paused).
+    // Auto-stops when we leave MENU so we're not running rAF in combat.
+    _startMenuPulse() {
+        if (this._menuPulseRaf) return;
+        const titleEl = document.querySelector('#screen-start h1.title');
+        const haloEl  = document.querySelector('#screen-start .glow-container');
+        if (!titleEl) return;
+        const tick = () => {
+            this._menuPulseRaf = requestAnimationFrame(tick);
+            if (this.currentState !== STATE.MENU) { this._stopMenuPulse(); return; }
+            const b = (AudioMgr && AudioMgr.getBeatPhase) ? AudioMgr.getBeatPhase(120) : null;
+            if (!b) return;
+            // Combine beat + bar so the every-4th-beat downbeat lands harder.
+            const pulse = Math.max(b.beatPulse, b.barPulse * 1.3);
+            titleEl.style.setProperty('--title-beat', pulse.toFixed(3));
+            titleEl.style.setProperty('--title-energy', b.energy.toFixed(3));
+            if (haloEl) haloEl.style.setProperty('--title-beat', pulse.toFixed(3));
+        };
+        this._menuPulseRaf = requestAnimationFrame(tick);
+    },
+    _stopMenuPulse() {
+        if (this._menuPulseRaf) {
+            cancelAnimationFrame(this._menuPulseRaf);
+            this._menuPulseRaf = null;
+        }
+        // Reset the beat var so a frozen pulse doesn't snap into the
+        // next menu open — without this, the title would flash at
+        // whatever scale/glow the last frame wrote on exit.
+        const titleEl = document.querySelector('#screen-start h1.title');
+        const haloEl  = document.querySelector('#screen-start .glow-container');
+        if (titleEl) titleEl.style.setProperty('--title-beat', '0');
+        if (haloEl)  haloEl.style.setProperty('--title-beat', '0');
+    },
+
     changeState(newState) {
+        // Stop the menu beat-pulse rAF whenever we leave MENU. The tick
+        // self-stops on its next frame too, but explicit cleanup here
+        // avoids a one-frame leak window during the state transition.
+        if (this.currentState === STATE.MENU && newState !== STATE.MENU) {
+            this._stopMenuPulse && this._stopMenuPulse();
+        }
         // Direction inference: forward states (deeper into a run) slide left;
         // back/menu states slide right; lateral states (shop/event/etc.) fade up.
         const FORWARD = new Set([STATE.CHAR_SELECT, STATE.MAP, STATE.COMBAT, STATE.TUTORIAL_COMBAT, STATE.REWARD, STATE.COMBAT_WIN, STATE.SHOP, STATE.EVENT, STATE.HEX, STATE.STORY, STATE.ENDING, STATE.VICTORY]);
@@ -2851,6 +2924,7 @@ startQTE(type, x, y, callback, opts) {
             case STATE.MENU:
                 activate('screen-start');
                 Unlocks.applyMenuVisibility();
+                this._startMenuPulse();
                 // Personalize the menu subtitle with the operator callsign.
                 {
                     const subEl = document.querySelector('#screen-start .subtitle');
@@ -8115,6 +8189,15 @@ triggerSystemCrash() {
         const modal = document.getElementById('save-slot-modal');
         const list = document.getElementById('save-slot-list');
         if (!modal || !list) return;
+        // Reparent the modal to <body> so `position: fixed` is scoped to
+        // the viewport, not #screen-start. The .screen ancestor has
+        // transform + filter + will-change set, all of which create a
+        // containing block for fixed positioning — without this hop the
+        // modal panel is sized to the screen rect (smaller than the
+        // viewport) and overflows the bottom of the menu canvas.
+        if (modal.parentNode !== document.body) {
+            document.body.appendChild(modal);
+        }
         const slots = this._listSaveSlots();
         const active = this._activeSlot();
         list.innerHTML = '';
@@ -8128,18 +8211,36 @@ triggerSystemCrash() {
                 body = '<div class="save-slot-empty" style="color:#ff6b9b">Corrupted</div>';
             } else {
                 const mode = s.challengeMode ? 'CHALLENGE' : (s.archiveMode ? 'ARCHIVE' : 'STORY');
+                // Compact metadata: pair fields into a 2-col grid so the
+                // card's vertical footprint is ~half what a stacked rows
+                // layout produced. Mode badge sits on its own line so the
+                // mode reads as the primary "what kind of run" cue.
                 body = `
-                    <div class="save-slot-meta-row"><span>Class</span><span>${(s.classId || 'unknown').toUpperCase()}</span></div>
-                    <div class="save-slot-meta-row"><span>Sector</span><span>${s.sector || 1}</span></div>
-                    <div class="save-slot-meta-row"><span>HP</span><span>${s.hp || 0} / ${s.maxHp || 0}</span></div>
-                    <div class="save-slot-meta-row"><span>Modules</span><span>${s.relicCount || 0}</span></div>
-                    <div class="save-slot-meta-row"><span>Mode</span><span>${mode}</span></div>
+                    <div class="save-slot-mode-tag save-slot-mode-${mode.toLowerCase()}">${mode}</div>
+                    <div class="save-slot-meta-grid">
+                        <div class="save-slot-meta-cell">
+                            <span class="save-slot-meta-label">CLASS</span>
+                            <span class="save-slot-meta-val">${(s.classId || '???').toUpperCase()}</span>
+                        </div>
+                        <div class="save-slot-meta-cell">
+                            <span class="save-slot-meta-label">SECTOR</span>
+                            <span class="save-slot-meta-val">${s.sector || 1}</span>
+                        </div>
+                        <div class="save-slot-meta-cell">
+                            <span class="save-slot-meta-label">HP</span>
+                            <span class="save-slot-meta-val">${s.hp || 0}/${s.maxHp || 0}</span>
+                        </div>
+                        <div class="save-slot-meta-cell">
+                            <span class="save-slot-meta-label">MODULES</span>
+                            <span class="save-slot-meta-val">${s.relicCount || 0}</span>
+                        </div>
+                    </div>
                 `;
             }
             card.innerHTML = `
                 <div class="save-slot-head">
                     <span class="save-slot-letter">SLOT ${s.slot}</span>
-                    ${s.slot === active ? '<span class="save-slot-active-tag">ACTIVE</span>' : ''}
+                    ${s.slot === active ? '<span class="save-slot-active-tag">ACTIVE</span>' : '<span class="save-slot-active-tag dim">IDLE</span>'}
                 </div>
                 <div class="save-slot-body">${body}</div>
                 <div class="save-slot-card-actions">
@@ -9170,14 +9271,43 @@ triggerSystemCrash() {
         const d = document;
         const tabs = d.querySelectorAll('.intel-tab');
         if (!tabs.length) return;
+        // Initial aria-selected sync — pane that already has .active wins.
+        tabs.forEach(t => t.setAttribute('aria-selected', t.classList.contains('active') ? 'true' : 'false'));
         tabs.forEach(tab => {
             tab.onclick = () => {
                 const target = tab.dataset.intelTab;
-                tabs.forEach(t => t.classList.toggle('active', t === tab));
+                tabs.forEach(t => {
+                    const isActive = (t === tab);
+                    t.classList.toggle('active', isActive);
+                    t.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                });
                 d.querySelectorAll('.intel-pane').forEach(p => {
                     p.classList.toggle('active', p.dataset.intelPane === target);
                 });
+                // Reset the screen's scroll position when switching tabs so
+                // the next pane always opens at its top — without this, a
+                // long Chronicle scroll position bled into Cipher and made
+                // the DECRYPT FILE button render off-viewport on entry.
+                const screen = d.getElementById('screen-intel');
+                if (screen && screen.scrollTo) {
+                    screen.scrollTo({ top: 0, behavior: 'auto' });
+                }
                 AudioMgr.playSound && AudioMgr.playSound('click');
+            };
+            // Arrow-key navigation between tabs — left/right cycles, with
+            // wrap. Keeps focus visible so keyboard users can switch panes
+            // without having to tab through every other interactive
+            // element on the screen.
+            tab.onkeydown = (e) => {
+                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                e.preventDefault();
+                const arr = Array.from(tabs);
+                const i = arr.indexOf(tab);
+                const next = e.key === 'ArrowRight'
+                    ? arr[(i + 1) % arr.length]
+                    : arr[(i - 1 + arr.length) % arr.length];
+                next.focus();
+                next.click();
             };
         });
     },
@@ -12803,34 +12933,39 @@ async startTurn() {
                 }, 500);
 
             } else if (type === 'METEOR') {
-                const onMeteorHit = () => {
-                    let dmg = isUpgraded ? 60 : 50;
-                    dmg = this.calculateCardDamage(dmg, type);
-                    dmg = Math.floor(dmg * qteMultiplier * chargeMult);
+                // Upgraded METEOR (Starfall) is a 3-part chain handled by the
+                // per-wave onWave hook in startQTE — each wave fires its own
+                // meteor + damage. Nothing to do here on the terminal callback.
+                if (!isUpgraded) {
+                    const onMeteorHit = () => {
+                        let dmg = 50;
+                        dmg = this.calculateCardDamage(dmg, type);
+                        dmg = Math.floor(dmg * qteMultiplier * chargeMult);
 
-                    if (finalEnemy.takeDamage(dmg)) {
-                        if (finalEnemy === this.enemy) {
-                            this.winCombat();
-                        } else {
-                            if (this.enemy) this.enemy.minions = this.enemy.minions.filter(m => m !== finalEnemy);
-                            if(this.player.hasRelic('brutalize') && !finalEnemy.isPlayerSide) {
-                                 this.triggerBrutalize(finalEnemy);
+                        if (finalEnemy.takeDamage(dmg)) {
+                            if (finalEnemy === this.enemy) {
+                                this.winCombat();
+                            } else {
+                                if (this.enemy) this.enemy.minions = this.enemy.minions.filter(m => m !== finalEnemy);
+                                if(this.player.hasRelic('brutalize') && !finalEnemy.isPlayerSide) {
+                                     this.triggerBrutalize(finalEnemy);
+                                }
                             }
                         }
+                    };
+                    // Aligned-VFX path: orbital_strike was already fired at
+                    // QTE active-phase start; the meteor is mid-flight. Skip
+                    // the duplicate trigger and schedule the damage callback
+                    // to coincide with the visual impact (remaining flight
+                    // time = total impact time minus what's already elapsed).
+                    if (this._alignedAttackVfxFired === 'orbital_strike') {
+                        const elapsed = Date.now() - (this._alignedAttackVfxStart || Date.now());
+                        const remaining = Math.max(0, (this._alignedAttackVfxImpactMs || 600) - elapsed);
+                        this._alignedAttackVfxFired = null;
+                        setTimeout(onMeteorHit, remaining);
+                    } else {
+                        this.triggerVFX('orbital_strike', this.player, finalEnemy, onMeteorHit);
                     }
-                };
-                // Aligned-VFX path: orbital_strike was already fired at
-                // QTE active-phase start; the meteor is mid-flight. Skip
-                // the duplicate trigger and schedule the damage callback
-                // to coincide with the visual impact (remaining flight
-                // time = total impact time minus what's already elapsed).
-                if (this._alignedAttackVfxFired === 'orbital_strike') {
-                    const elapsed = Date.now() - (this._alignedAttackVfxStart || Date.now());
-                    const remaining = Math.max(0, (this._alignedAttackVfxImpactMs || 600) - elapsed);
-                    this._alignedAttackVfxFired = null;
-                    setTimeout(onMeteorHit, remaining);
-                } else {
-                    this.triggerVFX('orbital_strike', this.player, finalEnemy, onMeteorHit);
                 }
 
             } else if (type === 'CONSTRICT') {
@@ -12899,6 +13034,49 @@ async startTurn() {
         }
 
         if (this._isAttackSlot(type)) {
+             // Starfall (upgraded METEOR) — chain QTE with N parts, each
+             // part fires its own meteor + damage. A missed part deals 0
+             // damage AND breaks the chain (no further parts), mirroring
+             // the rule that every link in the chain matters. Per-part
+             // base 30 × 3 = 90 ceiling beats the old single-hit 60, so
+             // a clean Starfall lands harder than a clean Meteor.
+             if (type === 'METEOR' && isUpgraded) {
+                 const STARFALL_WAVES = 3;
+                 const STARFALL_PER_HIT = 30;
+                 // Consume nextAttackMult here so each part of the chain
+                 // scales by the same Reckless-Charge / Vicious-Charge
+                 // multiplier the player set up. executeAction's own
+                 // chargeMult read (after the chain resolves) sees 1.0
+                 // and the Starfall branch there is already a no-op.
+                 const starfallChargeMult = this.player.nextAttackMult || 1;
+                 this.player.nextAttackMult = 1;
+                 this.startQTE('ATTACK', finalEnemy.x, finalEnemy.y, executeAction, {
+                     pattern: 'multi',
+                     waves: STARFALL_WAVES,
+                     onWave: (quality, waveIdx, waveMult) => {
+                         if (waveMult <= 0) return;
+                         if (!finalEnemy || finalEnemy.currentHp <= 0) return;
+                         const targetRef = finalEnemy;
+                         this.triggerVFX('orbital_strike', this.player, targetRef, () => {
+                             if (!targetRef || targetRef.currentHp <= 0) return;
+                             let dmg = STARFALL_PER_HIT;
+                             dmg = this.calculateCardDamage(dmg, type);
+                             dmg = Math.floor(dmg * waveMult * starfallChargeMult);
+                             if (targetRef.takeDamage(dmg)) {
+                                 if (targetRef === this.enemy) {
+                                     this.winCombat();
+                                 } else {
+                                     if (this.enemy) this.enemy.minions = this.enemy.minions.filter(m => m !== targetRef);
+                                     if (this.player.hasRelic('brutalize') && !targetRef.isPlayerSide) {
+                                         this.triggerBrutalize(targetRef);
+                                     }
+                                 }
+                             }
+                         });
+                     }
+                 });
+                 return;
+             }
              // Build the aligned-VFX bundle so the actual attack animation
              // plays DURING the QTE active phase. The QTE shrink time is
              // tuned to the VFX's natural impact time so the ring crosses
