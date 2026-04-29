@@ -20,7 +20,7 @@
 // Re-run is idempotent — existing .m4a files are overwritten.
 
 import { spawnSync } from 'node:child_process';
-import { readdirSync, statSync, existsSync } from 'node:fs';
+import { readdirSync, statSync, existsSync, rmSync } from 'node:fs';
 import { resolve, join, dirname, basename, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -28,13 +28,25 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const MUSIC_DIR = join(ROOT, 'music');
 
-const BITRATE = '96k';
+const BITRATE = '64k';
+// Override the ffmpeg binary path with the FFMPEG_BIN env var, e.g.
+//   FFMPEG_BIN="/c/path/to/ffmpeg.exe" npm run compress:music
+// Useful when ffmpeg is bundled with another app (Stacher, OBS,
+// VLC, etc.) and you don't want to install a global copy.
+const FFMPEG = process.env.FFMPEG_BIN || 'ffmpeg';
+// Ratio we'll accept before keeping the AAC output: 0.85 = output
+// must be at least 15% smaller than the OGG, otherwise we delete
+// the .m4a so the build-www OGG-strip path leaves the original
+// alone. Some sources are already low-bitrate Vorbis and AAC at
+// the same target ends up bigger — no point shipping a worse copy.
+const KEEP_THRESHOLD = 0.85;
 
 function checkFfmpeg() {
-    const r = spawnSync('ffmpeg', ['-version'], { stdio: 'pipe' });
+    const r = spawnSync(FFMPEG, ['-version'], { stdio: 'pipe' });
     if (r.error || r.status !== 0) {
-        console.error('compress-music: ffmpeg not found on PATH.');
-        console.error('Install from https://ffmpeg.org/download.html and rerun.');
+        console.error(`compress-music: ffmpeg not found (tried "${FFMPEG}").`);
+        console.error('Install from https://ffmpeg.org/download.html, OR set');
+        console.error('FFMPEG_BIN to point at an existing ffmpeg.exe and rerun.');
         process.exit(1);
     }
 }
@@ -47,7 +59,7 @@ function compressOne(srcPath) {
     const name = basename(srcPath, extname(srcPath));
     const outPath = join(dirname(srcPath), name + '.m4a');
     console.log(`compress-music: ${basename(srcPath)} → ${basename(outPath)}`);
-    const r = spawnSync('ffmpeg', [
+    const r = spawnSync(FFMPEG, [
         '-y',
         '-i', srcPath,
         '-c:a', 'aac',
@@ -61,7 +73,16 @@ function compressOne(srcPath) {
     }
     const inSz  = statSync(srcPath).size;
     const outSz = statSync(outPath).size;
+    if (outSz > inSz * KEEP_THRESHOLD) {
+        // The source was already well-compressed; AAC at this bitrate
+        // either matches or beats it only marginally. Drop the m4a so
+        // the OGG ships alone in the APK.
+        rmSync(outPath);
+        console.log(`  ${fmtMb(inSz)} → ${fmtMb(outSz)}  (skipped: not enough savings)`);
+        return { kept: false, inSz, outSz: inSz };
+    }
     console.log(`  ${fmtMb(inSz)} → ${fmtMb(outSz)}  (saved ${fmtMb(inSz - outSz)})`);
+    return { kept: true, inSz, outSz };
 }
 
 function main() {
@@ -79,10 +100,9 @@ function main() {
     }
     let totalIn = 0, totalOut = 0;
     for (const src of oggs) {
-        totalIn += statSync(src).size;
-        compressOne(src);
-        const out = src.replace(/\.ogg$/i, '.m4a');
-        if (existsSync(out)) totalOut += statSync(out).size;
+        const r = compressOne(src);
+        totalIn  += r.inSz;
+        totalOut += r.outSz;
     }
     console.log('---');
     console.log(`compress-music: total ${fmtMb(totalIn)} → ${fmtMb(totalOut)}  (saved ${fmtMb(totalIn - totalOut)})`);
