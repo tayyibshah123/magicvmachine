@@ -21,8 +21,14 @@ beforeEach(() => {
 });
 
 describe('UNIQUE_PER_HAND + BASE_DICE', () => {
+    // BASE_DICE is a class-aware getter — it reads Game.player.classId and
+    // returns that class's four zero-cost dice. Tactician's are TAC_*; we
+    // pin classId here so the assertions exercise a known set.
+    const setupTactician = (Game) => { Game.player = { classId: 'tactician' }; };
+
     it('exports the expected sets', async () => {
         const { Game } = await import('../game.js');
+        setupTactician(Game);
         expect(Game.UNIQUE_PER_HAND instanceof Set).toBe(true);
         expect(Game.UNIQUE_PER_HAND.has('RECKLESS_CHARGE')).toBe(true);
         expect(Game.UNIQUE_PER_HAND.has('OVERCHARGE')).toBe(true);
@@ -37,12 +43,19 @@ describe('UNIQUE_PER_HAND + BASE_DICE', () => {
         expect(Game.UNIQUE_PER_HAND.has('SIGNATURE')).toBe(false);
     });
 
-    it('BASE_DICE contains exactly the four zero-cost types', async () => {
+    it('BASE_DICE contains exactly the four zero-cost types for the active class', async () => {
         const { Game } = await import('../game.js');
+        setupTactician(Game);
         expect(Game.BASE_DICE.size).toBe(4);
         for (const t of ['TAC_ATTACK', 'TAC_DEFEND', 'TAC_MANA', 'TAC_MINION']) {
             expect(Game.BASE_DICE.has(t)).toBe(true);
         }
+    });
+
+    it('BASE_DICE returns empty set when no class is active', async () => {
+        const { Game } = await import('../game.js');
+        Game.player = null;
+        expect(Game.BASE_DICE.size).toBe(0);
     });
 });
 
@@ -190,6 +203,10 @@ describe('pity timer logic', () => {
 describe('base-dice floor logic', () => {
     it('last slot selects a base die when no base placed yet', async () => {
         const { Game } = await import('../game.js');
+        // Pin a class so BASE_DICE resolves — getter returns empty set when
+        // player.classId is not set, which would make the candidate filter
+        // empty and the test meaningless.
+        Game.player = { classId: 'tactician' };
         const baseCandidates = ['TAC_ATTACK', 'TAC_DEFEND', 'TAC_MANA', 'TAC_MINION']
             .filter(t => Game.BASE_DICE.has(t));
         expect(baseCandidates.length).toBeGreaterThan(0);

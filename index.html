@@ -187,9 +187,9 @@
                 <div class="spacer"></div>
 
                 <!-- Save Slot picker — modal listing A/B/C with metadata. -->
-                <div id="save-slot-modal" class="save-slot-modal hidden" role="dialog" aria-modal="true">
+                <div id="save-slot-modal" class="save-slot-modal hidden" role="dialog" aria-modal="true" aria-labelledby="save-slot-title-h">
                     <div class="save-slot-panel glass-panel">
-                        <h3 class="save-slot-title neon-text-gold">SAVE SLOTS</h3>
+                        <h3 id="save-slot-title-h" class="save-slot-title neon-text-gold">SAVE SLOTS</h3>
                         <p class="save-slot-sub">Pick the slot future saves write to. Each slot keeps its own run.</p>
                         <div id="save-slot-list" class="save-slot-list"></div>
                         <div class="save-slot-actions">
@@ -238,9 +238,9 @@
                 <button id="btn-back-char" class="btn secondary">ABORT</button>
 
                 <!-- Custom Run configuration modal -->
-                <div id="custom-run-modal" class="custom-run-modal hidden" role="dialog" aria-modal="true">
+                <div id="custom-run-modal" class="custom-run-modal hidden" role="dialog" aria-modal="true" aria-labelledby="custom-run-title-h">
                     <div class="custom-run-panel glass-panel glass-panel--premium">
-                        <h3 class="custom-run-title neon-text-pink">CUSTOM RUN</h3>
+                        <h3 id="custom-run-title-h" class="custom-run-title neon-text-pink">CUSTOM RUN</h3>
                         <p class="custom-run-sub">Stack modifiers to sharpen the run. Payout scales with the difficulty you accept.</p>
                         <div id="custom-run-presets" class="custom-run-presets">
                             <button class="custom-run-preset" data-preset="hardcore">HARDCORE</button>
@@ -954,9 +954,9 @@
 
     <!-- Sanctuary NPC service modal (Smith / Oracle / Curator). Top-level so
          it can overlay the sanctuary (META) screen. -->
-    <div id="sanctuary-npc-modal" class="sanctuary-npc-modal hidden" role="dialog" aria-modal="true">
+    <div id="sanctuary-npc-modal" class="sanctuary-npc-modal hidden" role="dialog" aria-modal="true" aria-labelledby="sanctuary-npc-title">
         <div class="sanctuary-npc-content glass-panel">
-            <h2 class="sanctuary-npc-title neon-text-gold">NPC</h2>
+            <h2 id="sanctuary-npc-title" class="sanctuary-npc-title neon-text-gold">NPC</h2>
             <div class="sanctuary-npc-body"></div>
             <div class="sanctuary-npc-actions">
                 <button class="btn secondary" data-action="npc-close">CLOSE</button>

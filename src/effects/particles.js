@@ -215,6 +215,12 @@ const ParticleSys = {
         let lastFont = null;
         let lastLineWidth = -1;
         const useShadow = this.quality >= 0.5;
+        // Font-string cache: `900 ${fs}px 'Orbitron'` was being allocated
+        // per text particle per frame. With 5-10 floaters active, that's
+        // 300+ string allocations/sec on top of the GC pressure from
+        // damage burst combat. The fontSize space is small (mostly
+        // 36/40/48/56/64), so a cache hits ~100% after warmup.
+        const fontCache = ParticleSys._fontCache || (ParticleSys._fontCache = {});
         for (let i = 0; i < this.pool.length; i++) {
             const p = this.pool[i];
             if (!p.active || !p.text) continue;
@@ -226,7 +232,7 @@ const ParticleSys = {
             }
             ctx.globalAlpha = p.alpha;
             const fs = p.fontSize || 48;
-            const font = `900 ${fs}px 'Orbitron'`;
+            const font = fontCache[fs] || (fontCache[fs] = `900 ${fs}px 'Orbitron'`);
             if (font !== lastFont) { ctx.font = font; lastFont = font; }
             const lw = Math.max(4, fs / 6);
             if (lw !== lastLineWidth) { ctx.lineWidth = lw; lastLineWidth = lw; }

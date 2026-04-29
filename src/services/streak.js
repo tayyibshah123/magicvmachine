@@ -48,11 +48,17 @@ function writeClaimedMilestones(arr) {
     try { localStorage.setItem(KEY_MILESTONES, JSON.stringify(arr)); } catch (e) {}
 }
 
+// Wrap raw localStorage reads/writes — Safari Private mode + a few
+// Capacitor WebView profiles throw on access. Treat any failure as
+// "no record" so the streak just resets, never crashes.
+const _read  = (key) => { try { return localStorage.getItem(key); } catch (_) { return null; } };
+const _write = (key, val) => { try { localStorage.setItem(key, val); } catch (_) {} };
+
 export const Streak = {
     tick() {
         const today = todayStr();
-        const last  = localStorage.getItem(KEY_LAST_LOGIN);
-        let streak  = parseInt(localStorage.getItem(KEY_STREAK) || '0', 10) || 0;
+        const last  = _read(KEY_LAST_LOGIN);
+        let streak  = parseInt(_read(KEY_STREAK) || '0', 10) || 0;
         let claimedMilestone = null;
         let bonus = 0;
         let usedGrace = false;
@@ -69,12 +75,12 @@ export const Streak = {
                 streak += 1;
             } else if (gap === 2) {
                 // Grace: one missed day per 7-day window is forgiven.
-                const graceLast = localStorage.getItem(KEY_GRACE_USED);
+                const graceLast = _read(KEY_GRACE_USED);
                 const graceGap = graceLast ? daysBetween(graceLast, today) : 999;
                 if (graceGap >= 7) {
                     streak += 1;
                     usedGrace = true;
-                    localStorage.setItem(KEY_GRACE_USED, today);
+                    _write(KEY_GRACE_USED, today);
                 } else {
                     streak = 1;
                 }
@@ -99,8 +105,8 @@ export const Streak = {
             bonus = Math.min(5 + streak, 25);
         }
 
-        localStorage.setItem(KEY_LAST_LOGIN, today);
-        localStorage.setItem(KEY_STREAK, String(streak));
+        _write(KEY_LAST_LOGIN, today);
+        _write(KEY_STREAK, String(streak));
 
         return {
             newStreak: streak,
@@ -112,7 +118,7 @@ export const Streak = {
     },
 
     current() {
-        return parseInt(localStorage.getItem(KEY_STREAK) || '0', 10) || 0;
+        return parseInt(_read(KEY_STREAK) || '0', 10) || 0;
     },
 
     // Returns the next upcoming milestone the user hasn't claimed, or null.

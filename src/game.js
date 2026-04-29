@@ -2776,16 +2776,30 @@ startQTE(type, x, y, callback, opts) {
         const titleEl = document.querySelector('#screen-start h1.title');
         const haloEl  = document.querySelector('#screen-start .glow-container');
         if (!titleEl) return;
+        // Track the last written value to skip CSS writes when the pulse
+        // hasn't visibly changed — `style.setProperty` is cheap but every
+        // skipped call avoids a style-recalc tick. Saves battery on the
+        // background pulse where most frames carry the same value.
+        let lastBeat = -1;
         const tick = () => {
             this._menuPulseRaf = requestAnimationFrame(tick);
             if (this.currentState !== STATE.MENU) { this._stopMenuPulse(); return; }
+            // Skip work entirely when the page is hidden (mobile lock,
+            // tab switch). rAF auto-pauses on most platforms but doesn't
+            // on every Capacitor profile — explicit guard is robust.
+            if (typeof document !== 'undefined' && document.hidden) return;
             const b = (AudioMgr && AudioMgr.getBeatPhase) ? AudioMgr.getBeatPhase(120) : null;
             if (!b) return;
             // Combine beat + bar so the every-4th-beat downbeat lands harder.
             const pulse = Math.max(b.beatPulse, b.barPulse * 1.3);
-            titleEl.style.setProperty('--title-beat', pulse.toFixed(3));
+            // Only write CSS vars when the value moved by >1% — avoids
+            // 60Hz style recalcs for sub-pixel changes nobody perceives.
+            if (Math.abs(pulse - lastBeat) < 0.01) return;
+            lastBeat = pulse;
+            const v = pulse.toFixed(3);
+            titleEl.style.setProperty('--title-beat', v);
             titleEl.style.setProperty('--title-energy', b.energy.toFixed(3));
-            if (haloEl) haloEl.style.setProperty('--title-beat', pulse.toFixed(3));
+            if (haloEl) haloEl.style.setProperty('--title-beat', v);
         };
         this._menuPulseRaf = requestAnimationFrame(tick);
     },
@@ -4130,6 +4144,14 @@ startQTE(type, x, y, callback, opts) {
         AudioMgr.playSound('click');
         const overlay = document.getElementById('char-detail-overlay');
         if (!overlay) { this.selectClass(cls); return; }
+        // Reparent to <body> so `position: fixed` resolves to the actual
+        // viewport rather than the .screen ancestor (which has transform
+        // + filter + will-change set, all of which create a containing
+        // block for fixed positioning — same defect we patched on the
+        // save-slot picker). Idempotent — only moves once.
+        if (overlay.parentNode !== document.body) {
+            document.body.appendChild(overlay);
+        }
         const meta = (this._classMeta && this._classMeta[cls.id]) || {};
 
         // Stop any previously-running preview animation before rebinding canvases.
@@ -8152,10 +8174,13 @@ triggerSystemCrash() {
     },
     _clearSave(slot) {
         try { localStorage.removeItem(this._saveKey(slot)); } catch (_) {}
-        // Also clear legacy on full wipe so a stale single-slot blob can't
-        // resurrect on the next slot-A read.
+        // Also clear the legacy single-slot key on a wipe of slot A so a
+        // stale blob can't resurrect on the next slot-A read. Previous
+        // version called `this._clearSave()` here recursively, which
+        // (a) never touched the legacy key it was meant to remove and
+        // (b) re-entered itself with no args until the stack blew.
         if ((slot || this._activeSlot()) === 'A') {
-            try { this._clearSave(); } catch (_) {}
+            try { localStorage.removeItem('mvm_save_v1'); } catch (_) {}
         }
     },
     // Lightweight per-slot metadata for the picker. Reads each slot once.
@@ -9745,6 +9770,14 @@ triggerSystemCrash() {
     _openCustomRunModal() {
         const modal = document.getElementById('custom-run-modal');
         if (!modal) return;
+        // Reparent to <body> — modal lives inside #screen-char-select which
+        // has transform/filter/will-change on .screen, creating a containing
+        // block that breaks `position: fixed` (panel sizes to the screen
+        // rect, not the viewport). Same fix as save-slot-picker and
+        // char-detail-overlay. Idempotent — only moves once.
+        if (modal.parentNode !== document.body) {
+            document.body.appendChild(modal);
+        }
         if (!this.customRunModifiers) this.customRunModifiers = new Set();
         ['negative', 'chaotic', 'positive'].forEach(kind => {
             const grid = modal.querySelector(`.custom-run-grid[data-kind="${kind}"]`);

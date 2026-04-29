@@ -9,14 +9,20 @@
 const KEY_LOSSES = 'mvm_assist_losses_sector';
 const KEY_ACTIVE = 'mvm_assist_active';
 
+// localStorage helpers — Safari Private mode + Capacitor edge cases
+// can throw on read OR write. Default to "no assist active" on failure.
+const _read = (key) => { try { return localStorage.getItem(key); } catch (_) { return null; } };
+const _write = (key, val) => { try { localStorage.setItem(key, val); } catch (_) {} };
+const _remove = (key) => { try { localStorage.removeItem(key); } catch (_) {} };
+
 export const Assist = {
     recordLoss(sector) {
         const key = KEY_LOSSES + sector;
-        const v = (parseInt(localStorage.getItem(key), 10) || 0) + 1;
-        try { localStorage.setItem(key, String(v)); } catch (e) {}
-        const wasActive = localStorage.getItem(KEY_ACTIVE + sector) === '1';
+        const v = (parseInt(_read(key), 10) || 0) + 1;
+        _write(key, String(v));
+        const wasActive = _read(KEY_ACTIVE + sector) === '1';
         if (v >= 3) {
-            try { localStorage.setItem(KEY_ACTIVE + sector, '1'); } catch (e) {}
+            _write(KEY_ACTIVE + sector, '1');
             if (!wasActive) this._showActivationToast(sector);
         }
         return v;
@@ -53,22 +59,20 @@ export const Assist = {
     },
 
     recordWin(sector) {
-        try {
-            localStorage.removeItem(KEY_LOSSES + sector);
-            localStorage.removeItem(KEY_ACTIVE + sector);
-        } catch (e) {}
+        _remove(KEY_LOSSES + sector);
+        _remove(KEY_ACTIVE + sector);
     },
 
     // Returns the HP multiplier to apply to bosses for the given sector, or
     // 1.0 if no assist is active.
     hpMultiplier(sector, ascension) {
         if (ascension && ascension > 0) return 1.0;
-        if (localStorage.getItem(KEY_ACTIVE + sector) === '1') return 0.9;
+        if (_read(KEY_ACTIVE + sector) === '1') return 0.9;
         return 1.0;
     },
 
     isActive(sector, ascension) {
         if (ascension && ascension > 0) return false;
-        return localStorage.getItem(KEY_ACTIVE + sector) === '1';
+        return _read(KEY_ACTIVE + sector) === '1';
     }
 };

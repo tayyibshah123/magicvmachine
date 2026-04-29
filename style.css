@@ -5766,7 +5766,11 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 .save-slot-modal.hidden { display: none; }
 .save-slot-panel {
     width: min(560px, 100%);
-    max-height: 92vh;
+    /* Use dvh so the panel respects iOS Safari's dynamic toolbar — old
+       100vh/92vh was the static "address bar collapsed" height, so the
+       panel could overflow when the URL bar was visible. Falls back to
+       vh on browsers without dvh support. */
+    max-height: 92dvh;
     padding: 16px;
     display: flex;
     flex-direction: column;

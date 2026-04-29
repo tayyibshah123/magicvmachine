@@ -33,26 +33,36 @@ export const ASCENSION_TWISTS = [
 const KEY_UNLOCKED = 'mvm_ascension_unlocked';
 const KEY_SELECTED = 'mvm_ascension_selected';
 
+// localStorage helpers that swallow access errors — Safari Private and a
+// few Android storage profiles throw on getItem/setItem. We treat any
+// failure as "unset" so the caller gets default behaviour rather than a
+// crash propagating up through the boot sequence.
+const _readNum = (key, fallback = 0) => {
+    try { return parseInt(localStorage.getItem(key) || String(fallback), 10); }
+    catch (_) { return fallback; }
+};
+const _writeStr = (key, val) => { try { localStorage.setItem(key, val); } catch (_) {} };
+
 export const Ascension = {
     // Highest unlocked level (default 0 — base game always available)
     getUnlocked() {
-        const v = parseInt(localStorage.getItem(KEY_UNLOCKED) || '0', 10);
+        const v = _readNum(KEY_UNLOCKED, 0);
         return Math.max(0, Math.min(ASCENSION_TWISTS.length - 1, v));
     },
     setUnlocked(level) {
         const cap = Math.max(0, Math.min(ASCENSION_TWISTS.length - 1, level));
         const cur = this.getUnlocked();
-        if (cap > cur) localStorage.setItem(KEY_UNLOCKED, String(cap));
+        if (cap > cur) _writeStr(KEY_UNLOCKED, String(cap));
     },
     // Selected ascension for the next run
     getSelected() {
-        const v = parseInt(localStorage.getItem(KEY_SELECTED) || '0', 10);
+        const v = _readNum(KEY_SELECTED, 0);
         const max = this.getUnlocked();
         return Math.max(0, Math.min(max, v));
     },
     setSelected(level) {
         const cap = Math.max(0, Math.min(this.getUnlocked(), level));
-        localStorage.setItem(KEY_SELECTED, String(cap));
+        _writeStr(KEY_SELECTED, String(cap));
     },
     twist(level) {
         return ASCENSION_TWISTS[level] || ASCENSION_TWISTS[0];

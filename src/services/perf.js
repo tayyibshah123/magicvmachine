@@ -109,8 +109,11 @@ export const Perf = {
     caps: CAPS.high,
 
     detect() {
-        // Honour explicit user override first.
-        const override = localStorage.getItem(KEY_OVERRIDE);
+        // Honour explicit user override first. localStorage may throw on
+        // certain Safari Private / corporate WebView profiles — treat any
+        // failure as "no override set" so the tier-detection path runs.
+        let override = null;
+        try { override = localStorage.getItem(KEY_OVERRIDE); } catch (_) {}
         if (override && CAPS[override]) {
             this.tier = override;
             this.caps = CAPS[override];
@@ -118,7 +121,8 @@ export const Perf = {
         }
 
         // If we have a prior detection, trust it (probe is expensive).
-        const prior = localStorage.getItem(KEY_TIER);
+        let prior = null;
+        try { prior = localStorage.getItem(KEY_TIER); } catch (_) {}
         if (prior && CAPS[prior]) {
             this.tier = prior;
             this.caps = CAPS[prior];
@@ -153,10 +157,10 @@ export const Perf = {
 
     setOverride(tier) {
         if (!CAPS[tier]) {
-            localStorage.removeItem(KEY_OVERRIDE);
+            try { localStorage.removeItem(KEY_OVERRIDE); } catch (_) {}
             return;
         }
-        try { localStorage.setItem(KEY_OVERRIDE, tier); } catch (e) {}
+        try { localStorage.setItem(KEY_OVERRIDE, tier); } catch (_) {}
         this.setTier(tier);
     },
 
@@ -169,7 +173,12 @@ export const Perf = {
     _monitor: null,
     startMonitor() {
         if (this._monitor) return; // idempotent
-        if (localStorage.getItem(KEY_OVERRIDE)) return; // user pinned the tier
+        // User-pinned tier — skip the runtime monitor. Wrap localStorage
+        // since Safari Private mode throws on access; treat any failure
+        // as "no override" so the monitor still runs.
+        let pinned = null;
+        try { pinned = localStorage.getItem(KEY_OVERRIDE); } catch (_) {}
+        if (pinned) return;
         const WINDOW = 180;           // ~3s of frames at 60fps
         const DOWNGRADE_FPS = 48;
         const UPGRADE_FPS   = 58;

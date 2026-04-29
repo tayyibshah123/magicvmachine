@@ -32,10 +32,11 @@ function makeId(prefix) {
 }
 
 function readInstallId() {
-    let id = localStorage.getItem(KEY_INSTALL);
+    let id = null;
+    try { id = localStorage.getItem(KEY_INSTALL); } catch (_) {}
     if (!id) {
         id = makeId('inst');
-        try { localStorage.setItem(KEY_INSTALL, id); } catch (e) {}
+        try { localStorage.setItem(KEY_INSTALL, id); } catch (_) {}
     }
     return id;
 }

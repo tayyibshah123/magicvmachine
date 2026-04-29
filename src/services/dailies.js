@@ -54,10 +54,17 @@ export const Challenge = {
     twists: DAILY_TWISTS,
 
     markActive(active) {
-        if (active) localStorage.setItem(KEY_ACTIVE, '1');
-        else localStorage.removeItem(KEY_ACTIVE);
+        // Wrap in try/catch — Safari Private mode + Capacitor on certain
+        // Android storage profiles can throw QuotaExceeded on write.
+        try {
+            if (active) localStorage.setItem(KEY_ACTIVE, '1');
+            else localStorage.removeItem(KEY_ACTIVE);
+        } catch (_) {}
     },
-    isActive() { return localStorage.getItem(KEY_ACTIVE) === '1'; },
+    isActive() {
+        try { return localStorage.getItem(KEY_ACTIVE) === '1'; }
+        catch (_) { return false; }
+    },
 
     markComplete(payload = {}) {
         const today = todayString();
@@ -66,7 +73,9 @@ export const Challenge = {
         history.unshift({ date: today, ...payload });
         // Keep last 50 entries — the Challenge gauntlet is short, so players
         // may rip through several in a session.
-        localStorage.setItem(KEY_HISTORY, JSON.stringify(history.slice(0, 50)));
+        try {
+            localStorage.setItem(KEY_HISTORY, JSON.stringify(history.slice(0, 50)));
+        } catch (_) {}
     },
 
     getHistory() {
@@ -99,7 +108,9 @@ export const Archive = {
         const today = todayString();
         const history = this.getHistory();
         history.unshift({ date: today, ...payload });
-        localStorage.setItem(KEY_ARCH_HISTORY, JSON.stringify(history.slice(0, 50)));
+        try {
+            localStorage.setItem(KEY_ARCH_HISTORY, JSON.stringify(history.slice(0, 50)));
+        } catch (_) {}
     },
     getHistory() {
         try { return JSON.parse(localStorage.getItem(KEY_ARCH_HISTORY) || '[]'); }
