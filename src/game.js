@@ -7787,6 +7787,15 @@ triggerSystemCrash() {
         const modal = document.getElementById('loadout-modal');
         const body  = document.getElementById('loadout-body');
         if (!modal || !body) return;
+        // Reparent to <body> so `position: fixed` resolves to the actual
+        // viewport rather than #game-container (which has
+        // container-type: size, creating a containing block for fixed
+        // descendants). Mirrors the save-slot / char-detail / custom-run
+        // pattern so every modal feels like the same UI surface.
+        // Idempotent — only moves on first open.
+        if (modal.parentNode !== document.body) {
+            document.body.appendChild(modal);
+        }
         body.innerHTML = this._renderLoadoutHtml();
         modal.classList.remove('hidden');
         AudioMgr.playSound && AudioMgr.playSound('click');

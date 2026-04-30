@@ -2796,14 +2796,20 @@ body.reduced-motion .intel-crawl-scanlines {
     position: fixed;
     inset: 0;
     z-index: 10040;
-    background: radial-gradient(ellipse at 50% 40%, rgba(0, 243, 255, 0.18), transparent 60%),
-                rgba(2, 4, 14, 0.85);
+    /* Cyan-tinted radial sits ON TOP of the standard backdrop so the
+       briefing keeps its "system bootup" mood while still using the
+       shared blur. */
+    background:
+        radial-gradient(ellipse at 50% 40%, rgba(0, 243, 255, 0.18), transparent 60%),
+        var(--modal-backdrop);
+    backdrop-filter: var(--modal-blur);
+    -webkit-backdrop-filter: var(--modal-blur);
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: var(--space-5);
     opacity: 0;
-    transition: opacity 260ms ease-out;
+    transition: opacity var(--t-slow) ease-out;
 }
 .class-briefing-overlay.active { opacity: 1; }
 .cb-card {
@@ -5362,13 +5368,17 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     position: fixed;
     inset: 0;
     z-index: 9000;
+    /* Hack minigame keeps a darker backdrop than other modals — the
+       gameplay needs zero distraction from the maze. Blur is the
+       shared --modal-blur so it feels like the same UI system. */
     background: radial-gradient(ellipse at center, rgba(20, 0, 30, 0.94) 0%, rgba(0, 0, 0, 0.98) 100%);
-    backdrop-filter: blur(10px);
+    backdrop-filter: var(--modal-blur);
+    -webkit-backdrop-filter: var(--modal-blur);
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
-    animation: fadeInUp 220ms var(--ease-out-smart);
+    padding: var(--space-5);
+    animation: fadeInUp var(--t-slow) var(--ease-out-smart);
 }
 .hack-overlay.hidden { display: none; }
 .hack-overlay.is-hard .hack-panel {
@@ -5813,26 +5823,29 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 .custom-run-modal {
     position: fixed;
     inset: 0;
-    z-index: 6800;
+    z-index: 9500;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 4cqw;
-    background: rgba(0, 0, 0, 0.72);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    padding: var(--space-3);
+    background: var(--modal-backdrop);
+    backdrop-filter: var(--modal-blur);
+    -webkit-backdrop-filter: var(--modal-blur);
 }
 .custom-run-modal.hidden { display: none; }
 .custom-run-panel {
     width: 100%;
     max-width: 760px;
-    max-height: 90cqh;
+    max-height: 92dvh;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--space-3);
     text-align: center;
-    padding: 20px 22px;
+    padding: var(--modal-pad);
     overflow: hidden;
+    border: var(--modal-border);
+    border-radius: var(--modal-radius);
+    box-shadow: var(--modal-shadow);
 }
 .custom-run-title {
     margin: 0;
@@ -5930,7 +5943,17 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 .custom-run-net span.payout-up      { color: #ff6b9b; text-shadow: 0 0 10px rgba(255, 107, 155, 0.5); }
 .custom-run-net span.payout-down    { color: #5ad864; text-shadow: 0 0 10px rgba(90, 216, 100, 0.5); }
 .custom-run-net span.payout-neutral { color: #ffffff; text-shadow: 0 0 8px rgba(255, 255, 255, 0.4); }
-.custom-run-actions { display: flex; gap: 8px; }
+/* Modal action footer — identical rhythm across save-slot/custom-run/
+   char-detail/sanctuary-npc/loadout. Tokenised so a future modal just
+   composes from .modal-actions in the unified utilities block. */
+.custom-run-actions {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-3);
+    padding-top: var(--space-2);
+    border-top: 1px solid rgba(0, 243, 255, 0.18);
+    flex-shrink: 0;
+}
 /* Challenge Mode — daily twist pill rendered above the gauntlet button. */
 .challenge-twist-pill {
     display: inline-flex;
@@ -6204,8 +6227,9 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 .save-slot-actions {
     display: flex;
     justify-content: center;
+    gap: var(--space-3);
     flex-shrink: 0;
-    padding-top: 6px;
+    padding-top: var(--space-2);
     border-top: 1px solid rgba(0, 243, 255, 0.18);
 }
 .save-slot-actions .btn {
@@ -6317,18 +6341,23 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     padding: 0 2px;
 }
 
-/* Detail overlay — full-viewport, canvas on top, rich text below, no scrollbars */
+/* Detail overlay — full-viewport, canvas on top, rich text below, no scrollbars.
+   Uses the shared modal-backdrop tokens so backdrop opacity + blur match
+   save-slot / custom-run / loadout. Original radial-gradient backdrop
+   replaced with the standard solid-with-blur for consistency; the
+   character cards already provide visual interest. */
 .char-detail-overlay {
     position: fixed;
     inset: 0;
-    z-index: 4000;
-    background: radial-gradient(ellipse at center, rgba(10, 6, 28, 0.92) 0%, rgba(0, 0, 0, 0.95) 100%);
-    backdrop-filter: blur(10px);
+    z-index: 9500;
+    background: var(--modal-backdrop);
+    backdrop-filter: var(--modal-blur);
+    -webkit-backdrop-filter: var(--modal-blur);
     display: flex;
     flex-direction: column;
-    padding: 20px;
+    padding: var(--space-5);
     overflow: hidden;
-    animation: fadeInUp 220ms var(--ease-out-smart);
+    animation: fadeInUp var(--t-slow) var(--ease-out-smart);
 }
 .char-detail-overlay.hidden { display: none; }
 .char-detail-content {
@@ -6494,15 +6523,19 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 }
 .char-detail-actions {
     display: flex;
-    gap: 12px;
-    margin-top: 4px;
+    justify-content: center;
+    gap: var(--space-3);
+    margin-top: var(--space-1);
     flex: 0 0 auto;
     /* Pin BACK / CONFIRM to the bottom of the scrollable panel so they
-       stay reachable even when the description runs long on small screens. */
+       stay reachable even when the description runs long on small screens.
+       Sticky + gradient fade is unique to this modal — the panel is the
+       only one that scrolls long-form copy. */
     position: sticky;
     bottom: 0;
-    padding: 10px 0 4px;
+    padding: var(--space-2) 0 var(--space-1);
     background: linear-gradient(to top, rgba(5, 0, 17, 0.98) 55%, rgba(5, 0, 17, 0));
+    border-top: 1px solid rgba(0, 243, 255, 0.18);
     z-index: 2;
 }
 .char-detail-actions .btn {
@@ -12022,17 +12055,22 @@ body.reduced-motion.bloodstalker-critical::after {
     min-width: 160px;
 }
 
-/* Sanctuary NPC service modal (Smith / Oracle / Curator). */
+/* Sanctuary NPC service modal (Smith / Oracle / Curator). Uses shared
+   modal tokens so backdrop opacity / blur match the rest of the system;
+   z-index stays below save-slot (9500) so the save picker can layer
+   over an open NPC modal without a re-parent dance. */
 .sanctuary-npc-modal {
     position: fixed;
     inset: 0;
     z-index: 4500;
-    background: radial-gradient(ellipse at center, rgba(10, 6, 28, 0.92) 0%, rgba(0, 0, 0, 0.95) 100%);
+    background: var(--modal-backdrop);
+    backdrop-filter: var(--modal-blur);
+    -webkit-backdrop-filter: var(--modal-blur);
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 24px;
-    animation: fadeInUp 200ms var(--ease-out-smart);
+    padding: var(--space-6);
+    animation: fadeInUp var(--t-slow) var(--ease-out-smart);
 }
 .sanctuary-npc-modal.hidden { display: none; }
 /* Dim the meta-sanctuary canvas behind any active NPC modal (or hack
@@ -12045,14 +12083,18 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
 .sanctuary-npc-content {
     width: 100%;
     max-width: 640px;
-    max-height: 90vh;
+    max-height: 92dvh;
     overflow-y: auto;
-    padding: 20px 24px;
+    overscroll-behavior: contain;
+    padding: var(--modal-pad);
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--space-3);
     border-color: var(--neon-gold) !important;
-    box-shadow: 0 0 32px rgba(255, 215, 0, 0.35) !important;
+    border-radius: var(--modal-radius);
+    box-shadow:
+        0 0 32px rgba(255, 215, 0, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
 }
 .sanctuary-npc-title {
     font-family: var(--font-cyber);
@@ -12103,10 +12145,11 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
 }
 .sanctuary-npc-actions {
     display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(255,255,255,0.08);
+    justify-content: center;
+    gap: var(--space-3);
+    padding-top: var(--space-2);
+    border-top: 1px solid rgba(0, 243, 255, 0.18);
+    flex-shrink: 0;
 }
 /* Curator stat panel — aggregate row dump under the trophy strip. */
 .sanctuary-npc-body .npc-stat-block {
@@ -12401,7 +12444,7 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
 .loadout-modal {
     position: fixed;
     inset: 0;
-    z-index: 11000;
+    z-index: 9700;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -12411,21 +12454,22 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
 .loadout-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.78);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    background: var(--modal-backdrop);
+    backdrop-filter: var(--modal-blur);
+    -webkit-backdrop-filter: var(--modal-blur);
 }
 .loadout-panel {
     position: relative;
     z-index: 1;
     width: min(640px, 94vw);
-    max-height: 88vh;
+    max-height: 92dvh;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 18px 20px 22px;
-    border-radius: 14px;
-    border: 1.5px solid rgba(0, 243, 255, 0.5);
-    box-shadow: 0 0 24px rgba(0, 243, 255, 0.35), inset 0 0 16px rgba(0, 243, 255, 0.1);
+    overscroll-behavior: contain;
+    padding: var(--modal-pad);
+    border-radius: var(--modal-radius);
+    border: var(--modal-border);
+    box-shadow: var(--modal-shadow);
 }
 .loadout-header {
     display: flex;
