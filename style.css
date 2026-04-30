@@ -2647,7 +2647,12 @@ body.reduced-motion .boss-intro-stripe {
     text-align: center;
     padding: 0 12px;
     text-shadow: 0 0 6px var(--boss-color), 0 1px 2px rgba(0, 0, 0, 0.85);
-    transition: opacity 480ms ease-out 1300ms;
+    /* Reveal earlier (was 1300ms) — the slate no longer carries a
+       subtitle beat between the title and the hint, so the hint can
+       slide in 800ms after the title lands. Total slate hold drops
+       to 2000ms; the player still gets ~700ms to read the hint
+       before the retreat begins. */
+    transition: opacity 420ms ease-out 800ms;
     /* Pin the hint within the slate's content column so it can never
        extend past the slate's clipped bounds. */
     width: 100%;

@@ -5739,10 +5739,7 @@ triggerPhaseGlitch() {
         host.style.setProperty('--boss-color', Palette.adapt(colorHex));
         // Class-vs-boss matchup hint — one tactical line per matchup.
         // Lives INSIDE the slate (delayed reveal — see CSS) so the boss
-        // reveal is a single screen instead of two stacked overlays.
-        // The previous version routed the hint through the separate
-        // intel briefing crawl, which left the slate visible at the
-        // same time as the crawl on screen — overlapping read.
+        // reveal is a single screen.
         const classId = this.player && this.player.classId;
         const hintText = getMatchupHint(classId, sector) || '';
         const hintMarkup = hintText
@@ -5751,13 +5748,16 @@ triggerPhaseGlitch() {
         // Briefing crawl is OFF for bosses — slate carries the moment.
         this._pendingMatchupHint = '';
         this._suppressBriefingCrawl = true;
+        // Subtitle (e.g. "THE ALL-SEEING EYE") removed from the slate —
+        // it duplicated the boss-enemy name strip drawn on the canvas
+        // beneath, and stacked another beat between the title and the
+        // matchup hint. Slate now reads as: tag → title → hint.
         host.innerHTML = `
             <div class="boss-intro-bar boss-intro-bar-top"></div>
             <div class="boss-intro-bar boss-intro-bar-bottom"></div>
             <div class="boss-intro-content">
                 <div class="boss-intro-tag">// SECTOR ${sector} BOSS</div>
                 <div class="boss-intro-name">${enemy.name}</div>
-                <div class="boss-intro-subtitle">${subtitle}</div>
                 <div class="boss-intro-stripe" aria-hidden="true"></div>
                 ${hintMarkup}
             </div>
@@ -5780,19 +5780,20 @@ triggerPhaseGlitch() {
             setTimeout(() => this.triggerScreenFlash(`rgba(${r},${g},${b},0.36)`, 320), 480);
         }
         requestAnimationFrame(() => host.classList.add('active'));
-        setTimeout(() => host.classList.add('settle'), 720);
-        // Hold the slate longer when there's a tactical hint to read —
-        // 2400ms total covers title (0-700), subtitle (700-1300), and
-        // the hint reveal (1300-2400) without rushing any beat.
-        const slateHoldMs = hintText ? 2400 : 1700;
+        // Subtitle removed → drop the 720ms .settle pulse that timed
+        // the subtitle reveal. The slate now reads as title (0ms) →
+        // hint (CSS-delayed reveal) → retreat. Cleaner.
+        // Hold: 2000ms when a hint exists (gives ~700ms to read it
+        // before retreat starts at 800ms reveal); 1500ms otherwise.
+        const slateHoldMs = hintText ? 2000 : 1500;
         setTimeout(() => {
             host.classList.remove('active');
             host.classList.remove('settle');
             setTimeout(() => host.classList.add('hidden'), 600);
             // Briefing crawl is intentionally NOT fired for bosses —
-            // the slate already carried the title / subtitle / hint as
-            // a single moment. Firing the crawl on top creates the
-            // double-intro overlap we just removed.
+            // the slate already carried the title + hint as a single
+            // moment. Firing the crawl on top creates the double-intro
+            // overlap we removed earlier.
         }, slateHoldMs);
     },
 
