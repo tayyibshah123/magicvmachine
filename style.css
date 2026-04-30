@@ -2724,6 +2724,22 @@ body.reduced-motion .boss-intro-hint {
     text-shadow: 0 0 10px rgba(0, 243, 255, 0.28);
     position: relative;
 }
+/* Second line of the briefing crawl — class-vs-boss matchup tactic.
+   Pink-tinted so it visually separates from the cyan INTEL dossier
+   line above. Slight top margin pushes it below the dossier without
+   needing a divider. */
+.intel-crawl-label-tactic {
+    color: var(--neon-pink-text);
+    text-shadow: 0 0 8px rgba(255, 91, 135, 0.5);
+    margin-top: 10px;
+}
+.intel-crawl-line-tactic {
+    color: #ffe4ec;
+    font-style: italic;
+    text-shadow: 0 0 8px rgba(255, 91, 135, 0.32);
+    margin-top: 4px;
+    font-size: 0.95rem;
+}
 body.reduced-motion .intel-crawl,
 body.reduced-motion .intel-crawl-scanlines {
     animation: none !important;

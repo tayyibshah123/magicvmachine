@@ -5684,8 +5684,42 @@ triggerPhaseGlitch() {
     // explosion) lands on the slate. The intel crawl follows once the
     // bars retreat, so the boss-name moment doesn't compete with the
     // dossier line.
+    // Schedule a boss-spawn announcement (GUARDIANS ACTIVE, ARMOR
+    // PLATED, ADAPTIVE MODE, etc.) so it lands AFTER the boss intro
+    // slate has retreated. Without this, the slate (1700ms) collides
+    // with every spawn floater that startCombat fires synchronously,
+    // and the player sees a wall of overlapping text on top of the
+    // boss reveal — too much to read at once.
+    //
+    // Pattern: each call increments _bossAnnounceOffset by 600ms so the
+    // floaters arrive in sequence, each with its own moment.
+    // Offset baseline (1900ms) lands shortly AFTER the slate retreats
+    // at 1700ms. For non-boss combats, this fires immediately so
+    // elite/normal spawn announcements aren't artificially delayed.
+    _queueBossAnnouncement(fn) {
+        const isBoss = this.enemy && this.enemy.isBoss;
+        if (!isBoss) {
+            try { fn(); } catch (_) {}
+            return;
+        }
+        if (typeof this._bossAnnounceOffset !== 'number') this._bossAnnounceOffset = 0;
+        const cbGen = this._combatGen || 0;
+        setTimeout(() => {
+            // Bail if the player already left this combat (quit, lost,
+            // boss already dead from a Bomb Bot first-frame chain) so
+            // the floater doesn't spawn on the next screen.
+            if ((this._combatGen || 0) !== cbGen) return;
+            if (!this.enemy || this.enemy.currentHp <= 0) return;
+            try { fn(); } catch (_) {}
+        }, 1900 + this._bossAnnounceOffset);
+        this._bossAnnounceOffset += 600;
+    },
+
     _showBossIntro(enemy) {
         if (!enemy) return;
+        // Reset the announcement offset every time the slate fires so
+        // back-to-back boss combats don't compound the delay.
+        this._bossAnnounceOffset = 0;
         const colorHex = (enemy.bossData && enemy.bossData.color) || '#ff3355';
         const subtitle = (enemy.bossData && enemy.bossData.subtitle) || 'BOSS';
         const sector = this.sector || 1;
@@ -5707,11 +5741,13 @@ triggerPhaseGlitch() {
         // returning player isn't relearning the matchup from the slate
         // alone. Falls back to empty string when no hint exists (e.g.
         // the Archivist, whose mechanics rotate per fight).
+        // ── Slate now contains ONLY title / subtitle. The hint used to
+        // sit inside the slate competing with the title for reading
+        // time — moved to the briefing crawl below so each text gets
+        // its own moment.
         const classId = this.player && this.player.classId;
         const hintText = getMatchupHint(classId, sector) || '';
-        const hintMarkup = hintText
-            ? `<div class="boss-intro-hint">${hintText}</div>`
-            : '';
+        this._pendingMatchupHint = hintText;
         host.innerHTML = `
             <div class="boss-intro-bar boss-intro-bar-top"></div>
             <div class="boss-intro-bar boss-intro-bar-bottom"></div>
@@ -5720,7 +5756,6 @@ triggerPhaseGlitch() {
                 <div class="boss-intro-name">${enemy.name}</div>
                 <div class="boss-intro-subtitle">${subtitle}</div>
                 <div class="boss-intro-stripe" aria-hidden="true"></div>
-                ${hintMarkup}
             </div>
         `;
         host.classList.remove('hidden');
@@ -5758,6 +5793,18 @@ triggerPhaseGlitch() {
     _showCombatBriefing(enemy) {
         if (!enemy) return;
         const line = this._getIntelLine(enemy);
+        // Pull the matchup hint out of the boss-intro slate (where it
+        // used to render alongside the title and made the slate too
+        // busy to read). It now appears as a second line in the
+        // briefing crawl, with a "TACTIC" label so it reads as a
+        // distinct beat from the dossier line. Cleared after read so
+        // a non-boss combat doesn't accidentally show a stale hint.
+        const hintLine = this._pendingMatchupHint || '';
+        this._pendingMatchupHint = '';
+        const hintMarkup = hintLine
+            ? `<div class="intel-crawl-label intel-crawl-label-tactic">// TACTIC</div>
+               <div class="intel-crawl-line intel-crawl-line-tactic">${hintLine}</div>`
+            : '';
 
         let host = document.getElementById('combat-briefing');
         if (!host) {
@@ -5773,6 +5820,7 @@ triggerPhaseGlitch() {
             <div class="intel-crawl-scanlines" aria-hidden="true"></div>
             <div class="intel-crawl-label">// INTEL</div>
             <div class="intel-crawl-line">${line}</div>
+            ${hintMarkup}
         `;
         host.classList.remove('hidden');
         requestAnimationFrame(() => host.classList.add('active'));
@@ -10757,17 +10805,22 @@ async startCombat(type) {
                 this.enemy.maxHp = Math.floor(this.enemy.maxHp * mult);
                 this.enemy.currentHp = this.enemy.maxHp;
                 this.enemy.assistActive = true;
-                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 220, "ADAPTIVE MODE", "#88eaff");
+                this._queueBossAnnouncement(() => {
+                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 220, "ADAPTIVE MODE", "#88eaff");
+                });
             }
         }
-        
+
         // Tesseract Prime Logic
         if (this.enemy.name === "TESSERACT PRIME") {
             this.enemy.invincibleTurns = 3;
-            setTimeout(() => {
+            // Was a raw setTimeout(1000) that fired during the boss
+            // intro slate. Now goes through the announcement queue so
+            // it slots AFTER the slate retreats, in stagger sequence.
+            this._queueBossAnnouncement(() => {
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200, "SHIELDS ACTIVE (3 TURNS)", "#00f3ff");
-            }, 1000);
-            
+            });
+
             AudioMgr.bossSilence = true;
             AudioMgr.fadeMusicOut(600);
         }
@@ -10788,9 +10841,9 @@ async startCombat(type) {
         // --- NEW: THE COMPILER LOGIC (Armor Plated) ---
         if (this.enemy.name === "THE COMPILER") {
             this.enemy.armorPlating = 10;
-            setTimeout(() => {
+            this._queueBossAnnouncement(() => {
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200, "ARMOR PLATED (10)", "#ffaa00");
-            }, 1000);
+            });
         }
         // ----------------------------------------------
 
@@ -10941,7 +10994,12 @@ async startCombat(type) {
              const m1 = new Minion(0, 0, 1, false, 3);
              const m2 = new Minion(0, 0, 2, false, 3);
              this.enemy.minions.push(m1, m2);
-             ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "GUARDIANS ACTIVE", "#f00");
+             // Queue the floater so it lands AFTER the boss intro slate
+             // retreats — was firing synchronously on top of the slate
+             // animation, making everything illegible.
+             this._queueBossAnnouncement(() => {
+                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "GUARDIANS ACTIVE", "#f00");
+             });
         }
 
         if (isBoss && this.sector === 5) {
@@ -10950,7 +11008,9 @@ async startCombat(type) {
              const m2 = new Minion(0, 0, 2, false, 3);
              m2.name = "Glitch Beta"; m2.maxHp = 100; m2.currentHp = 100; m2.dmg = 5;
              this.enemy.minions.push(m1, m2);
-             ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "REALITY FRACTURE", "#ffffff");
+             this._queueBossAnnouncement(() => {
+                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "REALITY FRACTURE", "#ffffff");
+             });
         }
 
         this.player.spawnTimer = 1.0;
