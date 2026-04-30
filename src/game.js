@@ -5737,17 +5737,20 @@ triggerPhaseGlitch() {
         // remaps Tesseract Prime gold and Compiler orange away from
         // each other so they don't collapse in the slate text).
         host.style.setProperty('--boss-color', Palette.adapt(colorHex));
-        // Class-vs-boss matchup hint: a one-line tactical reminder so a
-        // returning player isn't relearning the matchup from the slate
-        // alone. Falls back to empty string when no hint exists (e.g.
-        // the Archivist, whose mechanics rotate per fight).
-        // ── Slate now contains ONLY title / subtitle. The hint used to
-        // sit inside the slate competing with the title for reading
-        // time — moved to the briefing crawl below so each text gets
-        // its own moment.
+        // Class-vs-boss matchup hint — one tactical line per matchup.
+        // Lives INSIDE the slate (delayed reveal — see CSS) so the boss
+        // reveal is a single screen instead of two stacked overlays.
+        // The previous version routed the hint through the separate
+        // intel briefing crawl, which left the slate visible at the
+        // same time as the crawl on screen — overlapping read.
         const classId = this.player && this.player.classId;
         const hintText = getMatchupHint(classId, sector) || '';
-        this._pendingMatchupHint = hintText;
+        const hintMarkup = hintText
+            ? `<div class="boss-intro-hint">${hintText}</div>`
+            : '';
+        // Briefing crawl is OFF for bosses — slate carries the moment.
+        this._pendingMatchupHint = '';
+        this._suppressBriefingCrawl = true;
         host.innerHTML = `
             <div class="boss-intro-bar boss-intro-bar-top"></div>
             <div class="boss-intro-bar boss-intro-bar-bottom"></div>
@@ -5756,6 +5759,7 @@ triggerPhaseGlitch() {
                 <div class="boss-intro-name">${enemy.name}</div>
                 <div class="boss-intro-subtitle">${subtitle}</div>
                 <div class="boss-intro-stripe" aria-hidden="true"></div>
+                ${hintMarkup}
             </div>
         `;
         host.classList.remove('hidden');
@@ -5777,14 +5781,19 @@ triggerPhaseGlitch() {
         }
         requestAnimationFrame(() => host.classList.add('active'));
         setTimeout(() => host.classList.add('settle'), 720);
+        // Hold the slate longer when there's a tactical hint to read —
+        // 2400ms total covers title (0-700), subtitle (700-1300), and
+        // the hint reveal (1300-2400) without rushing any beat.
+        const slateHoldMs = hintText ? 2400 : 1700;
         setTimeout(() => {
             host.classList.remove('active');
             host.classList.remove('settle');
             setTimeout(() => host.classList.add('hidden'), 600);
-            // Slate has retreated — fire the standard intel crawl so
-            // the dossier line still gets its moment without overlap.
-            try { this._showCombatBriefing(enemy); } catch (_) {}
-        }, 1700);
+            // Briefing crawl is intentionally NOT fired for bosses —
+            // the slate already carried the title / subtitle / hint as
+            // a single moment. Firing the crawl on top creates the
+            // double-intro overlap we just removed.
+        }, slateHoldMs);
     },
 
     // Pre-combat Intel crawl. A short dossier line slides down from the
@@ -5793,18 +5802,6 @@ triggerPhaseGlitch() {
     _showCombatBriefing(enemy) {
         if (!enemy) return;
         const line = this._getIntelLine(enemy);
-        // Pull the matchup hint out of the boss-intro slate (where it
-        // used to render alongside the title and made the slate too
-        // busy to read). It now appears as a second line in the
-        // briefing crawl, with a "TACTIC" label so it reads as a
-        // distinct beat from the dossier line. Cleared after read so
-        // a non-boss combat doesn't accidentally show a stale hint.
-        const hintLine = this._pendingMatchupHint || '';
-        this._pendingMatchupHint = '';
-        const hintMarkup = hintLine
-            ? `<div class="intel-crawl-label intel-crawl-label-tactic">// TACTIC</div>
-               <div class="intel-crawl-line intel-crawl-line-tactic">${hintLine}</div>`
-            : '';
 
         let host = document.getElementById('combat-briefing');
         if (!host) {
@@ -5820,7 +5817,6 @@ triggerPhaseGlitch() {
             <div class="intel-crawl-scanlines" aria-hidden="true"></div>
             <div class="intel-crawl-label">// INTEL</div>
             <div class="intel-crawl-line">${line}</div>
-            ${hintMarkup}
         `;
         host.classList.remove('hidden');
         requestAnimationFrame(() => host.classList.add('active'));
