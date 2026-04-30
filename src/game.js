@@ -18223,6 +18223,16 @@ drawEffects() {
 
         if (sector === 2) {
             // --- NULL_POINTER: THE CONSUMING VOID ---
+            // Tier-aware density: spiral arms are the per-frame trig hot
+            // spot (5 × 36 segments). Mid drops to 3 arms × 24 segments,
+            // low to 2 × 18. Cracks/auroras also taper.
+            const _tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+            const _isLow  = _tier === 'low';
+            const _isMid  = _tier === 'mid';
+            const _armN   = _isLow ? 2 : (_isMid ? 3 : 5);
+            const _armSeg = _isLow ? 18 : (_isMid ? 24 : 36);
+            const _crackN = _isLow ? 1 : (_isMid ? 2 : 3);
+            const _auroraN = _isLow ? 1 : (_isMid ? 2 : 3);
             ctx.save();
             // Deep void-purple wash
             ctx.fillStyle = this._cachedGradient('s2_sky', () => {
@@ -18245,14 +18255,15 @@ drawEffects() {
                 return g;
             });
             ctx.beginPath(); ctx.arc(vx, vy, vR, 0, Math.PI * 2); ctx.fill();
-            // Spiral arms (magenta/cyan)
-            ctx.shadowColor = '#ff00ff'; ctx.shadowBlur = 16;
-            for (let j = 0; j < 5; j++) {
+            // Spiral arms (magenta/cyan). shadowBlur is expensive on mobile
+            // GPUs — skip on low.
+            if (!_isLow) { ctx.shadowColor = '#ff00ff'; ctx.shadowBlur = 16; }
+            for (let j = 0; j < _armN; j++) {
                 ctx.strokeStyle = j % 2 ? 'rgba(0, 200, 255, 0.55)' : 'rgba(255, 0, 255, 0.55)';
                 ctx.lineWidth = 3;
                 ctx.beginPath();
-                const baseA = time * 0.5 + j * (Math.PI * 2 / 5);
-                for (let k = 0; k < 36; k++) {
+                const baseA = time * 0.5 + j * (Math.PI * 2 / _armN);
+                for (let k = 0; k < _armSeg; k++) {
                     const a = baseA + k * 0.18;
                     const r = k * 11;
                     if (r > vR) break;
@@ -18267,13 +18278,14 @@ drawEffects() {
             // Reality cracks tearing across the sky — bright magenta seams
             ctx.strokeStyle = 'rgba(255, 80, 255, 0.85)';
             ctx.lineWidth = 2;
-            ctx.shadowColor = '#ff00ff'; ctx.shadowBlur = 14;
+            if (!_isLow) { ctx.shadowColor = '#ff00ff'; ctx.shadowBlur = 14; }
             const cracks = [
                 [0.02, 0.1, 0.25, 0.05, 0.4, 0.18, 0.55, 0.08],
                 [0.6, 0.3, 0.75, 0.22, 0.88, 0.35, 0.98, 0.28],
                 [0.05, 0.4, 0.2, 0.35, 0.35, 0.42]
             ];
-            for (const crack of cracks) {
+            for (let cIdx = 0; cIdx < _crackN; cIdx++) {
+                const crack = cracks[cIdx];
                 ctx.beginPath();
                 for (let i = 0; i < crack.length; i += 2) {
                     const px = w * crack[i];
@@ -18286,7 +18298,7 @@ drawEffects() {
 
             // Magenta aurora bands drifting
             ctx.globalCompositeOperation = 'lighter';
-            for (let i = 0; i < 3; i++) {
+            for (let i = 0; i < _auroraN; i++) {
                 const ay = horizon * (0.18 + i * 0.1);
                 ctx.fillStyle = this._cachedGradient('s2_aurora_' + i, () => {
                     const g = ctx.createLinearGradient(0, ay - 40, 0, ay + 40);
@@ -18310,6 +18322,15 @@ drawEffects() {
 
         if (sector === 3) {
             // --- THE COMPILER: THE FORGE ---
+            // Tier-aware density: 30 ember rects + 4 molten seams (each
+            // doing per-x sin) + 2 piston shadowBlur draws are the
+            // dominant per-frame cost. Embers were the worst offender
+            // because they always re-rasterize at random positions.
+            const _tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+            const _isLow  = _tier === 'low';
+            const _isMid  = _tier === 'mid';
+            const _emberN = _isLow ? 0 : (_isMid ? 12 : 30);
+            const _seamN  = _isLow ? 0 : (_isMid ? 2 : 4);
             ctx.save();
             // Hot ember-red sky wash
             ctx.fillStyle = this._cachedGradient('s3_sky', () => {
@@ -18348,7 +18369,7 @@ drawEffects() {
             for (const [px, phase] of [[w * 0.22, 0], [w * 0.78, Math.PI]]) {
                 ctx.fillStyle = '#1a0500';
                 ctx.strokeStyle = '#ff6600'; ctx.lineWidth = 3;
-                ctx.shadowColor = '#ff6600'; ctx.shadowBlur = 12;
+                if (!_isLow) { ctx.shadowColor = '#ff6600'; ctx.shadowBlur = 12; }
                 ctx.beginPath();
                 ctx.rect(px - 22, 0, 44, pistonY(phase));
                 ctx.fill(); ctx.stroke();
@@ -18360,34 +18381,50 @@ drawEffects() {
             ctx.shadowBlur = 0;
 
             // Molten seams on the ground
-            ctx.strokeStyle = '#ffaa00'; ctx.lineWidth = 2;
-            ctx.shadowColor = '#ff6600'; ctx.shadowBlur = 10;
-            for (let i = 0; i < 4; i++) {
-                const sy = horizon + 20 + i * 40;
-                ctx.beginPath();
-                ctx.moveTo(0, sy);
-                for (let x = 0; x < w; x += 40) {
-                    ctx.lineTo(x, sy + Math.sin(x * 0.03 + time * 2 + i) * 4);
+            if (_seamN > 0) {
+                ctx.strokeStyle = '#ffaa00'; ctx.lineWidth = 2;
+                if (!_isLow) { ctx.shadowColor = '#ff6600'; ctx.shadowBlur = 10; }
+                for (let i = 0; i < _seamN; i++) {
+                    const sy = horizon + 20 + i * 40;
+                    ctx.beginPath();
+                    ctx.moveTo(0, sy);
+                    for (let x = 0; x < w; x += 40) {
+                        ctx.lineTo(x, sy + Math.sin(x * 0.03 + time * 2 + i) * 4);
+                    }
+                    ctx.stroke();
                 }
-                ctx.stroke();
+                ctx.shadowBlur = 0;
             }
-            ctx.shadowBlur = 0;
 
             // Ember rain from above
-            ctx.fillStyle = '#ffcc00';
-            for (let i = 0; i < 30; i++) {
-                const ex = (i * 73 + time * 90) % w;
-                const ey = (i * 241 + time * 160) % horizon;
-                ctx.globalAlpha = 0.6 + (i % 3) * 0.15;
-                ctx.fillRect(ex, ey, 2, 6);
+            if (_emberN > 0) {
+                ctx.fillStyle = '#ffcc00';
+                for (let i = 0; i < _emberN; i++) {
+                    const ex = (i * 73 + time * 90) % w;
+                    const ey = (i * 241 + time * 160) % horizon;
+                    ctx.globalAlpha = 0.6 + (i % 3) * 0.15;
+                    ctx.fillRect(ex, ey, 2, 6);
+                }
+                ctx.globalAlpha = 1;
             }
-            ctx.globalAlpha = 1;
             ctx.restore();
             return;
         }
 
         if (sector === 4) {
             // --- HIVE PROTOCOL: THE HIVE CATHEDRAL ---
+            // Tier-aware density: hex tower had ~84 cells × per-frame
+            // Math.sin pulse, neural web does O(n²) distance checks on
+            // 18 nodes (153 pairs/frame), and 24 patrol drones do per-
+            // frame trig. Mid: 10 rows / 12 nodes / 12 drones. Low: 6
+            // rows / no neural web / no drones / no shadowBlur — keep
+            // the tower silhouette but strip animated cosmetics.
+            const _tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+            const _isLow  = _tier === 'low';
+            const _isMid  = _tier === 'mid';
+            const _hexRows = _isLow ? 6 : (_isMid ? 10 : 14);
+            const _nodeN   = _isLow ? 0 : (_isMid ? 12 : 18);
+            const _droneN  = _isLow ? 0 : (_isMid ? 12 : 24);
             ctx.save();
             // Acid-green sky wash
             ctx.fillStyle = this._cachedGradient('s4_sky', () => {
@@ -18406,7 +18443,7 @@ drawEffects() {
             ctx.fillStyle = '#061a06';
             ctx.strokeStyle = '#7fff00';
             ctx.lineWidth = 2;
-            ctx.shadowColor = '#32cd32'; ctx.shadowBlur = 12;
+            if (!_isLow) { ctx.shadowColor = '#32cd32'; ctx.shadowBlur = 12; }
             // Body
             ctx.beginPath();
             ctx.moveTo(towerX - towerWidth * 0.5, towerBase);
@@ -18448,7 +18485,7 @@ drawEffects() {
                 oc.fill();
                 return off;
             });
-            for (let row = 0; row < 14; row++) {
+            for (let row = 0; row < _hexRows; row++) {
                 const y = towerBase - 60 - row * (cellR * 1.7);
                 if (y < towerTop + 40) break;
                 const rowWidth = (towerWidth * (1 - row * 0.04)) * 0.5;
@@ -18462,40 +18499,45 @@ drawEffects() {
             }
             ctx.globalAlpha = 1;
 
-            // Neural network web across the sky
-            ctx.strokeStyle = 'rgba(127, 255, 0, 0.35)';
-            ctx.lineWidth = 1;
-            const nodes = [];
-            for (let i = 0; i < 18; i++) {
-                nodes.push([
-                    (i * 173 % w),
-                    (i * 97 % (horizon * 0.7))
-                ]);
-            }
-            for (let i = 0; i < nodes.length; i++) {
-                for (let j = i + 1; j < nodes.length; j++) {
-                    const dx = nodes[i][0] - nodes[j][0];
-                    const dy = nodes[i][1] - nodes[j][1];
-                    if (dx * dx + dy * dy < 220 * 220) {
-                        ctx.beginPath(); ctx.moveTo(nodes[i][0], nodes[i][1]); ctx.lineTo(nodes[j][0], nodes[j][1]); ctx.stroke();
+            // Neural network web across the sky — O(n²) connection scan
+            // is the hot path on this scene. Skip on low entirely.
+            if (_nodeN > 0) {
+                ctx.strokeStyle = 'rgba(127, 255, 0, 0.35)';
+                ctx.lineWidth = 1;
+                const nodes = [];
+                for (let i = 0; i < _nodeN; i++) {
+                    nodes.push([
+                        (i * 173 % w),
+                        (i * 97 % (horizon * 0.7))
+                    ]);
+                }
+                for (let i = 0; i < nodes.length; i++) {
+                    for (let j = i + 1; j < nodes.length; j++) {
+                        const dx = nodes[i][0] - nodes[j][0];
+                        const dy = nodes[i][1] - nodes[j][1];
+                        if (dx * dx + dy * dy < 220 * 220) {
+                            ctx.beginPath(); ctx.moveTo(nodes[i][0], nodes[i][1]); ctx.lineTo(nodes[j][0], nodes[j][1]); ctx.stroke();
+                        }
                     }
                 }
+                ctx.fillStyle = '#7fff00';
+                if (!_isMid) { ctx.shadowColor = '#32cd32'; ctx.shadowBlur = 8; }
+                for (const [nx, ny] of nodes) {
+                    const pulse = 1 + Math.sin(time * 3 + nx) * 0.4;
+                    ctx.beginPath(); ctx.arc(nx, ny, 3 * pulse, 0, Math.PI * 2); ctx.fill();
+                }
+                ctx.shadowBlur = 0;
             }
-            ctx.fillStyle = '#7fff00';
-            ctx.shadowColor = '#32cd32'; ctx.shadowBlur = 8;
-            for (const [nx, ny] of nodes) {
-                const pulse = 1 + Math.sin(time * 3 + nx) * 0.4;
-                ctx.beginPath(); ctx.arc(nx, ny, 3 * pulse, 0, Math.PI * 2); ctx.fill();
-            }
-            ctx.shadowBlur = 0;
 
             // Swarm of tiny drones buzzing in formations
-            ctx.fillStyle = '#7fff00';
-            for (let i = 0; i < 24; i++) {
-                const orbit = time * (0.3 + (i % 4) * 0.1) + i;
-                const dx = towerX + Math.cos(orbit) * (180 + (i % 5) * 30);
-                const dy = horizon * 0.35 + Math.sin(orbit * 1.3) * 120 + (i % 3) * 20;
-                ctx.fillRect(dx - 2, dy - 1, 4, 2);
+            if (_droneN > 0) {
+                ctx.fillStyle = '#7fff00';
+                for (let i = 0; i < _droneN; i++) {
+                    const orbit = time * (0.3 + (i % 4) * 0.1) + i;
+                    const dx = towerX + Math.cos(orbit) * (180 + (i % 5) * 30);
+                    const dy = horizon * 0.35 + Math.sin(orbit * 1.3) * 120 + (i % 3) * 20;
+                    ctx.fillRect(dx - 2, dy - 1, 4, 2);
+                }
             }
             ctx.restore();
             return;
@@ -18503,6 +18545,17 @@ drawEffects() {
 
         if (sector === 5) {
             // --- TESSERACT PRIME: GEOMETRIC IMPOSSIBILITY ---
+            // Tier-aware density: 18 prismatic rays use hsla() (slowest
+            // colorspace path), 4 scan-line tears blit the full screen
+            // width per frame, and the chromatic aberration draws each
+            // tesseract face 3× with shadowBlur. Mid drops rays/scans;
+            // low strips rays + scans + ghost overlays entirely while
+            // keeping the core tesseract wireframe.
+            const _tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+            const _isLow  = _tier === 'low';
+            const _isMid  = _tier === 'mid';
+            const _rayN   = _isLow ? 0 : (_isMid ? 10 : 18);
+            const _scanN  = _isLow ? 0 : (_isMid ? 2 : 4);
             ctx.save();
             // Prismatic white-pink wash
             ctx.fillStyle = this._cachedGradient('s5_sky', () => {
@@ -18515,18 +18568,20 @@ drawEffects() {
 
             // Prismatic rays fanning from center
             const cx = w * 0.5, cy = horizon * 0.55;
-            ctx.globalCompositeOperation = 'lighter';
-            for (let i = 0; i < 18; i++) {
-                const a = time * 0.15 + i * (Math.PI * 2 / 18);
-                const hue = (i * 20 + time * 30) % 360;
-                ctx.strokeStyle = `hsla(${hue}, 90%, 65%, 0.18)`;
-                ctx.lineWidth = 40;
-                ctx.beginPath();
-                ctx.moveTo(cx, cy);
-                ctx.lineTo(cx + Math.cos(a) * 1400, cy + Math.sin(a) * 1400);
-                ctx.stroke();
+            if (_rayN > 0) {
+                ctx.globalCompositeOperation = 'lighter';
+                for (let i = 0; i < _rayN; i++) {
+                    const a = time * 0.15 + i * (Math.PI * 2 / _rayN);
+                    const hue = (i * 20 + time * 30) % 360;
+                    ctx.strokeStyle = `hsla(${hue}, 90%, 65%, 0.18)`;
+                    ctx.lineWidth = 40;
+                    ctx.beginPath();
+                    ctx.moveTo(cx, cy);
+                    ctx.lineTo(cx + Math.cos(a) * 1400, cy + Math.sin(a) * 1400);
+                    ctx.stroke();
+                }
+                ctx.globalCompositeOperation = 'source-over';
             }
-            ctx.globalCompositeOperation = 'source-over';
 
             // Rotating tesseract (outer cube + inner cube connected) wireframe
             const tR = 230;
@@ -18555,7 +18610,7 @@ drawEffects() {
                 }
                 ctx.closePath(); ctx.stroke();
             };
-            ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 14;
+            if (!_isLow) { ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 14; }
             drawPoly(outer, 'rgba(255, 255, 255, 0.85)', 3);
             drawPoly(inner, 'rgba(255, 100, 180, 0.9)', 2.5);
             // Connect outer to inner (tesseract edges)
@@ -18566,7 +18621,7 @@ drawEffects() {
             ctx.shadowBlur = 0;
 
             // Glitch scan-line tears — horizontal bands offset
-            for (let i = 0; i < 4; i++) {
+            for (let i = 0; i < _scanN; i++) {
                 const ty = ((time * 90 + i * 220) % horizon);
                 const off = Math.sin(time * 5 + i) * 20;
                 ctx.fillStyle = `rgba(255, 255, 255, ${0.06 + (i % 2) * 0.04})`;
@@ -18575,23 +18630,27 @@ drawEffects() {
                 ctx.fillRect(-off, ty + 3, w, 2);
             }
 
-            // Ghosted overlay echoes of the tesseract (chromatic aberration copies)
-            ctx.globalAlpha = 0.35;
-            ctx.strokeStyle = 'rgba(0, 220, 255, 0.6)'; ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            for (let i = 0; i < outer.length; i++) {
-                const [x, y] = outer[i];
-                if (i === 0) ctx.moveTo(x + 10, y); else ctx.lineTo(x + 10, y);
+            // Ghosted overlay echoes of the tesseract (chromatic aberration
+            // copies) — skip on low; the wireframe alone reads as "weird
+            // geometry" without the per-frame extra strokes.
+            if (!_isLow) {
+                ctx.globalAlpha = 0.35;
+                ctx.strokeStyle = 'rgba(0, 220, 255, 0.6)'; ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                for (let i = 0; i < outer.length; i++) {
+                    const [x, y] = outer[i];
+                    if (i === 0) ctx.moveTo(x + 10, y); else ctx.lineTo(x + 10, y);
+                }
+                ctx.closePath(); ctx.stroke();
+                ctx.strokeStyle = 'rgba(255, 0, 120, 0.6)';
+                ctx.beginPath();
+                for (let i = 0; i < outer.length; i++) {
+                    const [x, y] = outer[i];
+                    if (i === 0) ctx.moveTo(x - 10, y); else ctx.lineTo(x - 10, y);
+                }
+                ctx.closePath(); ctx.stroke();
+                ctx.globalAlpha = 1;
             }
-            ctx.closePath(); ctx.stroke();
-            ctx.strokeStyle = 'rgba(255, 0, 120, 0.6)';
-            ctx.beginPath();
-            for (let i = 0; i < outer.length; i++) {
-                const [x, y] = outer[i];
-                if (i === 0) ctx.moveTo(x - 10, y); else ctx.lineTo(x - 10, y);
-            }
-            ctx.closePath(); ctx.stroke();
-            ctx.globalAlpha = 1;
 
             ctx.restore();
             return;
