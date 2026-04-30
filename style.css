@@ -2553,14 +2553,11 @@ body.reduced-motion .boss-intro-stripe {
     transition: none !important;
 }
 
-/* Class-flavored event option — appears first in the option list when
-   the active class has a unique reaction to the event. Tinted gold to
-   read as "this one's tuned for you" without overpowering the panel. */
-.event-option-class {
-    border-color: var(--neon-gold) !important;
-    color: var(--neon-gold) !important;
-    box-shadow: 0 0 14px rgba(255, 215, 106, 0.25);
-}
+/* Class-flavored event option styling now lives on the
+   .event-option-card.event-option-class compound selector below in the
+   "EVENT SCREEN" section so it composes with the new card layout
+   instead of fighting it (the previous generic rule used !important on
+   color + border-color which broke the card's per-event accent). */
 
 /* Hex Breach result panel — replaces the legacy alert() popup. Sits
    centred over the hex grid with a glass card; .hex-result-win uses
@@ -6697,9 +6694,284 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     pointer-events: none;
 }
 
-/* Event Options */
-.event-text { font-size: 1.1rem; color: #ddd; margin-bottom: 20px; line-height: 1.5; }
-.event-options { display: flex; flex-direction: column; gap: 10px; align-items: center; width: 100%; }
+/* ============================================================
+   EVENT SCREEN — hero illustration + title + desc + option cards
+   ============================================================ */
+
+/* Event-art accent map. Each `data-event-art` value sets a CSS variable
+   that drives backdrop tint, hero glow, and option-hover color. Adding
+   a new event illustration only needs one entry here. */
+#screen-event[data-event-art="medbay"]        { --event-accent: #5ad864; }
+#screen-event[data-event-art="relic-shrine"]  { --event-accent: #ffd76a; }
+#screen-event[data-event-art="merchant"]      { --event-accent: #00f3ff; }
+#screen-event[data-event-art="conduit"]       { --event-accent: #bc13fe; }
+#screen-event[data-event-art="combat-trial"]  { --event-accent: #ff5b87; }
+#screen-event[data-event-art="corrupt-gift"]  { --event-accent: #ff0055; }
+#screen-event[data-event-art="memory-shard"]  { --event-accent: #88eaff; }
+#screen-event[data-event-art="beacon"]        { --event-accent: #ffd76a; }
+#screen-event[data-event-art="sentry"]        { --event-accent: #5ad864; }
+#screen-event[data-event-art="obelisk"]       { --event-accent: #aaf0ff; }
+#screen-event[data-event-art="data-vault"]    { --event-accent: #00f3ff; }
+#screen-event[data-event-art="frozen"]        { --event-accent: #aaf0ff; }
+#screen-event[data-event-art="glitch"]        { --event-accent: #bc13fe; }
+
+#screen-event {
+    --event-accent: var(--neon-purple);
+    /* Override .screen's center-flex with a top-aligned scrolling layout
+       so the hero stays at top + options stack naturally below. */
+    justify-content: flex-start;
+    align-items: center;
+    overflow-y: auto;
+    padding: var(--space-5) var(--space-4) var(--space-7);
+    gap: var(--space-3);
+}
+
+/* Hero illustration container — the inline SVG fills it. Glow ring
+   pulses with the event accent so the hero feels alive even before
+   the SVG's own animations kick in. */
+.event-hero {
+    width: clamp(160px, 50%, 220px);
+    aspect-ratio: 1;
+    margin: var(--space-4) auto var(--space-2);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    filter: drop-shadow(0 0 16px var(--event-accent));
+    animation: event-hero-float 4s ease-in-out infinite;
+}
+.event-hero svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+@keyframes event-hero-float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-6px); }
+}
+
+/* Per-illustration internal animations. Each art's class targets its
+   distinctive moving piece (medbay arm, shrine gem, merchant drone,
+   conduit sparks, etc.) so the hero feels bespoke instead of a static
+   image. All keyframes are short + cheap; reduced-motion blanket
+   collapses them automatically. */
+.event-art-pulse-bg     { animation: ea-pulse-bg 3.2s ease-in-out infinite; }
+.event-art-pulse        { animation: ea-pulse 1.4s ease-in-out infinite; }
+.event-art-medbay-arm   { animation: ea-medbay-arm 4s ease-in-out infinite; transform-origin: 100px 20px; }
+.event-art-medbay-cross { animation: ea-medbay-cross 1.8s ease-in-out infinite; transform-origin: 140px 50px; }
+.event-art-ekg          { stroke-dasharray: 320; stroke-dashoffset: 320; animation: ea-ekg 2.4s linear infinite; }
+.event-art-shrine-gem   { animation: ea-shrine-float 3s ease-in-out infinite; transform-origin: center; }
+.event-art-shrine-orbit { animation: ea-shrine-orbit 6s linear infinite; transform-origin: 100px 100px; }
+.event-art-merchant-drone { animation: ea-merchant-bob 2.6s ease-in-out infinite; transform-origin: 100px 90px; }
+.event-art-conduit-spark  { animation: ea-conduit-flicker 0.8s steps(6, end) infinite; }
+.event-art-trial-dummy    { animation: ea-trial-flicker 3s ease-in-out infinite; }
+.event-art-trial-reticle  { animation: ea-trial-reticle 4s linear infinite; transform-origin: 100px 95px; }
+.event-art-corrupt-crate  { animation: ea-corrupt-shake 2.4s ease-in-out infinite; transform-origin: 100px 120px; }
+.event-art-corrupt-glitch { animation: ea-corrupt-glitch 0.5s steps(4, end) infinite; }
+.event-art-shard-float    { animation: ea-shard-float 3.6s ease-in-out infinite; transform-origin: 100px 95px; }
+.event-art-shard-orbit text { animation: ea-shard-text 4s ease-in-out infinite; }
+.event-art-beacon-waves   { animation: ea-beacon-wave 2s ease-out infinite; transform-origin: 100px 60px; }
+.event-art-sentry-head    { animation: ea-sentry-scan 4s ease-in-out infinite; transform-origin: 100px 90px; }
+.event-art-obelisk-echo   { animation: ea-obelisk-echo 2.4s ease-in-out infinite; transform-origin: 100px 90px; }
+.event-art-glitch-spin    { animation: ea-glitch-spin 8s linear infinite; }
+.event-art-vault-slots circle { /* per-row pulse already handled by .event-art-pulse */ }
+.event-art-frozen-spin    { animation: ea-frozen-spin 24s linear infinite; }
+
+@keyframes ea-pulse-bg     { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+@keyframes ea-pulse        { 0%, 100% { opacity: 0.6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.15); } }
+@keyframes ea-medbay-arm   { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(8deg); } }
+@keyframes ea-medbay-cross { 0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px #ff4470); }
+                              50%      { transform: scale(1.12); filter: drop-shadow(0 0 12px #ff4470); } }
+@keyframes ea-ekg          { 0% { stroke-dashoffset: 320; } 100% { stroke-dashoffset: 0; } }
+@keyframes ea-shrine-float { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-8px) rotate(4deg); } }
+@keyframes ea-shrine-orbit { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+@keyframes ea-merchant-bob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-4px) rotate(1deg); } }
+@keyframes ea-conduit-flicker { 0%, 100% { opacity: 0.9; } 50% { opacity: 0.4; } }
+@keyframes ea-trial-flicker   { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; }
+                                 25% { opacity: 0.85; transform: translate(-1px, 0); }
+                                 75% { opacity: 0.85; transform: translate(1px, 0); } }
+@keyframes ea-trial-reticle   { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+@keyframes ea-corrupt-shake   { 0%, 100% { transform: translate(0, 0); }
+                                 25% { transform: translate(-1px, 0); }
+                                 50% { transform: translate(0, -1px); }
+                                 75% { transform: translate(1px, 0); } }
+@keyframes ea-corrupt-glitch  { 0%, 100% { opacity: 0.9; } 50% { opacity: 0.3; } }
+@keyframes ea-shard-float     { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-6px) rotate(2deg); } }
+@keyframes ea-shard-text      { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.9; } }
+@keyframes ea-beacon-wave     { 0% { opacity: 1; transform: scale(0.8); } 100% { opacity: 0; transform: scale(1.4); } }
+@keyframes ea-sentry-scan     { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(8deg); } }
+@keyframes ea-obelisk-echo    { 0%, 100% { opacity: 0.5; transform: translateY(0); } 50% { opacity: 0.85; transform: translateY(-3px); } }
+@keyframes ea-glitch-spin     { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+@keyframes ea-frozen-spin     { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* Event title — centred, accent-glowing. Replaces the prior
+   .neon-text-purple inline class with a token-aware version that picks
+   up the per-event accent. */
+.event-title {
+    font-family: var(--font-cyber);
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: clamp(1.4rem, 6vw, 2rem);
+    text-align: center;
+    margin: 0 0 var(--space-2);
+    color: var(--event-accent);
+    text-shadow: 0 0 14px var(--event-accent);
+    animation: event-title-pulse 3.2s ease-in-out infinite;
+}
+@keyframes event-title-pulse {
+    0%, 100% { text-shadow: 0 0 8px var(--event-accent); }
+    50%      { text-shadow: 0 0 18px var(--event-accent); }
+}
+
+.event-desc {
+    font-family: var(--font-main);
+    color: var(--text-muted);
+    font-size: var(--text-base);
+    line-height: 1.5;
+    text-align: center;
+    margin: 0 auto var(--space-5);
+    max-width: 520px;
+    padding: 0 var(--space-3);
+}
+
+.event-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    align-items: stretch;
+    width: 100%;
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 0 var(--space-3);
+}
+
+/* Each option is a card — icon slot left, text block centre, optional
+   "CLASS" tag right. Tinted to the event accent on hover so the
+   feedback feels event-specific instead of generic. */
+.event-option-card {
+    --card-color: var(--event-accent);
+    display: grid;
+    grid-template-columns: 56px 1fr auto;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: linear-gradient(135deg,
+        rgba(8, 12, 24, 0.85) 0%,
+        rgba(4, 6, 18, 0.92) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-family: var(--font-cyber);
+    font-size: var(--text-sm);
+    text-align: left;
+    cursor: pointer;
+    overflow: hidden;
+    position: relative;
+    transition:
+        transform var(--t-base) var(--ease-out-smart),
+        border-color var(--t-base) var(--ease-out-smart),
+        box-shadow var(--t-base) var(--ease-out-smart),
+        background var(--t-base) var(--ease-out-smart);
+    opacity: 0;
+    transform: translateY(8px);
+    animation: event-option-in 360ms var(--ease-out-smart) forwards;
+}
+@keyframes event-option-in {
+    to { opacity: 1; transform: translateY(0); }
+}
+.event-option-card::before {
+    /* Accent strip down the left edge — picks up the event color. */
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--card-color);
+    box-shadow: 0 0 8px var(--card-color);
+    opacity: 0.7;
+}
+@media (hover: hover) {
+    .event-option-card:hover {
+        transform: translateY(-2px);
+        border-color: var(--card-color);
+        box-shadow:
+            0 8px 24px rgba(0, 0, 0, 0.55),
+            0 0 24px color-mix(in srgb, var(--card-color) 35%, transparent);
+        background: linear-gradient(135deg,
+            color-mix(in srgb, var(--card-color) 15%, rgba(8, 12, 24, 0.85)) 0%,
+            rgba(4, 6, 18, 0.92) 100%);
+    }
+}
+.event-option-card:active { transform: translateY(0) scale(0.98); }
+
+.event-option-icon-slot {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--card-color);
+    background: color-mix(in srgb, var(--card-color) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--card-color) 35%, transparent);
+    border-radius: 8px;
+    box-shadow: 0 0 8px color-mix(in srgb, var(--card-color) 25%, transparent);
+}
+.event-option-icon { width: 28px; height: 28px; }
+
+.event-option-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.event-option-headline {
+    font-weight: 700;
+    font-size: var(--text-base);
+    letter-spacing: 0.06em;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+.event-option-consequence {
+    font-family: var(--font-main);
+    font-size: var(--text-xs);
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    font-weight: 400;
+    line-height: 1.3;
+}
+
+/* Class-flavored option override — gold border/icon, "CLASS" tag pinned
+   to the right column. Replaces the old gold flat button styling. */
+.event-option-card.event-option-class {
+    --card-color: var(--neon-gold);
+    border-color: rgba(255, 215, 106, 0.55);
+}
+.event-option-class-tag {
+    font-family: var(--font-cyber);
+    font-size: 0.6rem;
+    letter-spacing: 0.18em;
+    font-weight: 800;
+    color: var(--neon-gold);
+    background: rgba(255, 215, 106, 0.12);
+    border: 1px solid rgba(255, 215, 106, 0.5);
+    padding: 3px 6px;
+    border-radius: 3px;
+}
+
+/* Background tint behind the screen — soft radial of the event accent
+   so the whole screen reads "this place feels different from a normal
+   map node". Layered behind the .screen entry flash. */
+#screen-event::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse at 50% 25%,
+        color-mix(in srgb, var(--event-accent) 18%, transparent) 0%,
+        transparent 55%);
+    z-index: 0;
+    transition: background var(--t-slow) ease-out;
+}
+#screen-event > * { position: relative; z-index: 1; }
 
 /* Relic Dropdown Menu */
 /* --- STORYBOARD INTRO — Phase 2 --- */

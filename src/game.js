@@ -6,6 +6,7 @@ import { Minion } from './entities/minion.js';
 import { Enemy } from './entities/enemy.js';
 import { ParticleSys } from './effects/particles.js';
 import { TooltipMgr } from './ui/tooltip.js';
+import { getEventArt, getOptionIcon } from './ui/event-art.js';
 import { ClassAbility } from './ui/class-ability.js';
 import { ICONS, iconImage, drawIcon, preloadCombatIcons } from './ui/icons.js';
 import { drawIntentIcon, drawEffectIcon, blitEffectIcon } from './ui/canvas-icons.js';
@@ -8539,16 +8540,28 @@ triggerSystemCrash() {
     startEvent() {
         // FIX: Filter events based on conditions (e.g. don't show upgrade events if maxed)
         const validEvents = EVENTS_DB.filter(e => !e.condition || e.condition(this));
-        
+
         // Fallback to all events if filter leaves none (unlikely but safe)
         const pool = validEvents.length > 0 ? validEvents : EVENTS_DB;
-        
+
         const event = pool[Math.floor(Math.random() * pool.length)];
-        
+
         this.changeState(STATE.EVENT);
+
+        // Wire the per-event hero illustration. The art key on the event
+        // record (e.g. 'medbay', 'relic-shrine', 'merchant') resolves to
+        // an inline SVG via getEventArt; same key is mirrored to a data
+        // attribute on the screen so CSS can tint backdrop / button glow
+        // per-event without per-event selector explosions.
+        const screen = document.getElementById('screen-event');
+        const hero = document.getElementById('event-hero');
+        const artKey = event.art || 'glitch';
+        if (screen) screen.setAttribute('data-event-art', artKey);
+        if (hero)   hero.innerHTML = getEventArt(artKey);
+
         document.getElementById('event-title').innerText = event.title;
         document.getElementById('event-desc').innerText = event.desc;
-        
+
         const opts = document.getElementById('event-options');
         opts.innerHTML = '';
 
@@ -8560,10 +8573,25 @@ triggerSystemCrash() {
         const renderable = classOpt ? [{ ...classOpt, _class: true }, ...event.options]
                                     : event.options;
 
-        renderable.forEach(opt => {
+        renderable.forEach((opt, idx) => {
             const btn = document.createElement('button');
-            btn.className = opt._class ? 'btn primary event-option-class' : 'btn secondary';
-            btn.innerText = opt.text;
+            const isClassOpt = !!opt._class;
+            btn.className = 'event-option-card' + (isClassOpt ? ' event-option-class' : '');
+            btn.style.animationDelay = `${80 + idx * 60}ms`;
+            // Split the option label into "headline" and "(consequence)"
+            // chunks so the cost/payoff reads as a sub-line rather than
+            // crammed into one long string.
+            const m = /^(.+?)\s*\(([^)]+)\)\s*$/.exec(opt.text);
+            const headline = m ? m[1].trim() : opt.text;
+            const consequence = m ? m[2].trim() : '';
+            btn.innerHTML = `
+                <span class="event-option-icon-slot">${getOptionIcon(opt.icon || 'star')}</span>
+                <span class="event-option-text">
+                    <span class="event-option-headline">${headline}</span>
+                    ${consequence ? `<span class="event-option-consequence">${consequence}</span>` : ''}
+                </span>
+                ${isClassOpt ? '<span class="event-option-class-tag">CLASS</span>' : ''}
+            `;
             btn.onclick = () => {
                 const beforeFrags = this.techFragments || 0;
                 const msg = opt.effect(this);

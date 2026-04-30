@@ -478,14 +478,18 @@
                     </div>
                 </div>
             </div>
-            <!-- Event Screen -->
-            <div id="screen-event" class="screen hidden">
-                <h2 id="event-title" class="neon-text-purple">SIGNAL DETECTED</h2>
-                <div class="event-content glass-panel">
-                    <p id="event-desc" class="event-text">...</p>
-                    <div id="event-options" class="event-options">
-                        <!-- Populated by JS -->
-                    </div>
+            <!-- Event Screen — hero illustration + title + description +
+                 option cards. Each event sets data-event-art on
+                 #screen-event so per-event accent colors / glow tints
+                 cascade through the layout. -->
+            <div id="screen-event" class="screen hidden" data-event-art="glitch">
+                <div class="event-hero" id="event-hero" aria-hidden="true">
+                    <!-- SVG illustration injected by getEventArt() -->
+                </div>
+                <h2 id="event-title" class="event-title">SIGNAL DETECTED</h2>
+                <p id="event-desc" class="event-desc">...</p>
+                <div id="event-options" class="event-options">
+                    <!-- Option cards injected by JS -->
                 </div>
             </div>
 

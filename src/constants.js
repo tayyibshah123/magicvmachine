@@ -698,318 +698,273 @@ const BOSS_DATA = {
 const EVENTS_DB = [
     {
         title: "STRANGE SIGNAL",
+        art: 'beacon',
         desc: "You intercept an encrypted transmission. It seems to be a distress signal from a rogue AI.",
         options: [
-            {
-                text: "Decrypt (-4 HP, +40 Fragments)", // Reduced from 10
-                effect: (g) => {
-                    g.player.takeDamage(4);
-                    g.techFragments += 40;
-                    return "You gained 40 Fragments.";
-                }
-            },
-            {
-                text: "Ignore (Leave)",
-                effect: (g) => { return "You moved on."; }
-            }
+            { text: "Decrypt (-4 HP, +40 Fragments)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(4); g.techFragments += 40; return "You gained 40 Fragments.";
+            } },
+            { text: "Ignore (Leave)", icon: 'walk-away', effect: () => "You moved on." }
         ],
         classOptions: {
-            tactician: {
-                text: "Trace the source (+60 Fragments, +1 Reroll Token)",
-                effect: (g) => {
-                    g.techFragments += 60;
-                    g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
-                    return "Source traced. +60 Fragments. +1 Reroll Token.";
-                }
-            },
-            arcanist: {
-                text: "Channel the glyph (-2 Mana, +1 Reroll, +30 Fragments)",
-                effect: (g) => {
-                    g.player.mana = Math.max(0, (g.player.mana || 0) - 2);
-                    g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
-                    g.techFragments += 30;
-                    return "Glyph channeled. +1 Reroll. +30 Fragments.";
-                }
-            },
-            bloodstalker: {
-                text: "Bleed for it (-8 HP, +80 Fragments)",
-                effect: (g) => {
-                    g.player.takeDamage(8);
-                    g.techFragments += 80;
-                    return "Blood paid. +80 Fragments.";
-                }
-            },
+            tactician: { text: "Trace the source (+60 Fragments, +1 Reroll Token)", icon: 'eye', effect: (g) => {
+                g.techFragments += 60; g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
+                return "Source traced. +60 Fragments. +1 Reroll Token.";
+            } },
+            arcanist:  { text: "Channel the glyph (-2 Mana, +1 Reroll, +30 Fragments)", icon: 'mana-drop', effect: (g) => {
+                g.player.mana = Math.max(0, (g.player.mana || 0) - 2);
+                g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
+                g.techFragments += 30;
+                return "Glyph channeled. +1 Reroll. +30 Fragments.";
+            } },
+            bloodstalker: { text: "Bleed for it (-8 HP, +80 Fragments)", icon: 'skull', effect: (g) => {
+                g.player.takeDamage(8); g.techFragments += 80;
+                return "Blood paid. +80 Fragments.";
+            } },
         }
     },
     {
         title: "ABANDONED CACHE",
+        art: 'data-vault',
         desc: "A supply crate sits amidst the rubble.",
         options: [
-            {
-                text: "Open (+25 Fragments)",
-                effect: (g) => {
-                    g.techFragments += 25;
-                    return "Found 25 Fragments.";
-                }
-            },
-            {
-                text: "Salvage Parts (+5 HP)", // Reduced from 15
-                effect: (g) => {
-                    g.player.heal(5);
-                    return "Restored 5 HP.";
-                }
-            }
+            { text: "Open (+25 Fragments)", icon: 'coin-stack', effect: (g) => {
+                g.techFragments += 25; return "Found 25 Fragments.";
+            } },
+            { text: "Salvage Parts (+5 HP)", icon: 'bandage', effect: (g) => {
+                g.player.heal(5); return "Restored 5 HP.";
+            } }
         ],
         classOptions: {
-            sentinel: {
-                text: "Reinforce armour (+5 Max HP, +5 HP)",
-                effect: (g) => {
-                    g.player.maxHp += 5;
-                    g.player.heal(5);
-                    return "Armour reinforced. +5 Max HP. Healed 5.";
-                }
-            },
-            summoner: {
-                text: "Send a Spirit ahead (+60 Fragments, +5 HP)",
-                effect: (g) => {
-                    g.techFragments += 60;
-                    g.player.heal(5);
-                    return "Spirit returns with the haul. +60 Fragments.";
-                }
-            },
-            annihilator: {
-                text: "Rig a charge (-3 HP, +1 Reroll Token)",
-                effect: (g) => {
-                    g.player.takeDamage(3);
-                    g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
-                    return "Charge rigged. +1 Reroll Token.";
-                }
-            },
+            sentinel: { text: "Reinforce armour (+5 Max HP, +5 HP)", icon: 'shield', effect: (g) => {
+                g.player.maxHp += 5; g.player.heal(5);
+                return "Armour reinforced. +5 Max HP. Healed 5.";
+            } },
+            summoner: { text: "Send a Spirit ahead (+60 Fragments, +5 HP)", icon: 'minion', effect: (g) => {
+                g.techFragments += 60; g.player.heal(5);
+                return "Spirit returns with the haul. +60 Fragments.";
+            } },
+            annihilator: { text: "Rig a charge (-3 HP, +1 Reroll Token)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(3); g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
+                return "Charge rigged. +1 Reroll Token.";
+            } },
         }
     },
     {
         title: "MALFUNCTIONING FABRICATOR",
+        art: 'conduit',
         desc: "An unstable upgrade station sparks wildly. You might be able to force an upgrade, but it will hurt.",
         condition: (g) => Object.keys(DICE_UPGRADES).some(k => !g.player.hasDiceUpgrade(k)),
         options: [
-            { 
-                text: "Force Upgrade (-8 HP)", // Reduced from 20
-                effect: (g) => { 
-                    g.player.takeDamage(8);
-                    const available = Object.keys(DICE_UPGRADES).filter(k => !g.player.hasDiceUpgrade(k));
-                    if (available.length > 0) {
-                        const up = available[Math.floor(Math.random() * available.length)];
-                        g.player.diceUpgrades.push(up);
-                        return "SYSTEM UPGRADED: " + DICE_UPGRADES[up].name;
-                    } else {
-                        g.techFragments += 100;
-                        return "Maximum Upgrades Reached. (+100 Frags)";
-                    }
-                } 
-            },
-            { text: "Leave", effect: (g) => "Too risky." }
+            { text: "Force Upgrade (-8 HP)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(8);
+                const available = Object.keys(DICE_UPGRADES).filter(k => !g.player.hasDiceUpgrade(k));
+                if (available.length > 0) {
+                    const up = available[Math.floor(Math.random() * available.length)];
+                    g.player.diceUpgrades.push(up);
+                    return "SYSTEM UPGRADED: " + DICE_UPGRADES[up].name;
+                }
+                g.techFragments += 100;
+                return "Maximum Upgrades Reached. (+100 Frags)";
+            } },
+            { text: "Leave", icon: 'walk-away', effect: () => "Too risky." }
         ]
     },
     {
         title: "GLITCH ANOMALY",
+        art: 'glitch',
         desc: "A tear in the network reveals a high-value target. It looks dangerous.",
         options: [
-            { 
-                text: "Engage Elite (Combat)", 
-                effect: (g) => { 
-                    g.startCombat('elite'); 
-                    return "COMBAT_STARTED"; 
-                } 
-            },
-            { text: "Avoid", effect: (g) => "You skirt around the anomaly." }
+            { text: "Engage Elite (Combat)", icon: 'sword', effect: (g) => { g.startCombat('elite'); return "COMBAT_STARTED"; } },
+            { text: "Avoid", icon: 'walk-away', effect: () => "You skirt around the anomaly." }
         ]
     },
     {
         title: "DATA BROKER",
+        art: 'data-vault',
         desc: "A shady algorithm offers you a random module in exchange for raw data.",
         options: [
-            { 
-                text: "Buy Random Module (-50 Fragments)", 
-                effect: (g) => { 
-                    if (g.techFragments >= 50) {
-                        g.techFragments -= 50;
-                        const pool = UPGRADES_POOL;
-                        const item = pool[Math.floor(Math.random() * pool.length)];
-                        g.player.addRelic(item);
-                        return "ACQUIRED: " + item.name;
-                    } else {
-                        return "Insufficient Fragments.";
-                    }
-                } 
-            },
-            { text: "Decline", effect: (g) => "You walk away." }
+            { text: "Buy Random Module (-50 Fragments)", icon: 'gem', effect: (g) => {
+                if (g.techFragments >= 50) {
+                    g.techFragments -= 50;
+                    const pool = UPGRADES_POOL;
+                    const item = pool[Math.floor(Math.random() * pool.length)];
+                    g.player.addRelic(item);
+                    return "ACQUIRED: " + item.name;
+                }
+                return "Insufficient Fragments.";
+            } },
+            { text: "Decline", icon: 'walk-away', effect: () => "You walk away." }
         ]
     },
     {
         title: "CORRUPTED NODE",
+        art: 'glitch',
         desc: "This node is leaking data. You can absorb it, but it will corrupt your max integrity.",
         options: [
-            {
-                text: "Absorb (-4 Max HP, +150 Fragments)", // Reduced from 10
-                effect: (g) => {
-                    g.player.maxHp -= 4;
-                    if (g.player.currentHp > g.player.maxHp) g.player.currentHp = g.player.maxHp;
-                    g.techFragments += 150;
-                    return "Data absorbed. Integrity compromised.";
-                }
-            },
-            { text: "Purge (+7 HP)", effect: (g) => { g.player.heal(7); return "Node stabilized."; } } // Reduced from 20
+            { text: "Absorb (-4 Max HP, +150 Fragments)", icon: 'skull', effect: (g) => {
+                g.player.maxHp -= 4;
+                if (g.player.currentHp > g.player.maxHp) g.player.currentHp = g.player.maxHp;
+                g.techFragments += 150;
+                return "Data absorbed. Integrity compromised.";
+            } },
+            { text: "Purge (+7 HP)", icon: 'heart-burst', effect: (g) => { g.player.heal(7); return "Node stabilized."; } }
         ],
         classOptions: {
-            bloodstalker: {
-                text: "Drink the corruption (-10 HP, +200 Fragments)",
-                effect: (g) => {
-                    g.player.takeDamage(10);
-                    g.techFragments += 200;
-                    return "Corruption metabolized. +200 Fragments.";
-                }
-            },
-            arcanist: {
-                text: "Catalyse it (+60 Fragments, +2 Mana)",
-                effect: (g) => {
-                    g.techFragments += 60;
-                    g.player.mana = (g.player.mana || 0) + 2;
-                    return "Catalysed. +60 Fragments. +2 Mana.";
-                }
-            },
+            bloodstalker: { text: "Drink the corruption (-10 HP, +200 Fragments)", icon: 'skull', effect: (g) => {
+                g.player.takeDamage(10); g.techFragments += 200;
+                return "Corruption metabolized. +200 Fragments.";
+            } },
+            arcanist:  { text: "Catalyse it (+60 Fragments, +2 Mana)", icon: 'mana-drop', effect: (g) => {
+                g.techFragments += 60; g.player.mana = (g.player.mana || 0) + 2;
+                return "Catalysed. +60 Fragments. +2 Mana.";
+            } },
         }
     },
     {
         title: "TRAINING SIMULATION",
+        art: 'combat-trial',
         desc: "You find an old combat log. Studying it might reveal new tactics.",
         options: [
-            { 
-                text: "Study (Unlock Random Skill)", 
-                effect: (g) => { 
-                    const available = Object.keys(DICE_UPGRADES).filter(k => !g.player.hasDiceUpgrade(k));
-                    if (available.length > 0) {
-                        const up = available[Math.floor(Math.random() * available.length)];
-                        g.player.diceUpgrades.push(up);
-                        return "TACTIC LEARNED: " + DICE_UPGRADES[up].name;
-                    } else {
-                        g.techFragments += 50;
-                        return "Knowledge database full. (+50 Frags)";
-                    }
+            { text: "Study (Unlock Random Skill)", icon: 'star', effect: (g) => {
+                const available = Object.keys(DICE_UPGRADES).filter(k => !g.player.hasDiceUpgrade(k));
+                if (available.length > 0) {
+                    const up = available[Math.floor(Math.random() * available.length)];
+                    g.player.diceUpgrades.push(up);
+                    return "TACTIC LEARNED: " + DICE_UPGRADES[up].name;
                 }
-            }
+                g.techFragments += 50;
+                return "Knowledge database full. (+50 Frags)";
+            } }
         ]
     },
 
     // --- V1.1 event expansion ---
     {
         title: "FROZEN LATTICE",
+        art: 'frozen',
         desc: "A shimmering ice crystal holds a trapped fragment of code. Touching it burns.",
         options: [
-            { text: "Shatter (+40 Fragments, -3 HP)", effect: (g) => { g.player.takeDamage(3); g.techFragments += 40; return "Shards scatter and fuse to your circuits."; } },
-            { text: "Admire only", effect: () => "You step around it." }
+            { text: "Shatter (+40 Fragments, -3 HP)", icon: 'spark', effect: (g) => { g.player.takeDamage(3); g.techFragments += 40; return "Shards scatter and fuse to your circuits."; } },
+            { text: "Admire only", icon: 'walk-away', effect: () => "You step around it." }
         ]
     },
     {
         title: "ROGUE CODEC",
+        art: 'beacon',
         desc: "A friendly voice broadcasts on an unused frequency, offering a tuneup.",
         options: [
-            { text: "Accept tuneup (+5 Max HP)", effect: (g) => { g.player.maxHp += 5; g.player.currentHp += 5; return "Calibration complete."; } },
-            { text: "Trade frequencies (+1 Reroll max)", effect: (g) => { g.maxRerolls = (g.maxRerolls || 2) + 1; return "Bandwidth expanded."; } }
+            { text: "Accept tuneup (+5 Max HP)", icon: 'heart-burst', effect: (g) => { g.player.maxHp += 5; g.player.currentHp += 5; return "Calibration complete."; } },
+            { text: "Trade frequencies (+1 Reroll max)", icon: 'dice', effect: (g) => { g.maxRerolls = (g.maxRerolls || 2) + 1; return "Bandwidth expanded."; } }
         ]
     },
     {
         title: "SILENT SERVER",
+        art: 'data-vault',
         desc: "Idle hardware. You could scavenge it, but its maintenance drone is close.",
         options: [
-            { text: "Scavenge (+80 Fragments)", effect: (g) => { g.techFragments += 80; return "Quick pass. Drone none the wiser."; } },
-            { text: "Provoke drone (Combat)", effect: (g) => { g.startCombat('elite'); return "COMBAT_STARTED"; } }
+            { text: "Scavenge (+80 Fragments)", icon: 'coin-stack', effect: (g) => { g.techFragments += 80; return "Quick pass. Drone none the wiser."; } },
+            { text: "Provoke drone (Combat)", icon: 'sword', effect: (g) => { g.startCombat('elite'); return "COMBAT_STARTED"; } }
         ]
     },
     {
         title: "BURNT-OUT ORACLE",
+        art: 'relic-shrine',
         desc: "A charred Oracle-class AI offers one last prophecy, but it needs a minion to focus.",
         condition: (g) => g.player.minions && g.player.minions.length > 0,
         options: [
-            { text: "Sacrifice a minion (Unlock Random Relic)", effect: (g) => {
+            { text: "Sacrifice a minion (Unlock Random Relic)", icon: 'minion', effect: (g) => {
                 if (g.player.minions.length > 0) g.player.minions.shift();
                 const pool = UPGRADES_POOL;
                 const item = pool[Math.floor(Math.random() * pool.length)];
                 g.player.addRelic(item);
                 return "Oracle speaks once more: " + item.name;
             } },
-            { text: "Walk away", effect: () => "The Oracle fades." }
+            { text: "Walk away", icon: 'walk-away', effect: () => "The Oracle fades." }
         ]
     },
     {
         title: "RECURSIVE MARKET",
+        art: 'merchant',
         desc: "An automated market offers an exchange: pay fragments to duplicate one of your relics' effects.",
         condition: (g) => g.player.relics && g.player.relics.length >= 3,
         options: [
-            { text: "Buy duplicate (-120 Fragments)", effect: (g) => {
+            { text: "Buy duplicate (-120 Fragments)", icon: 'coin-stack', effect: (g) => {
                 if (g.techFragments < 120) return "Insufficient fragments.";
                 g.techFragments -= 120;
                 const rel = g.player.relics[Math.floor(Math.random() * g.player.relics.length)];
                 g.player.addRelic({ ...rel });
                 return "DUPLICATED: " + rel.name;
             } },
-            { text: "Refuse", effect: () => "You decline." }
+            { text: "Refuse", icon: 'walk-away', effect: () => "You decline." }
         ]
     },
     {
         title: "SKYGLASS RELIC",
+        art: 'obelisk',
         desc: "A mirrored obelisk reflects a younger you. Shattering it might grant a boon.",
         options: [
-            { text: "Shatter (take 5 DMG, random Relic)", effect: (g) => {
+            { text: "Shatter (take 5 DMG, random Relic)", icon: 'gem', effect: (g) => {
                 g.player.takeDamage(5);
                 const pool = UPGRADES_POOL;
                 const item = pool[Math.floor(Math.random() * pool.length)];
                 g.player.addRelic(item);
                 return "A fragment embeds: " + item.name;
             } },
-            { text: "Bow respectfully (+3 HP)", effect: (g) => { g.player.heal(3); return "The glass hums in thanks."; } }
+            { text: "Bow respectfully (+3 HP)", icon: 'heart-burst', effect: (g) => { g.player.heal(3); return "The glass hums in thanks."; } }
         ]
     },
     {
         title: "AUTOMATED MEDBAY",
+        art: 'medbay',
         desc: "A surgical arm whirs to life, offering emergency triage.",
         options: [
-            { text: "Full heal (-40% Max HP cap this run)", effect: (g) => {
+            // Old "-40% Max HP cap THIS RUN" was a brutal one-time cost
+            // for what's effectively a heal — players almost always took
+            // Quick Stitch instead, making the option dead. Tightened to
+            // -10% Max HP (5+ HP for most builds), which is a real trade
+            // (you give up some HP cap to top off in a fight) without
+            // bricking the run.
+            { text: "Full Heal (-10% Max HP)", icon: 'heart-burst', effect: (g) => {
+                const reduction = Math.max(2, Math.floor(g.player.maxHp * 0.10));
+                g.player.maxHp = Math.max(10, g.player.maxHp - reduction);
                 g.player.currentHp = g.player.maxHp;
-                g.player.maxHp = Math.max(10, Math.floor(g.player.maxHp * 0.6));
-                if (g.player.currentHp > g.player.maxHp) g.player.currentHp = g.player.maxHp;
-                return "Restored. Frame weakened.";
+                return `Restored. -${reduction} Max HP.`;
             } },
-            { text: "Quick stitch (+15 HP)", effect: (g) => { g.player.heal(15); return "Patched up."; } },
-            { text: "Decline", effect: () => "You move on." }
+            { text: "Quick Stitch (+15 HP)", icon: 'bandage', effect: (g) => { g.player.heal(15); return "Patched up."; } },
+            { text: "Decline", icon: 'walk-away', effect: () => "You move on." }
         ]
     },
     {
         title: "HOLO-ARENA",
+        art: 'combat-trial',
         desc: "Challenge a simulated version of an earlier boss. Win for fragments.",
         options: [
-            { text: "Accept challenge (Combat)", effect: (g) => { g.startCombat('elite'); return "COMBAT_STARTED"; } },
-            { text: "Leave", effect: () => "Not today." }
+            { text: "Accept challenge (Combat)", icon: 'sword', effect: (g) => { g.startCombat('elite'); return "COMBAT_STARTED"; } },
+            { text: "Leave", icon: 'walk-away', effect: () => "Not today." }
         ]
     },
     {
         title: "OVERFLOW CONDUIT",
+        art: 'conduit',
         desc: "Raw mana pours from a broken line.",
         options: [
-            { text: "Drink deep (+2 Base Mana, -5 Max HP)", effect: (g) => {
+            { text: "Drink deep (+2 Base Mana, -5 Max HP)", icon: 'mana-drop', effect: (g) => {
                 g.player.baseMana += 2;
                 g.player.maxHp -= 5;
                 if (g.player.currentHp > g.player.maxHp) g.player.currentHp = g.player.maxHp;
                 return "Current rises.";
             } },
-            { text: "Bottle a sip (+1 Base Mana)", effect: (g) => { g.player.baseMana += 1; return "Stored safely."; } },
-            { text: "Seal it", effect: () => "The line hisses shut." }
+            { text: "Bottle a sip (+1 Base Mana)", icon: 'mana-drop', effect: (g) => { g.player.baseMana += 1; return "Stored safely."; } },
+            { text: "Seal it", icon: 'walk-away', effect: () => "The line hisses shut." }
         ]
     },
     {
         title: "MERCHANT DRONE",
+        art: 'merchant',
         desc: "A flying vendor offers a rotating stock. One item, one chance.",
         options: [
-            { text: "Buy discounted relic (-60 Fragments)", effect: (g) => {
+            { text: "Buy discounted relic (-60 Fragments)", icon: 'gem', effect: (g) => {
                 if (g.techFragments < 60) return "Not enough Fragments.";
                 g.techFragments -= 60;
                 const pool = UPGRADES_POOL;
@@ -1017,39 +972,42 @@ const EVENTS_DB = [
                 g.player.addRelic(item);
                 return "ACQUIRED: " + item.name;
             } },
-            { text: "Shake them down (-10 HP, +80 Fragments)", effect: (g) => { g.player.takeDamage(10); g.techFragments += 80; return "The drone flees."; } },
-            { text: "Let them pass", effect: () => "They hum onward." }
+            { text: "Shake them down (-10 HP, +80 Fragments)", icon: 'fist', effect: (g) => { g.player.takeDamage(10); g.techFragments += 80; return "The drone flees."; } },
+            { text: "Let them pass", icon: 'walk-away', effect: () => "They hum onward." }
         ]
     },
     {
         title: "ABANDONED COMBAT SIM",
+        art: 'combat-trial',
         desc: "A training dummy flickers in and out. Perfect for a quick warm-up.",
         options: [
-            { text: "Train (next combat: +25% damage for first 2 turns)", effect: (g) => {
+            { text: "Train (next combat: +25% damage for first 2 turns)", icon: 'sword', effect: (g) => {
                 g.player._trainBonus = 2;
                 return "Muscle memory restored.";
             } },
-            { text: "Move on", effect: () => "No time to waste." }
+            { text: "Move on", icon: 'walk-away', effect: () => "No time to waste." }
         ]
     },
     {
         title: "CORRUPT GIFT",
+        art: 'corrupt-gift',
         desc: "A crate bound in red tape. The label warns of side effects.",
         options: [
-            { text: "Open (random Corrupted relic)", effect: (g) => {
+            { text: "Open (random Corrupted relic)", icon: 'gem', effect: (g) => {
                 const pool = CORRUPTED_RELICS;
                 const item = pool[Math.floor(Math.random() * pool.length)];
                 g.player.addRelic(item);
                 return "WARNING: " + item.name + " installed.";
             } },
-            { text: "Destroy (+40 Fragments)", effect: (g) => { g.techFragments += 40; return "Melted for scrap."; } }
+            { text: "Destroy (+40 Fragments)", icon: 'cross', effect: (g) => { g.techFragments += 40; return "Melted for scrap."; } }
         ]
     },
     {
         title: "MEMORY SHARD",
+        art: 'memory-shard',
         desc: "A shard of someone else's run. Study it to learn.",
         options: [
-            { text: "Study (Unlock Random Dice Upgrade)", effect: (g) => {
+            { text: "Study (Unlock Random Dice Upgrade)", icon: 'star', effect: (g) => {
                 const available = Object.keys(DICE_UPGRADES).filter(k => !g.player.hasDiceUpgrade(k));
                 if (available.length > 0) {
                     const up = available[Math.floor(Math.random() * available.length)];
@@ -1059,14 +1017,15 @@ const EVENTS_DB = [
                 g.techFragments += 50;
                 return "Nothing new. (+50 Frags)";
             } },
-            { text: "Leave it", effect: () => "Their story stays buried." }
+            { text: "Leave it", icon: 'walk-away', effect: () => "Their story stays buried." }
         ]
     },
     {
         title: "LIGHT SENTRY",
+        art: 'sentry',
         desc: "An inactive sentry could be repurposed, at a cost.",
         options: [
-            { text: "Repurpose (Gain a Minion)", effect: (g) => {
+            { text: "Repurpose (Gain a Minion)", icon: 'minion', effect: (g) => {
                 if (g.player.minions.length < (g.player.maxMinions || 2)) {
                     const Minion = g._MinionClass || null;
                     if (Minion) {
@@ -1076,29 +1035,31 @@ const EVENTS_DB = [
                 }
                 return "New ally online.";
             } },
-            { text: "Cannibalize (+30 Fragments)", effect: (g) => { g.techFragments += 30; return "Parts extracted."; } }
+            { text: "Cannibalize (+30 Fragments)", icon: 'gear', effect: (g) => { g.techFragments += 30; return "Parts extracted."; } }
         ]
     },
     {
         title: "BROKEN BEACON",
+        art: 'beacon',
         desc: "A damaged distress signal. Following it might bring help, or an ambush.",
         options: [
-            { text: "Investigate (50% ambush, 50% +100 Fragments)", effect: (g) => {
+            { text: "Investigate (50% ambush, 50% +100 Fragments)", icon: 'eye', effect: (g) => {
                 if (Math.random() < 0.5) { g.startCombat('elite'); return "AMBUSH! COMBAT_STARTED"; }
                 g.techFragments += 100;
                 return "You find a supply cache.";
             } },
-            { text: "Mark and leave", effect: () => "Someone else's problem." }
+            { text: "Mark and leave", icon: 'walk-away', effect: () => "Someone else's problem." }
         ]
     },
     {
         title: "FIRMWARE PIN",
+        art: 'data-vault',
         desc: "A piece of salvaged firmware can lock one dice slot to a chosen type for 3 turns next combat.",
         options: [
-            { text: "Seal ATTACK (3 turns)",  effect: (g) => { if (g.sealDice) g.sealDice('ATTACK', 3);  return "ATTACK pinned for 3 turns."; } },
-            { text: "Seal DEFEND (3 turns)",  effect: (g) => { if (g.sealDice) g.sealDice('DEFEND', 3);  return "DEFEND pinned for 3 turns."; } },
-            { text: "Seal MINION (3 turns)",  effect: (g) => { if (g.sealDice) g.sealDice('MINION', 3);  return "MINION pinned for 3 turns."; } },
-            { text: "Discard it", effect: () => "Firmware discarded." }
+            { text: "Seal ATTACK (3 turns)", icon: 'sword',     effect: (g) => { if (g.sealDice) g.sealDice('ATTACK', 3); return "ATTACK pinned for 3 turns."; } },
+            { text: "Seal DEFEND (3 turns)", icon: 'shield',    effect: (g) => { if (g.sealDice) g.sealDice('DEFEND', 3); return "DEFEND pinned for 3 turns."; } },
+            { text: "Seal MINION (3 turns)", icon: 'minion',    effect: (g) => { if (g.sealDice) g.sealDice('MINION', 3); return "MINION pinned for 3 turns."; } },
+            { text: "Discard it",            icon: 'walk-away', effect: () => "Firmware discarded." }
         ]
     }
 ];
