@@ -568,29 +568,97 @@
                 <button id="btn-leave-shop" class="btn primary">EXIT SHOP</button>
             </div>
 
-	<!-- Rest Screen -->
+	<!-- Rest Screen — central player figure absorbing energy from four
+	     quadrants, each a different colour-coded recovery option. -->
             <div id="screen-rest" class="screen hidden">
                 <h2 class="neon-text-green">SYSTEM RESTORE</h2>
-                <div class="event-content glass-panel">
-                    <p style="margin-bottom: 30px;">Select maintenance protocol:</p>
-                    <div class="event-options">
-                        <button id="btn-rest-sleep" class="btn secondary">
-                            <div><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 14 A8 8 0 1 1 14 4 A6 6 0 0 0 22 14 Z" fill="currentColor" fill-opacity="0.25"/><path d="M3 5 L9 5 L3 11 L9 11" stroke-width="1.6"/></svg> SLEEP</div>
-                            <div style="font-size: 0.8rem; color: #aaa;">Heal 50% HP</div>
-                        </button>
-                        <button id="btn-rest-meditate" class="btn secondary">
-                            <div><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="9" r="3" fill="currentColor" fill-opacity="0.4"/><path d="M5 19 Q8 14 12 14 Q16 14 19 19" stroke-width="1.8"/><path d="M9 17 L7 20 M15 17 L17 20"/></svg> MEDITATE</div>
-                            <div style="font-size: 0.8rem; color: #aaa;">+1 Max Reroll (Permanent)</div>
-                        </button>
-                        <button id="btn-rest-tinker" class="btn secondary">
-                            <div><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19 L11 13"/><path d="M11 13 L13 11 L15 13 L17 11 Q19 9 17 7 Q15 5 13 7 L11 9 L13 11 Z" fill="currentColor" fill-opacity="0.22"/></svg> TINKER</div>
-                            <div style="font-size: 0.8rem; color: #aaa;">Upgrade a Random Skill</div>
-                        </button>
-                        <!-- Challenge Mode only — surfaced/hidden by Game.visitNode. -->
-                        <button id="btn-rest-pact" class="btn secondary neon-border-pink hidden">
-                            <div><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 L20 8 L20 16 L12 21 L4 16 L4 8 Z" fill="currentColor" fill-opacity="0.18"/><path d="M12 7 L12 17 M8 12 L16 12"/></svg> SIGN A PACT</div>
-                            <div style="font-size: 0.8rem; color: #ff77aa;">Trade survival for power. Stacks all run.</div>
-                        </button>
+                <p class="rest-sub">Select maintenance protocol:</p>
+
+                <!-- Stage: 2x2 grid of option cards with the player figure
+                     overlaying the centre. Inflow particle streams radiate
+                     from the player (CSS pseudo-elements). -->
+                <div class="rest-stage">
+                    <button id="btn-rest-sleep" class="rest-option rest-option--sleep" data-quadrant="tl">
+                        <div class="rest-option-glow" aria-hidden="true"></div>
+                        <svg class="rest-option-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M22 14 A8 8 0 1 1 14 4 A6 6 0 0 0 22 14 Z" fill="currentColor" fill-opacity="0.3"/>
+                            <path d="M22 14 A8 8 0 1 1 14 4 A6 6 0 0 0 22 14 Z" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                            <path d="M3 5 L9 5 L3 11 L9 11" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                        </svg>
+                        <span class="rest-option-label">SLEEP</span>
+                        <span class="rest-option-desc">Heal 50% HP</span>
+                    </button>
+
+                    <button id="btn-rest-meditate" class="rest-option rest-option--meditate" data-quadrant="tr">
+                        <div class="rest-option-glow" aria-hidden="true"></div>
+                        <svg class="rest-option-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle cx="12" cy="9" r="3" fill="currentColor" fill-opacity="0.45"/>
+                            <circle cx="12" cy="9" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                            <path d="M5 19 Q8 14 12 14 Q16 14 19 19" fill="none" stroke="currentColor" stroke-width="1.8"/>
+                            <path d="M9 17 L7 20 M15 17 L17 20" stroke="currentColor" stroke-width="1.6"/>
+                        </svg>
+                        <span class="rest-option-label">MEDITATE</span>
+                        <span class="rest-option-desc">+1 Max Reroll · permanent</span>
+                    </button>
+
+                    <button id="btn-rest-tinker" class="rest-option rest-option--tinker" data-quadrant="bl">
+                        <div class="rest-option-glow" aria-hidden="true"></div>
+                        <svg class="rest-option-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M5 19 L11 13" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                            <path d="M11 13 L13 11 L15 13 L17 11 Q19 9 17 7 Q15 5 13 7 L11 9 L13 11 Z" fill="currentColor" fill-opacity="0.3"/>
+                            <path d="M11 13 L13 11 L15 13 L17 11 Q19 9 17 7 Q15 5 13 7 L11 9 L13 11 Z" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                        </svg>
+                        <span class="rest-option-label">TINKER</span>
+                        <span class="rest-option-desc">Upgrade a random skill</span>
+                    </button>
+
+                    <!-- Challenge Mode only — JS toggles the .hidden class. -->
+                    <button id="btn-rest-pact" class="rest-option rest-option--pact hidden" data-quadrant="br">
+                        <div class="rest-option-glow" aria-hidden="true"></div>
+                        <svg class="rest-option-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 3 L20 8 L20 16 L12 21 L4 16 L4 8 Z" fill="currentColor" fill-opacity="0.25"/>
+                            <path d="M12 3 L20 8 L20 16 L12 21 L4 16 L4 8 Z" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                            <path d="M12 7 L12 17 M8 12 L16 12" stroke="currentColor" stroke-width="1.6"/>
+                        </svg>
+                        <span class="rest-option-label">SIGN A PACT</span>
+                        <span class="rest-option-desc">Survival for power · stacks all run</span>
+                    </button>
+
+                    <!-- Centre figure: operator silhouette absorbing inflow
+                         streams from each quadrant. Pure SVG, animated by CSS. -->
+                    <div class="rest-center" aria-hidden="true">
+                        <svg viewBox="0 0 200 200" class="rest-figure">
+                            <defs>
+                                <radialGradient id="rest-aura" cx="50%" cy="50%" r="50%">
+                                    <stop offset="0%"  stop-color="#5ad864" stop-opacity="0.6"/>
+                                    <stop offset="60%" stop-color="#5ad864" stop-opacity="0.15"/>
+                                    <stop offset="100%" stop-color="#5ad864" stop-opacity="0"/>
+                                </radialGradient>
+                            </defs>
+                            <!-- Aura halo behind the figure -->
+                            <circle cx="100" cy="100" r="92" fill="url(#rest-aura)" class="rest-figure-aura"/>
+                            <!-- Operator silhouette -->
+                            <g class="rest-figure-body" stroke="#aaf0ff" stroke-width="2" fill="rgba(170, 240, 255, 0.18)">
+                                <circle cx="100" cy="78" r="18"/>
+                                <path d="M72 100 Q72 90 100 90 Q128 90 128 100 L128 145 Q128 158 100 158 Q72 158 72 145 Z"/>
+                            </g>
+                            <!-- Heart core -->
+                            <circle cx="100" cy="120" r="6" fill="#5ad864" class="rest-figure-heart"/>
+                            <!-- Inflow streams (lines that pulse inward) -->
+                            <g class="rest-inflow" stroke-width="1.5" fill="none">
+                                <line x1="20"  y1="20"  x2="80"  y2="80"  stroke="#5ad864" class="rest-stream rest-stream-tl"/>
+                                <line x1="180" y1="20"  x2="120" y2="80"  stroke="#bc13fe" class="rest-stream rest-stream-tr"/>
+                                <line x1="20"  y1="180" x2="80"  y2="120" stroke="#ffd76a" class="rest-stream rest-stream-bl"/>
+                                <line x1="180" y1="180" x2="120" y2="120" stroke="#ff5b87" class="rest-stream rest-stream-br"/>
+                            </g>
+                            <!-- Spark particles travelling inward -->
+                            <g class="rest-sparks">
+                                <circle r="3" fill="#5ad864" class="rest-spark rest-spark-tl"/>
+                                <circle r="3" fill="#bc13fe" class="rest-spark rest-spark-tr"/>
+                                <circle r="3" fill="#ffd76a" class="rest-spark rest-spark-bl"/>
+                                <circle r="3" fill="#ff5b87" class="rest-spark rest-spark-br"/>
+                            </g>
+                        </svg>
                     </div>
                 </div>
             </div>
