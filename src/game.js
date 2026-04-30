@@ -23635,7 +23635,20 @@ drawEntity(entity) {
         // openPostTutorial reset state, dev tools hook) must never paint a
         // tutorial overlay — most case branches reference this.enemy.x and
         // would crash on the sector map where the enemy is null.
-        if (this.currentState !== STATE.TUTORIAL_COMBAT) {
+        //
+        // Two reasons this is also gated on `this.enemy`:
+        //   1. openPostTutorial() nulls this.enemy BEFORE it transitions
+        //      out of STATE.TUTORIAL_COMBAT (state changes happen inside
+        //      the recap's onContinue, which fires after a 280ms
+        //      fade-out). During that window any setTimeout-deferred
+        //      updateTutorialStep call (line ~13176-13182 schedules them
+        //      with a 500ms delay) sees state === TUTORIAL_COMBAT yet a
+        //      null enemy, and hits "null is not an object (evaluating
+        //      'entity.x')" the moment a case branch reads this.enemy.x.
+        //   2. Symmetric defence — the guard now bails on EITHER stale
+        //      state or missing enemy, so future tutorial flows that
+        //      teardown enemy-first can't reintroduce the same crash.
+        if (this.currentState !== STATE.TUTORIAL_COMBAT || !this.enemy) {
             const tNarr = document.getElementById('tutorial-narration');
             if (tNarr) tNarr.classList.add('hidden');
             const tOverlay = document.getElementById('tutorial-overlay');
