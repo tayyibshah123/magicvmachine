@@ -11069,7 +11069,14 @@ async startCombat(type) {
             Hints.trigger('first_boss');
         }
 
-        await this.sleep(500);
+        // Wait long enough that the boss intro slate is fully retreated
+        // before startTurn() fires its PLAYER PHASE banner. Slate runs
+        // 1900ms hold + 600ms retreat = ~2500ms total. Cinematic punch
+        // above already burned ~450ms, so we need ~2050ms more on the
+        // boss path. Non-boss combats (no slate) keep the snappy 500ms
+        // pre-turn beat. The user reported the PLAYER PHASE banner
+        // landing on top of the slate's title — this is the gap fix.
+        await this.sleep(isBoss ? 2050 : 500);
 
         this.enemy.decideTurn();
         ClassAbility.startCombat();
