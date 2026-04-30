@@ -704,7 +704,11 @@ const EVENTS_DB = [
             { text: "Decrypt (-4 HP, +40 Fragments)", icon: 'spark', effect: (g) => {
                 g.player.takeDamage(4); g.techFragments += 40; return "You gained 40 Fragments.";
             } },
-            { text: "Ignore (Leave)", icon: 'walk-away', effect: () => "You moved on." }
+            // No-op skip removed — every option must commit. The signal
+            // pulses on whether you tune in or not; ignoring it costs.
+            { text: "Tune it out (-3 HP, signal feedback)", icon: 'skull', effect: (g) => {
+                g.player.takeDamage(3); return "Static drives a spike through your skull.";
+            } }
         ],
         classOptions: {
             tactician: { text: "Trace the source (+60 Fragments, +1 Reroll Token)", icon: 'eye', effect: (g) => {
@@ -767,7 +771,10 @@ const EVENTS_DB = [
                 g.techFragments += 100;
                 return "Maximum Upgrades Reached. (+100 Frags)";
             } },
-            { text: "Leave", icon: 'walk-away', effect: () => "Too risky." }
+            // The fabricator catches you on the way out. No free retreat.
+            { text: "Back away (-4 HP, sparks scorch)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(4); return "Sparks rake your back as you retreat.";
+            } }
         ]
     },
     {
@@ -776,7 +783,14 @@ const EVENTS_DB = [
         desc: "A tear in the network reveals a high-value target. It looks dangerous.",
         options: [
             { text: "Engage Elite (Combat)", icon: 'sword', effect: (g) => { g.startCombat('elite'); return "COMBAT_STARTED"; } },
-            { text: "Avoid", icon: 'walk-away', effect: () => "You skirt around the anomaly." }
+            // No "free avoid" — proximity to a tear damages the integrity
+            // of any system that gets close. 25% Max HP loss is steep
+            // enough to feel like a real choice vs. fighting the elite.
+            { text: "Skirt the tear (lose 25% current HP)", icon: 'skull', effect: (g) => {
+                const dmg = Math.max(4, Math.floor(g.player.currentHp * 0.25));
+                g.player.takeDamage(dmg);
+                return `Static rakes ${dmg} HP off your hull.`;
+            } }
         ]
     },
     {
@@ -794,7 +808,12 @@ const EVENTS_DB = [
                 }
                 return "Insufficient Fragments.";
             } },
-            { text: "Decline", icon: 'walk-away', effect: () => "You walk away." }
+            // The broker scrapes a "browsing fee" if you leave empty-handed.
+            { text: "Decline (-25 Fragments parting fee)", icon: 'coin-stack', effect: (g) => {
+                const lost = Math.min(25, g.techFragments);
+                g.techFragments -= lost;
+                return `Broker skims ${lost} Fragments on your way out.`;
+            } }
         ]
     },
     {
@@ -846,7 +865,10 @@ const EVENTS_DB = [
         desc: "A shimmering ice crystal holds a trapped fragment of code. Touching it burns.",
         options: [
             { text: "Shatter (+40 Fragments, -3 HP)", icon: 'spark', effect: (g) => { g.player.takeDamage(3); g.techFragments += 40; return "Shards scatter and fuse to your circuits."; } },
-            { text: "Admire only", icon: 'walk-away', effect: () => "You step around it." }
+            // Lingering near a frozen lattice frosts your coolant.
+            { text: "Linger near it (-2 HP, frostbite)", icon: 'skull', effect: (g) => {
+                g.player.takeDamage(2); return "Cold seeps through your shielding.";
+            } }
         ]
     },
     {
@@ -880,7 +902,11 @@ const EVENTS_DB = [
                 g.player.addRelic(item);
                 return "Oracle speaks once more: " + item.name;
             } },
-            { text: "Walk away", icon: 'walk-away', effect: () => "The Oracle fades." }
+            // The Oracle's last words land on your back as you leave —
+            // a parting curse for refusing the prophecy.
+            { text: "Refuse the prophecy (-6 HP curse)", icon: 'skull', effect: (g) => {
+                g.player.takeDamage(6); return "The Oracle's whisper rakes you.";
+            } }
         ]
     },
     {
@@ -896,7 +922,14 @@ const EVENTS_DB = [
                 g.player.addRelic({ ...rel });
                 return "DUPLICATED: " + rel.name;
             } },
-            { text: "Refuse", icon: 'walk-away', effect: () => "You decline." }
+            // The market scans you on the way out — sells the data,
+            // and you pay the difference in fragments and integrity.
+            { text: "Refuse (-30 Fragments scanned, -3 HP)", icon: 'skull', effect: (g) => {
+                const lost = Math.min(30, g.techFragments);
+                g.techFragments -= lost;
+                g.player.takeDamage(3);
+                return `Scan complete. -${lost} Fragments. -3 HP.`;
+            } }
         ]
     },
     {
@@ -932,7 +965,11 @@ const EVENTS_DB = [
                 return `Restored. -${reduction} Max HP.`;
             } },
             { text: "Quick Stitch (+15 HP)", icon: 'bandage', effect: (g) => { g.player.heal(15); return "Patched up."; } },
-            { text: "Decline", icon: 'walk-away', effect: () => "You move on." }
+            // Even declining leaves you in proximity to the surgical
+            // arm. It scans you anyway and pulls a small toll.
+            { text: "Decline (-3 HP, the arm scans you)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(3); return "Scanner hum grates against your hull.";
+            } }
         ]
     },
     {
@@ -941,7 +978,12 @@ const EVENTS_DB = [
         desc: "Challenge a simulated version of an earlier boss. Win for fragments.",
         options: [
             { text: "Accept challenge (Combat)", icon: 'sword', effect: (g) => { g.startCombat('elite'); return "COMBAT_STARTED"; } },
-            { text: "Leave", icon: 'walk-away', effect: () => "Not today." }
+            // Forfeiting still triggers the simulator's parting volley.
+            { text: "Forfeit (lose 20% current HP)", icon: 'skull', effect: (g) => {
+                const dmg = Math.max(3, Math.floor(g.player.currentHp * 0.20));
+                g.player.takeDamage(dmg);
+                return `Holo-strike clips you for ${dmg} HP.`;
+            } }
         ]
     },
     {
@@ -956,7 +998,12 @@ const EVENTS_DB = [
                 return "Current rises.";
             } },
             { text: "Bottle a sip (+1 Base Mana)", icon: 'mana-drop', effect: (g) => { g.player.baseMana += 1; return "Stored safely."; } },
-            { text: "Seal it", icon: 'walk-away', effect: () => "The line hisses shut." }
+            // Sealing the line burns a Mana to weld it shut. Real cost.
+            { text: "Seal it (-1 Mana, +20 Fragments scrap)", icon: 'spark', effect: (g) => {
+                g.player.mana = Math.max(0, (g.player.mana || 0) - 1);
+                g.techFragments += 20;
+                return "Line welded. +20 Fragments salvaged.";
+            } }
         ]
     },
     {
@@ -973,7 +1020,12 @@ const EVENTS_DB = [
                 return "ACQUIRED: " + item.name;
             } },
             { text: "Shake them down (-10 HP, +80 Fragments)", icon: 'fist', effect: (g) => { g.player.takeDamage(10); g.techFragments += 80; return "The drone flees."; } },
-            { text: "Let them pass", icon: 'walk-away', effect: () => "They hum onward." }
+            // The drone scans you as it leaves; sells the data, pricks you.
+            { text: "Wave them off (-15 Fragments scan tax)", icon: 'coin-stack', effect: (g) => {
+                const lost = Math.min(15, g.techFragments);
+                g.techFragments -= lost;
+                return `Drone scans you. -${lost} Fragments.`;
+            } }
         ]
     },
     {
@@ -985,7 +1037,11 @@ const EVENTS_DB = [
                 g.player._trainBonus = 2;
                 return "Muscle memory restored.";
             } },
-            { text: "Move on", icon: 'walk-away', effect: () => "No time to waste." }
+            // Skipping practice means walking past the dummy's last
+            // training routine — its motion sensors clip you.
+            { text: "Skip the drill (-3 HP, dummy clips you)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(3); return "Holo-fist grazes your shoulder.";
+            } }
         ]
     },
     {
@@ -1017,7 +1073,11 @@ const EVENTS_DB = [
                 g.techFragments += 50;
                 return "Nothing new. (+50 Frags)";
             } },
-            { text: "Leave it", icon: 'walk-away', effect: () => "Their story stays buried." }
+            // Refusing the memory pulls a thread of your own out with it.
+            { text: "Smash the shard (-4 HP, +20 Fragments)", icon: 'fist', effect: (g) => {
+                g.player.takeDamage(4); g.techFragments += 20;
+                return "Shards crumble. Memory dies. +20 Fragments.";
+            } }
         ]
     },
     {
@@ -1048,7 +1108,11 @@ const EVENTS_DB = [
                 g.techFragments += 100;
                 return "You find a supply cache.";
             } },
-            { text: "Mark and leave", icon: 'walk-away', effect: () => "Someone else's problem." }
+            // Whoever sent the beacon was tracking it. Leaving without
+            // disabling it costs you a tail of stalkers — small chip damage.
+            { text: "Disable the signal (-5 HP, recoil burn)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(5); return "Beacon silenced. Burn marks on your hand.";
+            } }
         ]
     },
     {
@@ -1059,7 +1123,12 @@ const EVENTS_DB = [
             { text: "Seal ATTACK (3 turns)", icon: 'sword',     effect: (g) => { if (g.sealDice) g.sealDice('ATTACK', 3); return "ATTACK pinned for 3 turns."; } },
             { text: "Seal DEFEND (3 turns)", icon: 'shield',    effect: (g) => { if (g.sealDice) g.sealDice('DEFEND', 3); return "DEFEND pinned for 3 turns."; } },
             { text: "Seal MINION (3 turns)", icon: 'minion',    effect: (g) => { if (g.sealDice) g.sealDice('MINION', 3); return "MINION pinned for 3 turns."; } },
-            { text: "Discard it",            icon: 'walk-away', effect: () => "Firmware discarded." }
+            // Discarding firmware is a real choice — it sparks as it
+            // dissolves and bites your interface during the discharge.
+            { text: "Burn it for parts (-2 HP, +30 Fragments)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(2); g.techFragments += 30;
+                return "Firmware combusts. +30 Fragments salvaged.";
+            } }
         ]
     }
 ];
