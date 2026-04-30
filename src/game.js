@@ -102,7 +102,28 @@ const Game = {
         // combatPaceMult scales wait durations: >1 is faster (shorter wait), <1 slower.
         const mult = this.combatPaceMult || 1;
         const scaled = Math.max(1, Math.round(ms / mult));
-        return new Promise(resolve => setTimeout(resolve, scaled));
+        // Pause-aware resolve: the timer fires on real-time even when the
+        // game is paused, but we defer the actual resolution until pause
+        // clears. Without this, a tab-hidden mid-combat caused awaiting
+        // sleep callers (enemy attack chains, VFX-aligned damage) to
+        // resume mid-flow against frozen game state — by the time the
+        // user tapped "RESUME", the rest of the chain had already
+        // executed in the background.
+        //
+        // Polling cadence: 200ms while paused. Cheap, only active during
+        // an actual pause. The first resolve attempt is the real-time
+        // setTimeout; subsequent attempts are nested setTimeouts that
+        // self-cancel as soon as `this.paused` clears.
+        return new Promise(resolve => {
+            const checkAndResolve = () => {
+                if (this.paused) {
+                    setTimeout(checkAndResolve, 200);
+                    return;
+                }
+                resolve();
+            };
+            setTimeout(checkAndResolve, scaled);
+        });
     },
 
     // -------- Tracked timers (perf audit P7) ------------------------------
