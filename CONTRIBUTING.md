@@ -10,7 +10,11 @@ session re-discover them.
 
 The game respects both the OS-level `prefers-reduced-motion` media query AND an
 in-game settings toggle (`body.reduced-motion`). Either being on triggers a
-blanket CSS rule that collapses every animation/transition to ~0ms.
+blanket CSS rule that collapses every CSS *animation* to ~0ms / single iteration.
+CSS *transitions* (state-change motion like screen swaps, modal fades, hover
+lift, button press, turn banner slide) are intentionally NOT touched — the W3C
+guidance is that transitions don't cause vestibular issues and removing them
+makes the UI feel broken rather than respectful.
 
 ### How to write a new animation
 
