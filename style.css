@@ -9988,13 +9988,39 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
 .intro-v2 .introv2-corner-bl { bottom: 3cqmin; left: 3cqmin; transform: scaleY(-1); }
 .intro-v2 .introv2-corner-br { bottom: 3cqmin; right: 3cqmin; transform: scale(-1, -1); }
 
-/* Reduced-motion — strip breathing/sweeping, keep fades only. */
+/* Reduced-motion exemption — the intro splash is a 5-second one-shot
+   brand moment shown once at launch. It doesn't loop into gameplay,
+   the motion is gentle (scale + opacity drift, slow pulse, slow grid
+   slide), and most desktops ship with OS-level reduced-motion ON by
+   default (Windows 11 Settings → Accessibility, macOS System Settings
+   → Accessibility). Without this exemption the player sees a frozen
+   intro on PC while their phone (no OS preference) sees the intended
+   cinematic — the inconsistency reads as broken rather than respectful.
+   We re-declare the full animation shorthand on each affected element
+   so the blanket's `animation-duration: 0.001ms / iteration-count: 1`
+   pair gets fully overridden (revert/unset don't help here because
+   they fall back to UA initial of 0s).
+   Same overrides mirrored to the in-game body.reduced-motion toggle. */
 @media (prefers-reduced-motion: reduce) {
-    .intro-v2 .introv2-bg,
-    .intro-v2 .introv2-gridfloor,
-    .intro-v2 .introv2-pulse,
-    .intro-v2 .introv2-vs { animation: none !important; }
+    .intro-v2 .introv2-bg          { animation: introv2-wash 18s ease-in-out infinite alternate !important; }
+    .intro-v2 .introv2-gridfloor   { animation: introv2-grid-slide 3.6s linear infinite !important; }
+    .intro-v2 .introv2-pulse       { animation: introv2-pulse-breath 5.5s ease-in-out infinite !important; }
+    .intro-v2 .introv2-title       {
+        animation:
+            introv2-title-in 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) 0.45s forwards,
+            introv2-title-pulse 3.2s ease-in-out 1.9s infinite !important;
+    }
+    .intro-v2 .introv2-tap         { animation: introv2-tap-blink 1.6s ease-in-out 2.8s infinite !important; }
 }
+body.reduced-motion .intro-v2 .introv2-bg          { animation: introv2-wash 18s ease-in-out infinite alternate !important; }
+body.reduced-motion .intro-v2 .introv2-gridfloor   { animation: introv2-grid-slide 3.6s linear infinite !important; }
+body.reduced-motion .intro-v2 .introv2-pulse       { animation: introv2-pulse-breath 5.5s ease-in-out infinite !important; }
+body.reduced-motion .intro-v2 .introv2-title       {
+    animation:
+        introv2-title-in 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) 0.45s forwards,
+        introv2-title-pulse 3.2s ease-in-out 1.9s infinite !important;
+}
+body.reduced-motion .intro-v2 .introv2-tap         { animation: introv2-tap-blink 1.6s ease-in-out 2.8s infinite !important; }
 
 .combat-win-sub .highlight-file { color: var(--neon-pink); }
 
