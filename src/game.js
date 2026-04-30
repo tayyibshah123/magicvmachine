@@ -146,6 +146,16 @@ const Game = {
     },
 
     init() {
+        // Idempotency guard — Game.init is called once at boot in
+        // production, but a debug reload, hot-module replacement during
+        // development, or a third-party harness re-importing the module
+        // could trigger a second call. Without this guard, every
+        // `window.addEventListener` and `canvas.addEventListener` below
+        // would stack a duplicate handler — drag/drop and resize would
+        // then fire 2x, 3x, ... on every interaction.
+        if (this._initialized) return;
+        this._initialized = true;
+
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d', { alpha: false });
 
@@ -8360,24 +8370,64 @@ triggerSystemCrash() {
         this._writeSaveRaw(JSON.stringify(data));
     },
 
-    // Migrate a raw save object to the current schema. Returns the migrated
-    // object (never mutates the input). Unknown versions are treated as v1
-    // (pre-versioning era) and passed through the same defensive pipeline.
-    _migrateSave(raw) {
-        const data = JSON.parse(JSON.stringify(raw)); // deep clone to avoid mutating raw
-        const from = (typeof data.v === 'number') ? data.v : 1;
-
-        // v1 → v2: added schema version field; no data shape changes, but this
-        // is the point where any future field-rename migrations will live.
-        if (from < 2) {
-            data.v = 2;
-            // Defensive defaults for fields that newer code paths expect.
-            data.player = data.player || {};
-            if (!data.player.upgrades) data.player.upgrades = [];
-            if (!data.player.relics) data.player.relics = [];
-            if (!data.player.signatureTier) data.player.signatureTier = 1;
+    // Save-data migration registry. Each entry runs IN ORDER and bumps
+    // the schema version forward by 1. To add a new migration:
+    //   1. Bump SAVE_SCHEMA_VERSION (line 8138).
+    //   2. Append a new entry { from, to, migrate(data) }.
+    //   3. The migrate function may mutate `data` in place — _migrateSave
+    //      already deep-clones the input so callers stay protected.
+    //
+    // Unknown / missing `v` is treated as v1 (pre-versioning era).
+    // Entries with from >= current schema version are skipped, so loading
+    // a save written by a NEWER build than what's installed still works
+    // (best-effort; new fields the old build doesn't know about pass
+    // through unread, which is the desired forward-compat behaviour).
+    SAVE_MIGRATIONS: [
+        {
+            from: 1, to: 2,
+            // v1→v2: added schema version field. No shape changes — this is
+            // the canonical "defensive defaults" pass for any save written
+            // before the migration framework existed.
+            migrate(data) {
+                data.player = data.player || {};
+                if (!Array.isArray(data.player.upgrades)) data.player.upgrades = [];
+                if (!Array.isArray(data.player.relics))   data.player.relics   = [];
+                if (typeof data.player.signatureTier !== 'number') data.player.signatureTier = 1;
+            }
         }
+        // Future migrations append here. Example:
+        // { from: 2, to: 3, migrate(data) { data.player.bloodTier = data.player.bloodTier || 0; } }
+    ],
 
+    // Apply the migration chain to a raw save object. Returns the migrated
+    // copy (never mutates the input). Tolerates malformed input — anything
+    // non-object returns null so callers can fail gracefully.
+    _migrateSave(raw) {
+        if (!raw || typeof raw !== 'object') return null;
+        // Deep clone via JSON round-trip — fast for the small save shape and
+        // guarantees no shared refs leak back to the caller's object.
+        let data;
+        try { data = JSON.parse(JSON.stringify(raw)); }
+        catch (_) { return null; }
+
+        let v = (typeof data.v === 'number' && data.v > 0) ? data.v : 1;
+        const target = this.SAVE_SCHEMA_VERSION;
+        // Forward-compat: if the save is from a NEWER build than this one,
+        // accept it as-is rather than dropping it. Best-effort — fields we
+        // don't know about pass through harmlessly.
+        if (v >= target) return data;
+
+        // Walk the migration chain. Each step must advance the version by
+        // exactly 1 — guards against loops if the registry is misconfigured.
+        let safety = 16;
+        while (v < target && safety-- > 0) {
+            const step = this.SAVE_MIGRATIONS.find(m => m.from === v);
+            if (!step) break; // gap in the chain — bail with what we have
+            try { step.migrate(data); }
+            catch (e) { console.warn(`[save-migrate] step ${v}→${step.to} threw`, e); }
+            data.v = step.to;
+            v = step.to;
+        }
         return data;
     },
 
@@ -8388,6 +8438,10 @@ triggerSystemCrash() {
         try {
             const raw = JSON.parse(json);
             const data = this._migrateSave(raw);
+            // _migrateSave returns null on malformed input. Treat as a corrupt
+            // save and route through the catch block's recovery path rather
+            // than dereferencing null below.
+            if (!data) throw new Error('save migration returned null');
 
             this.sector = data.sector || 1;
             this.map = data.map || { nodes: [], currentIdx: 'start' };
