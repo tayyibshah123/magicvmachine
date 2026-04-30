@@ -5738,29 +5738,25 @@ triggerPhaseGlitch() {
         // remaps Tesseract Prime gold and Compiler orange away from
         // each other so they don't collapse in the slate text).
         host.style.setProperty('--boss-color', Palette.adapt(colorHex));
-        // Class-vs-boss matchup hint — one tactical line per matchup.
-        // Lives INSIDE the slate (delayed reveal — see CSS) so the boss
-        // reveal is a single screen.
-        const classId = this.player && this.player.classId;
-        const hintText = getMatchupHint(classId, sector) || '';
-        const hintMarkup = hintText
-            ? `<div class="boss-intro-hint">${hintText}</div>`
-            : '';
-        // Briefing crawl is OFF for bosses — slate carries the moment.
+        // Slate is now title + subtitle ONLY. Per player request: keep
+        // it ominous, single moment, no extra layers. The matchup hint,
+        // sector-N tag, and briefing crawl are all dropped from the
+        // boss-start sequence — they made the screen feel busy. The
+        // dramatic phase banner (showPhaseBanner('boss') at startCombat
+        // line 11075) is also disabled for the boss-start path so this
+        // slate is the SINGLE intro the player sees. Other phase banners
+        // (mid-combat phase 2/3 transitions, PANOPTICON Analyse warnings,
+        // NULL_POINTER Void Crush, COMPILER recompile) keep the dramatic
+        // banner since they carry distinct information.
         this._pendingMatchupHint = '';
         this._suppressBriefingCrawl = true;
-        // Subtitle (e.g. "THE ALL-SEEING EYE") removed from the slate —
-        // it duplicated the boss-enemy name strip drawn on the canvas
-        // beneath, and stacked another beat between the title and the
-        // matchup hint. Slate now reads as: tag → title → hint.
         host.innerHTML = `
             <div class="boss-intro-bar boss-intro-bar-top"></div>
             <div class="boss-intro-bar boss-intro-bar-bottom"></div>
             <div class="boss-intro-content">
-                <div class="boss-intro-tag">// SECTOR ${sector} BOSS</div>
                 <div class="boss-intro-name">${enemy.name}</div>
                 <div class="boss-intro-stripe" aria-hidden="true"></div>
-                ${hintMarkup}
+                <div class="boss-intro-subtitle">${subtitle}</div>
             </div>
         `;
         host.classList.remove('hidden');
@@ -5781,21 +5777,15 @@ triggerPhaseGlitch() {
             setTimeout(() => this.triggerScreenFlash(`rgba(${r},${g},${b},0.36)`, 320), 480);
         }
         requestAnimationFrame(() => host.classList.add('active'));
-        // Subtitle removed → drop the 720ms .settle pulse that timed
-        // the subtitle reveal. The slate now reads as title (0ms) →
-        // hint (CSS-delayed reveal) → retreat. Cleaner.
-        // Hold: 2000ms when a hint exists (gives ~700ms to read it
-        // before retreat starts at 800ms reveal); 1500ms otherwise.
-        const slateHoldMs = hintText ? 2000 : 1500;
+        // Single timing pass: title fades in (0ms), subtitle settles in
+        // (720ms via .settle), slate retreats (1900ms). Briefing crawl
+        // is OFF for bosses — slate is the single moment.
+        setTimeout(() => host.classList.add('settle'), 720);
         setTimeout(() => {
             host.classList.remove('active');
             host.classList.remove('settle');
             setTimeout(() => host.classList.add('hidden'), 600);
-            // Briefing crawl is intentionally NOT fired for bosses —
-            // the slate already carried the title + hint as a single
-            // moment. Firing the crawl on top creates the double-intro
-            // overlap we removed earlier.
-        }, slateHoldMs);
+        }, 1900);
     },
 
     // Pre-combat Intel crawl. A short dossier line slides down from the
@@ -11057,9 +11047,13 @@ async startCombat(type) {
         }
 
         if (isBoss) {
-            // Cinematic: screen darken + camera zoom pulse + slow-mo + low-end
-            // sting + charge sparks, then banner with subtitle. Beat order
-            // timed so audio, zoom, and banner land together.
+            // Cinematic post-slate punch — slow-mo + zoom + screen flash
+            // + audio sting + shake. The boss name + subtitle are NOT
+            // re-shown here: that used to fire showPhaseBanner('boss')
+            // which painted a second cyan boss-name banner over the
+            // top of the slate's red intro, creating the double-intro
+            // the player flagged. The slate IS the boss reveal; this
+            // block is just the impact beat after it lands.
             this.triggerSlowMo(0.35, 1.4);
             this.triggerBossZoom && this.triggerBossZoom();
             this.triggerScreenFlash && this.triggerScreenFlash('rgba(10,0,16,0.55)', 600);
@@ -11072,7 +11066,6 @@ async startCombat(type) {
             ParticleSys.createSparks(this.enemy.x, this.enemy.y, '#ff0055', 24);
             Game.shake(32);
             await this.sleep(450);
-            await this.showPhaseBanner(this.enemy.name, this.enemy.bossData.subtitle, 'boss');
             Hints.trigger('first_boss');
         }
 
