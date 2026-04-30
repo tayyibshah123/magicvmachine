@@ -13463,49 +13463,52 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
 .rest-option--sleep    { --opt-color: var(--neon-green); }
 .rest-option--meditate { --opt-color: var(--neon-purple); }
 .rest-option--tinker   { --opt-color: var(--neon-gold); }
+.rest-option--module   { --opt-color: var(--neon-pink); }
 .rest-option--pact     { --opt-color: var(--neon-pink); }
 
-/* Centre operator figure overlays the grid centre, slightly larger
-   than the gap between cells. pointer-events: none so taps drop
-   through to whichever cell is behind the rim. */
+/* Centre figure — the player's actual class entity painted onto a
+   canvas, plus a streams/sparks SVG layer behind that converges from
+   the four corners onto the figure. The rest-center sits above the
+   2x2 grid (z-index 3 lifts it over option borders) but pointer-
+   events: none lets taps fall through to the corner cards. */
 .rest-center {
     position: absolute;
     top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    width: clamp(120px, 32%, 180px);
+    width: clamp(140px, 36%, 200px);
     aspect-ratio: 1;
     pointer-events: none;
-    z-index: 2;
+    z-index: 3;
+    display: grid;
+    place-items: center;
 }
-.rest-figure {
+/* Streams SVG fills the centre slot edge-to-edge so its 0,0 / 200,0 /
+   0,200 / 200,200 anchor points read as "the corners of this rest
+   figure zone". Sparks animate from those anchors INTO 100,100. */
+.rest-streams {
+    position: absolute;
+    inset: -40%;        /* extend past the grid centre so the streams
+                           visibly originate at the option-card corners
+                           rather than the small figure box */
+    width: auto; height: auto;
+    overflow: visible;
+    pointer-events: none;
+}
+/* Class canvas sits on top of the streams; lit by a soft cyan halo
+   that breathes so the figure feels alive even when class previews
+   render still by default. */
+.rest-figure-canvas {
+    position: relative;
+    z-index: 1;
     width: 100%;
     height: 100%;
-    overflow: visible;
-    filter: drop-shadow(0 0 18px rgba(0, 243, 255, 0.4));
-}
-.rest-figure-aura {
+    filter: drop-shadow(0 0 18px rgba(0, 243, 255, 0.45));
+    animation: rest-figure-breath 3.4s ease-in-out infinite;
     transform-origin: center;
-    animation: rest-figure-aura 3.4s ease-in-out infinite;
-}
-@keyframes rest-figure-aura {
-    0%, 100% { opacity: 0.55; transform-origin: 100px 100px; transform: scale(0.92); }
-    50%      { opacity: 1;    transform-origin: 100px 100px; transform: scale(1.08); }
-}
-.rest-figure-body {
-    animation: rest-figure-breath 3s ease-in-out infinite;
-    transform-origin: 100px 110px;
 }
 @keyframes rest-figure-breath {
-    0%, 100% { transform: scale(1); }
-    50%      { transform: scale(1.03); }
-}
-.rest-figure-heart {
-    animation: rest-figure-heart 1.4s ease-in-out infinite;
-    transform-origin: 100px 120px;
-}
-@keyframes rest-figure-heart {
-    0%, 100% { r: 5; opacity: 0.85; }
-    50%      { r: 8; opacity: 1; }
+    0%, 100% { transform: scale(0.96); }
+    50%      { transform: scale(1.04); }
 }
 
 /* Inflow streams — static colour-coded lines from each corner that
@@ -13533,39 +13536,39 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
 .rest-spark-bl { animation-name: rest-spark-bl; animation-delay: 0.8s; }
 .rest-spark-br { animation-name: rest-spark-br; animation-delay: 1.2s; }
 
-/* Each keyframe set runs corner → centre. Starts at the outer
-   corner of the SVG (20,20 / 180,20 / 20,180 / 180,180) and lands at
-   the figure's heart (100,120). cx/cy on the circle are 0,0 by
-   default so we just transform-translate. */
+/* Each keyframe set runs corner → centre of the streams SVG, which
+   now spans the rest-center plus 40% inset, so the corner anchors
+   visibly originate near the option-card corners. Sparks land at
+   100,100 (SVG centre — the figure's torso). */
 @keyframes rest-spark-tl {
-    0%   { transform: translate(20px, 20px);   opacity: 0; }
+    0%   { transform: translate(0px, 0px);     opacity: 0; }
     20%  { opacity: 1; }
     90%  { opacity: 1; }
-    100% { transform: translate(100px, 120px); opacity: 0; }
+    100% { transform: translate(100px, 100px); opacity: 0; }
 }
 @keyframes rest-spark-tr {
-    0%   { transform: translate(180px, 20px);  opacity: 0; }
+    0%   { transform: translate(200px, 0px);   opacity: 0; }
     20%  { opacity: 1; }
     90%  { opacity: 1; }
-    100% { transform: translate(100px, 120px); opacity: 0; }
+    100% { transform: translate(100px, 100px); opacity: 0; }
 }
 @keyframes rest-spark-bl {
-    0%   { transform: translate(20px, 180px);  opacity: 0; }
+    0%   { transform: translate(0px, 200px);   opacity: 0; }
     20%  { opacity: 1; }
     90%  { opacity: 1; }
-    100% { transform: translate(100px, 120px); opacity: 0; }
+    100% { transform: translate(100px, 100px); opacity: 0; }
 }
 @keyframes rest-spark-br {
-    0%   { transform: translate(180px, 180px); opacity: 0; }
+    0%   { transform: translate(200px, 200px); opacity: 0; }
     20%  { opacity: 1; }
     90%  { opacity: 1; }
-    100% { transform: translate(100px, 120px); opacity: 0; }
+    100% { transform: translate(100px, 100px); opacity: 0; }
 }
 
-/* Dim the corresponding stream + spark when its option is hidden
-   (e.g. .rest-option--pact hidden outside Challenge mode). */
-.rest-option.hidden ~ .rest-center .rest-stream-br,
-.rest-option.hidden ~ .rest-center .rest-spark-br { display: none; }
+/* Bottom-right is always populated (MODULE by default, PACT replaces
+   it in Challenge Mode) so no stream-dimming rule needed — the
+   sibling-tilde override that lived here was dropped along with the
+   pact-only design. */
 
 /* Mobile / narrow viewport tightening. */
 @media (max-width: 480px) {

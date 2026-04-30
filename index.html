@@ -612,7 +612,21 @@
                         <span class="rest-option-desc">Upgrade a random skill</span>
                     </button>
 
-                    <!-- Challenge Mode only — JS toggles the .hidden class. -->
+                    <!-- Bottom-right: random module (always visible). When
+                         Challenge Mode is active and an unsigned pact remains,
+                         JS swaps this card with the pact one. -->
+                    <button id="btn-rest-module" class="rest-option rest-option--module" data-quadrant="br">
+                        <div class="rest-option-glow" aria-hidden="true"></div>
+                        <svg class="rest-option-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <polygon points="12,3 19,9 15,21 9,21 5,9" fill="currentColor" fill-opacity="0.3"/>
+                            <polygon points="12,3 19,9 15,21 9,21 5,9" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                            <polygon points="12,3 19,9 12,9" fill="rgba(255,255,255,0.35)"/>
+                        </svg>
+                        <span class="rest-option-label">MODULE</span>
+                        <span class="rest-option-desc">Random module · install</span>
+                    </button>
+
+                    <!-- Challenge Mode only — JS swaps with MODULE when pacts available. -->
                     <button id="btn-rest-pact" class="rest-option rest-option--pact hidden" data-quadrant="br">
                         <div class="rest-option-glow" aria-hidden="true"></div>
                         <svg class="rest-option-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -624,34 +638,20 @@
                         <span class="rest-option-desc">Survival for power · stacks all run</span>
                     </button>
 
-                    <!-- Centre figure: operator silhouette absorbing inflow
-                         streams from each quadrant. Pure SVG, animated by CSS. -->
+                    <!-- Centre figure: the player's actual class entity, painted
+                         by Game._paintCharPreview() into a canvas tagged with
+                         data-class-id. Inflow streams + sparks live in a
+                         separate SVG layer behind the canvas so they radiate
+                         from the four corners of the grid INTO the figure
+                         regardless of which class is shown. -->
                     <div class="rest-center" aria-hidden="true">
-                        <svg viewBox="0 0 200 200" class="rest-figure">
-                            <defs>
-                                <radialGradient id="rest-aura" cx="50%" cy="50%" r="50%">
-                                    <stop offset="0%"  stop-color="#5ad864" stop-opacity="0.6"/>
-                                    <stop offset="60%" stop-color="#5ad864" stop-opacity="0.15"/>
-                                    <stop offset="100%" stop-color="#5ad864" stop-opacity="0"/>
-                                </radialGradient>
-                            </defs>
-                            <!-- Aura halo behind the figure -->
-                            <circle cx="100" cy="100" r="92" fill="url(#rest-aura)" class="rest-figure-aura"/>
-                            <!-- Operator silhouette -->
-                            <g class="rest-figure-body" stroke="#aaf0ff" stroke-width="2" fill="rgba(170, 240, 255, 0.18)">
-                                <circle cx="100" cy="78" r="18"/>
-                                <path d="M72 100 Q72 90 100 90 Q128 90 128 100 L128 145 Q128 158 100 158 Q72 158 72 145 Z"/>
-                            </g>
-                            <!-- Heart core -->
-                            <circle cx="100" cy="120" r="6" fill="#5ad864" class="rest-figure-heart"/>
-                            <!-- Inflow streams (lines that pulse inward) -->
+                        <svg viewBox="0 0 200 200" class="rest-streams" preserveAspectRatio="none">
                             <g class="rest-inflow" stroke-width="1.5" fill="none">
-                                <line x1="20"  y1="20"  x2="80"  y2="80"  stroke="#5ad864" class="rest-stream rest-stream-tl"/>
-                                <line x1="180" y1="20"  x2="120" y2="80"  stroke="#bc13fe" class="rest-stream rest-stream-tr"/>
-                                <line x1="20"  y1="180" x2="80"  y2="120" stroke="#ffd76a" class="rest-stream rest-stream-bl"/>
-                                <line x1="180" y1="180" x2="120" y2="120" stroke="#ff5b87" class="rest-stream rest-stream-br"/>
+                                <line x1="0"   y1="0"   x2="100" y2="100" stroke="#5ad864" class="rest-stream rest-stream-tl"/>
+                                <line x1="200" y1="0"   x2="100" y2="100" stroke="#bc13fe" class="rest-stream rest-stream-tr"/>
+                                <line x1="0"   y1="200" x2="100" y2="100" stroke="#ffd76a" class="rest-stream rest-stream-bl"/>
+                                <line x1="200" y1="200" x2="100" y2="100" stroke="#ff5b87" class="rest-stream rest-stream-br"/>
                             </g>
-                            <!-- Spark particles travelling inward -->
                             <g class="rest-sparks">
                                 <circle r="3" fill="#5ad864" class="rest-spark rest-spark-tl"/>
                                 <circle r="3" fill="#bc13fe" class="rest-spark rest-spark-tr"/>
@@ -659,6 +659,14 @@
                                 <circle r="3" fill="#ff5b87" class="rest-spark rest-spark-br"/>
                             </g>
                         </svg>
+                        <!-- Class canvas — _paintCharPreview() reads
+                             data-class-id and paints the cached preview. We
+                             rebuild the dataset attribute each visit so a
+                             class swap (debug menu, mod manager) refreshes. -->
+                        <canvas id="rest-class-canvas"
+                                class="char-preview rest-figure-canvas"
+                                width="200" height="200"
+                                aria-hidden="true"></canvas>
                     </div>
                 </div>
             </div>

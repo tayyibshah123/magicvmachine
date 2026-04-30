@@ -888,6 +888,7 @@ const Game = {
         attachButtonEvent('btn-rest-sleep', () => this.handleRest('sleep'));
         attachButtonEvent('btn-rest-meditate', () => this.handleRest('meditate'));
         attachButtonEvent('btn-rest-tinker', () => this.handleRest('tinker'));
+        attachButtonEvent('btn-rest-module', () => this.handleRest('module'));
         attachButtonEvent('btn-rest-pact', () => this.openPactPicker());
         attachButtonEvent('btn-pact-cancel', () => {
             // Back to the rest screen — same options still available.
@@ -7785,20 +7786,33 @@ triggerSystemCrash() {
                 btnTinker.innerHTML = "<div>🔧 TINKER</div><div style='font-size: 0.8rem; color: #aaa;'>Upgrade a Random Skill</div>";
             }
 
-            // Pact option — Challenge Mode only, and only while at least one
-            // unsigned pact remains. Hidden everywhere else.
+            // Bottom-right slot: MODULE always visible by default; PACT
+            // takes its place ONLY when the run is in Challenge Mode AND
+            // an unsigned pact remains. Both share data-quadrant="br".
             const btnPact = document.getElementById('btn-rest-pact');
-            if (btnPact) {
-                const remaining = PACTS.filter(p => !this.activePacts || !this.activePacts.has(p.id));
-                if (this.challengeMode && remaining.length > 0) {
-                    btnPact.classList.remove('hidden');
-                    // First-time discoverability — surface a hint the moment
-                    // the Pact option becomes pickable so players notice the
-                    // mechanic exists before they hit a tougher boss.
-                    Hints.trigger && Hints.trigger('first_pact_available');
-                } else {
-                    btnPact.classList.add('hidden');
-                }
+            const btnModule = document.getElementById('btn-rest-module');
+            const remaining = PACTS.filter(p => !this.activePacts || !this.activePacts.has(p.id));
+            const showPact = this.challengeMode && remaining.length > 0;
+            if (btnPact)   btnPact.classList.toggle('hidden', !showPact);
+            if (btnModule) btnModule.classList.toggle('hidden', showPact);
+            if (showPact) {
+                // First-time discoverability — surface a hint the moment
+                // the Pact option becomes pickable so players notice the
+                // mechanic exists before they hit a tougher boss.
+                Hints.trigger && Hints.trigger('first_pact_available');
+            }
+
+            // Centre figure: paint the player's CURRENT class entity into
+            // the rest screen's canvas. Reuses the char-select preview
+            // cache (_paintCharPreview reads data-class-id), so a Summoner
+            // run shows the Summoner sprite, an Arcanist run shows the
+            // Arcanist, etc. Re-set the dataset attribute on every visit
+            // so a debug class swap (or future class-mod manager) picks
+            // up the new class without needing a reload.
+            const restCanvas = document.getElementById('rest-class-canvas');
+            if (restCanvas && this.player && this.player.classId) {
+                restCanvas.dataset.classId = this.player.classId;
+                this._paintCharPreview(restCanvas);
             }
 
             document.getElementById('screen-rest').classList.remove('hidden');
@@ -7825,6 +7839,24 @@ triggerSystemCrash() {
             this.player.addRelic({ id: 'reroll_chip', name: "Reroll Chip", desc: "+1 Reroll per turn.", icon: ICONS.metaReroll });
             ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH/2, CONFIG.CANVAS_HEIGHT/2, "FOCUS INCREASED", COLORS.MANA);
             AudioMgr.playSound('mana');
+            this.completeCurrentNode();
+            this.renderMap();
+        } else if (action === 'module') {
+            // Random module — pick from UPGRADES_POOL (excluding already-
+            // owned uniques) so rest nodes can hand out a relic in
+            // addition to the heal/meditate/tinker options. Mirrors the
+            // shop's relic pool for consistency.
+            document.getElementById('screen-rest').classList.remove('active');
+            document.getElementById('screen-rest').classList.add('hidden');
+            const ownedIds = new Set((this.player.relics || []).map(r => r.id));
+            const pool = UPGRADES_POOL.filter(r => !ownedIds.has(r.id));
+            const fallback = UPGRADES_POOL;
+            const picked = (pool.length > 0 ? pool : fallback)[Math.floor(Math.random() * (pool.length > 0 ? pool.length : fallback.length))];
+            if (picked) {
+                this.player.addRelic(picked);
+                ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH/2, CONFIG.CANVAS_HEIGHT/2, `INSTALLED: ${picked.name}`, COLORS.GOLD);
+                AudioMgr.playSound('upgrade');
+            }
             this.completeCurrentNode();
             this.renderMap();
         } else if (action === 'tinker') {
