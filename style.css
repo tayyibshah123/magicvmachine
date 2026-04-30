@@ -2507,7 +2507,17 @@ body.reduced-motion .pause-overlay-title {
     transform: translateY(20px) scale(0.96);
     transition: opacity 320ms ease-out 200ms, transform 460ms cubic-bezier(.35, .9, .2, 1) 200ms;
     text-align: center;
-    padding: 0 24px;
+    /* Wider safe-area padding so the title can never butt against the
+       container edge. The longest boss name (PANOPTICON, 10 chars
+       with 0.14em letter-spacing) was exiting the viewport on
+       narrower phones because the title used 8vw without a width
+       guard. */
+    padding: 0 var(--space-5);
+    /* Hard cap on text width so even on very wide screens the
+       title doesn't sprawl past a comfortable reading column. */
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 .boss-intro.active .boss-intro-content {
     opacity: 1;
@@ -2521,9 +2531,16 @@ body.reduced-motion .pause-overlay-title {
 }
 .boss-intro-name {
     font-family: var(--font-cyber);
-    font-size: clamp(1.8rem, 8vw, 3.4rem);
+    /* Tightened clamp + cqw fallback. Old: clamp(1.8rem, 8vw, 3.4rem)
+       with 0.14em letter-spacing — "PANOPTICON" (10 chars × ~0.7em
+       glyph + 9 × ~0.14em letter-spacing ≈ 8.3em) overflowed on
+       portrait phones at the 8vw rate. New cap is 2.6rem and the
+       middle tier uses 7vw, so the longest names fit on a 360px
+       viewport without clipping. word-wrap allows graceful wrap if
+       a future boss has an even longer name. */
+    font-size: clamp(1.6rem, 7vw, 2.6rem);
     font-weight: 900;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.1em;
     color: var(--boss-color);
     text-shadow:
         0 0 18px var(--boss-color),
@@ -2531,14 +2548,24 @@ body.reduced-motion .pause-overlay-title {
         0 2px 4px rgba(0, 0, 0, 0.8);
     line-height: 1.05;
     animation: boss-intro-pulse 1.6s ease-in-out infinite;
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    hyphens: none;
 }
 .boss-intro-subtitle {
     font-family: var(--font-cyber);
-    font-size: clamp(0.7rem, 3vw, 1rem);
-    letter-spacing: 0.32em;
+    /* Same safety: clamp tightened + max-width 100% so subtitles
+       like "GEOMETRIC IMPOSSIBILITY" (which was the next-longest
+       at 0.32em letter-spacing) can't push past the safe-area. */
+    font-size: clamp(0.65rem, 2.6vw, 0.95rem);
+    letter-spacing: 0.24em;
     color: #fff;
     opacity: 0.78;
     text-shadow: 0 0 8px var(--boss-color), 0 1px 2px rgba(0, 0, 0, 0.8);
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 .boss-intro-stripe {
     width: 60%;
