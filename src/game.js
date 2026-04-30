@@ -2884,12 +2884,20 @@ startQTE(type, x, y, callback, opts) {
             el.classList.remove('active');
             setTimeout(() => { if(!el.classList.contains('active')) el.classList.add('hidden'); }, 500);
         });
-        document.getElementById('hud').classList.add('hidden');
-        document.getElementById('modal-settings').classList.add('hidden');
+        // Defensive null-guards on chrome elements — every state change
+        // touches these and a missing element (template hot-swap, A/B
+        // test stripping a node, third-party script removing a div)
+        // would otherwise crash the entire transition.
+        const _hud = document.getElementById('hud');
+        if (_hud) _hud.classList.add('hidden');
+        const _settings = document.getElementById('modal-settings');
+        if (_settings) _settings.classList.add('hidden');
 
         // FIX: Force hide tutorial overlays to prevent blocking
-        document.getElementById('tutorial-overlay').classList.add('hidden');
-        document.getElementById('tutorial-spotlight').classList.add('hidden');
+        const _tOverlay = document.getElementById('tutorial-overlay');
+        if (_tOverlay) _tOverlay.classList.add('hidden');
+        const _tSpot = document.getElementById('tutorial-spotlight');
+        if (_tSpot) _tSpot.classList.add('hidden');
 
         // Defensive: narration pane (and its sibling skip button) must
         // only appear in TUTORIAL_COMBAT.
@@ -2905,6 +2913,24 @@ startQTE(type, x, y, callback, opts) {
         }
 
         TooltipMgr.hide();
+        // Drag-state reset on state change. If a drag is mid-flight when
+        // the screen swaps (state change fired by a relic, achievement
+        // popup, gameOver, etc.), the surviving window pointermove /
+        // pointerup listeners would otherwise read a now-orphaned
+        // dragState.ghostElement (the old DOM node, possibly removed
+        // with the prior screen) and crash on next mouse move. Tear it
+        // down explicitly here.
+        if (this.dragState && this.dragState.active) {
+            try {
+                if (this.dragState.ghostElement && this.dragState.ghostElement.remove) {
+                    this.dragState.ghostElement.remove();
+                }
+            } catch (_) {}
+            this.dragState.active = false;
+            this.dragState.die = null;
+            this.dragState.dieElement = null;
+            this.dragState.ghostElement = null;
+        }
         // Clear the canvas long-press suppression flag on every state
         // change so a long-press that fired in the previous screen
         // can't silently drop the next screen's first tap. Single-shot
@@ -3118,11 +3144,16 @@ startQTE(type, x, y, callback, opts) {
         // 1. Remove Z-Index Highlights (Fixes Blank Screen/Softlock)
         document.querySelectorAll('.tutorial-focus').forEach(el => el.classList.remove('tutorial-focus'));
 
-        // 2. Clean up Combat UI
-        document.getElementById('hud').style.zIndex = "";
-        document.getElementById('hud').classList.add('hidden');
-        document.getElementById('tutorial-overlay').classList.add('hidden');
-        document.getElementById('tutorial-text').classList.add('hidden');
+        // 2. Clean up Combat UI. Each getElementById can return null if
+        // the element was removed (e.g. during a hot-reload, or by a
+        // stray third-party script). Guard each so a missing chrome
+        // element doesn't bring down the post-tutorial flow.
+        const hudEl = document.getElementById('hud');
+        if (hudEl) { hudEl.style.zIndex = ""; hudEl.classList.add('hidden'); }
+        const tOverlay = document.getElementById('tutorial-overlay');
+        if (tOverlay) tOverlay.classList.add('hidden');
+        const tText = document.getElementById('tutorial-text');
+        if (tText) tText.classList.add('hidden');
         const narrPane = document.getElementById('tutorial-narration');
         if (narrPane) narrPane.classList.add('hidden');
         const skipBtnDone = document.getElementById('btn-tutorial-skip');
@@ -16030,11 +16061,19 @@ drawEffects() {
             } 
             else if (intent.type === 'heal') {
                 await this.sleep(300);
+                // Post-sleep enemy guard — a prior intent's VFX callback,
+                // a Bomb Bot detonation, or a thorns/reflect chain can
+                // null `this.enemy` during the 300ms wait. Without this
+                // guard the `enemy.heal` call below crashes on null.
+                if (!this.enemy || this.enemy.currentHp <= 0) continue;
                 // Use effectiveVal (Constrict applies here)
-                this.enemy.heal(intent.effectiveVal || intent.val); 
-            } 
+                this.enemy.heal(intent.effectiveVal || intent.val);
+            }
             else if (intent.type === 'summon') {
                 await this.sleep(300);
+                // Same null guard — the summon path reads enemy.x/.y/.minions
+                // and would crash if the enemy died during the sleep.
+                if (!this.enemy || this.enemy.currentHp <= 0) continue;
                 if(this.enemy.minions.length < 2) {
                     const tier = this.enemy.isBoss ? 3 : (this.enemy.isElite ? 2 : 1);
                     const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false, tier);
@@ -16104,9 +16143,17 @@ drawEffects() {
                     this.player.minions = this.player.minions.filter(m => m !== victim);
                     // Retract phase drags essence back into the boss.
                     await this.sleep(360);
-                    this.enemy.currentHp = Math.min(this.enemy.maxHp, this.enemy.currentHp + healAmt);
-                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 80, `+${healAmt}`, "#00ff00");
-                    AudioMgr.playSound('mana');
+                    // Post-sleep guard — the void spawn's consume animation
+                    // takes ~1080ms across three sleep stages. During that
+                    // window a Bomb Bot detonation, thorns reflect, or
+                    // mirror-shard chain can kill the enemy. Without this
+                    // guard the `enemy.currentHp = ...` and floating-text
+                    // call below crash on null.
+                    if (this.enemy && this.enemy.currentHp > 0) {
+                        this.enemy.currentHp = Math.min(this.enemy.maxHp, this.enemy.currentHp + healAmt);
+                        ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 80, `+${healAmt}`, "#00ff00");
+                        AudioMgr.playSound('mana');
+                    }
                 } else {
                     this.triggerVFX('micro_laser', min, this.player, () => {
                         const dmgOut = (typeof min.getEffectiveDamage === 'function') ? min.getEffectiveDamage(min.dmg) : min.dmg;
@@ -16127,10 +16174,19 @@ drawEffects() {
             const t = targets[Math.floor(Math.random() * targets.length)];
             if(t) {
                 this.triggerVFX('micro_laser', min, t, () => {
-                    if (min.tier >= 2 && this.enemy.currentHp > 0) {
+                    // Null-safe leech: triggerVFX callbacks fire after a
+                    // VFX-specific delay, during which combat can end via
+                    // a chain reaction. Guard the enemy ref before reading
+                    // .currentHp — was previously checked but assumed
+                    // .enemy itself was non-null.
+                    if (min.tier >= 2 && this.enemy && this.enemy.currentHp > 0) {
                         this.enemy.heal(2);
                         ParticleSys.createFloatingText(this.enemy.x, this.enemy.y, "LEECH", "#00ff00");
                     }
+                    // If the target died on a prior callback in this same
+                    // tick (chained kills via Bomb Bot, lifesteal, etc.),
+                    // bail before invoking takeDamage on a dead entity.
+                    if (!t || t.currentHp <= 0) return;
                     const dmgOut = (typeof min.getEffectiveDamage === 'function') ? min.getEffectiveDamage(min.dmg) : min.dmg;
                     if (t.takeDamage(dmgOut, min) && t === this.player) { this.gameOver(); return; }
                     if (t !== this.player && t.currentHp <= 0) {
