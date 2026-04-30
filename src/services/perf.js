@@ -179,10 +179,17 @@ export const Perf = {
         let pinned = null;
         try { pinned = localStorage.getItem(KEY_OVERRIDE); } catch (_) {}
         if (pinned) return;
-        const WINDOW = 180;           // ~3s of frames at 60fps
+        const WINDOW = 180;             // ~3s of frames at 60fps
         const DOWNGRADE_FPS = 48;
         const UPGRADE_FPS   = 58;
-        const DOWNGRADE_COOL_MS = 15000; // don't re-check too often
+        let cooldownMs = 15000;         // base cool-down between tier changes
+        const FLAP_COOLDOWN_MS = 90000; // if we've flapped, lock in the lower
+                                        // tier for a longer window so the
+                                        // user doesn't see the log spam the
+                                        // dev console flagged in the trace
+                                        // (auto-down → auto-up → auto-down
+                                        // every 15s when the avg fps was
+                                        // bouncing around the threshold).
         let last = performance.now();
         // Circular buffer — O(1) per frame. Previously used Array.shift()
         // on a 180-entry Array, which was O(n) × 60fps = 10k+ ops/sec of
@@ -192,6 +199,12 @@ export const Perf = {
         let filled = 0;
         let sum = 0;
         let lastChange = performance.now();
+        // Anti-flap: track whether the previous transition was a downgrade.
+        // If we then upgrade and downgrade again within FLAP_COOLDOWN_MS,
+        // we've identified an oscillation — pin the lower tier and stop
+        // upgrading attempts until the cooldown clears.
+        let lastDirection = null;       // 'down' | 'up' | null
+        let flapDetectedUntil = 0;
         const tick = (now) => {
             const dt = now - last;
             last = now;
@@ -205,22 +218,33 @@ export const Perf = {
             }
             writeIdx = (writeIdx + 1) % WINDOW;
             // Only react once we have a full window + cool-down elapsed.
-            if (filled >= WINDOW && (now - lastChange) > DOWNGRADE_COOL_MS) {
+            if (filled >= WINDOW && (now - lastChange) > cooldownMs) {
                 const avgDt = sum / WINDOW;
                 const fps = 1000 / avgDt;
+                const inFlapLockout = now < flapDetectedUntil;
                 if (fps < DOWNGRADE_FPS && this.tier !== 'low') {
                     const nextTier = this.tier === 'high' ? 'mid' : 'low';
                     console.warn(`[Perf] auto-downgrade → ${nextTier} (avg ${fps.toFixed(1)} fps)`);
                     this.setTier(nextTier);
                     lastChange = now;
-                } else if (fps > UPGRADE_FPS && this.tier === 'low') {
+                    if (lastDirection === 'up') {
+                        // up-then-down inside the same monitor session is the
+                        // signature of a borderline FPS that the rolling avg
+                        // can't decide on. Pin the lower tier for 90s.
+                        flapDetectedUntil = now + FLAP_COOLDOWN_MS;
+                        cooldownMs = FLAP_COOLDOWN_MS;
+                    }
+                    lastDirection = 'down';
+                } else if (fps > UPGRADE_FPS && this.tier === 'low' && !inFlapLockout) {
                     console.info(`[Perf] auto-upgrade → mid (avg ${fps.toFixed(1)} fps)`);
                     this.setTier('mid');
                     lastChange = now;
-                } else if (fps > UPGRADE_FPS && this.tier === 'mid') {
+                    lastDirection = 'up';
+                } else if (fps > UPGRADE_FPS && this.tier === 'mid' && !inFlapLockout) {
                     console.info(`[Perf] auto-upgrade → high (avg ${fps.toFixed(1)} fps)`);
                     this.setTier('high');
                     lastChange = now;
+                    lastDirection = 'up';
                 }
             }
             this._monitor = requestAnimationFrame(tick);

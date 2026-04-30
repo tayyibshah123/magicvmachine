@@ -18004,6 +18004,22 @@ drawEffects() {
             // Bentham panopticon. Twin prison towers flank the stage, their cell
             // windows flicker with individual prisoners, searchlights sweep,
             // and a clean dark spotlight keeps the boss silhouette readable.
+            // Tier-aware density: this scene was identified in a perf trace as
+            // the heaviest backdrop in the game (160 cell windows × per-frame
+            // sin() flicker, plus 60 starfield + 22 cell-block windows + 20
+            // scanline data streams + 3 patrol drones + 2 searchlights). Mid
+            // tier halves the dense bits; low tier strips the cosmetic
+            // animated layers entirely so the avg FPS stops bouncing on
+            // borderline hardware.
+            const _tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+            const _isLow  = _tier === 'low';
+            const _isMid  = _tier === 'mid';
+            const _starN  = _isLow ? 0 : (_isMid ? 30 : 60);
+            const _winRows = _isLow ? 8 : (_isMid ? 12 : 16);
+            const _winCols = _isLow ? 3 : 5;
+            const _wallN  = _isLow ? 0 : (_isMid ? 12 : 22);
+            const _scanN  = _isLow ? 0 : (_isMid ? 10 : 20);
+            const _droneN = _isLow ? 0 : (_isMid ? 2 : 3);
             ctx.save();
             const cx = w * 0.5;
 
@@ -18012,7 +18028,7 @@ drawEffects() {
             ctx.fillRect(0, 0, w, horizon);
 
             // Starfield of tiny surveillance "eyes" — distant, blinking.
-            for (let i = 0; i < 60; i++) {
+            for (let i = 0; i < _starN; i++) {
                 const sx = (i * 137 % w);
                 const sy = ((i * 83 + 60) % horizon);
                 const tw = 0.4 + 0.6 * Math.abs(Math.sin(time * 1.5 + i));
@@ -18044,9 +18060,11 @@ drawEffects() {
                 ctx.lineTo(baseX + baseW * 0.5, baseY);
                 ctx.closePath(); ctx.fill(); ctx.stroke();
 
-                // Cell windows — grid of small glowing rects, each flickers on its own phase.
-                const rows = 16;
-                const cols = 5;
+                // Cell windows — grid of small glowing rects, each flickers
+                // on its own phase. Counts driven by the tier-aware
+                // _winRows / _winCols above.
+                const rows = _winRows;
+                const cols = _winCols;
                 for (let r = 0; r < rows; r++) {
                     // Windows narrow toward the top (tapered building)
                     const rowT = r / rows;
@@ -18122,8 +18140,8 @@ drawEffects() {
             const wallY = horizon - 110;
             ctx.fillStyle = 'rgba(4, 10, 22, 0.92)';
             ctx.fillRect(0, wallY, w, horizon - wallY);
-            for (let i = 0; i < 22; i++) {
-                const wx = i * (w / 22);
+            for (let i = 0; i < _wallN; i++) {
+                const wx = i * (w / Math.max(1, _wallN));
                 const lit = Math.sin(time * 1.2 + i * 0.8) > 0.2 ? 0.55 : 0.15;
                 ctx.fillStyle = `rgba(0, 220, 255, ${lit * 0.35})`;
                 ctx.fillRect(wx + 8, wallY + 30, 20, 6);
@@ -18131,7 +18149,7 @@ drawEffects() {
             }
 
             // Scanline data streams falling from above — info-feeds into the tower.
-            for (let i = 0; i < 20; i++) {
+            for (let i = 0; i < _scanN; i++) {
                 const dx = (i * 53) % w;
                 const dy = ((i * 97 + time * 140) % horizon);
                 const ht = 28 + (i % 3) * 10;
@@ -18139,8 +18157,8 @@ drawEffects() {
                 ctx.fillRect(dx, dy, 1.5, ht);
             }
 
-            // Patrol drones in the sky — two cyan dots with blinking red underlights.
-            for (let i = 0; i < 3; i++) {
+            // Patrol drones in the sky — cyan dots with blinking red underlights.
+            for (let i = 0; i < _droneN; i++) {
                 const orbit = time * 0.25 + i * 2.1;
                 const dx = w * 0.5 + Math.cos(orbit) * (w * 0.42);
                 const dy = horizon * 0.25 + Math.sin(orbit * 1.4) * 20;
