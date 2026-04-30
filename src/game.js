@@ -5385,13 +5385,21 @@ triggerPhaseGlitch() {
     },
 
     triggerSlowMo(scale = 0.4, duration = 0.6) {
-        // Cinematic slow-motion. Re-entrant: newest call wins.
+        // Cinematic slow-motion. Re-entrant: newest call wins. Under
+        // reduced-motion we skip entirely — time-warping the world is
+        // exactly the kind of perceptual disturbance the setting is
+        // meant to disable.
+        if (this._isReducedMotion()) return;
         this.slowMoScale = scale;
         this.slowMoTimer = duration;
     },
 
-    // Camera zoom cinematic — brief CSS transform on the game canvas wrapper.
+    // Camera zoom cinematic — brief CSS transform on the game canvas
+    // wrapper. Skipped under reduced-motion (the viewport scale-jump is a
+    // textbook vestibular trigger). The boss reveal still happens — we
+    // just skip the visual punch.
     triggerBossZoom() {
+        if (this._isReducedMotion()) return;
         const cv = document.getElementById('gameCanvas');
         if (!cv) return;
         cv.classList.remove('boss-zoom');
@@ -5448,8 +5456,11 @@ triggerPhaseGlitch() {
     },
 
     // Hit-stop: freeze the canvas for a few ms so heavy hits land with weight.
-    // Re-entrant; longest active wins.
+    // Re-entrant; longest active wins. Under reduced-motion the freeze is
+    // shortened (>0 so feedback still registers on perfect QTEs / crits)
+    // but never long enough to feel like a vestibular pause.
     hitStop(durationMs = 60) {
+        if (this._isReducedMotion()) durationMs = Math.min(durationMs, 30);
         const until = performance.now() + durationMs;
         if (!this.hitStopUntil || until > this.hitStopUntil) {
             this.hitStopUntil = until;

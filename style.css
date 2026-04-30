@@ -195,46 +195,78 @@ body.reduced-motion .landscape-hint-icon { animation: none; }
 }
 
 /* Reduced motion — honours user setting AND OS preference.
-   W3C guidance: kill *vestibular* motion (big parallax, sudden zooms, fast
-   shakes, screen flashes) but keep gentle ambient drifts, fades, and subtle
-   pulses that carry the game's aesthetic. To opt a specific animation out,
-   add the `.rm-vestibular` class to the element. */
+   Two layers of defence:
+     1. Blanket rule: collapse animation/transition durations to ~0 so
+        every motion completes instantly. Elements that depend on a
+        keyframe to become visible still appear (jumped to end state),
+        and infinite spins/pulses/sweeps effectively freeze.
+     2. Targeted kills: specific selectors that should be REMOVED rather
+        than instant-finished — flashes, big slam-zooms, anything that
+        even a single-frame appearance would be jarring.
+   Anything that legitimately needs to keep its smooth motion (a VFX
+   that REQUIRES tweened intermediate state to read) can opt out by
+   adding the `.rm-keep` class — none of the current animations need
+   this, but the hook is there for future work.
+
+   Why both `@media (prefers-reduced-motion: reduce)` AND
+   `body.reduced-motion`: the media query catches OS-level preference;
+   the body class is the in-game settings toggle. Either should fully
+   silence animations. */
 @media (prefers-reduced-motion: reduce) {
-    :root { --motion-scale: 0.35; }
+    :root { --motion-scale: 0.001; }
     html { scroll-behavior: auto !important; }
 
-    /* Freeze only the handful of effects that actually trigger motion sickness */
-    .rm-vestibular,
-    .rm-vestibular::before,
-    .rm-vestibular::after {
-        animation: none !important;
-        transform: none !important;
+    /* Blanket: every animated/transitioned element finishes its motion
+       in ~0ms. Universal selector; high-specificity-via-!important so
+       nothing in the cascade can re-enable a long animation by accident.
+       Elements with .rm-keep opt OUT of the blanket and keep their
+       declared animation (escape hatch). */
+    *:not(.rm-keep),
+    *:not(.rm-keep)::before,
+    *:not(.rm-keep)::after {
+        animation-duration: 0.001ms !important;
+        animation-delay: 0ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        transition-delay: 0ms !important;
     }
 
-    /* Targeted kills — screen flashes, violent shakes, slam-zoom cinematics.
-       Everything else (nebula drift, particles, pulses, carousels, glow)
-       keeps running so the game still feels alive. */
+    /* Hard-kills for vestibular triggers — screen flashes, violent shakes,
+       slam-zoom cinematics. Removing the animation entirely (rather than
+       letting the blanket above tick a single frame) avoids a one-frame
+       white flash on entry. */
+    .rm-vestibular,
+    .rm-vestibular::before,
+    .rm-vestibular::after,
     .intro-scanbeam,
     .intro-rays,
     #screen-flash,
     .hit-flash,
     #gameCanvas.boss-zoom {
         animation: none !important;
+        transform: none !important;
     }
 }
-body.reduced-motion { --motion-scale: 0.35; }
+body.reduced-motion { --motion-scale: 0.001; }
+body.reduced-motion *:not(.rm-keep),
+body.reduced-motion *:not(.rm-keep)::before,
+body.reduced-motion *:not(.rm-keep)::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    transition-delay: 0ms !important;
+}
 body.reduced-motion .rm-vestibular,
 body.reduced-motion .rm-vestibular::before,
-body.reduced-motion .rm-vestibular::after {
-    animation: none !important;
-    transform: none !important;
-}
+body.reduced-motion .rm-vestibular::after,
 body.reduced-motion .intro-scanbeam,
 body.reduced-motion .intro-rays,
 body.reduced-motion #screen-flash,
 body.reduced-motion .hit-flash,
 body.reduced-motion #gameCanvas.boss-zoom {
     animation: none !important;
+    transform: none !important;
 }
 
 /* High-contrast mode — clamps all text to white, strips subtle glow */
