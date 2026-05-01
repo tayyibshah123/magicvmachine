@@ -321,7 +321,17 @@ const Game = {
         // keydown for keyboard users) so the first interaction unlocks no
         // matter where the user taps.
         const unlockAudio = () => {
-            AudioMgr.init(); AudioMgr.startMusic();
+            // AudioMgr.init() is intentionally on the gesture stack — the
+            // 1-sample silent buffer + ctx.resume() inside it must fire
+            // synchronously for iOS / Brave-iOS to treat the context as
+            // unlocked. The expensive bits (preloadSfx fetch+decode, the
+            // bgm <Audio> element construction) are deferred so the
+            // pointerdown handler can return promptly. Without this defer
+            // the handler showed up as a 170+ms violation in DevTools on
+            // Capacitor WebView, where `new Audio(src)` has to look up
+            // and validate the codec on the gesture-blocking thread.
+            AudioMgr.init();
+            setTimeout(() => { try { AudioMgr.startMusic(); } catch (_) {} }, 0);
             ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'].forEach(ev =>
                 window.removeEventListener(ev, unlockAudio)
             );
@@ -2806,6 +2816,14 @@ startQTE(type, x, y, callback, opts) {
     // Auto-stops when we leave MENU so we're not running rAF in combat.
     _startMenuPulse() {
         if (this._menuPulseRaf) return;
+        // Skip the beat-pulse entirely on mid/low. The rAF tick itself is
+        // cheap, but each new --title-beat value triggers a re-rasterize
+        // of the title's stacked drop-shadow filter chain (3 layers),
+        // and that paint cost is what was holding the rolling-avg fps
+        // around 47 even after the auto-downgrade. The CSS perf gate in
+        // style.css pins the title to its beat-0 filter state, so the
+        // menu still reads as "the title glows" — it just doesn't pulse.
+        if (Perf.tier !== 'high') return;
         const titleEl = document.querySelector('#screen-start h1.title');
         const haloEl  = document.querySelector('#screen-start .glow-container');
         if (!titleEl) return;
@@ -2817,6 +2835,13 @@ startQTE(type, x, y, callback, opts) {
         const tick = () => {
             this._menuPulseRaf = requestAnimationFrame(tick);
             if (this.currentState !== STATE.MENU) { this._stopMenuPulse(); return; }
+            // Self-cancel if the perf monitor downgrades the tier mid-pulse.
+            // Without this the loop kept ticking after a high → mid downgrade
+            // (the entry guard at the top of _startMenuPulse only gates new
+            // calls), and the per-frame setProperty cost continued even
+            // though the CSS gate above had already pinned the title's
+            // filter chain to its beat-0 state.
+            if (Perf.tier !== 'high') { this._stopMenuPulse(); return; }
             // Skip work entirely when the page is hidden (mobile lock,
             // tab switch). rAF auto-pauses on most platforms but doesn't
             // on every Capacitor profile — explicit guard is robust.
@@ -4550,8 +4575,17 @@ startQTE(type, x, y, callback, opts) {
         }
 
         if (relic.id === 'solar_battery') {
-            const manaAmt = (count * 2) - 1;
-            return `Every 3rd turn, gain +${manaAmt} Mana.`;
+            // Code at startTurn fires on `turnCount % 2 === 0` and grants
+            // `flatMana = stacks`. Earlier formula `(count*2)-1` mismatched
+            // both the cadence ("3rd" vs actual "2nd") and the reward.
+            return `Every 2nd turn, gain +${count} Mana.`;
+        }
+
+        if (relic.id === 'dusk_protocol') {
+            // Effect is a single fixed condition (turn > 5 → +10% per turn
+            // beyond). Not stack-aware in the live handler — already filtered
+            // from the offer pool when owned.
+            return "After turn 5, deal +10% damage per turn beyond.";
         }
 
         if (relic.id === 'brutalize') {
@@ -4566,6 +4600,32 @@ startQTE(type, x, y, callback, opts) {
         if (relic.id === 'emergency_kit') {
             const charges = count > 1 ? ` Charges: ${count}.` : '';
             return `Heal 30% Max HP if below 30%. One charge consumed per trigger.${charges}`;
+        }
+
+        // The relics below all have a *fixed* trigger threshold in their
+        // game logic and only the reward scales with stacks. The fallback
+        // regex below would multiply EVERY number in the description by
+        // count, which inflates the threshold and made stacked copies
+        // appear strictly worse on the relic card (e.g. "After 6 attacks"
+        // at 2 stacks instead of "After 3 attacks, gain +4 Mana"). Custom
+        // handlers keep the threshold pinned and only scale the reward.
+
+        if (relic.id === 'dervish_mode') {
+            return `After 3 attacks in a single turn, gain +${2 * count} Mana.`;
+        }
+
+        if (relic.id === 'static_capacitor') {
+            return `At start of turn, zap a random enemy for ${10 * count} DMG if you hold 3+ Mana.`;
+        }
+
+        if (relic.id === 'retaliator') {
+            return `After taking 20+ damage in a single hit, deal ${10 * count} DMG back.`;
+        }
+
+        // Aegis Cycler — the consume cost stays at 5 Shield regardless of
+        // stacks (see startTurn handler). Only the +DMG bonus scales.
+        if (relic.id === 'aegis_cycler') {
+            return `At start of turn, convert 5 Shield into +${3 * count} DMG next attack.`;
         }
 
         return relic.desc.replace(/(\d+)/g, (match) => {
@@ -11365,15 +11425,19 @@ async startTurn() {
         }
 
         // Relic: AEGIS CYCLER — at start of turn, convert 5 Shield → +3 DMG next attack.
+        // Cost is FIXED at 5 Shield no matter how many stacks the player owns;
+        // only the +DMG bonus scales. Previously the consume scaled with stacks
+        // too (5/10/15…), which meant stacking made the relic strictly more
+        // expensive to trigger — at 2+ stacks a single 5-shield round would
+        // fail the gate entirely. Net effect was that stacking made it worse,
+        // contradicting "upgraded versions are always better".
         if (this.player.hasRelic('aegis_cycler') && (this.player.shield || 0) >= 5) {
             const stacks = this.stackCount('aegis_cycler');
-            const consume = 5 * stacks;
+            const consume = 5;
             const dmgBonus = 3 * stacks;
-            if (this.player.shield >= consume) {
-                this.player.shield -= consume;
-                this.player.nextAttackFlatBonus = (this.player.nextAttackFlatBonus || 0) + dmgBonus;
-                ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `AEGIS CYCLE +${dmgBonus}`, COLORS.GOLD);
-            }
+            this.player.shield -= consume;
+            this.player.nextAttackFlatBonus = (this.player.nextAttackFlatBonus || 0) + dmgBonus;
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `AEGIS CYCLE +${dmgBonus}`, COLORS.GOLD);
         }
 
         // Relic: STATIC CAPACITOR — reset per-turn mana counter for trigger.
@@ -16910,6 +16974,28 @@ drawEffects() {
         const fireCount = this.stackCount('firewall');
         if(fireCount >= 3) pool = pool.filter(i => i.id !== 'firewall');
 
+        // Filter relics whose effect doesn't read stackCount — owning a
+        // second copy provides zero benefit, and for `c_quantum_core` the
+        // pickup-time `-15 maxHp` is paid each time without scaling the
+        // upside, so a second copy is *strictly worse*. Hide every such
+        // relic from the offer pool once the player owns one.
+        const ONE_COPY_MAX = [
+            'c_quantum_core', // -15 maxHp per pickup, crit cadence/strength fixed
+            'c_paradox',      // first-die-free flag, single-shot
+            'c_fracture',     // reroll-cost-swap flag, single-shot
+            'c_blood_pact',   // damage % + bleed flag, single-shot
+            'iron_lung',      // first-defend bonus, fixed +5
+            'dawn_protocol',  // first-turn multiplier, fixed
+            'dusk_protocol',  // turn-5+ ramp, fixed
+            'echo_chamber',   // first-skill-free flag, fixed
+            'dice_cache',     // once-per-turn draw, fixed
+            'volt_primer',    // first-attack +5, fixed
+            'salvage_protocol', // +3 frags per kill, fixed
+        ];
+        for (const id of ONE_COPY_MAX) {
+            if (this.player.hasRelic(id)) pool = pool.filter(i => i.id !== id);
+        }
+
         // Shuffle pool
         for (let i = pool.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
@@ -17533,11 +17619,13 @@ drawEffects() {
         const lagPct = Math.max(0, entity._displayHp / entity.maxHp);
 
         // Draw the bleed ribbon FIRST (behind the live HP fill).
+        // Solid fill — was a per-entity-per-frame createLinearGradient,
+        // which allocated up to 8 gradients/frame in 1v1 + 3-minion combats.
+        // The 95%→85% alpha fade isn't visually distinguishable behind the
+        // shadowBlur=12 glow, and the live HP fill paints over the top half
+        // immediately on the next pass.
         if (lagPct > pct + 0.001) {
-            const tearGrad = ctx.createLinearGradient(x, y, x, y + height);
-            tearGrad.addColorStop(0, 'rgba(255, 70, 100, 0.95)');
-            tearGrad.addColorStop(1, 'rgba(180, 30, 60, 0.85)');
-            ctx.fillStyle = tearGrad;
+            ctx.fillStyle = 'rgba(220, 50, 80, 0.92)';
             ctx.shadowColor = '#ff3355';
             ctx.shadowBlur = 12;
             ctx.fillRect(x, y, width * lagPct, height);
@@ -18662,6 +18750,12 @@ drawEffects() {
     },
 
     drawAtmosphere(ctx, conf, type, w, h, time, dt) {
+        // Tier gates — atmospheric layers thin out on weaker hardware so the
+        // per-frame shadowBlur + Math.random path counts drop. High tier keeps
+        // the full density.
+        const _atmTier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+        const _atmLow  = _atmTier === 'low';
+        const _atmMid  = _atmTier === 'mid';
         // Initialize per-sector atmosphere state on demand.
         if (!this.atmState || this.atmState.sector !== this.sector) {
             this.atmState = {
@@ -18747,10 +18841,12 @@ drawEffects() {
                 ctx.restore();
             }
         } else if (type === 'ice') {
-            // Aurora ribbons across the top third
+            // Aurora ribbons across the top third — gated; each ribbon costs
+            // ~50 lineTo + a clipped composite-lighter pass.
+            const _auroraN = _atmLow ? 1 : (_atmMid ? 2 : 3);
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
-            for (let k = 0; k < 3; k++) {
+            for (let k = 0; k < _auroraN; k++) {
                 ctx.fillStyle = this._cachedGradient('atm_ice_aurora_' + k, () => {
                     const g = ctx.createLinearGradient(0, 0, 0, h * 0.4);
                     const colors = [['rgba(0,243,255,0.12)', 'rgba(0,255,153,0.08)'],
@@ -18776,23 +18872,45 @@ drawEffects() {
             }
             ctx.restore();
         } else if (type === 'fire') {
-            // Lava glow pulsing from below horizon
-            const pulse = 0.5 + 0.5 * Math.sin(time * 1.1);
-            const lavaGrad = ctx.createLinearGradient(0, horizon, 0, h);
-            lavaGrad.addColorStop(0, `rgba(255, ${80 + 60 * pulse}, 0, 0.35)`);
-            lavaGrad.addColorStop(0.5, 'rgba(180, 40, 0, 0.25)');
-            lavaGrad.addColorStop(1, 'transparent');
-            ctx.fillStyle = lavaGrad;
-            ctx.fillRect(0, horizon, w, h - horizon);
-            // Rare tremor shake
-            atm.lastTremor -= dt;
-            if (atm.lastTremor <= 0) {
-                this.shake(4);
-                atm.lastTremor = 8 + Math.random() * 10;
+            // Lava glow pulsing from below horizon — gradient is cached at a
+            // mid-pulse value (was rebuilt every frame just to modulate the
+            // green channel). The pulse now lives in globalAlpha so the
+            // animation read is preserved without the per-frame allocation.
+            // Skipped on low — the fillrect covers the entire bottom half of
+            // the canvas and was costing several ms of paint each frame on
+            // weaker hardware. The sector backdrop colour already reads as
+            // "fire" without it.
+            if (!_atmLow) {
+                const pulse = 0.5 + 0.5 * Math.sin(time * 1.1);
+                ctx.save();
+                ctx.globalAlpha = 0.85 + 0.15 * pulse;
+                ctx.fillStyle = this._cachedGradient('atm_fire_lava', () => {
+                    const g = ctx.createLinearGradient(0, horizon, 0, h);
+                    g.addColorStop(0, 'rgba(255, 110, 0, 0.35)');
+                    g.addColorStop(0.5, 'rgba(180, 40, 0, 0.25)');
+                    g.addColorStop(1, 'transparent');
+                    return g;
+                });
+                ctx.fillRect(0, horizon, w, h - horizon);
+                ctx.restore();
+            }
+            // Rare tremor shake — also off on low. The shake already triggers
+            // a layout/raster pass via canvas transform; even though it's
+            // rare (~10s cadence), pinning it to high+mid means weak devices
+            // never pay that hit at all.
+            if (!_atmLow) {
+                atm.lastTremor -= dt;
+                if (atm.lastTremor <= 0) {
+                    this.shake(4);
+                    atm.lastTremor = 8 + Math.random() * 10;
+                }
             }
         } else if (type === 'tech') {
-            // Dyson-ring fragments floating in the mid-sky
-            atm.rings.forEach(r => {
+            // Dyson-ring fragments floating in the mid-sky — tier-gated;
+            // each ring costs 2 strokes × shadowBlur=14.
+            const _ringMax = _atmLow ? 0 : (_atmMid ? 3 : atm.rings.length);
+            for (let _ri = 0; _ri < _ringMax; _ri++) {
+                const r = atm.rings[_ri];
                 r.angle += r.speed * dt;
                 r.x += Math.cos(r.angle) * 0.3;
                 r.y += Math.sin(r.angle) * 0.15;
@@ -18812,7 +18930,7 @@ drawEffects() {
                 ctx.arc(0, 0, r.r * 0.55, 0, Math.PI * 2);
                 ctx.stroke();
                 ctx.restore();
-            });
+            }
             // Data packets zipping along horizon
             atm.lastLightning -= dt;
             if (atm.lastLightning <= 0 && Math.random() < 0.6) {
@@ -18824,8 +18942,12 @@ drawEffects() {
                 atm.lastLightning = 6 + Math.random() * 10;
             }
         } else if (type === 'source') {
-            // Reality cracks: jagged white fissures flickering in/out
-            atm.cracks.forEach(c => {
+            // Reality cracks: jagged white fissures flickering in/out — gated;
+            // each crack is shadowBlur=18 + a 6-segment Math.random path
+            // rebuilt every frame, so the count is one of the heaviest dials.
+            const _crackMax = _atmLow ? 0 : (_atmMid ? 4 : atm.cracks.length);
+            for (let _ci = 0; _ci < _crackMax; _ci++) {
+                const c = atm.cracks[_ci];
                 const flick = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(time * 2 + c.flickerPhase));
                 ctx.save();
                 ctx.translate(c.x, c.y);
@@ -18845,8 +18967,11 @@ drawEffects() {
                 }
                 ctx.stroke();
                 ctx.restore();
-            });
-            // Sacred-geometry ghost overlay pulsing
+            }
+            // Sacred-geometry ghost overlay pulsing — skipped on low so the
+            // 6 radial strokes don't compete for fillrate when the cracks
+            // are already disabled.
+            if (_atmLow) return;
             ctx.save();
             ctx.globalAlpha = 0.08 + 0.05 * Math.sin(time * 0.5);
             ctx.strokeStyle = '#ffd700';
@@ -18869,6 +18994,11 @@ drawEffects() {
     drawSectorCelestial(ctx, conf, type, w, h, time) {
         const horizon = h * 0.45;
         const isBoss = this.enemy && this.enemy.isBoss;
+        // Tier gates — celestial layers thin out on weaker hardware so the
+        // per-frame shadowBlur + Math.random work scales with the device.
+        const _celTier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+        const _celLow  = _celTier === 'low';
+        const _celMid  = _celTier === 'mid';
 
         if (type === 'city') {
             // 1. Neon moon with concentric rings
@@ -18979,19 +19109,33 @@ drawEffects() {
             ctx.lineTo(w * 0.85, horizon - 140);
             ctx.stroke();
             ctx.restore();
-            // 2. Molten sun (huge, pulsing)
+            // 2. Molten sun (huge, pulsing) — gradient cached at base sunR;
+            // pulse is applied as a draw-time scale so the gradient itself
+            // doesn't reallocate every frame.
             const sunX = w * 0.78, sunY = horizon * 0.4;
             const pulse = 1 + Math.sin(time * 1.5) * 0.08;
-            const sunR = (isBoss ? 180 : 130) * pulse;
-            const sunGrad = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, sunR);
-            sunGrad.addColorStop(0, '#fff0b0');
-            sunGrad.addColorStop(0.4, conf.sun[0]);
-            sunGrad.addColorStop(0.8, conf.sun[1]);
-            sunGrad.addColorStop(1, 'rgba(255, 68, 0, 0)');
-            ctx.fillStyle = sunGrad;
-            ctx.beginPath(); ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2); ctx.fill();
-            // 3. Rising ember particles (cheap loop)
-            for (let i = 0; i < 30; i++) {
+            const sunRBase = isBoss ? 180 : 130;
+            ctx.fillStyle = this._cachedGradient(
+                'celestial_fire_sun_' + (isBoss ? 'b' : 'n') + '_' + (conf.sun && conf.sun[0]),
+                () => {
+                    const g = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, sunRBase);
+                    g.addColorStop(0, '#fff0b0');
+                    g.addColorStop(0.4, conf.sun[0]);
+                    g.addColorStop(0.8, conf.sun[1]);
+                    g.addColorStop(1, 'rgba(255, 68, 0, 0)');
+                    return g;
+                }
+            );
+            // Pulse via globalAlpha + a fixed-radius arc so the cached
+            // gradient stays valid (was being re-rasterised at a different
+            // radius every frame because pulse was multiplied into the arc).
+            ctx.save();
+            ctx.globalAlpha = 0.85 + 0.15 * (pulse - 1) / 0.08;
+            ctx.beginPath(); ctx.arc(sunX, sunY, sunRBase, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+            // 3. Rising ember particles (cheap loop) — count gated.
+            const _emberN = _celLow ? 8 : (_celMid ? 18 : 30);
+            for (let i = 0; i < _emberN; i++) {
                 const ex = ((i * 91 + time * 20) % w);
                 const ey = (h - ((i * 47 + time * 120) % h));
                 const a = 0.4 + 0.4 * Math.sin(time * 3 + i);
@@ -19064,14 +19208,15 @@ drawEffects() {
                 return g;
             });
             ctx.beginPath(); ctx.arc(vx, vy, vr + 40, 0, Math.PI * 2); ctx.fill();
-            // Jagged glyph ring around void
+            // Jagged glyph ring around void — gated; 12 glyphs × shadowBlur=15.
+            const _glyphN = _celLow ? 6 : (_celMid ? 8 : 12);
             ctx.save();
             ctx.translate(vx, vy);
             ctx.rotate(time * 0.3);
             ctx.strokeStyle = '#ff3355'; ctx.lineWidth = 2;
             ctx.shadowColor = '#ff3355'; ctx.shadowBlur = 15;
-            for (let i = 0; i < 12; i++) {
-                const a = (i / 12) * Math.PI * 2;
+            for (let i = 0; i < _glyphN; i++) {
+                const a = (i / _glyphN) * Math.PI * 2;
                 ctx.beginPath();
                 ctx.moveTo(Math.cos(a) * (vr + 10), Math.sin(a) * (vr + 10));
                 ctx.lineTo(Math.cos(a + 0.1) * (vr + 20), Math.sin(a + 0.1) * (vr + 20));
@@ -19079,9 +19224,12 @@ drawEffects() {
                 ctx.stroke();
             }
             ctx.restore();
-            // 2. Red lightning cracks emanating outward
-            for (let i = 0; i < 6; i++) {
-                const a = (i / 6) * Math.PI * 2 + time * 0.1;
+            // 2. Red lightning cracks emanating outward — gated;
+            // each crack is shadowBlur=12 + 6-segment Math.random path
+            // rebuilt every frame, very expensive at full density.
+            const _boltN = _celLow ? 0 : (_celMid ? 3 : 6);
+            for (let i = 0; i < _boltN; i++) {
+                const a = (i / _boltN) * Math.PI * 2 + time * 0.1;
                 ctx.save();
                 ctx.translate(vx, vy);
                 ctx.rotate(a);
@@ -19099,8 +19247,9 @@ drawEffects() {
                 ctx.stroke();
                 ctx.restore();
             }
-            // 3. Falling glyph particles (red tint)
-            for (let i = 0; i < 30; i++) {
+            // 3. Falling glyph particles (red tint) — count gated.
+            const _glyphPartN = _celLow ? 8 : (_celMid ? 18 : 30);
+            for (let i = 0; i < _glyphPartN; i++) {
                 const gx = ((i * 113 + time * 40) % w);
                 const gy = ((i * 67 + time * 60) % h);
                 ctx.fillStyle = `rgba(255, 51, 85, ${0.4 + 0.3 * Math.sin(time * 2 + i)})`;
@@ -19376,12 +19525,13 @@ drawEffects() {
             ctx.lineCap = 'round';
             ctx.shadowColor = "#ff0000";
             ctx.shadowBlur = 15;
-            
-            // Gradient Stroke (Fade from Enemy to Target)
-            const grad = ctx.createLinearGradient(enemy.x, enemy.y, target.x, target.y);
-            grad.addColorStop(0, 'rgba(255, 0, 0, 0.3)');
-            grad.addColorStop(1, '#ff0000');
-            ctx.strokeStyle = grad;
+
+            // Solid stroke — was a per-frame createLinearGradient(enemy→target),
+            // which allocated a new gradient object every combat frame. The
+            // dashed flow + shadowBlur=15 outer glow already convey direction,
+            // and the impact ring at the endpoint anchors the read. The faint
+            // fade-in the gradient added isn't perceptible through the glow.
+            ctx.strokeStyle = '#ff0000';
 
             // Flow animation (Moving Dashes)
             ctx.setLineDash([20, 20]);
@@ -19959,7 +20109,15 @@ drawEffects() {
     // Sector silhouette underlayer — drawn BEHIND the base enemy shape so
     // the silhouette shifts visually per zone. Kept cheap (one gradient or a
     // few strokes) so perf stays clean.
+    // Tier-gated. Each branch builds at least one fresh `createRadialGradient`
+    // every frame per enemy (the radius modulates with `pulse` so a naive
+    // cache key wouldn't help) — with one enemy + an enemy minion that's
+    // 2 fresh GPU-side gradient allocations every frame just for the underlay.
+    // Skipped entirely on low; runs without the fresh-gradient path on mid
+    // (a flat fill with the base colour is enough to keep the silhouette
+    // tinted without re-rasterising the gradient each frame).
     drawSectorEnemyUnderlayer(ctx, entity, time) {
+        if (Perf.tier === 'low') return;
         const sector = this.sector;
         const r = entity.radius || 80;
         ctx.save();
@@ -19984,15 +20142,24 @@ drawEffects() {
             ctx.fill();
         } else if (sector === 3) {
             // Heat corona — orange pulsing halo + ground scorch.
+            // Gradient is cached at the base radius (was rebuilt every frame
+            // because `pulse` was multiplied into the radius). Pulse now
+            // drives globalAlpha + a fixed-radius arc, so the cached
+            // gradient stays valid and the visible breath is preserved.
             const pulse = 0.8 + 0.2 * Math.sin(time * 4);
-            const g = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 1.3 * pulse);
-            g.addColorStop(0, 'rgba(255, 160, 60, 0.55)');
-            g.addColorStop(0.5, 'rgba(255, 90, 0, 0.25)');
-            g.addColorStop(1, 'rgba(80, 0, 0, 0)');
-            ctx.fillStyle = g;
+            ctx.save();
+            ctx.globalAlpha = pulse;
+            ctx.fillStyle = this._cachedGradient('sector3_heat_corona_' + r, () => {
+                const g = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 1.3);
+                g.addColorStop(0, 'rgba(255, 160, 60, 0.55)');
+                g.addColorStop(0.5, 'rgba(255, 90, 0, 0.25)');
+                g.addColorStop(1, 'rgba(80, 0, 0, 0)');
+                return g;
+            });
             ctx.beginPath();
-            ctx.arc(0, 0, r * 1.3 * pulse, 0, Math.PI * 2);
+            ctx.arc(0, 0, r * 1.3, 0, Math.PI * 2);
             ctx.fill();
+            ctx.restore();
             // Ground scorch ellipse
             ctx.fillStyle = 'rgba(80, 20, 0, 0.55)';
             ctx.beginPath();
@@ -20028,7 +20195,16 @@ drawEffects() {
     // Called from drawEntity after the base shape is drawn. The accent
     // motifs make the same base chassis read as "surveillance drone" in
     // Sector 1 vs "forged war-frame" in Sector 3 without swapping meshes.
+    // Tier-gated. Each branch fires unconditional `shadowBlur` strokes plus
+    // small per-frame loops (data-rain, embers, swarm dots, etc.) per enemy
+    // per frame. With one regular enemy in sector 3 this branch alone was
+    // doing a 5-segment shadowBlur=10 stroke + 6 ember fillRects with
+    // shadowBlur=6 + a 25-segment heat-shimmer wavy arc × 2 every frame.
+    // Skipped entirely on low; on mid we drop the shadowBlur calls so the
+    // motifs still render but without the rasterisation hit.
     drawSectorEnemyAccents(ctx, entity, time) {
+        if (Perf.tier === 'low') return;
+        const _accentTier = Perf.tier;
         const sector = this.sector;
         const r = entity.radius || 80;
         const isElite = !!entity.isElite;
@@ -20113,8 +20289,10 @@ drawEffects() {
             // embers rising, heat distortion shimmer.
             // Seams (jagged glowing lines)
             ctx.strokeStyle = '#ff9933';
-            ctx.shadowColor = '#ff4500';
-            ctx.shadowBlur = 10 + Math.sin(time * 5) * 4;
+            if (_accentTier === 'high') {
+                ctx.shadowColor = '#ff4500';
+                ctx.shadowBlur = 10 + Math.sin(time * 5) * 4;
+            }
             ctx.lineWidth = 1.8;
             ctx.beginPath();
             ctx.moveTo(-r * 0.6, -r * 0.4);
@@ -20127,7 +20305,7 @@ drawEffects() {
             ctx.stroke();
             // Ember specks rising from head
             ctx.fillStyle = '#ffcc33';
-            ctx.shadowBlur = 6;
+            if (_accentTier === 'high') ctx.shadowBlur = 6;
             for (let i = 0; i < 6; i++) {
                 const ex = (i * 17) - r * 0.3;
                 const ey = -r * 0.6 - ((time * 60 + i * 35) % (r * 0.9));
@@ -20136,10 +20314,13 @@ drawEffects() {
             }
             ctx.globalAlpha = 1;
             ctx.shadowBlur = 0;
-            // Faint heat shimmer — two offset wavy arcs
+            // Faint heat shimmer — two offset wavy arcs. Mid drops one of the
+            // two arcs (each is a 25-segment per-frame stroke) since one is
+            // enough to read as "heat above the chassis".
             ctx.strokeStyle = 'rgba(255, 170, 80, 0.25)';
             ctx.lineWidth = 1;
-            for (let k = 0; k < 2; k++) {
+            const _shimmerN = _accentTier === 'mid' ? 1 : 2;
+            for (let k = 0; k < _shimmerN; k++) {
                 ctx.beginPath();
                 for (let x = -r; x <= r; x += 8) {
                     const y = -r - 6 - k * 6 + Math.sin(x * 0.06 + time * 4 + k) * 3;
@@ -20348,14 +20529,18 @@ drawEntity(entity) {
                 }
                 ctx.restore();
 
-                // 2. Radar sweep wedge
+                // 2. Radar sweep wedge — gradient cached (was per-frame).
+                // Sweep is drawn in entity-local space (after translate), so
+                // sweepR is stable and the cached gradient stays valid.
                 ctx.save();
                 ctx.rotate(time * 1.5);
                 const sweepR = R + 30;
-                const scanGrad = ctx.createLinearGradient(0, 0, sweepR, 0);
-                scanGrad.addColorStop(0, 'rgba(0, 243, 255, 0.45)');
-                scanGrad.addColorStop(1, 'rgba(0, 243, 255, 0)');
-                ctx.fillStyle = scanGrad;
+                ctx.fillStyle = this._cachedGradient('tactician_sweep_' + sweepR, () => {
+                    const g = ctx.createLinearGradient(0, 0, sweepR, 0);
+                    g.addColorStop(0, 'rgba(0, 243, 255, 0.45)');
+                    g.addColorStop(1, 'rgba(0, 243, 255, 0)');
+                    return g;
+                });
                 ctx.beginPath();
                 ctx.moveTo(0, 0);
                 ctx.arc(0, 0, sweepR, -0.28, 0.28);
@@ -20497,12 +20682,14 @@ drawEntity(entity) {
                 const urgency = 1 + (1 - hpRatio) * 1.5;
                 const heartbeat = Math.sin(time * 4 * urgency);
 
-                // 1. Blood-red fog aura
-                const auraGrad = ctx.createRadialGradient(0, 0, R * 0.3, 0, 0, R + 30);
-                auraGrad.addColorStop(0, 'rgba(255, 30, 60, 0.22)');
-                auraGrad.addColorStop(0.6, 'rgba(120, 0, 20, 0.12)');
-                auraGrad.addColorStop(1, 'transparent');
-                ctx.fillStyle = auraGrad;
+                // 1. Blood-red fog aura — cached.
+                ctx.fillStyle = this._cachedGradient('bloodstalker_player_aura_' + R, () => {
+                    const g = ctx.createRadialGradient(0, 0, R * 0.3, 0, 0, R + 30);
+                    g.addColorStop(0, 'rgba(255, 30, 60, 0.22)');
+                    g.addColorStop(0.6, 'rgba(120, 0, 20, 0.12)');
+                    g.addColorStop(1, 'transparent');
+                    return g;
+                });
                 ctx.beginPath(); ctx.arc(0, 0, R + 30, 0, Math.PI * 2); ctx.fill();
 
                 // 2. Twin bat wings (behind body, bezier-curved membranes)
@@ -20583,15 +20770,19 @@ drawEntity(entity) {
                 ctx.restore();
                 ctx.lineCap = 'butt';
 
-                // 7. Pulsing heart core (beats visibly)
+                // 7. Pulsing heart core (beats visibly) — gradient cached;
+                // beat scale already runs through ctx.scale so the cached
+                // gradient stretches with it.
                 const beat = 1 + Math.max(0, heartbeat) * 0.25;
                 ctx.save();
                 ctx.scale(beat, beat);
-                const heartGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, R * 0.4);
-                heartGrad.addColorStop(0, '#ff6080');
-                heartGrad.addColorStop(0.55, '#aa0022');
-                heartGrad.addColorStop(1, '#220005');
-                ctx.fillStyle = heartGrad;
+                ctx.fillStyle = this._cachedGradient('bloodstalker_player_heart_' + R, () => {
+                    const g = ctx.createRadialGradient(0, 0, 1, 0, 0, R * 0.4);
+                    g.addColorStop(0, '#ff6080');
+                    g.addColorStop(0.55, '#aa0022');
+                    g.addColorStop(1, '#220005');
+                    return g;
+                });
                 ctx.shadowColor = '#ff2244'; ctx.shadowBlur = 20 + heartbeat * 10;
                 ctx.beginPath(); ctx.arc(0, 0, R * 0.36, 0, Math.PI * 2); ctx.fill();
                 ctx.restore();
@@ -20609,6 +20800,11 @@ drawEntity(entity) {
             else if (entity.classId === 'arcanist') {
                 // ARCANIST — High-sorcerer: nested sacred geometry sigil, floating crystal orb,
                 // ribboned rune tablets, chained lightning, starfield backdrop, all-seeing eye.
+                // Heaviest player class on the device — 17+ shadowBlur passes per
+                // frame plus 6 levitating tablets that each spawn an 8-segment
+                // ribbon trail. Tier flag is read once and used to gate the
+                // optional decorative layers below.
+                const _arcTier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
                 const R = entity.radius;
                 const PURPLE = COLORS.PURPLE;
                 const LILAC = '#e0b0ff';
@@ -20628,14 +20824,16 @@ drawEntity(entity) {
                 }
                 ctx.restore();
 
-                // 2. Clean summoning disc — single soft-radial halo (flat, no hard lines)
+                // 2. Clean summoning disc — gradient cached.
                 ctx.save();
                 ctx.translate(0, R * 0.55);
-                const discGrad = ctx.createRadialGradient(0, 0, 4, 0, 0, (R + 28) * 1.3);
-                discGrad.addColorStop(0, 'rgba(188, 19, 254, 0.35)');
-                discGrad.addColorStop(0.5, 'rgba(188, 19, 254, 0.12)');
-                discGrad.addColorStop(1, 'transparent');
-                ctx.fillStyle = discGrad;
+                ctx.fillStyle = this._cachedGradient('arcanist_player_disc_' + R, () => {
+                    const g = ctx.createRadialGradient(0, 0, 4, 0, 0, (R + 28) * 1.3);
+                    g.addColorStop(0, 'rgba(188, 19, 254, 0.35)');
+                    g.addColorStop(0.5, 'rgba(188, 19, 254, 0.12)');
+                    g.addColorStop(1, 'transparent');
+                    return g;
+                });
                 ctx.beginPath();
                 ctx.ellipse(0, 0, (R + 30) * 1.3, (R + 30) * 0.36, 0, 0, Math.PI * 2);
                 ctx.fill();
@@ -20653,24 +20851,35 @@ drawEntity(entity) {
                 ctx.restore();
                 ctx.restore();
 
-                // 3. Outer arcane aura (pulses with breath)
+                // 3. Outer arcane aura (pulses with breath) — gradient
+                // cached at base auraR; breath now drives ctx.scale so the
+                // halo expands without rebuilding the gradient.
                 const breath = 1 + Math.sin(time * 1.5) * 0.08;
-                const auraR = (R + 18) * breath;
-                const aura = ctx.createRadialGradient(0, 0, R * 0.2, 0, 0, auraR);
-                aura.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
-                aura.addColorStop(0.4, 'rgba(224, 176, 255, 0.28)');
-                aura.addColorStop(0.8, 'rgba(188, 19, 254, 0.22)');
-                aura.addColorStop(1, 'transparent');
-                ctx.fillStyle = aura;
+                const auraR = R + 18;
+                ctx.save();
+                ctx.scale(breath, breath);
+                ctx.fillStyle = this._cachedGradient('arcanist_player_aura_' + R, () => {
+                    const g = ctx.createRadialGradient(0, 0, R * 0.2, 0, 0, auraR);
+                    g.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
+                    g.addColorStop(0.4, 'rgba(224, 176, 255, 0.28)');
+                    g.addColorStop(0.8, 'rgba(188, 19, 254, 0.22)');
+                    g.addColorStop(1, 'transparent');
+                    return g;
+                });
                 ctx.beginPath(); ctx.arc(0, 0, auraR, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
 
-                // 4. Runic band — a ring of floating glyphs (8 symbols) slowly rotating
+                // 4. Runic band — a ring of floating glyphs slowly rotating.
+                // Glyph count gated; on low the entire band drops since the
+                // tablets above already disappear — keeping just the band
+                // creates a silhouette imbalance, so it's all-or-nothing.
                 ctx.save();
                 ctx.rotate(time * 0.22);
                 const bandR = R + 8;
                 ctx.shadowColor = LILAC; ctx.shadowBlur = 4;
-                for (let i = 0; i < 8; i++) {
-                    const a = i * Math.PI / 4;
+                const _bandN = _arcTier === 'low' ? 0 : (_arcTier === 'mid' ? 4 : 8);
+                for (let i = 0; i < _bandN; i++) {
+                    const a = i * Math.PI * 2 / _bandN;
                     const gx = Math.cos(a) * bandR, gy = Math.sin(a) * bandR;
                     ctx.save(); ctx.translate(gx, gy); ctx.rotate(a + Math.PI / 2);
                     const alpha = 0.5 + 0.5 * Math.sin(time * 3 + i * 0.9);
@@ -20701,8 +20910,13 @@ drawEntity(entity) {
                 ctx.setLineDash([]);
                 ctx.restore();
 
-                // 6. Chained lightning weave — connects each tablet to the next around the ring
-                const TABLETS = 6;
+                // 6. Chained lightning weave — connects each tablet to the next around the ring.
+                // Tablet count gated: each tablet runs ~10 fills + strokes per
+                // frame plus its own ribbon trail (8 segments × shadowBlur).
+                // Mid halves the count, low strips the entire layer; on a
+                // borderline machine this pass alone was costing several fps
+                // during sustained Arcanist combat.
+                const TABLETS = _arcTier === 'low' ? 0 : (_arcTier === 'mid' ? 3 : 6);
                 const tabletPositions = [];
                 for (let i = 0; i < TABLETS; i++) {
                     const a = time * 0.7 + i * (Math.PI * 2 / TABLETS);
@@ -20734,12 +20948,13 @@ drawEntity(entity) {
                 }
                 ctx.restore();
 
-                // 7. Aetheric ribbon trails (behind each tablet)
+                // 7. Aetheric ribbon trails (behind each tablet) — segment
+                // count halved on mid (was 8 × TABLETS = 48 shadowBlur arcs).
                 ctx.save();
                 ctx.lineWidth = 2;
                 for (let i = 0; i < TABLETS; i++) {
                     const p = tabletPositions[i];
-                    const trailSegs = 8;
+                    const trailSegs = _arcTier === 'mid' ? 4 : 8;
                     for (let s = 1; s <= trailSegs; s++) {
                         const lag = 0.18 * s;
                         const a = p.a - lag;
@@ -20767,17 +20982,21 @@ drawEntity(entity) {
                 ctx.setLineDash([]);
                 ctx.restore();
 
-                // 9. Six levitating rune tablets (flip-rotate for 3D feel, depth scale)
+                // 9. Six levitating rune tablets (flip-rotate for 3D feel, depth scale).
+                // Tablet crystal gradient cached once and reused across all 6
+                // tablets — was 6 createLinearGradient allocations per frame.
+                const _tabGrad = this._cachedGradient('arcanist_player_tablet', () => {
+                    const g = ctx.createLinearGradient(0, -18, 0, 18);
+                    g.addColorStop(0, '#24093a');
+                    g.addColorStop(1, '#0a0214');
+                    return g;
+                });
                 for (let i = 0; i < TABLETS; i++) {
                     const p = tabletPositions[i];
                     ctx.save();
                     ctx.translate(p.x, p.y);
                     ctx.scale(Math.max(0.15, Math.abs(p.flip)), 0.9 + p.depth * 0.18);
-                    // Tablet crystal
-                    const tabGrad = ctx.createLinearGradient(0, -18, 0, 18);
-                    tabGrad.addColorStop(0, '#24093a');
-                    tabGrad.addColorStop(1, '#0a0214');
-                    ctx.fillStyle = tabGrad; ctx.strokeStyle = PURPLE; ctx.lineWidth = 2;
+                    ctx.fillStyle = _tabGrad; ctx.strokeStyle = PURPLE; ctx.lineWidth = 2;
                     ctx.shadowColor = PURPLE; ctx.shadowBlur = 14;
                     ctx.beginPath();
                     ctx.moveTo(-10, -15); ctx.lineTo(10, -15); ctx.lineTo(13, 0);
@@ -20807,20 +21026,24 @@ drawEntity(entity) {
                 const orbY = -R * 0.55 + Math.sin(time * 1.5) * 4;
                 ctx.save();
                 ctx.translate(0, orbY);
-                // Orb halo
-                const orbHalo = ctx.createRadialGradient(0, 0, 4, 0, 0, 22);
-                orbHalo.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
-                orbHalo.addColorStop(0.5, 'rgba(224, 176, 255, 0.4)');
-                orbHalo.addColorStop(1, 'transparent');
-                ctx.fillStyle = orbHalo;
+                // Orb halo — cached.
+                ctx.fillStyle = this._cachedGradient('arcanist_player_orb_halo', () => {
+                    const g = ctx.createRadialGradient(0, 0, 4, 0, 0, 22);
+                    g.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+                    g.addColorStop(0.5, 'rgba(224, 176, 255, 0.4)');
+                    g.addColorStop(1, 'transparent');
+                    return g;
+                });
                 ctx.beginPath(); ctx.arc(0, 0, 22, 0, Math.PI * 2); ctx.fill();
-                // Orb body (radial gradient glass)
-                const orbGrad = ctx.createRadialGradient(-3, -4, 1, 0, 0, 10);
-                orbGrad.addColorStop(0, '#fff');
-                orbGrad.addColorStop(0.4, '#e0b0ff');
-                orbGrad.addColorStop(0.85, 'rgba(76, 19, 136, 0.9)');
-                orbGrad.addColorStop(1, 'rgba(20, 5, 40, 0.9)');
-                ctx.fillStyle = orbGrad;
+                // Orb body (radial gradient glass) — cached.
+                ctx.fillStyle = this._cachedGradient('arcanist_player_orb_body', () => {
+                    const g = ctx.createRadialGradient(-3, -4, 1, 0, 0, 10);
+                    g.addColorStop(0, '#fff');
+                    g.addColorStop(0.4, '#e0b0ff');
+                    g.addColorStop(0.85, 'rgba(76, 19, 136, 0.9)');
+                    g.addColorStop(1, 'rgba(20, 5, 40, 0.9)');
+                    return g;
+                });
                 ctx.shadowColor = PURPLE; ctx.shadowBlur = 18;
                 ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
                 // Swirling cloud inside orb
@@ -20866,15 +21089,24 @@ drawEntity(entity) {
                     ctx.stroke();
                 }
                 ctx.restore();
-                // Pupil (pulsing)
+                // Pupil (pulsing) — gradient cached at peak pupil radius;
+                // pulse drives ctx.scale (range ~0.6×–1.0× of peak) so the
+                // pupil still breathes without a per-frame allocation.
                 const pupil = 3 + Math.sin(time * 3) * 1.2;
-                const pupilGrad = ctx.createRadialGradient(0, 0, 0.5, 0, 0, pupil + 3);
-                pupilGrad.addColorStop(0, '#fff');
-                pupilGrad.addColorStop(0.5, LILAC);
-                pupilGrad.addColorStop(1, 'rgba(188, 19, 254, 0)');
-                ctx.fillStyle = pupilGrad;
+                const _pupilPeak = 4.2 + 3; // pupil max + the +3 outer ring
+                const _pupilScale = (pupil + 3) / _pupilPeak;
+                ctx.save();
+                ctx.scale(_pupilScale, _pupilScale);
+                ctx.fillStyle = this._cachedGradient('arcanist_player_pupil_' + LILAC, () => {
+                    const g = ctx.createRadialGradient(0, 0, 0.5, 0, 0, _pupilPeak);
+                    g.addColorStop(0, '#fff');
+                    g.addColorStop(0.5, LILAC);
+                    g.addColorStop(1, 'rgba(188, 19, 254, 0)');
+                    return g;
+                });
                 ctx.shadowColor = color; ctx.shadowBlur = 22;
-                ctx.beginPath(); ctx.arc(0, 0, pupil + 3, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(0, 0, _pupilPeak, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
                 ctx.restore();
 
                 // 12. Rising crystalline shards (replace generic motes)
@@ -20927,12 +21159,14 @@ drawEntity(entity) {
                 }
                 ctx.restore();
 
-                // 2. Aegis bubble (soft shield dome)
-                const bubbleGrad = ctx.createRadialGradient(0, -R * 0.3, R * 0.3, 0, 0, R + 18);
-                bubbleGrad.addColorStop(0, 'rgba(255, 255, 255, 0.12)');
-                bubbleGrad.addColorStop(0.55, 'rgba(0, 243, 255, 0.15)');
-                bubbleGrad.addColorStop(1, 'transparent');
-                ctx.fillStyle = bubbleGrad;
+                // 2. Aegis bubble (soft shield dome) — cached.
+                ctx.fillStyle = this._cachedGradient('sentinel_player_bubble_' + R, () => {
+                    const g = ctx.createRadialGradient(0, -R * 0.3, R * 0.3, 0, 0, R + 18);
+                    g.addColorStop(0, 'rgba(255, 255, 255, 0.12)');
+                    g.addColorStop(0.55, 'rgba(0, 243, 255, 0.15)');
+                    g.addColorStop(1, 'transparent');
+                    return g;
+                });
                 ctx.beginPath(); ctx.arc(0, 0, R + 18, 0, Math.PI * 2); ctx.fill();
 
                 // 3. Four orbital shield panels (rotating around)
@@ -21126,17 +21360,25 @@ drawEntity(entity) {
                 this.drawPolygon(ctx, 0, 0, R * 0.32, 3, 0);
                 ctx.restore();
 
-                // 7. Plasma fusion core (radial gradient, pulsing)
+                // 7. Plasma fusion core (radial gradient, pulsing) — gradient
+                // cached at the peak coreR+8 radius; per-frame coreBeat
+                // drives ctx.scale so the core throbs without a per-frame
+                // gradient allocation.
                 const coreBeat = 1 + Math.sin(time * 10) * 0.15;
-                const coreR = 12 * coreBeat;
-                const coreGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, coreR + 8);
-                coreGrad.addColorStop(0, '#fff4c0');
-                coreGrad.addColorStop(0.35, '#ffb433');
-                coreGrad.addColorStop(0.75, '#ff5a00');
-                coreGrad.addColorStop(1, 'transparent');
-                ctx.fillStyle = coreGrad;
+                const _coreBase = 12 + 8; // base coreR (12) + outer ring (8)
+                ctx.save();
+                ctx.scale(coreBeat, coreBeat);
+                ctx.fillStyle = this._cachedGradient('annihilator_player_core', () => {
+                    const g = ctx.createRadialGradient(0, 0, 1, 0, 0, _coreBase);
+                    g.addColorStop(0, '#fff4c0');
+                    g.addColorStop(0.35, '#ffb433');
+                    g.addColorStop(0.75, '#ff5a00');
+                    g.addColorStop(1, 'transparent');
+                    return g;
+                });
                 ctx.shadowColor = '#ffaa33'; ctx.shadowBlur = 30;
-                ctx.beginPath(); ctx.arc(0, 0, coreR + 8, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(0, 0, _coreBase, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
 
                 // 8. Rising flame puffs (smoke)
                 ctx.save();
@@ -21176,15 +21418,21 @@ drawEntity(entity) {
                 const NATURE = '#00ff99';
 
                 // 1. Deep emerald aura — breathing radial halo.
+                // Gradient cached at peak breath; per-frame breath now lives in
+                // globalAlpha (was rebuilding a 4-stop radial gradient every
+                // frame for the player's full-screen aura).
                 ctx.save();
                 const auraR = R * 2.0;
-                const aura = ctx.createRadialGradient(0, 0, R * 0.25, 0, 0, auraR);
                 const breath = 0.28 + Math.sin(time * 1.0) * 0.1;
-                aura.addColorStop(0, `rgba(180, 255, 210, ${breath * 0.7})`);
-                aura.addColorStop(0.3, `rgba(30, 200, 120, ${breath * 0.55})`);
-                aura.addColorStop(0.7, `rgba(10, 110, 70, ${breath * 0.28})`);
-                aura.addColorStop(1, 'rgba(0, 30, 15, 0)');
-                ctx.fillStyle = aura;
+                ctx.globalAlpha = breath / 0.38;
+                ctx.fillStyle = this._cachedGradient('summoner_player_aura_' + R, () => {
+                    const g = ctx.createRadialGradient(0, 0, R * 0.25, 0, 0, auraR);
+                    g.addColorStop(0, 'rgba(180, 255, 210, 0.266)');
+                    g.addColorStop(0.3, 'rgba(30, 200, 120, 0.209)');
+                    g.addColorStop(0.7, 'rgba(10, 110, 70, 0.106)');
+                    g.addColorStop(1, 'rgba(0, 30, 15, 0)');
+                    return g;
+                });
                 ctx.beginPath(); ctx.arc(0, 0, auraR, 0, Math.PI * 2); ctx.fill();
                 ctx.restore();
 
@@ -21246,19 +21494,23 @@ drawEntity(entity) {
                 }
                 ctx.restore();
 
-                // 3. Central luminous core — soft radial gradient orb, deep
-                //    green rim fading to a white center. No stroke edge.
+                // 3. Central luminous core — gradient cached at base coreR;
+                // pulse is applied via ctx.scale so the radial stops stretch
+                // with the orb instead of allocating per frame.
                 ctx.save();
                 const coreR = R * 0.42;
                 const corePulse = 1.0 + Math.sin(time * 2.0) * 0.08;
-                const coreGrad = ctx.createRadialGradient(0, -coreR * 0.15, 1, 0, 0, coreR * corePulse);
-                coreGrad.addColorStop(0, 'rgba(255, 255, 235, 1.0)');
-                coreGrad.addColorStop(0.25, 'rgba(200, 255, 220, 0.95)');
-                coreGrad.addColorStop(0.65, 'rgba(40, 220, 130, 0.75)');
-                coreGrad.addColorStop(1, 'rgba(10, 90, 50, 0)');
-                ctx.fillStyle = coreGrad;
+                ctx.scale(corePulse, corePulse);
+                ctx.fillStyle = this._cachedGradient('summoner_player_core_' + R, () => {
+                    const g = ctx.createRadialGradient(0, -coreR * 0.15, 1, 0, 0, coreR);
+                    g.addColorStop(0, 'rgba(255, 255, 235, 1.0)');
+                    g.addColorStop(0.25, 'rgba(200, 255, 220, 0.95)');
+                    g.addColorStop(0.65, 'rgba(40, 220, 130, 0.75)');
+                    g.addColorStop(1, 'rgba(10, 90, 50, 0)');
+                    return g;
+                });
                 ctx.shadowColor = NATURE; ctx.shadowBlur = 20;
-                ctx.beginPath(); ctx.arc(0, 0, coreR * corePulse, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(0, 0, coreR, 0, Math.PI * 2); ctx.fill();
                 ctx.restore();
 
                 // 3b. Bright pinpoint at the exact center — the "soul".
@@ -21286,24 +21538,35 @@ drawEntity(entity) {
                 ctx.stroke();
                 ctx.restore();
 
-                // 5. Companion motes — 3 brighter fairy attendants orbiting on
-                //    a wide tilted ellipse. Each is a small radial gradient
-                //    with a hard white pinpoint center.
+                // 5. Companion motes — 3 brighter fairy attendants orbiting.
+                // Gradient cached once at origin (0,0)→(0,0,radius=5) and
+                // re-applied at each mote's position via ctx.translate (canvas
+                // applies the active matrix at fill time, so the cached
+                // gradient lands wherever we translate to). Per-mote pulse
+                // lives in globalAlpha. Was 3 createRadialGradient allocations
+                // per frame for the player's lifetime in combat.
                 ctx.save();
                 ctx.shadowColor = NATURE; ctx.shadowBlur = 8;
+                const _moteGrad = this._cachedGradient('summoner_player_mote', () => {
+                    const g = ctx.createRadialGradient(0, 0, 0.5, 0, 0, 5);
+                    g.addColorStop(0, 'rgba(255, 255, 220, 1)');
+                    g.addColorStop(0.5, 'rgba(140, 255, 200, 0.7)');
+                    g.addColorStop(1, 'rgba(0, 255, 153, 0)');
+                    return g;
+                });
                 for (let i = 0; i < 3; i++) {
                     const ca = time * 0.9 + i * (Math.PI * 2 / 3);
                     const cx = Math.cos(ca) * R * 0.95;
                     const cy = Math.sin(ca) * R * 0.4 - R * 0.15;
                     const compPulse = 0.7 + 0.3 * Math.sin(time * 3 + i * 1.7);
-                    const compGrad = ctx.createRadialGradient(cx, cy, 0.5, cx, cy, 5);
-                    compGrad.addColorStop(0, `rgba(255, 255, 220, ${compPulse})`);
-                    compGrad.addColorStop(0.5, `rgba(140, 255, 200, ${compPulse * 0.7})`);
-                    compGrad.addColorStop(1, 'rgba(0, 255, 153, 0)');
-                    ctx.fillStyle = compGrad;
-                    ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
-                    ctx.fillStyle = `rgba(255, 255, 255, ${compPulse})`;
-                    ctx.beginPath(); ctx.arc(cx, cy, 1.1, 0, Math.PI * 2); ctx.fill();
+                    ctx.save();
+                    ctx.translate(cx, cy);
+                    ctx.globalAlpha = compPulse;
+                    ctx.fillStyle = _moteGrad;
+                    ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath(); ctx.arc(0, 0, 1.1, 0, Math.PI * 2); ctx.fill();
+                    ctx.restore();
                 }
                 ctx.restore();
 
@@ -21389,13 +21652,15 @@ drawEntity(entity) {
                 const body = Math.sin(time * pulseRate) > 0;
                 const danger = 1 - hpRatio; // 0..1 threat escalator
 
-                // 1. Ground scorch + shadow pool
+                // 1. Ground scorch + shadow pool — cached.
                 ctx.save();
-                const scorch = ctx.createRadialGradient(0, 22, 4, 0, 22, 22);
-                scorch.addColorStop(0, 'rgba(40, 10, 0, 0.7)');
-                scorch.addColorStop(0.7, 'rgba(20, 5, 0, 0.4)');
-                scorch.addColorStop(1, 'rgba(0, 0, 0, 0)');
-                ctx.fillStyle = scorch;
+                ctx.fillStyle = this._cachedGradient('bomb_scorch', () => {
+                    const g = ctx.createRadialGradient(0, 22, 4, 0, 22, 22);
+                    g.addColorStop(0, 'rgba(40, 10, 0, 0.7)');
+                    g.addColorStop(0.7, 'rgba(20, 5, 0, 0.4)');
+                    g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                    return g;
+                });
                 ctx.beginPath(); ctx.ellipse(0, 22, 22, 6, 0, 0, Math.PI * 2); ctx.fill();
                 // Charred radial cracks
                 ctx.strokeStyle = `rgba(100, 30, 0, ${0.35 + 0.25 * danger})`;
@@ -21425,15 +21690,22 @@ drawEntity(entity) {
                 ctx.strokeStyle = color; ctx.lineWidth = 2;
                 ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 
-                // 4. Glowing inner core (pulses through the vents)
+                // 4. Glowing inner core (pulses through the vents) — cached.
+                // Pulse intensity now runs through globalAlpha instead of
+                // baking new colour stops every frame.
                 const coreIntensity = body ? 1 : 0.55;
-                const coreGrad = ctx.createRadialGradient(0, 2, 2, 0, 0, 16);
-                coreGrad.addColorStop(0, `rgba(255, 220, 140, ${0.95 * coreIntensity})`);
-                coreGrad.addColorStop(0.45, `rgba(255, 80, 10, ${0.75 * coreIntensity})`);
-                coreGrad.addColorStop(1, 'rgba(40, 5, 0, 0.6)');
                 ctx.shadowBlur = 0;
-                ctx.fillStyle = coreGrad;
+                ctx.save();
+                ctx.globalAlpha = coreIntensity;
+                ctx.fillStyle = this._cachedGradient('bomb_core', () => {
+                    const g = ctx.createRadialGradient(0, 2, 2, 0, 0, 16);
+                    g.addColorStop(0, 'rgba(255, 220, 140, 0.95)');
+                    g.addColorStop(0.45, 'rgba(255, 80, 10, 0.75)');
+                    g.addColorStop(1, 'rgba(40, 5, 0, 0.6)');
+                    return g;
+                });
                 ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
 
                 // 5. Armor plate seams — 6 radial lines dividing the shell
                 ctx.save();
@@ -21641,13 +21913,20 @@ drawEntity(entity) {
                 }
                 ctx.restore();
 
-                // 2. Soft pulse aura behind the body
+                // 2. Soft pulse aura behind the body — gradient cached at
+                // mid alpha; pulse now lives in globalAlpha (was rebuilding
+                // a radial gradient for every Pawn every frame).
                 const auraPulse = 0.55 + Math.sin(time * 2.2) * 0.25;
-                const aura = ctx.createRadialGradient(0, 0, 6, 0, 0, 34);
-                aura.addColorStop(0, `rgba(0, 243, 255, ${0.35 * auraPulse})`);
-                aura.addColorStop(1, 'rgba(0, 243, 255, 0)');
-                ctx.fillStyle = aura;
+                ctx.save();
+                ctx.globalAlpha = auraPulse;
+                ctx.fillStyle = this._cachedGradient('tactician_pawn_aura', () => {
+                    const g = ctx.createRadialGradient(0, 0, 6, 0, 0, 34);
+                    g.addColorStop(0, 'rgba(0, 243, 255, 0.35)');
+                    g.addColorStop(1, 'rgba(0, 243, 255, 0)');
+                    return g;
+                });
                 ctx.beginPath(); ctx.arc(0, 0, 34, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
 
                 // 3. Cyan tether ribbon behind (extends down, now glowing)
                 ctx.save();
@@ -21790,24 +22069,33 @@ drawEntity(entity) {
 
             // ---- MANA WISP (Arcanist) ----
             else if (classId === 'arcanist' || entity.name.includes('Wisp') || entity.name.includes('Mana')) {
-                // Halo
+                // Halo — cached gradient. Was a fresh createRadialGradient
+                // every frame per wisp; with 1-3 wisps the moment Channel
+                // raised mana to 4+ the per-frame gradient allocations
+                // (halo + orb = 2 fresh per wisp) were the dominant cost
+                // on the rolling fps avg until combat_end.
                 ctx.save();
-                const haloGrad = ctx.createRadialGradient(0, 0, 2, 0, 0, 28);
-                haloGrad.addColorStop(0, 'rgba(224, 176, 255, 0.55)');
-                haloGrad.addColorStop(0.5, 'rgba(188, 19, 254, 0.35)');
-                haloGrad.addColorStop(1, 'transparent');
-                ctx.fillStyle = haloGrad;
+                ctx.fillStyle = this._cachedGradient('manawisp_halo', () => {
+                    const g = ctx.createRadialGradient(0, 0, 2, 0, 0, 28);
+                    g.addColorStop(0, 'rgba(224, 176, 255, 0.55)');
+                    g.addColorStop(0.5, 'rgba(188, 19, 254, 0.35)');
+                    g.addColorStop(1, 'transparent');
+                    return g;
+                });
                 ctx.beginPath(); ctx.arc(0, 0, 28, 0, Math.PI * 2); ctx.fill();
                 ctx.restore();
 
-                // Translucent orb body
+                // Translucent orb body — cached gradient (same reasoning).
                 ctx.save();
-                const orbGrad = ctx.createRadialGradient(-3, -4, 1, 0, 0, 14);
-                orbGrad.addColorStop(0, '#fff');
-                orbGrad.addColorStop(0.4, '#e0b0ff');
-                orbGrad.addColorStop(0.9, 'rgba(76, 19, 136, 0.9)');
-                orbGrad.addColorStop(1, 'rgba(20, 5, 40, 0.9)');
-                ctx.fillStyle = orbGrad; ctx.shadowColor = COLORS.PURPLE; ctx.shadowBlur = 14;
+                ctx.fillStyle = this._cachedGradient('manawisp_orb', () => {
+                    const g = ctx.createRadialGradient(-3, -4, 1, 0, 0, 14);
+                    g.addColorStop(0, '#fff');
+                    g.addColorStop(0.4, '#e0b0ff');
+                    g.addColorStop(0.9, 'rgba(76, 19, 136, 0.9)');
+                    g.addColorStop(1, 'rgba(20, 5, 40, 0.9)');
+                    return g;
+                });
+                ctx.shadowColor = COLORS.PURPLE; ctx.shadowBlur = 14;
                 ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
                 // Cloud swirl clipped inside
                 ctx.save();
@@ -21827,26 +22115,46 @@ drawEntity(entity) {
                 ctx.beginPath(); ctx.arc(-4, -5, 2.5, 0, Math.PI * 2); ctx.fill();
                 ctx.restore();
 
-                // Pulse brighter when player has ≥4 mana
-                if (this.player && this.player.mana >= 4) {
+                // Pulse brighter when player has ≥4 mana — skipped on low.
+                // Channel pushes mana to ≥4 immediately, so this is the layer
+                // that turned on the moment the user reported the FPS hit.
+                // It now drops on low and uses a cheaper line on mid (no
+                // shadowBlur) so it tells the same "wisp is energised" story
+                // without the per-frame 10px shadow rasterisation.
+                if (this.player && this.player.mana >= 4 && Perf.tier !== 'low') {
                     ctx.save();
                     ctx.strokeStyle = `rgba(224, 176, 255, ${0.4 + 0.4 * Math.sin(time * 6)})`;
-                    ctx.lineWidth = 1.2; ctx.shadowColor = COLORS.PURPLE; ctx.shadowBlur = 10;
+                    ctx.lineWidth = 1.2;
+                    if (Perf.tier === 'high') {
+                        ctx.shadowColor = COLORS.PURPLE;
+                        ctx.shadowBlur = 10;
+                    }
                     ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.stroke();
                     ctx.restore();
                 }
 
-                // Lavender mote trail
-                if (Math.random() < 0.4) ParticleSys.createTrail(entity.x + (Math.random() - 0.5) * 20, entity.y + 14, '#e0b0ff', 0.4);
+                // Lavender mote trail — was unconditional (~24 trails/sec/wisp).
+                // Halved on mid, dropped on low.
+                if (Perf.tier !== 'low') {
+                    const _trailRate = Perf.tier === 'mid' ? 0.2 : 0.4;
+                    if (Math.random() < _trailRate) ParticleSys.createTrail(entity.x + (Math.random() - 0.5) * 20, entity.y + 14, '#e0b0ff', 0.4);
+                }
             }
 
             // ---- BLOOD THRALL (Blood Stalker) ----
             else if (classId === 'bloodstalker' || entity.name.includes('Thrall') || entity.name.includes('Blood')) {
-                // Bat wings (bezier, symmetrical)
+                // Bat wings (bezier, symmetrical) — same tier-gating shape as
+                // the spirit minion; mid drops shadowBlur on the wings + eyes
+                // and uses a smaller blur on the heart, low drops all three.
+                const _thrallTier = Perf.tier;
                 const wingFlap = Math.sin(time * (2.5 + (1 - hpRatio) * 3)) * 0.25;
                 ctx.save();
                 ctx.fillStyle = 'rgba(40, 0, 15, 0.9)'; ctx.strokeStyle = '#aa0022';
-                ctx.lineWidth = 1.5; ctx.shadowColor = '#ff2244'; ctx.shadowBlur = 10;
+                ctx.lineWidth = 1.5;
+                if (_thrallTier === 'high') {
+                    ctx.shadowColor = '#ff2244';
+                    ctx.shadowBlur = 10;
+                }
                 for (const side of [-1, 1]) {
                     ctx.save(); ctx.rotate(side * wingFlap);
                     ctx.beginPath();
@@ -21858,40 +22166,78 @@ drawEntity(entity) {
                 }
                 ctx.restore();
 
-                // Pulsing heart core
+                // Pulsing heart core — cached gradient (was rebuilt per
+                // Thrall per frame). The beat scale runs through the active
+                // matrix at fill time, so the cached identity-space gradient
+                // still pulses correctly.
                 const beat = 1 + Math.sin(time * (4 + (1 - hpRatio) * 2)) * 0.18;
                 ctx.save();
                 ctx.scale(beat, beat);
-                const heartGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, 10);
-                heartGrad.addColorStop(0, '#ff6080');
-                heartGrad.addColorStop(0.55, '#aa0022');
-                heartGrad.addColorStop(1, '#220005');
-                ctx.fillStyle = heartGrad;
-                ctx.shadowColor = '#ff2244'; ctx.shadowBlur = 14;
+                ctx.fillStyle = this._cachedGradient('bloodstalker_thrall_heart', () => {
+                    const g = ctx.createRadialGradient(0, 0, 1, 0, 0, 10);
+                    g.addColorStop(0, '#ff6080');
+                    g.addColorStop(0.55, '#aa0022');
+                    g.addColorStop(1, '#220005');
+                    return g;
+                });
+                if (_thrallTier !== 'low') {
+                    ctx.shadowColor = '#ff2244';
+                    ctx.shadowBlur = _thrallTier === 'mid' ? 8 : 14;
+                }
                 ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
                 ctx.restore();
 
-                // Twin red eyes
-                ctx.fillStyle = '#ff2244'; ctx.shadowColor = '#ff2244'; ctx.shadowBlur = 10;
+                // Twin red eyes — flat fills on mid/low, no shadow halo.
+                ctx.fillStyle = '#ff2244';
+                if (_thrallTier === 'high') {
+                    ctx.shadowColor = '#ff2244';
+                    ctx.shadowBlur = 10;
+                } else {
+                    ctx.shadowBlur = 0;
+                }
                 ctx.beginPath(); ctx.arc(-3, -2, 1.2, 0, Math.PI * 2); ctx.fill();
                 ctx.beginPath(); ctx.arc(3, -2, 1.2, 0, Math.PI * 2); ctx.fill();
 
-                // Blood drip particles
-                if (Math.random() < 0.35) ParticleSys.createTrail(entity.x + (Math.random() - 0.5) * 30, entity.y + 16, '#ff2244', 0.45);
+                // Blood drip particles — same per-frame pattern as the Mana
+                // Wisp's lavender trail; halved on mid, off on low.
+                if (Perf.tier !== 'low') {
+                    const _dripRate = Perf.tier === 'mid' ? 0.18 : 0.35;
+                    if (Math.random() < _dripRate) ParticleSys.createTrail(entity.x + (Math.random() - 0.5) * 30, entity.y + 16, '#ff2244', 0.45);
+                }
             }
 
             // ---- SPIRIT / DEFAULT (Summoner) ----
             else {
-                // Petal wreath (behind)
+                // Petal wreath (behind) — cached gradient. Was rebuilt 6×
+                // per minion per frame; with 4-5 spirit minions in play this
+                // alone burned ~30 gradient allocations every frame. The
+                // gradient is identity in entity-local space so a single
+                // cached instance applies to every petal regardless of the
+                // per-petal rotation (canvas applies the active transform at
+                // fill time, not creation time).
+                // Tier-gated. The summoner with 3 spirits in the field was
+                // running ~30 shadowBlur ops per frame purely from this
+                // branch (6 petals + 1 pollen core + 3 fireflies × 3 minions
+                // ≈ 30/frame). On mid we drop the petal/firefly shadowBlur,
+                // keeping just the pollen-core glow as the primary read; on
+                // low we also halve the petal count.
+                const _spiritTier = Perf.tier;
                 ctx.save();
                 ctx.rotate(time * 0.3);
-                for (let i = 0; i < 6; i++) {
-                    ctx.save(); ctx.rotate(i * Math.PI / 3);
-                    const petalGrad = ctx.createLinearGradient(0, 0, 0, -18);
-                    petalGrad.addColorStop(0, 'rgba(0, 255, 153, 0.15)');
-                    petalGrad.addColorStop(1, 'rgba(0, 200, 120, 0.55)');
-                    ctx.fillStyle = petalGrad; ctx.strokeStyle = color; ctx.lineWidth = 1.2;
+                const _petalGrad = this._cachedGradient('summoner_minion_petal', () => {
+                    const g = ctx.createLinearGradient(0, 0, 0, -18);
+                    g.addColorStop(0, 'rgba(0, 255, 153, 0.15)');
+                    g.addColorStop(1, 'rgba(0, 200, 120, 0.55)');
+                    return g;
+                });
+                ctx.fillStyle = _petalGrad; ctx.strokeStyle = color; ctx.lineWidth = 1.2;
+                if (_spiritTier === 'high') {
                     ctx.shadowColor = color; ctx.shadowBlur = 8;
+                }
+                const _petalN = _spiritTier === 'low' ? 3 : 6;
+                const _petalStep = (Math.PI * 2) / _petalN;
+                for (let i = 0; i < _petalN; i++) {
+                    ctx.save(); ctx.rotate(i * _petalStep);
                     ctx.beginPath();
                     ctx.moveTo(0, 0);
                     ctx.quadraticCurveTo(6, -10, 0, -18);
@@ -21901,21 +22247,37 @@ drawEntity(entity) {
                 }
                 ctx.restore();
 
-                // Pollen core
-                const coreGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, 10);
-                coreGrad.addColorStop(0, '#fff');
-                coreGrad.addColorStop(0.4, '#ffff99');
-                coreGrad.addColorStop(1, 'rgba(0, 255, 153, 0.3)');
-                ctx.fillStyle = coreGrad; ctx.shadowColor = COLORS.GOLD; ctx.shadowBlur = 14;
+                // Pollen core — cached (was per-minion per-frame). Keep its
+                // glow on mid (it's the primary "this is a spirit" read);
+                // drop the shadowBlur on low.
+                ctx.fillStyle = this._cachedGradient('summoner_minion_core', () => {
+                    const g = ctx.createRadialGradient(0, 0, 1, 0, 0, 10);
+                    g.addColorStop(0, '#fff');
+                    g.addColorStop(0.4, '#ffff99');
+                    g.addColorStop(1, 'rgba(0, 255, 153, 0.3)');
+                    return g;
+                });
+                if (_spiritTier !== 'low') {
+                    ctx.shadowColor = COLORS.GOLD;
+                    ctx.shadowBlur = _spiritTier === 'mid' ? 8 : 14;
+                }
                 ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
 
-                // Three orbiting fireflies
+                // Three orbiting fireflies — flat fills (no shadowBlur) on
+                // mid/low; the orbit motion + colour alternation is enough
+                // to read as "fireflies" without rasterising a glow halo
+                // for each one every frame.
                 for (let i = 0; i < 3; i++) {
                     const a = time * 2 + i * (Math.PI * 2 / 3);
                     const r = 14 + Math.sin(time * 3 + i) * 2;
                     const fx = Math.cos(a) * r, fy = Math.sin(a) * r;
                     ctx.fillStyle = i % 2 === 0 ? COLORS.GOLD : COLORS.NATURE_LIGHT;
-                    ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 8;
+                    if (_spiritTier === 'high') {
+                        ctx.shadowColor = ctx.fillStyle;
+                        ctx.shadowBlur = 8;
+                    } else {
+                        ctx.shadowBlur = 0;
+                    }
                     ctx.beginPath(); ctx.arc(fx, fy, 1.5, 0, Math.PI * 2); ctx.fill();
                 }
 
@@ -21937,8 +22299,12 @@ drawEntity(entity) {
                     ctx.restore();
                 }
 
-                // Firefly trail emission
-                if (Math.random() < 0.25) ParticleSys.createTrail(entity.x + (Math.random() - 0.5) * 20, entity.y - 8, COLORS.NATURE_LIGHT, 0.35);
+                // Firefly trail emission — Summoner runs 4-5 spirits, so a
+                // 25% per-minion per-frame spawn rate stacks up fast. Scale
+                // the rate down on weaker tiers and divide by minion count
+                // so the total trail spawn-rate doesn't grow with the army.
+                const _trailRate = (Perf.tier === 'low' ? 0.04 : Perf.tier === 'mid' ? 0.10 : 0.18);
+                if (Math.random() < _trailRate) ParticleSys.createTrail(entity.x + (Math.random() - 0.5) * 20, entity.y - 8, COLORS.NATURE_LIGHT, 0.35);
             }
             ctx.restore();
         }
@@ -21964,11 +22330,19 @@ drawEntity(entity) {
             ctx.lineWidth = baseWidth;
             ctx.shadowColor = mGlow;
             ctx.shadowBlur = baseGlow;
-            
-            const bodyGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, entity.radius);
-            bodyGrad.addColorStop(0, '#111'); 
-            bodyGrad.addColorStop(1, mColor);
-            ctx.fillStyle = bodyGrad;
+
+            // Body gradient cached per (radius × palette colour). Was
+            // rebuilt every frame for every enemy + every enemy-side
+            // minion drawn through the enemy fall-through; with even a
+            // small minion swarm that was several radial gradients per
+            // frame allocated for nothing — colours and radius don't
+            // change between frames in a single fight.
+            ctx.fillStyle = this._cachedGradient('enemy_body_' + entity.radius + '_' + mColor, () => {
+                const g = ctx.createRadialGradient(0, 0, 0, 0, 0, entity.radius);
+                g.addColorStop(0, '#111');
+                g.addColorStop(1, mColor);
+                return g;
+            });
 
             // =========================================================
             // BOSS RENDERING
@@ -22155,14 +22529,22 @@ drawEntity(entity) {
                     ctx.font = "bold 32px 'Orbitron', monospace"; ctx.fillStyle = brightMagenta; ctx.shadowBlur = 8; ctx.globalAlpha = 0.8; const txtX = Math.sin(time * 1.2) * 140; const txtY = Math.cos(time * 0.9) * 140; ctx.fillText("NULL", txtX - 40, txtY); ctx.fillText("VOID", -txtX - 40, -txtY);
 
                     // --- VOID CRUSH CHARGING VISUAL ---
+                    // Tier-gated — once charging starts, this draws 4 concentric
+                    // shadowBlur:50 rings every frame for 5 turns (the entire
+                    // back half of the fight). Mid drops the shadowBlur,
+                    // low drops 2 of the 4 rings as well. The countdown text
+                    // is the load-bearing read so it survives every tier.
                     if (entity.voidCrushTurns > 0) {
                         const charge = 1 - (entity.voidCrushTurns / 5); // 0..1 across the 5-turn charge
                         const chargePulse = 0.6 + Math.sin(time * (8 + charge * 10)) * 0.4;
+                        const _vcRings = Perf.tier === 'low' ? 2 : 4;
                         // Concentric crackling rings pulling inward
                         ctx.globalAlpha = 1;
-                        ctx.shadowColor = '#ff00ff';
-                        ctx.shadowBlur = 22 + charge * 28;
-                        for (let r = 0; r < 4; r++) {
+                        if (Perf.tier === 'high') {
+                            ctx.shadowColor = '#ff00ff';
+                            ctx.shadowBlur = 22 + charge * 28;
+                        }
+                        for (let r = 0; r < _vcRings; r++) {
                             const ringR = 260 - (r * 40) + Math.sin(time * 6 + r) * 8;
                             ctx.strokeStyle = `rgba(255, ${20 + r * 40}, 255, ${0.35 + chargePulse * 0.4 * (1 - r * 0.15)})`;
                             ctx.lineWidth = 3 + charge * 3;
@@ -22174,8 +22556,12 @@ drawEntity(entity) {
                         ctx.setLineDash([]);
                         // Countdown text
                         ctx.globalAlpha = 0.9;
-                        ctx.shadowColor = '#ff00ff';
-                        ctx.shadowBlur = 18;
+                        if (Perf.tier === 'high') {
+                            ctx.shadowColor = '#ff00ff';
+                            ctx.shadowBlur = 18;
+                        } else {
+                            ctx.shadowBlur = 0;
+                        }
                         ctx.fillStyle = '#fff';
                         ctx.font = "bold 56px 'Orbitron', monospace";
                         ctx.textAlign = 'center';
@@ -23438,7 +23824,14 @@ drawEntity(entity) {
         // are now hitting harder. The stack count drives ring intensity
         // (more stacks = brighter, thicker) so a multi-buffed Praetorian
         // reads as the priority focus.
-        if (entity instanceof Enemy || (entity instanceof Minion && entity.isPlayerSide === false)) {
+        // Tier-gated — once a buff_allies hits, this aura draws every
+        // frame for every empowered target until combat_end. On low we
+        // skip it (the intent text already reads "EMPOWERED"), on mid
+        // we drop the inner companion ring + the shadowBlur halo and
+        // keep just a flat pulse stroke so the visual identity is
+        // preserved at a fraction of the per-frame cost.
+        if ((entity instanceof Enemy || (entity instanceof Minion && entity.isPlayerSide === false))
+            && Perf.tier !== 'low') {
             const stacks = entity._empoweredStacks || 0;
             if (stacks > 0) {
                 ctx.save();
@@ -23446,19 +23839,23 @@ drawEntity(entity) {
                 const intensity = Math.min(1, stacks / 6); // soft cap visual at 6 stacks
                 ctx.globalAlpha = (0.45 + intensity * 0.35) * pulse;
                 ctx.strokeStyle = '#ffd76a';
-                ctx.shadowColor = '#ffd76a';
-                ctx.shadowBlur = 14 + intensity * 12;
+                if (Perf.tier === 'high') {
+                    ctx.shadowColor = '#ffd76a';
+                    ctx.shadowBlur = 14 + intensity * 12;
+                }
                 ctx.lineWidth = 2 + intensity * 2;
                 ctx.beginPath();
                 ctx.arc(0, 0, entity.radius + 10, 0, Math.PI * 2);
                 ctx.stroke();
-                // Inner companion ring at slightly faster pulse so the
-                // double-ring reads as "stacked empowerment".
-                ctx.globalAlpha = pulse * 0.4;
-                ctx.lineWidth = 1.5;
-                ctx.beginPath();
-                ctx.arc(0, 0, entity.radius + 4, time * 0.6, time * 0.6 + Math.PI * 1.4);
-                ctx.stroke();
+                if (Perf.tier === 'high') {
+                    // Inner companion ring at slightly faster pulse so the
+                    // double-ring reads as "stacked empowerment".
+                    ctx.globalAlpha = pulse * 0.4;
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, entity.radius + 4, time * 0.6, time * 0.6 + Math.PI * 1.4);
+                    ctx.stroke();
+                }
                 ctx.restore();
             }
         }
@@ -23468,6 +23865,10 @@ drawEntity(entity) {
         // ghost-states: a translucent purple aura + a faint duplicate
         // silhouette offset to one side. Reads as "this thing isn't
         // fully here" so the 35% miss feels earned, not random.
+        // Permanent for the whole fight, so tier-gated: low keeps just
+        // the duplicate silhouette (no shadowBlur, no broken-arc ring)
+        // since that's the load-bearing part of the read; mid drops the
+        // shadowBlur on both layers.
         if (entity instanceof Enemy && entity.kind === 'phase_shift') {
             ctx.save();
             const flicker = 0.5 + Math.sin(time * 9) * 0.4;
@@ -23475,26 +23876,30 @@ drawEntity(entity) {
             // Faint purple silhouette duplicate offset to one side
             ctx.globalAlpha = 0.22 + flicker * 0.18;
             ctx.fillStyle = '#bc13fe';
-            ctx.shadowColor = '#bc13fe';
-            ctx.shadowBlur = 18;
+            if (Perf.tier === 'high') {
+                ctx.shadowColor = '#bc13fe';
+                ctx.shadowBlur = 18;
+            }
             ctx.beginPath();
             ctx.arc(offset, 0, entity.radius * 0.85, 0, Math.PI * 2);
             ctx.fill();
             // Outer wisp ring — broken arcs that flicker on/off so the
-            // outline reads as "phasing in and out".
-            ctx.globalAlpha = 0.6 + flicker * 0.3;
-            ctx.strokeStyle = '#d070ff';
-            ctx.shadowBlur = 12;
-            ctx.lineWidth = 2;
-            const segs = 5;
-            const segLen = (Math.PI * 2) / segs;
-            for (let i = 0; i < segs; i++) {
-                if (Math.random() < 0.4) continue; // skip random arcs each frame
-                const a0 = i * segLen + time * 0.4;
-                const a1 = a0 + segLen * 0.55;
-                ctx.beginPath();
-                ctx.arc(0, 0, entity.radius + 6, a0, a1);
-                ctx.stroke();
+            // outline reads as "phasing in and out". Skipped on low.
+            if (Perf.tier !== 'low') {
+                ctx.globalAlpha = 0.6 + flicker * 0.3;
+                ctx.strokeStyle = '#d070ff';
+                if (Perf.tier === 'high') ctx.shadowBlur = 12;
+                ctx.lineWidth = 2;
+                const segs = 5;
+                const segLen = (Math.PI * 2) / segs;
+                for (let i = 0; i < segs; i++) {
+                    if (Math.random() < 0.4) continue; // skip random arcs each frame
+                    const a0 = i * segLen + time * 0.4;
+                    const a1 = a0 + segLen * 0.55;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, entity.radius + 6, a0, a1);
+                    ctx.stroke();
+                }
             }
             ctx.restore();
         }
@@ -23547,7 +23952,13 @@ drawEntity(entity) {
         // --- EFFECT AURAS — one colored ring per active debuff so the player
         // reads status at a glance even when multiple effects stack. Drawn at
         // staggered radii so rings don't fight for the same pixels.
-        {
+        // Tier-gated — once 3-4 debuffs stack on a boss, this loop is the
+        // single most expensive item in the per-frame draw (each ring sets
+        // shadowColor/shadowBlur and triggers a fresh stroke pass). On low
+        // we skip auras entirely — the status-icon strip on the HUD already
+        // exposes every active debuff. On mid we keep the rings but drop
+        // shadowBlur (the colour + radius is sufficient signal).
+        if (Perf.tier !== 'low') {
             const auras = [];
             if (entity.hasEffect('weak'))       auras.push({ color: '#6fe8ff', label: 'weak' });
             if (entity.hasEffect('frail'))      auras.push({ color: '#ff9cf2', label: 'frail' });
@@ -23560,16 +23971,13 @@ drawEntity(entity) {
                 ctx.save();
                 const pulse = 0.65 + Math.sin(time * 3.6) * 0.25;
                 const bleedPulse = 0.55 + Math.sin(time * 7) * 0.25;
-                // Shadow blur is the same for every ring — set once to
-                // avoid per-ring GPU state flips (those were showing up
-                // as a measurable FPS hit on bosses with 4+ debuffs).
-                ctx.shadowBlur = 14;
+                if (Perf.tier === 'high') ctx.shadowBlur = 14;
                 ctx.lineWidth = 2;
                 const baseR = entity.radius + 22;
                 for (let ai = 0; ai < auras.length; ai++) {
                     const a = auras[ai];
                     ctx.globalAlpha = a.label === 'bleed' ? bleedPulse : pulse * 0.7;
-                    ctx.shadowColor = a.color;
+                    if (Perf.tier === 'high') ctx.shadowColor = a.color;
                     ctx.strokeStyle = a.color;
                     ctx.beginPath();
                     ctx.arc(0, 0, baseR + ai * 7, 0, Math.PI * 2);

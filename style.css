@@ -303,6 +303,126 @@ body.reduced-motion #gameCanvas.boss-zoom {
     transform: none !important;
 }
 
+/* Performance-tier gates. Set by Perf.detect() / Perf.setTier() in perf.js.
+   The intro overlay and main menu both run a `mix-blend-mode: screen`
+   scanline that animates `background-position`, plus a `mask-image` +
+   perspective grid and a `filter: drop-shadow` pulse on the L-bracket
+   frame. On borderline hardware those three patterns alone force a full
+   layer repaint every frame and were holding the rolling avg around 48
+   fps even with the canvas idle on the start screen. Stripping the
+   blend mode and the animated drop-shadow under `perf-low` / `perf-mid`
+   restores headroom without changing the design intent — the silhouette
+   reads the same, the animation just stops costing the GPU each frame.
+   We keep the actual scanline texture (it's a static `repeating-linear-
+   gradient`); only the blend + position animation are removed. */
+/* INTRO splash (intro-v2). The HTML uses introv2-* class names — earlier
+   gates targeted the older intro-bg / intro-scanlines / intro-grid /
+   intro-particles selectors which no longer exist in the DOM, so they
+   matched nothing and the intro stayed at full cost on weaker devices.
+   These rules use the live class names. */
+body.perf-low #intro-overlay.intro-v2 .introv2-scanlines,
+body.perf-mid #intro-overlay.intro-v2 .introv2-scanlines,
+body.perf-low #screen-start::before,
+body.perf-mid #screen-start::before {
+    animation: none !important;
+    mix-blend-mode: normal;
+}
+body.perf-low #intro-overlay.intro-v2 .introv2-gridfloor,
+body.perf-mid #intro-overlay.intro-v2 .introv2-gridfloor,
+body.perf-low #intro-overlay.intro-v2 .introv2-bg,
+body.perf-mid #intro-overlay.intro-v2 .introv2-bg,
+body.perf-low #intro-overlay.intro-v2 .introv2-pulse,
+body.perf-mid #intro-overlay.intro-v2 .introv2-pulse,
+body.perf-low #intro-overlay.intro-v2 .introv2-vs,
+body.perf-mid #intro-overlay.intro-v2 .introv2-vs {
+    animation: none !important;
+}
+/* The intro splash title runs `introv2-title-pulse`, which animates a
+   4-layer `text-shadow` stack (12 → 60px blur) plus `filter: brightness`
+   on a clamp-sized H1 element infinite. Animating multi-layer text-shadow
+   is the single most expensive paint pattern in the codebase: every frame
+   the entire bounding box of the title is repainted with a fresh shadow
+   pass per layer. The boot trace showed a sustained 36 fps avg before the
+   first auto-downgrade — this is the dominant item. Killed on BOTH mid
+   AND low (was only low). The entry animation `introv2-title-in` still
+   plays so the title still slides in; only the infinite pulse is dropped. */
+body.perf-low #intro-overlay.intro-v2 .introv2-title,
+body.perf-mid #intro-overlay.intro-v2 .introv2-title {
+    animation: introv2-title-in 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) 0.45s forwards !important;
+}
+body.perf-low #intro-overlay.intro-v2 .introv2-tap,
+body.perf-mid #intro-overlay.intro-v2 .introv2-tap {
+    animation: introv2-sub-in 1.0s ease-out 1.8s forwards !important;
+}
+body.perf-low #screen-start::after,
+body.perf-mid #screen-start::after {
+    animation: none !important;
+    /* Keep a static drop-shadow so the L-brackets still pop; just don't
+       recompute the filter every frame — that was the single most
+       expensive item on the menu screen. */
+    filter: drop-shadow(0 0 8px rgba(0, 243, 255, 0.55));
+    opacity: 0.85;
+}
+
+/* MAIN MENU (#screen-start). The wordmark stack runs four overlapping
+   infinite animations on top of an already-glowing element with three
+   stacked drop-shadow filters, plus a JS rAF that rewrites a CSS var the
+   filter chain reads off. The single most expensive item is
+   `menu-title-glow`, which animates `letter-spacing` — a layout-trigger
+   that forces continuous text reflow at 60Hz. On mid/low we also strip
+   `text-flicker`, `title-scanline`, and the halo background-position
+   animations; collectively this was the missing chunk that let the
+   rolling avg hold at ~47fps even after the first auto-downgrade. */
+body.perf-low #screen-start h1.title,
+body.perf-mid #screen-start h1.title {
+    animation: none !important;
+    /* Pin the filter to the beat-0 state so removing the JS pulse
+       doesn't leave a runtime-promoted layer at zero opacity. */
+    filter:
+        drop-shadow(0 0 8px rgba(0, 243, 255, 0.6))
+        drop-shadow(0 0 14px rgba(188, 19, 254, 0.35)) !important;
+    transform: none !important;
+    letter-spacing: 4px !important;
+}
+body.perf-low #screen-start h1.title::before,
+body.perf-mid #screen-start h1.title::before {
+    animation: none !important;
+    opacity: 0;
+}
+body.perf-low #screen-start .glow-container::before,
+body.perf-mid #screen-start .glow-container::before,
+body.perf-low #screen-start .glow-container::after,
+body.perf-mid #screen-start .glow-container::after {
+    animation: none !important;
+}
+/* The "v" separator on the wordmark — vs-glitch mutates `text-shadow` and
+   `color` at 8 steps over 2.4s, infinite. Each step is a paint trigger;
+   on a child of the title (which stacks 3 drop-shadow filters on the
+   parent) every step also re-rasterises the parent's filter chain. Killed
+   on mid/low; the parent gate above already pinned a static drop-shadow
+   so the title still reads as "glowing wordmark" without the glitch. */
+body.perf-low #screen-start h1.title .vs,
+body.perf-mid #screen-start h1.title .vs {
+    animation: none !important;
+}
+/* Title energy bars — two pseudo-elements with infinite blur+drop-shadow
+   gradient sweeps. Each carries `filter: blur(0.5px) drop-shadow(...)` so
+   any animation on them re-rasterises the entire bar layer every frame. */
+body.perf-low #screen-start .title-energy-bars::before,
+body.perf-low #screen-start .title-energy-bars::after,
+body.perf-mid #screen-start .title-energy-bars::before,
+body.perf-mid #screen-start .title-energy-bars::after {
+    animation: none !important;
+}
+/* btn-sheen runs on every .btn::after across the site, infinite. The menu
+   has 5+ buttons visible at boot, so 5+ pseudos animate transform/opacity.
+   Cheap individually but stacks. Off on low; mid keeps it (it's the main
+   "interactive" affordance on the menu and is just transform-only). */
+body.perf-low .btn::after { animation: none !important; }
+/* Version-label gentle glow — small but ungated, off on mid/low. */
+body.perf-low .menu-version,
+body.perf-mid .menu-version { animation: none !important; }
+
 /* High-contrast mode — clamps all text to white, strips subtle glow */
 body.high-contrast { color: #fff; }
 body.high-contrast .neon-text-blue,
@@ -1813,10 +1933,28 @@ h2 {
 
 /* Combo-eligible die — illuminated glow + orbiting sparks so the player
    sees at a glance that this die contributes to a combo bonus. Colour is
-   driven by --combo-color (set inline to the combo's banner colour). */
+   driven by --combo-color (set inline to the combo's banner colour).
+
+   Animation budget: the host element holds a STATIC multi-layer box-shadow
+   (paint-once, no per-frame repaint), and only the two pseudo-elements
+   animate — and only via `opacity` + `transform`, which the compositor
+   accelerates on its own thread. Earlier this stack animated `box-shadow`
+   on three layers simultaneously: with 2-3 mana dice in OVERFLOW that's
+   4-6 large-blur shadows being repainted every frame, which Chromium
+   does not GPU-promote. That repaint storm dropped the rolling fps avg
+   from 60 → ~47 the moment OVERFLOW announced and held it there until
+   combat_end (when renderDiceUI rebuilds the dice container without the
+   `.die-combo` class). The visual is identical to the eye — same colour,
+   same scale pulse, same dashed orbit — only the cost moved off the
+   raster thread. */
 .die.die-combo {
     --combo-color: #ffd700;
-    animation: die-combo-glow 1.2s ease-in-out infinite;
+    /* Static halo. Pre-rasterized once; no per-frame repaint. */
+    box-shadow:
+        0 0 14px var(--combo-color),
+        0 0 30px var(--combo-color),
+        inset 0 0 16px var(--combo-color);
+    filter: brightness(1.15) saturate(1.25);
     z-index: 2;
 }
 .die.die-combo::before,
@@ -1827,8 +1965,12 @@ h2 {
     border-radius: inherit;
     pointer-events: none;
     border: 1px solid var(--combo-color);
+    /* Static box-shadow on each pseudo. The pulse animation below only
+       animates opacity + transform, both of which composite without
+       triggering paint. */
     box-shadow: 0 0 16px var(--combo-color), 0 0 32px var(--combo-color);
     opacity: 0.85;
+    will-change: transform, opacity;
     animation: die-combo-pulse 1.4s ease-in-out infinite;
 }
 .die.die-combo::after {
@@ -1838,22 +1980,9 @@ h2 {
     opacity: 0.55;
     animation: die-combo-spin 3.2s linear infinite, die-combo-pulse 1.4s ease-in-out infinite;
 }
-@keyframes die-combo-glow {
-    0%, 100% {
-        box-shadow:
-            0 0 10px var(--combo-color),
-            0 0 22px var(--combo-color),
-            inset 0 0 12px var(--combo-color);
-        filter: brightness(1.05) saturate(1.15);
-    }
-    50% {
-        box-shadow:
-            0 0 18px var(--combo-color),
-            0 0 44px var(--combo-color),
-            inset 0 0 22px var(--combo-color);
-        filter: brightness(1.25) saturate(1.35);
-    }
-}
+/* Pulse the pseudos via opacity/transform only — both compositor-friendly,
+   no paint each frame. Visual equivalence to the previous box-shadow keyframe
+   is preserved by the static shadow on the host + pseudos above. */
 @keyframes die-combo-pulse {
     0%, 100% { transform: scale(1.0); opacity: 0.55; }
     50%      { transform: scale(1.08); opacity: 0.95; }
@@ -1862,9 +1991,18 @@ h2 {
     from { transform: rotate(0deg); }
     to   { transform: rotate(360deg); }
 }
-/* Used dice lose the combo aura cleanly */
+/* Used dice lose the combo aura cleanly — strip the host glow too so a
+   spent mana die in OVERFLOW doesn't keep painting the static shadow. */
+.die.die-combo.used {
+    box-shadow: none;
+    filter: none;
+}
 .die.die-combo.used::before,
 .die.die-combo.used::after { display: none; }
+/* Perf-tier gate: low strips the orbit ring entirely (drops one animated
+   layer per combo'd die), mid keeps the inner pulse but stops the spin. */
+body.perf-low .die.die-combo::after { display: none; }
+body.perf-mid .die.die-combo::after { animation: die-combo-pulse 1.4s ease-in-out infinite; }
 
 /* Hovering a combo-eligible die outlines its peers so new players learn
    which dice chain together. Stronger than the idle glow. */
