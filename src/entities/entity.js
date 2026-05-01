@@ -57,33 +57,15 @@ class Entity {
             return false;
         }
 
-        // Bloodstalker: Blood Thrall redirects EXTERNAL player-bound damage
-        // to itself while alive. "External" = damage originating from an
-        // Enemy or an enemy-side Minion — so blocking enemy attacks counts,
-        // but self-costs (Blood Tribute HP payment, reroll costs, event
-        // choices that drain HP, annihilator autovent) still hit the player.
-        // DOT ticks from debuffs (bleed/poison, null source) also bypass the
-        // thrall, which keeps the bar from double-filling off self-applied
-        // tick damage. The Blood Pool bar still fills off the redirected
-        // amount so the tribute charge-up loop keeps running untouched.
-        const _isExternalSource = !!(source && (
-            (Enemy && source instanceof Enemy) ||
-            (Minion && source instanceof Minion && source.isPlayerSide === false)
-        ));
-        if (this instanceof Player && _isExternalSource && amount > 0
-            && this.traits && this.traits.minionName === 'Blood Thrall') {
-            const thrall = (this.minions || []).find(m => m && m.currentHp > 0);
-            if (thrall) {
-                ParticleSys.createFloatingText(thrall.x, thrall.y - 60, `SHIELDED -${amount}`, '#ff0055');
-                AudioMgr.playSound('hit');
-                thrall.takeDamage(amount, source, suppressBlockText);
-                if (thrall.currentHp <= 0) {
-                    this.minions = this.minions.filter(m => m !== thrall);
-                }
-                try { ClassAbility.onEvent('damage_taken', { amount, source }); } catch (_) {}
-                return false;
-            }
-        }
+        // Bloodstalker — Blood Thrall siphon. Damage that lands on the
+        // thrall is fed back to the player as healing (and ×2 once the
+        // thrall has been upgraded to level 2). The actual heal is applied
+        // *after* the thrall's HP deduction below so we know how much the
+        // hit really took (shield/mitigations apply first; a hit that's
+        // fully absorbed by the thrall's shield does no healing).
+        // Replaces the old "redirect player damage to thrall" mechanic —
+        // the player now eats their own incoming damage, and the thrall
+        // pays for itself by being a heal battery while it's getting hit.
 
         if (this instanceof Enemy && this.invincibleTurns > 0) {
             ParticleSys.createFloatingText(this.x, this.y - 60, "INVINCIBLE", "#888");
@@ -328,6 +310,13 @@ class Entity {
             ParticleSys.createFloatingText(this.x, this.y - 150, "ECHO SPLIT", "#88eaff");
         }
 
+        // Snapshot HP before the deduction so the Blood Thrall siphon
+        // below can compute the *actual* HP loss (a hit fully absorbed by
+        // shield won't trigger any heal — `actualDmg` already accounts for
+        // shield, but a fatal hit may overflow currentHp, so we want the
+        // capped delta).
+        const _hpBeforeHit = this.currentHp;
+
         // Boss phase clamp — a boss can only be killed once it's in its
         // FINAL phase. Attacks that would drop a Phase 1 boss past the
         // 50% threshold get clamped so Phase 2 always triggers; same for
@@ -348,6 +337,22 @@ class Entity {
             }
         } else {
             this.currentHp = Math.max(0, this.currentHp - actualDmg);
+        }
+
+        // Bloodstalker — Blood Thrall siphon. When a player-side Blood
+        // Thrall takes damage, heal the player by the amount it lost
+        // (×2 if the thrall is level 2 / upgraded). Uses the HP delta
+        // rather than `actualDmg` so a hit that overkills the thrall
+        // only heals for what the thrall actually had left.
+        if (Minion && this instanceof Minion && this.isPlayerSide && Game.player
+            && Game.player.traits && Game.player.traits.minionName === 'Blood Thrall') {
+            const lost = _hpBeforeHit - this.currentHp;
+            if (lost > 0) {
+                const mult = (this.level && this.level >= 2) ? 2 : 1;
+                const healAmt = lost * mult;
+                Game.player.heal(healAmt);
+                ParticleSys.createFloatingText(this.x, this.y - 80, `SIPHON +${healAmt}`, '#ff5577');
+            }
         }
 
         // Archivist Phase 3+ — REWIND. A heavy single hit (≥80 raw dmg)

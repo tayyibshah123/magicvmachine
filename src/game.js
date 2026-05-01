@@ -198,6 +198,12 @@ const Game = {
 
         // --- Performance tier detection (must run before renderScale) ---
         Perf.detect();
+        // Expose Perf to DevTools so the per-section profiler can be flipped
+        // on without rebuilding. From the console:
+        //   __perf.startTrace()                       // 25ms slow threshold
+        //   __perf.startTrace({ thresholdMs: 18 })    // tighter
+        //   __perf.stopTrace()
+        try { if (typeof window !== 'undefined') window.__perf = Perf; } catch (_) {}
         ParticleSys.quality = Perf.particleQuality();
         if (Perf.tier === 'low') ParticleSys.maxParticles = 128;
         else if (Perf.tier === 'mid') ParticleSys.maxParticles = 220;
@@ -2063,6 +2069,13 @@ startQTE(type, x, y, callback, opts) {
                 // and existing chain QTEs that don't pass it keep the old
                 // worst-of-waves behaviour.
                 perWaveCallback: (opts && opts.onWave) || null,
+                // Incoming damage value the call site is about to apply, post-
+                // multiplier. Used by the perfect-parry block in resolveQTE so
+                // the riposte reflects a portion of the actual hit that's
+                // about to land, not a stat-derived approximation. Optional —
+                // call sites that don't pass it fall back to the legacy
+                // baseDmg-based reflect formula.
+                incomingDamage: (opts && typeof opts.incomingDamage === 'number') ? opts.incomingDamage : null,
                 callback: callback || resolve
             };
 
@@ -2751,12 +2764,11 @@ startQTE(type, x, y, callback, opts) {
                  }
              } else {
                  if (quality === 'perfect') {
-                     // Clair-Obscur-style parry: nailing the perfect window
-                     // FULLY nullifies the hit. Old payout (0.5 = half) was
-                     // limp given the new tight window; doubling the reward
-                     // matches the doubled difficulty so the parry beat
-                     // becomes the high-skill defensive option.
-                     multiplier = 0.0;
+                     // Perfect parry: cuts incoming damage in half AND
+                     // reflects 50% of what the player just took back at
+                     // the attacker. The hit gets split — half lands on
+                     // the player, a quarter of the original bounces back.
+                     multiplier = 0.5;
                      msg = "PERFECT PARRY!";
                      color = COLORS.GOLD;
                      AudioMgr.playSound('defend');
@@ -2777,17 +2789,36 @@ startQTE(type, x, y, callback, opts) {
                          color: COLORS.GOLD
                      });
                      this.triggerSlowMo && this.triggerSlowMo(0.1, 0.085);
-                     // Reflect a portion back at the attacker so the parry
-                     // feels like an active counter, not a passive dodge.
+                     // Riposte: 50% of the damage the player took (which is
+                     // itself half of the incoming) bounces back. Falls back
+                     // to the legacy baseDmg-derived value when the call
+                     // site didn't plumb the incoming damage through opts —
+                     // keeps every existing DEFEND QTE working while new
+                     // sites pick up the symmetric formula.
                      // Skipped during scripted tutorial combat: the dummy
                      // is sized for the lesson, and a 2 HP riposte chip
                      // per parry would derail the choreographed pacing.
                      if (this.enemy && this.enemy.currentHp > 0
                          && this.currentState !== STATE.TUTORIAL_COMBAT) {
-                         const reflect = Math.max(2, Math.floor(this.enemy.baseDmg * 0.25));
-                         this.enemy.takeDamage(reflect, this.player);
+                         let reflect;
+                         if (typeof this.qte.incomingDamage === 'number' && this.qte.incomingDamage > 0) {
+                             // damage_taken = incoming × 0.5; reflect = 50% of that.
+                             reflect = Math.max(1, Math.floor(this.qte.incomingDamage * 0.25));
+                         } else {
+                             reflect = Math.max(2, Math.floor(this.enemy.baseDmg * 0.25));
+                         }
+                         const enemyKilled = this.enemy.takeDamage(reflect, this.player);
                          ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, `RIPOSTE ${reflect}`, COLORS.GOLD);
                          ParticleSys.createShockwave(this.enemy.x, this.enemy.y, COLORS.GOLD, 28);
+                         // Softlock fix: previously, if the riposte killed
+                         // the enemy we never fired winCombat — the post-
+                         // intent-loop check just `return`s on a dead enemy.
+                         // Trigger it directly here. winCombat is async +
+                         // reentrance-guarded, so a second fire from the
+                         // outer loop is a no-op.
+                         if (enemyKilled && this.enemy && this.enemy.currentHp <= 0) {
+                             this.winCombat();
+                         }
                      }
                  } else if (quality === 'good') {
                      // Block reward held at 0.6 (was 0.75) — shield-tier
@@ -3959,7 +3990,7 @@ startQTE(type, x, y, callback, opts) {
         bloodstalker: {
             description: "A vampiric predator who turns damage taken into a brutal payback.",
             style: "High risk burst, lifesteal sustain, takes +1 incoming damage on every hit.",
-            minion: "Blood Thrall. While alive it soaks every hit aimed at you. Damage routed to it still fills the Blood Pool.",
+            minion: "Blood Thrall. Damage it takes is siphoned back as healing for you (×2 once upgraded).",
             ability: "Blood Pool fills as you take damage. At full, spend HP for one of three tributes. Minor: +1 reroll. Major: 20 damage plus Bleed. Grand: 40 damage plus Bleed plus mana plus rerolls.",
             attack: "Bite, Gouge, Maul. Predatory strike that heals on hit and applies Frail at top tier.",
             combo:  "FEEDING FRENZY (2 ATK + 1 DEF). Heal 5 HP at climax on top of the per-hit lifesteal.",
@@ -5006,7 +5037,7 @@ triggerPhaseGlitch() {
             ],
             qte: [
                 { name: 'CRITICAL TAP', icon: '⚔', color: '#ffd700', body: 'When attacking, a ring shrinks toward a target zone. Tap inside the gold window for a critical (+60% damage). Outside but close = good hit (+15%). Miss = base damage.' },
-                { name: 'PERFECT PARRY', icon: '◈', color: '#ffd700', body: 'When defending, perfect tap fully nullifies the hit AND ripostes 25% of the boss\'s base damage. Good = 40% damage reduction. Miss = full damage.' },
+                { name: 'PERFECT PARRY', icon: '◈', color: '#ffd700', body: 'When defending, perfect tap halves the incoming damage AND ripostes 50% of what you took (25% of incoming) back at the attacker. Good = 40% damage reduction. Miss = full damage.' },
                 { name: 'STEADY',      icon: '─', color: '#ffd700', body: 'Default rhythm — ring shrinks at constant speed. Most regular enemies use this.' },
                 { name: 'ACCELERATE',  icon: '↗', color: '#ff3355', body: 'Slow start, fast finish. Bosses use this — read the wind-up, commit late.' },
                 { name: 'PULSE',       icon: '∿', color: '#ff66dd', body: 'Speed wobbles. Elites + chaotic / observer enemies use this. Stay focused, the rhythm shifts.' },
@@ -15612,10 +15643,10 @@ drawEffects() {
             this.updateTutorialStep(); 
             if (this.enemy) this.enemy.playAnim('lunge');
             await this.sleep(2000);
-            this.qte.radius = 100; 
-            const multiplier = await this.startQTE('DEFEND', this.player.x, this.player.y);
-            let dmg = 5;
-            dmg = Math.floor(dmg * multiplier);
+            this.qte.radius = 100;
+            const tutorialDmg = 5;
+            const multiplier = await this.startQTE('DEFEND', this.player.x, this.player.y, null, { incomingDamage: tutorialDmg });
+            let dmg = Math.floor(tutorialDmg * multiplier);
             this.player.takeDamage(dmg, this.enemy, true);
             await this.sleep(1000);
             this.tutorialStep = 10;
@@ -15708,9 +15739,10 @@ drawEffects() {
                                 if (t.takeDamage(dmg, m) && t === this.enemy) { this.winCombat(); return; }
                                 if (t !== this.enemy && t.currentHp <= 0) {
                                      // Blood Thrall kills no longer heal the player — the
-                                     // thrall's value now comes from soaking damage while
-                                     // alive (see Player.takeDamage redirect). Per-hit
-                                     // lifesteal on the player's own attacks is still on.
+                                     // thrall's value now comes from siphoning damage it
+                                     // takes back to the player as healing (see the heal
+                                     // hook in Entity.takeDamage). Per-hit lifesteal on
+                                     // the player's own attacks is still on.
                                      if (this.enemy) this.enemy.minions = this.enemy.minions.filter(min => min !== t);
                                      if(this.player.hasRelic('brutalize') && !t.isPlayerSide) {
                                          this.triggerBrutalize(t);
@@ -15807,7 +15839,7 @@ drawEffects() {
                 const dmgVal = (intent.effectiveVal !== undefined) ? intent.effectiveVal : intent.val;
                 
                 if (dmgVal > 0) {
-                    const multiplier = await this.startQTE('DEFEND', this.player.x, this.player.y);
+                    const multiplier = await this.startQTE('DEFEND', this.player.x, this.player.y, null, { incomingDamage: dmgVal });
                     let dmg = Math.floor(dmgVal * multiplier);
                     if (this.player.takeDamage(dmg, this.enemy, true) && this.player.currentHp <= 0) { this.gameOver(); return; }
                 }
@@ -15927,7 +15959,7 @@ drawEffects() {
                 const dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
                 await this.sleep(300);
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, "SWEEP ARC", "#ff3355");
-                const mult = await this.startQTE('DEFEND', this.player.x, this.player.y, null, { pattern: 'accelerate' });
+                const mult = await this.startQTE('DEFEND', this.player.x, this.player.y, null, { pattern: 'accelerate', incomingDamage: dmg });
                 const finalDmg = Math.floor(dmg * mult);
                 {
                     const sweepGen = this._combatGen || 0;
@@ -15948,7 +15980,7 @@ drawEffects() {
                 const dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
                 await this.sleep(300);
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, "CRYO FIELD", "#88eaff");
-                const mult = await this.startQTE('DEFEND', this.player.x, this.player.y, null, { pattern: 'pulse' });
+                const mult = await this.startQTE('DEFEND', this.player.x, this.player.y, null, { pattern: 'pulse', incomingDamage: dmg });
                 const finalDmg = Math.floor(dmg * mult);
                 if (this.player.takeDamage(finalDmg, this.enemy, true) && this.player.currentHp <= 0) { this.gameOver(); return; }
                 this.player.addEffect('weak', 2, 0, '🥶', 'Deals 50% less DMG.');
@@ -16142,6 +16174,17 @@ drawEffects() {
                         else if (orig === 'burrow_resurge')   qteOpts = { pattern: 'pulse' };
                         else if (orig === 'shield_strip_attack') qteOpts = { pattern: 'accelerate' };
                         else if (orig === 'chaotic_act')      qteOpts = { pattern: 'pulse' };
+                    }
+                    // Plumb total chain damage so a perfect parry's riposte
+                    // scales to the WHOLE attack the player just parried.
+                    // For a 3×5 chain that's 15 incoming → reflect 25% × 15
+                    // = 3-4 dmg, which feels proportional to "you parried
+                    // the entire chain". Passing per-hit instead would
+                    // surface a 1-dmg pity riposte after eating 3 hits.
+                    const _perHit = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
+                    const _qteIncoming = (typeof _perHit === 'number' && _perHit > 0) ? _perHit * Math.max(1, hits) : 0;
+                    if (_qteIncoming > 0) {
+                        qteOpts = Object.assign({}, qteOpts || {}, { incomingDamage: _qteIncoming });
                     }
                     chainMultiplier = await this.startQTE('DEFEND', this.player.x, this.player.y, null, qteOpts);
                 }
@@ -16363,7 +16406,12 @@ drawEffects() {
 
         // Combat may have ended inside a minion callback (kill via lifesteal/brutalize/etc).
         if (!stillLive()) return; // new combat — don't spill into it
-        if (!this.enemy || this.enemy.currentHp <= 0) return;
+        // If the enemy died mid-loop (e.g. parry riposte, deferred VFX kill,
+        // detonator fallout) we have to fire winCombat ourselves — without
+        // it, control just returns and the player is stranded on the dead
+        // enemy with no rewards screen. winCombat is reentrance-guarded,
+        // so a duplicate fire from a callback is a no-op.
+        if (!this.enemy || this.enemy.currentHp <= 0) { this.winCombat(); return; }
         // Or the player died on a reflect / thorns / minion-attack path — don't
         // start another turn on a dead player.
         if (this.currentState === STATE.GAMEOVER) return;
@@ -19680,6 +19728,10 @@ drawEffects() {
             this._lastRenderTime = timestamp - (elapsed % this._targetFrameInterval);
         }
 
+        // Diagnostic profiler. No-op when Perf.startTrace() has not been
+        // called — the active flag is checked first in every PerfTrace call.
+        Perf.trace.beginFrame();
+
         let dt = (timestamp - this.lastTime) / 1000;
         if (dt > 0.1) dt = 0.1;
 
@@ -19755,14 +19807,19 @@ drawEffects() {
                 ]);
             }
             if (Game._domOnlyStates.has(this.currentState)) {
+                Perf.trace.mark('domOnlyExit');
+                Perf.trace.endFrame();
                 requestAnimationFrame(this._boundLoop);
                 return;
             }
 
             this.drawEnvironment(dt);
+            Perf.trace.mark('drawEnvironment');
 
             if (this.currentState === STATE.META) {
                 this.drawSanctuary(dt);
+                Perf.trace.mark('drawSanctuary');
+                Perf.trace.endFrame();
                 requestAnimationFrame(this._boundLoop);
                 return;
             }
@@ -19776,8 +19833,9 @@ drawEffects() {
 
             this.ctx.save();
             this.ctx.translate(shakeX, shakeY);
-            
+
             this.updateMinionPositions();
+            Perf.trace.mark('updateMinionPositions');
 
             if ((this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT) && this.player && this.enemy) {
                 // Hot-path: plain for-loops instead of forEach to avoid allocating
@@ -19800,13 +19858,18 @@ drawEffects() {
                         if (m) this.drawEntity(m);
                     }
                 }
+                Perf.trace.mark('drawEntities');
 
                 this.drawIntentLine(this.enemy);
+                Perf.trace.mark('drawIntentLine');
+
                 this.drawEffects();
+                Perf.trace.mark('drawEffects');
 
                 // QTE Updates
                 this.updateQTE(dt);
                 this.drawQTE();
+                Perf.trace.mark('qte');
 
                 this.drawHealthBar(this.player);
                 if (pMinions) {
@@ -19822,10 +19885,13 @@ drawEffects() {
                         if (m) this.drawHealthBar(m);
                     }
                 }
+                Perf.trace.mark('drawHealthBars');
             }
 
             ParticleSys.update(dt);
+            Perf.trace.mark('particles.update');
             ParticleSys.draw(this.ctx);
+            Perf.trace.mark('particles.draw');
 
             // Combat mood vignette: tint shifts by who's in danger.
             // Skipped on low tier (gradient creation per frame is expensive).
@@ -19866,6 +19932,7 @@ drawEffects() {
                     this.ctx.restore();
                 }
             }
+            Perf.trace.mark('vignette');
 
         } catch (e) {
             console.error("Render Error:", e);
@@ -19886,7 +19953,9 @@ drawEffects() {
             this.ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
             this.ctx.restore();
         }
+        Perf.trace.mark('screenFlash');
 
+        Perf.trace.endFrame();
         requestAnimationFrame(this._boundLoop);
     },
 

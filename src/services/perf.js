@@ -6,6 +6,8 @@
 // Game code reads `Perf.tier` and `Perf.caps` to scale particles, shadow
 // blurs, background complexity, and animation budgets.
 
+import { PerfTrace } from './perf-trace.js';
+
 const KEY_TIER = 'mvm_perf_tier';
 const KEY_OVERRIDE = 'mvm_perf_override'; // user setting to force a tier
 
@@ -302,6 +304,20 @@ export const Perf = {
         // the monitor has been torn down.
         this._resetMonitorWindow = null;
     },
+
+    // Per-section frame profiler — flip on at runtime to find which phase
+    // of Game.loop is consistently eating ms when the auto-downgrade fires.
+    // Default thresholds: log slow frames (>25ms) individually and emit a
+    // sorted summary every 3s. Pass an options object to tune both.
+    //
+    //   Perf.startTrace()
+    //   Perf.startTrace({ thresholdMs: 18, intervalMs: 5000 })
+    //   Perf.stopTrace()
+    //
+    // Also reachable from DevTools as `window.__perf.startTrace()`.
+    trace: PerfTrace,
+    startTrace(opts) { PerfTrace.start(opts); },
+    stopTrace()      { PerfTrace.stop(); },
 
     // Convenience getters for hot-path code.
     shadowBlur(base) {

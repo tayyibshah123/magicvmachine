@@ -119,7 +119,7 @@ const TUTORIAL_NARRATION = [
     { story: "Time your strike. Tap the moment the ring crosses the gold zone for a critical.", action: "Tap when the ring lands on the target." },
     { story: "Brace yourself.", action: "Drag the SHIELD module onto yourself." },
     { story: "Cycle complete.", action: "Tap END TURN (⏭)." },
-    { story: "Read the strike. Tap the ring at the target zone to parry. Perfect parries fully nullify the hit.", action: "Tap the ring to parry the incoming attack." },
+    { story: "Read the strike. Tap the ring at the target zone to parry. Perfect parries halve the hit and reflect half of what you took.", action: "Tap the ring to parry the incoming attack." },
     { story: "Bad roll?", action: "Tap the reroll icon." },
     { story: "Call in reinforcements.", action: "Drag the MINION module onto empty space." },
     { story: "Finish it.", action: "Attack to complete training." }
@@ -153,7 +153,7 @@ const TUTORIAL_PAGES = [
         title: "ACTION COMMANDS (TIMING)",
         content: "<p>Timing rewards reading the enemy. Each strike spawns a ring that shrinks toward a target zone.</p>" +
                  "<p><strong>CRIT (Attack):</strong> Tap as the ring crosses the target. Perfect timing deals <strong>+60% DAMAGE</strong>.</p>" +
-                 "<p><strong>PARRY (Defend):</strong> A perfect tap <strong>FULLY NULLIFIES</strong> the hit and ripostes 25% back. A late tap still <strong>BLOCKS</strong> 40%.</p>" +
+                 "<p><strong>PARRY (Defend):</strong> A perfect tap <strong>HALVES</strong> the hit and reflects <strong>50% of what you took</strong> back at the attacker. A late tap still <strong>BLOCKS</strong> 40%.</p>" +
                  "<div class='tut-tip'>READ THE PATTERN: Bosses ramp up fast. Elites feint. Multi-hits chain — every wave matters.</div>"
     },
     {
@@ -250,8 +250,8 @@ const PLAYER_CLASSES = [
     },
     {
         id: 'bloodstalker', name: 'Blood Stalker', icon: ICONS.classBloodstalker, color: '#ff0000',
-        desc: 'Lifesteal 2 HP on every hit.\nTakes +1 damage from every source.\nBlood Pool fills on damage taken. Spend HP for tribute payouts.\nMinion: Blood Thrall. Soaks every hit aimed at you.',
-        traits: { lifesteal: true, vulnerable: true, minionName: "Blood Thrall", minionTrait: "Alive: absorbs damage meant for the player.", bloodTierPerKill: 1, bloodTierLifestealBonus: 1 },
+        desc: 'Lifesteal 2 HP on every hit.\nTakes +1 damage from every source.\nBlood Pool fills on damage taken. Spend HP for tribute payouts.\nMinion: Blood Thrall. Heals you for any damage it takes (x2 if upgraded).',
+        traits: { lifesteal: true, vulnerable: true, minionName: "Blood Thrall", minionTrait: "Alive: heals the player for damage it takes (x2 at level 2).", bloodTierPerKill: 1, bloodTierLifestealBonus: 1 },
         classDice: { attack: 'BLD_ATTACK', defend: 'BLD_DEFEND', mana: 'BLD_MANA', minion: 'BLD_MINION' }
     },
     {
