@@ -28,6 +28,22 @@ const COLORS = {
     HP_BAR_BG: '#111'
 };
 
+// Codified impact-feedback palette — single source of truth for VFX
+// tints so future hit-feedback work stays coherent across classes.
+// Reference these from compose helpers (game.js triggerVFX, particle
+// helpers, status-effect ticks) instead of inlining hex strings.
+const IMPACT_COLORS = {
+    PERFECT: '#ffd700',  // crit, perfect parry, signature finish
+    GOOD:    '#6fe8ff',  // solid hit, ally minion damage
+    HEAVY:   '#ff3300',  // catastrophic hit, big damage
+    BLOCK:   '#88aaff',  // shield absorb, BLOCKED text
+    BLEED:   '#ff1a3a',  // bleed/poison ticks, bloodstalker
+    ARCANE:  '#bc13fe',  // arcanist, void, glitch
+    NATURE:  '#00ff99',  // heal, summoner, leaf VFX
+    WARN:    '#ff8800',  // annihilator, fire, telegraph
+    DEATH:   '#ffffff'   // deaths, shatters, finishers
+};
+
 // UPDATED: Added 'type' for background generation
 const SECTOR_CONFIG = {
     // Richer two-stop gradients + primary/secondary celestial colours. `bgMid` is an
@@ -1388,4 +1404,4 @@ const CUSTOM_RUN_MODIFIERS = [
    modifier needs wiring, disable temporarily here while the handler lands. */
 const FEATURE_CUSTOM_RUNS = true;
 
-export { CONFIG, COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS };
+export { CONFIG, COLORS, IMPACT_COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS };

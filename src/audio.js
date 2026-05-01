@@ -19,9 +19,17 @@ const AudioMgr = {
                 this._sfxMaster.gain.value = (this.sfxVolume != null ? this.sfxVolume : 0.8);
                 this._sfxMaster.connect(this.ctx.destination);
             } catch (e) { this._sfxMaster = null; }
-            // Lazy-preload every known SFX file into decoded AudioBuffers so
-            // combat's first click/hit/attack is already cached. Fires once.
-            this.preloadSfx();
+            // Defer SFX preload off the gesture stack. The Capacitor WebView
+            // was reporting `pointerdown took 195ms` on first tap because
+            // preloadSfx synchronously kicks off fetch + decodeAudioData for
+            // every sample id. Even though decodeAudioData itself is async,
+            // the synchronous fetch+ArrayBuffer setup for ~25 samples plus
+            // AudioContext creation overhead added up to a 12-frame stall on
+            // weaker devices. Punting via setTimeout lets the gesture handler
+            // return immediately — the unlock buffer below still fires inside
+            // the gesture so iOS audio routing stays clean.
+            const _self = this;
+            setTimeout(() => { try { _self.preloadSfx(); } catch (_) {} }, 0);
         }
         // iOS Safari / Brave-iOS unlock: ctx.resume() flips the state flag
         // but isn't enough on its own — iOS only treats the context as
@@ -635,6 +643,60 @@ const AudioMgr = {
         dart: 25,
         defend: 25,
         click: 20,
+    },
+
+    /* Composed-sting registry. Each entry is an array of {id, delay, opts}
+     * — playSting fires them in order via setTimeout. Use for moments
+     * where a single sound feels flat (perfect crit, parry riposte, boss
+     * phase transition). Delays are ms from the playSting call.
+     *
+     * Add entries to STING_REGISTRY rather than inlining if a sting will
+     * be used from multiple call sites — keeps the audio "vocabulary"
+     * consistent.
+     */
+    STING_REGISTRY: {
+        perfect_attack: [
+            { id: 'mana',       delay: 0,   opts: { volume: 0.9 } },
+            { id: 'zap',        delay: 30,  opts: { playbackRate: 1.4, volume: 0.7 } },
+            { id: 'hit',        delay: 60,  opts: { playbackRate: 0.7, volume: 1.2 } },
+            { id: 'attack',     delay: 90,  opts: { volume: 0.5 } }
+        ],
+        perfect_parry: [
+            { id: 'mana',       delay: 0,   opts: { volume: 0.6 } },
+            { id: 'defend',     delay: 0,   opts: { volume: 1.0 } },
+            { id: 'beam',       delay: 30,  opts: { volume: 0.8 } },
+            { id: 'chains',     delay: 120, opts: { playbackRate: 0.6, volume: 0.6 } }
+        ],
+        boss_phase: [
+            { id: 'grid_fracture', delay: 0,   opts: { volume: 0.9 } },
+            { id: 'explosion',     delay: 60,  opts: { volume: 0.7 } },
+            { id: 'siren',         delay: 400, opts: { playbackRate: 0.5, volume: 0.7, duration: 0.6 } }
+        ],
+        crit_pop: [
+            { id: 'attack',     delay: 0,   opts: { volume: 0.8 } },
+            { id: 'hit',        delay: 0,   opts: { volume: 1.1 } },
+            { id: 'zap',        delay: 40,  opts: { volume: 0.6 } },
+            { id: 'explosion',  delay: 120, opts: { volume: 0.6, playbackRate: 1.2 } }
+        ],
+        die_pickup: [
+            { id: 'click',      delay: 0,   opts: { volume: 0.7 } },
+            { id: 'mana',       delay: 0,   opts: { playbackRate: 1.6, volume: 0.4 } }
+        ]
+    },
+
+    playSting(stingId, baseOpts) {
+        if (!this.ctx || !this.sfxEnabled || this.sfxVolume === 0) return;
+        const seq = this.STING_REGISTRY[stingId];
+        if (!seq || !seq.length) return;
+        for (let i = 0; i < seq.length; i++) {
+            const step = seq[i];
+            const opts = Object.assign({}, step.opts || {}, baseOpts || {});
+            if (step.delay > 0) {
+                setTimeout(() => { try { this.playSound(step.id, opts); } catch (_) {} }, step.delay);
+            } else {
+                try { this.playSound(step.id, opts); } catch (_) {}
+            }
+        }
     },
 
     playSound(type, opts = {}) {

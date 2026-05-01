@@ -2732,7 +2732,13 @@ startQTE(type, x, y, callback, opts) {
                      color = COLORS.GOLD;
                      this.haptic('crit');
                      Hints.trigger('first_crit');
-                     AudioMgr.playSound('mana');
+                     // Composed sting (chime + zap + low-hit + attack-tail)
+                     // — perfect_attack lives in AudioMgr.STING_REGISTRY so
+                     // the layering is identical wherever a perfect crit
+                     // resolves. Falls back gracefully if AudioMgr is older
+                     // and lacks playSting.
+                     if (AudioMgr.playSting) AudioMgr.playSting('perfect_attack');
+                     else AudioMgr.playSound('mana');
                      if (this.runStats) this.runStats.perfectQTEs = (this.runStats.perfectQTEs || 0) + 1;
                      // Annihilator class rework: QTE crits grant a reroll token that
                      // bypasses the no-rerolls trait on the next reroll. Refresh
@@ -2787,8 +2793,11 @@ startQTE(type, x, y, callback, opts) {
                      multiplier = 0.5;
                      msg = "PERFECT PARRY!";
                      color = COLORS.GOLD;
-                     AudioMgr.playSound('defend');
-                     AudioMgr.playSound('beam');
+                     // Composed riposte sting — perfect_parry layers chime
+                     // + defend + beam + a delayed chains-snap so the
+                     // moment reads as a counter, not a passive block.
+                     if (AudioMgr.playSting) AudioMgr.playSting('perfect_parry');
+                     else { AudioMgr.playSound('defend'); AudioMgr.playSound('beam'); }
                      this.triggerScreenFlash('rgba(255, 215, 0, 0.5)', 240);
                      this.hitStop(80);
                      this.shake(10);
@@ -19981,18 +19990,29 @@ drawEffects() {
             }
 
             ctx.save();
+            // Boss-telegraph color — when the enemy is a boss in phase 2+,
+            // its `phaseTelegraphColor` is set on phase entry (Panopticon
+            // cyan, Null magenta, Compiler orange, Hive lime, Tesseract
+            // red/purple). Surfaces phase identity through the intent
+            // telegraph itself instead of always painting red. Falls back
+            // to red for pre-phase-2 and non-boss enemies.
+            const telegraphColor = (enemy.phaseTelegraphColor && enemy.phase >= 2)
+                ? enemy.phaseTelegraphColor : '#ff0000';
+
             // Improved Visuals: Thicker, glowing, animated
             ctx.lineWidth = 4;
             ctx.lineCap = 'round';
-            ctx.shadowColor = "#ff0000";
-            ctx.shadowBlur = 15;
+            // shadowBlur on this stroke is the single biggest cost of the
+            // intent-line draw (~0.4ms on mid). Tier-gate to high so mid/low
+            // get the dashed line + ring marker without the glow halo.
+            if (Perf && Perf.tier === 'high') {
+                ctx.shadowColor = telegraphColor;
+                ctx.shadowBlur = 15;
+            }
 
             // Solid stroke — was a per-frame createLinearGradient(enemy→target),
-            // which allocated a new gradient object every combat frame. The
-            // dashed flow + shadowBlur=15 outer glow already convey direction,
-            // and the impact ring at the endpoint anchors the read. The faint
-            // fade-in the gradient added isn't perceptible through the glow.
-            ctx.strokeStyle = '#ff0000';
+            // which allocated a new gradient object every combat frame.
+            ctx.strokeStyle = telegraphColor;
 
             // Flow animation (Moving Dashes)
             ctx.setLineDash([20, 20]);
@@ -20023,9 +20043,11 @@ drawEffects() {
             
             // Impact Point Marker (Target Lock)
             ctx.setLineDash([]);
-            ctx.fillStyle = "#ff0000";
-            ctx.shadowColor = "#fff";
-            ctx.shadowBlur = 10;
+            ctx.fillStyle = telegraphColor;
+            if (Perf && Perf.tier !== 'low') {
+                ctx.shadowColor = "#fff";
+                ctx.shadowBlur = 10;
+            }
             ctx.beginPath();
             ctx.arc(endX, endY, 6, 0, Math.PI*2);
             ctx.fill();
@@ -20040,16 +20062,19 @@ drawEffects() {
             ctx.restore();
         };
 
-        // Handle Multiple Intents
+        // Handle Multiple Intents — indexed for-loop (was forEach with a
+        // per-frame closure allocation). Boss frames hit this 2-3× per
+        // render so the closure churn was real.
         if (enemy.nextIntents && enemy.nextIntents.length > 0) {
-            enemy.nextIntents.forEach(intent => {
+            const intents = enemy.nextIntents;
+            for (let i = 0, n = intents.length; i < n; i++) {
+                const intent = intents[i];
                 if (intent.type === 'attack' || intent.type === 'multi_attack' || intent.type === 'debuff' || intent.type === 'purge_attack') {
-                    // Default to player if no specific target set (common for boss logic)
                     const target = intent.target || this.player;
                     drawLine(target);
                 }
-            });
-        } 
+            }
+        }
         // Fallback for single intent
         else if (enemy.nextIntent && enemy.nextIntent.target) {
             drawLine(enemy.nextIntent.target);
