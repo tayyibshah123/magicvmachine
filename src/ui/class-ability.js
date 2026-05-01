@@ -476,7 +476,11 @@ export const ClassAbility = {
                 if (state.pips < CFG.tactician.pipMax) return;
                 if (action === 'tact-reroll') {
                     Game.rerolls += CFG.tactician.rerollsGain;
-                    document.getElementById('reroll-badge').innerText = Game.rerolls;
+                    // Guard the reroll badge — same DOM-swap risk as the
+                    // Arcanist lightning glyph. Skipped writes recover on
+                    // the next renderDiceUI tick.
+                    const _rb = document.getElementById('reroll-badge');
+                    if (_rb) _rb.innerText = Game.rerolls;
                     ParticleSys.createFloatingText(p.x, p.y - 80, "+1 REROLL", "#00f3ff");
                 } else if (action === 'tact-shield') {
                     p.addShield(CFG.tactician.shieldGain);
@@ -590,8 +594,7 @@ export const ClassAbility = {
                         }
                         bossKilled = _resolveKill(Game.enemy);
                     }
-                    if (typeof Game.gainMana === 'function') Game.gainMana(CFG.bloodstalker.grandManaGain, { silent: true });
-                    else p.mana = Math.min(p.maxMana || 99, (p.mana || 0) + CFG.bloodstalker.grandManaGain);
+                    Game.gainMana(CFG.bloodstalker.grandManaGain, { silent: true });
                     Game.rerolls = (Game.rerolls || 0) + CFG.bloodstalker.grandRerolls;
                     const badge = document.getElementById('reroll-badge');
                     if (badge) badge.innerText = Game.rerolls;
@@ -677,15 +680,14 @@ export const ClassAbility = {
                 const idx = parseInt(action.split('-')[1], 10);
                 if (isNaN(idx) || idx < 0 || idx >= state.plots.length) return;
                 if (state.plots[idx] !== 2) return; // only Bloomed plots
-                // APEX path — when the grove is full (4 living minions) AND
-                // every plot is bloomed, a bloom tap empowers every minion
-                // at ×2. The cap rose from 3 → 4 so APEX demands a fully
-                // built canopy: the grove only has 3 plots, so the player
-                // must supplement with non-bloom summons to reach the
-                // fourth minion before the ×2 unlocks.
+                // APEX path — when the grove is full (4/4 minions live) AND
+                // every plot in the canopy is bloomed, a bloom tap empowers
+                // every minion at ×2 for the rest of the combat. The grove
+                // and the minion cap both sit at 4, so this requires the
+                // FULL canopy (not a 3-of-4 short cut).
                 const atMax = p.minions && p.minions.length >= (p.maxMinions || 4);
                 const bloomCount = (state.plots || []).filter(v => v === 2).length;
-                const isApex = !!(atMax && bloomCount >= 3);
+                const isApex = !!(atMax && bloomCount >= state.plots.length);
                 if (isApex) {
                     const color = '#ffd76a';
                     // Apex multiplier: 2× across every stat. Tag each
@@ -1269,20 +1271,20 @@ export const ClassAbility = {
     _renderSummoner() {
         const el = $w(); if (!el) return;
         // APEX-ready is now the ONLY whole-grove payoff: full grove (4/4
-        // minions out AND 3/3 plots bloomed) → tap any bloom to ×2 every
-        // minion. The cap rose from 3 → 4 so the canopy + a non-grove
-        // summon are both required to unlock the buff. CSS still reads
-        // .apex-ready to paint the gold canopy treatment.
+        // minions out AND every plot bloomed) → tap any bloom to ×2 every
+        // minion. CSS still reads .apex-ready to paint the gold canopy
+        // treatment.
         const p = Game && Game.player;
         const atMax = p && p.minions && p.minions.length >= (p.maxMinions || 4);
         const bloomCount = (state.plots || []).filter(v => v === 2).length;
-        const isApexReady = !!(atMax && bloomCount >= 3);
+        const totalPlots = (state.plots || []).length;
+        const isApexReady = !!(atMax && totalPlots > 0 && bloomCount >= totalPlots);
         // Keep the amplify-ready class as a harmless alias so older CSS
         // references don't break mid-deploy, but it tracks apex now.
         el.classList.toggle('amplify-ready', isApexReady);
         el.classList.toggle('apex-ready', isApexReady);
         const apexTip  = 'GROVE APEX READY. Bloom a plot to x2 every minion (consumes the canopy).';
-        const fullTip  = 'MINIONS AT MAX. Complete the canopy (3/3 blooms) to unleash APEX x2.';
+        const fullTip  = `MINIONS AT MAX. Complete the canopy (${bloomCount}/${totalPlots} blooms) to unleash APEX x2.`;
         const spawnTip = 'Bloom a plot to free-summon a Spirit.';
         // Grove growth = count of bloomed plots (0..3). Drives the tree
         // silhouette's brightness so the center tree visibly "grows" with

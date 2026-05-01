@@ -1448,7 +1448,11 @@ const Game = {
                 }
 
                 if(ent instanceof Player) {
-                    txt += `\nMana: ${ent.mana}/${ent.baseMana}`;
+                    // Display the actual mana cap (maxMana or baseMana + 5),
+                    // not the per-turn refill base. Previous label read
+                    // "5 / 5" while gainMana could push the pool to 10.
+                    const manaCap = ent.maxMana || ((ent.baseMana || 3) + 5);
+                    txt += `\nMana: ${ent.mana}/${manaCap}`;
                     if (ent.nextAttackMult > 1) txt += `\n\n🔥 CHARGED: Next Atk x${ent.nextAttackMult}`;
                     if (ent.incomingDamageMult > 1) {
                         const val = ent.incomingDamageMult === 1.5 ? "+50%" : `x${ent.incomingDamageMult}`;
@@ -8007,7 +8011,7 @@ triggerSystemCrash() {
         let html = '<div class="loadout-section">';
         html += `<div class="loadout-section-title">OPERATOR</div>`;
         html += `<div class="loadout-row"><span><strong>${(cls.name || 'OPERATOR').toUpperCase()}</strong></span><span>HP ${Math.floor(p.currentHp || 0)} / ${p.maxHp || 0}</span></div>`;
-        html += `<div class="loadout-row"><span>Mana</span><span>${p.mana || 0} / ${p.baseMana || 0}</span></div>`;
+        html += `<div class="loadout-row"><span>Mana</span><span>${p.mana || 0} / ${p.maxMana || ((p.baseMana || 3) + 5)}</span></div>`;
         if (sig) {
             html += `<div class="loadout-row"><span>Signature</span><span>${sig.name} · TIER ${p.signatureTier || 1}</span></div>`;
         }
@@ -11012,9 +11016,8 @@ async startCombat(type) {
         if (Array.isArray(this.player.minions)) {
             this.player.minions.forEach(m => { if (m) m._apexedThisCombat = false; });
         }
-        // Reset Sentinel Firewall trigger counter so the relic re-arms
-        // every combat (it was leaking across fights).
-        this.player._firewallTriggersUsed = 0;
+        // (`_firewallTriggersUsed` is reset earlier in setupCombat at the
+        // per-combat counter block — no duplicate needed here.)
 
         // Expansion (5.2.1) — Drone Swarmling & friends spawn extra minions on combat open.
         if (this.enemy && template && template.summonOnStart > 0) {
@@ -11798,15 +11801,16 @@ async startTurn() {
         const arr = this.player.minions;
         const survivors = [];
         let removed = 0;
+        // Spirit revive is a Summoner-specific class fantasy. Gate on
+        // classId so a future class with maxMinions=4 (or anyone else
+        // who happens to share the trait number) doesn't inherit it
+        // unintentionally.
+        const summonerRevive = this.player.classId === 'summoner';
         for (let i = 0; i < arr.length; i++) {
             const m = arr[i];
             if (!m) continue;
             if (m.currentHp <= 0) {
-                // Spirit revive trait: 30% chance to bounce back at half HP.
-                // Gate on the Summoner-specific `maxMinions === 4` since
-                // that's the existing trait check used in the single-target
-                // path (entity.player.minions.maxMinions === 4 ⇒ Summoner).
-                if (this.player.traits && this.player.traits.maxMinions === 4 && Math.random() < 0.3) {
+                if (summonerRevive && Math.random() < 0.3) {
                     m.currentHp = Math.max(1, Math.floor(m.maxHp / 2));
                     ParticleSys.createFloatingText(m.x, m.y, "REVIVED!", "#00ff99");
                     survivors.push(m);
@@ -13792,7 +13796,17 @@ async startTurn() {
             AudioMgr.playSound('attack');
             // Pass source so Mirror enemies can reflect, runStats picks up
             // the hit, and on-hit relics (lifesteal etc) trigger correctly.
+            const beforeHp = finalEnemy.currentHp;
             const dead = finalEnemy.takeDamage(dmg, this.player);
+            // Honour the Bloodstalker "Lifesteal 2 HP on every hit" promise
+            // on signature strikes too — the per-class signature heals at
+            // the bottom of each branch are class-specific, but the basic
+            // lifesteal trait should apply to every actually-landed hit.
+            if (this.player && this.player.traits && this.player.traits.lifesteal && beforeHp > finalEnemy.currentHp) {
+                const lTier = this.player.bloodTier || 0;
+                const lBonus = (this.player.traits.bloodTierLifestealBonus || 0) * lTier;
+                this.player.heal(2 + lBonus);
+            }
             ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 100, name.toUpperCase(), label);
             return dead;
         };
@@ -16439,7 +16453,8 @@ drawEffects() {
                             if (!thornsFiredThisIntent && validTarget === this.player && this.player.tempThorns > 0 && this.enemy && this.enemy.currentHp > 0) {
                                 thornsFiredThisIntent = true;
                                 const reflectAmt = this.player.tempThorns;
-                                const thornsKill = this.enemy.takeDamage(reflectAmt);
+                                // Pass source so Mirror reflects + runStats track the hit.
+                                const thornsKill = this.enemy.takeDamage(reflectAmt, this.player);
                                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, `THORNS ${reflectAmt}`, "#ffffff");
                                 if (thornsKill && this.enemy && this.enemy.currentHp <= 0) {
                                     chainBroken = true;
