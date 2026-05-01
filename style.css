@@ -13741,3 +13741,52 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     .rest-option { padding: var(--space-2); }
     .rest-option-icon { width: 28px; height: 28px; }
 }
+
+/* SPARKS — persistent meta-currency pill. Sits top-left on the menu
+   screen so the player sees their balance every launch. Gold accent
+   to read as "premium / earned" rather than the cyan run-fragments. */
+.meta-sparks-pill {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 20;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px 6px 10px;
+    background: rgba(20, 18, 8, 0.72);
+    border: 1px solid rgba(255, 215, 106, 0.55);
+    border-radius: 999px;
+    color: #ffd76a;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    box-shadow: 0 0 12px rgba(255, 215, 106, 0.18), inset 0 0 8px rgba(255, 215, 106, 0.08);
+    pointer-events: none;
+}
+.meta-sparks-glyph {
+    font-size: 16px;
+    line-height: 1;
+    text-shadow: 0 0 8px rgba(255, 215, 106, 0.6);
+}
+.meta-sparks-label {
+    opacity: 0.75;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+}
+
+/* Sanctuary spark counter — rendered larger so it reads as the
+   spend-currency at a glance. */
+.sanctuary-sparks {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    color: #ffd76a;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 16px;
+    letter-spacing: 0.08em;
+    background: rgba(40, 30, 10, 0.48);
+    border: 1px solid rgba(255, 215, 106, 0.4);
+    border-radius: 8px;
+}

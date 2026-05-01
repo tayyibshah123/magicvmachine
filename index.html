@@ -169,6 +169,14 @@
                 <div style="position: absolute; top: 20px; right: 20px; z-index: 20;">
                     <button id="btn-settings-main" class="btn-icon" aria-label="Settings"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5 L20 7 L20 17 L12 21.5 L4 17 L4 7 Z" fill="currentColor" fill-opacity="0.14"/><circle cx="12" cy="12" r="4.5" fill="none"/><path d="M12 5.5 L12 7.5 M12 16.5 L12 18.5 M5.5 12 L7.5 12 M16.5 12 L18.5 12 M7.6 7.6 L9 9 M15 15 L16.4 16.4 M16.4 7.6 L15 9 M7.6 16.4 L9 15" stroke-width="1.4"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg></button>
                 </div>
+                <!-- Sparks (persistent meta-currency). Earned at significant
+                     events: boss kills, sector clears, run wins, hex breaches,
+                     first-of-class wins. Spent in Sanctuary. -->
+                <div class="meta-sparks-pill" aria-label="Sparks">
+                    <span class="meta-sparks-glyph" aria-hidden="true">✦</span>
+                    <span id="menu-sparks">0</span>
+                    <span class="meta-sparks-label">SPARKS</span>
+                </div>
                 <div class="glow-container">
                     <!-- Archivist Slain cosmetic frame (Roadmap Part 24.2).
                          Rendered as a sibling under .title-frame; CSS picks
@@ -343,8 +351,15 @@
            <!-- Meta Progression (Sanctuary) -->
             <div id="screen-meta" class="screen hidden">
                 <h2 class="neon-text-green" style="text-shadow: 0 0 15px lime; margin-top: 20px; margin-bottom: 10px;">SANCTUARY</h2>
-                <div id="fragment-count" class="currency-display neon-text-gold">Fragments: 0</div>
-                
+                <div class="sanctuary-currencies" style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-bottom:8px;">
+                    <div id="fragment-count" class="currency-display neon-text-gold">Fragments: 0</div>
+                    <div class="sanctuary-sparks" aria-label="Sparks">
+                        <span style="font-size:18px; line-height:1;">✦</span>
+                        <span id="sanctuary-sparks">0</span>
+                        <span style="opacity:0.7; font-size:11px; letter-spacing:0.12em;">SPARKS</span>
+                    </div>
+                </div>
+
                 <div id="upgrade-list" class="meta-grid">
                     <!-- Populated by JS -->
                 </div>

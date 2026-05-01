@@ -295,6 +295,15 @@ const Game = {
             this.seenFlags = savedSeen ? JSON.parse(savedSeen) : {};
             const savedCorruption = localStorage.getItem('mvm_corruption');
             this.corruptionLevel = savedCorruption ? parseInt(savedCorruption) : 0;
+            // SPARKS — persistent meta currency. Earned only at significant
+            // events (boss kill, sector clear, full-run win, hex breach,
+            // first-of-class clear). Spent in the Sanctuary on permanent
+            // upgrades, not consumed inside a run. Frags remain the
+            // mid-run currency and reset on death; Sparks persist.
+            const savedSparks = localStorage.getItem('mvm_sparks');
+            this.sparks = savedSparks ? parseInt(savedSparks) : 0;
+            const savedSparkLifetime = localStorage.getItem('mvm_sparks_lifetime');
+            this.sparksLifetime = savedSparkLifetime ? parseInt(savedSparkLifetime) : 0;
             const saveFile = this._readSaveRaw();
             const btnLoad = document.getElementById('btn-load-save');
             if (saveFile && saveFile !== "null") {
@@ -310,6 +319,7 @@ const Game = {
         } catch (e) {
             console.warn("LocalStorage error:", e);
             this.techFragments = 0; this.metaUpgrades = []; this.seenFlags = {}; this.corruptionLevel = 0;
+            this.sparks = 0; this.sparksLifetime = 0;
         }
 
         if (this.corruptionLevel > 0) {
@@ -319,6 +329,8 @@ const Game = {
         this.effects = [];
         const fragEl = document.getElementById('run-fragments');
         if(fragEl) fragEl.innerText = this.techFragments;
+        // Paint the Sparks pill on the menu the moment we know our balance.
+        this.renderSparks();
         const fragCountEl = document.getElementById('fragment-count');
         if(fragCountEl) fragCountEl.innerText = `Fragments: ${this.techFragments}`;
 
@@ -3379,9 +3391,12 @@ startQTE(type, x, y, callback, opts) {
     },
     
     renderMeta() {
+        // Refresh the Sparks counter every time the Sanctuary repaints —
+        // covers both menu-pill and sanctuary-pill ids in one call.
+        this.renderSparks && this.renderSparks();
         const list = document.getElementById('upgrade-list');
         list.innerHTML = '';
-        list.className = 'meta-grid'; 
+        list.className = 'meta-grid';
 
         META_UPGRADES.forEach(u => {
             const unlocked = this.hasMetaUpgrade(u.id);
@@ -10506,8 +10521,12 @@ updateHexBreach(dt) {
 
         this.encryptedFiles--;
         this.techFragments += 300;
+        // SPARKS — successful Hex Breach is a "significant event" earnable
+        // outside of combat. Modest payout to reward optional engagement
+        // with the intel system without warping run economy.
+        this.grantSparks(3, 'hex_breach', { silent: true });
 
-        const rewards = [`+300 Fragments`];
+        const rewards = [`+300 Fragments`, `+3 ✦ Sparks`];
         // Custom Run: Silent Chronicle — no lore unlocks this run.
         if (this._customDisableLore) {
             rewards.push('Database access denied (Silent Chronicle)');
@@ -12750,6 +12769,59 @@ async startTurn() {
                 this.recycleBinCount++;
                 ParticleSys.createFloatingText(this.player.x, this.player.y - 60, "RECYCLE", "#0f0");
             }
+        }
+    },
+
+    /* SPARKS — persistent meta-currency. Awarded ONLY at significant
+     * events: boss kill, sector clear, full-run win, hex breach, first-of-
+     * class clear, ascension milestones. Spent in the Sanctuary on
+     * permanent upgrades. Frags remain the mid-run currency.
+     *
+     * `reason` is a short tag (e.g. 'boss_kill', 'sector_clear') used for
+     * analytics + once-per-run dedupe. `opts.silent` skips the floater
+     * (used by callers that render their own splash). Returns the amount
+     * actually granted.
+     */
+    grantSparks(amount, reason, opts) {
+        if (!amount || amount <= 0) return 0;
+        const silent = !!(opts && opts.silent);
+        this.sparks = (this.sparks || 0) + amount;
+        this.sparksLifetime = (this.sparksLifetime || 0) + amount;
+        try {
+            localStorage.setItem('mvm_sparks', String(this.sparks));
+            localStorage.setItem('mvm_sparks_lifetime', String(this.sparksLifetime));
+        } catch (_) {}
+        // Refresh any visible Sparks counters. The Sanctuary HUD listens
+        // for this id; the menu / map can subscribe by calling renderSparks.
+        if (typeof this.renderSparks === 'function') this.renderSparks();
+        if (!silent && this.player) {
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 220, `+${amount} ✦ SPARK${amount > 1 ? 'S' : ''}`, '#ffd76a');
+            ParticleSys.createShockwave(this.player.x, this.player.y - 40, '#ffd76a', 22);
+            ParticleSys.createSparks(this.player.x, this.player.y - 40, '#ffd76a', 12);
+            try { AudioMgr.playSound && AudioMgr.playSound('upgrade'); } catch (_) {}
+        }
+        try { Analytics && Analytics.emit && Analytics.emit('sparks_grant', { amount, reason: reason || 'unknown', total: this.sparks }); } catch (_) {}
+        return amount;
+    },
+
+    spendSparks(amount, reason) {
+        if (!amount || amount <= 0) return false;
+        if ((this.sparks || 0) < amount) return false;
+        this.sparks -= amount;
+        try { localStorage.setItem('mvm_sparks', String(this.sparks)); } catch (_) {}
+        if (typeof this.renderSparks === 'function') this.renderSparks();
+        try { Analytics && Analytics.emit && Analytics.emit('sparks_spend', { amount, reason: reason || 'unknown', remaining: this.sparks }); } catch (_) {}
+        return true;
+    },
+
+    /* Update any DOM counters showing the player's Spark balance.
+     * Called by grantSparks/spendSparks and when the menu/sanctuary
+     * paints. Idempotent + cheap; safe to call frequently. */
+    renderSparks() {
+        const ids = ['run-sparks', 'menu-sparks', 'sanctuary-sparks'];
+        for (const id of ids) {
+            const el = (typeof document !== 'undefined') ? document.getElementById(id) : null;
+            if (el) el.textContent = String(this.sparks || 0);
         }
     },
 
@@ -16787,8 +16859,20 @@ drawEffects() {
                 Unlocks.grant('intel', 'first_boss_defeated');
                 // Clear the assist streak for this sector on victory.
                 Assist.recordWin(this.sector);
+                // SPARKS — boss kill is a "significant event". Reward
+                // scales with sector so a Sector-5 boss is worth more
+                // than a Sector-1 one. Gate on tutorial flag is already
+                // outside this branch, so tutorial bosses don't pay.
+                const bossSparks = 3 + Math.max(0, (this.sector || 1) - 1) * 2;
+                this.grantSparks(bossSparks, 'boss_kill_s' + (this.sector || 1));
                 if (this.sector >= 5) {
                     Unlocks.grant('ascension', 'sector5_cleared');
+                    // Sector-5 clear = full run win → grant a heftier
+                    // bonus on top of the boss reward. Ascension level
+                    // adds proportional bonus.
+                    const ascLevel = (Ascension && Ascension.getSelected) ? Ascension.getSelected() : 0;
+                    const winSparks = 15 + Math.max(0, ascLevel) * 3;
+                    this.grantSparks(winSparks, 'run_win_asc' + ascLevel);
                     Analytics.emit('run_end', {
                         won: true,
                         sector: this.sector,
@@ -16827,16 +16911,29 @@ drawEffects() {
                 }
                 // Sector-5 boss = full run clear → class achievement + grand achievement
                 if (this.sector >= 5 && this.player) {
+                    const firstRunComplete = !Achievements.isUnlocked('FIRST_RUN_COMPLETE');
                     Achievements.unlock('FIRST_RUN_COMPLETE');
+                    if (firstRunComplete) this.grantSparks(10, 'first_run_complete');
                     const map = {
                         tactician: 'CLASS_TACTICIAN', arcanist: 'CLASS_ARCANIST',
                         bloodstalker: 'CLASS_BLOODSTALKER', annihilator: 'CLASS_ANNIHILATOR',
                         sentinel: 'CLASS_SENTINEL', summoner: 'CLASS_SUMMONER'
                     };
-                    if (map[this.player.classId]) Achievements.unlock(map[this.player.classId]);
+                    const classAch = map[this.player.classId];
+                    if (classAch) {
+                        const firstClassClear = !Achievements.isUnlocked(classAch);
+                        Achievements.unlock(classAch);
+                        // First-of-class clear: +20 Sparks. Substantial since
+                        // each class only fires once per save.
+                        if (firstClassClear) this.grantSparks(20, 'first_class_clear_' + this.player.classId);
+                    }
                     // Check "all 6 classes" composite
                     const allSix = ['CLASS_TACTICIAN','CLASS_ARCANIST','CLASS_BLOODSTALKER','CLASS_ANNIHILATOR','CLASS_SENTINEL','CLASS_SUMMONER'];
-                    if (allSix.every(id => Achievements.isUnlocked(id))) Achievements.unlock('ALL_CLASSES_S5');
+                    if (allSix.every(id => Achievements.isUnlocked(id))) {
+                        const firstAll = !Achievements.isUnlocked('ALL_CLASSES_S5');
+                        Achievements.unlock('ALL_CLASSES_S5');
+                        if (firstAll) this.grantSparks(50, 'all_classes_s5');
+                    }
                     // Ascension-tier achievements
                     const sel = Ascension.getSelected();
                     if (sel >= 10) Achievements.unlock('ASC_10');
