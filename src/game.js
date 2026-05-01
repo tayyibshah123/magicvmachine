@@ -11054,6 +11054,8 @@ async startCombat(type) {
         if (Array.isArray(this.player.minions)) {
             this.player.minions.forEach(m => { if (m) m._apexedThisCombat = false; });
         }
+        // Per-combat one-shot relic flags reset alongside Apex.
+        this._sparkBatteryUsed = false;
         // (`_firewallTriggersUsed` is reset earlier in setupCombat at the
         // per-combat counter block — no duplicate needed here.)
 
@@ -11538,6 +11540,18 @@ async startTurn() {
 
         // Relic: STATIC CAPACITOR — reset per-turn mana counter for trigger.
         this._staticCapMana = 0;
+        // Relic: LAST STAND — below 33% max HP, grant +1 reroll at turn
+        // start AND a +30% outgoing damage flag (read in the attack
+        // damage path). Stacks add nothing; the relic is a binary
+        // safety-net trigger.
+        if (this.player.hasRelic('last_stand') && this.player.maxHp > 0
+            && this.player.currentHp <= Math.ceil(this.player.maxHp / 3)) {
+            this.rerolls = (this.rerolls || 0) + 1;
+            this.player._lastStandActive = true;
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 90, "LAST STAND", '#ff5577');
+        } else {
+            this.player._lastStandActive = false;
+        }
         // Relic: DERVISH MODE — track attacks this turn (uses existing attacksThisTurn).
 
         if (this.player.hasRelic('solar_battery') && this.turnCount % 2 === 0) {
@@ -13005,6 +13019,9 @@ async startTurn() {
                     const pct = Math.round((duskBonus - 1) * 100);
                     ParticleSys.createFloatingText(this.player.x, this.player.y - 140, `DUSK +${pct}%`, COLORS.ORANGE);
                 }
+                // Relic: LAST STAND — +30% damage while below 33% HP. Flag
+                // is set/cleared at startTurn.
+                const lastStandBonus = this.player._lastStandActive ? 1.3 : 1.0;
                 if (this._dieSlot(type) === 'attack') {
                     this.attacksThisTurn++;
                     const rStacks = this.stackCount('relentless');
@@ -13087,7 +13104,7 @@ async startTurn() {
                     glitchMult = 1 + Math.random() * 2;
                     ParticleSys.createFloatingText(this.player.x, this.player.y - 140, `GLITCH x${glitchMult.toFixed(1)}`, "#ff00ff");
                 }
-                dmg = Math.floor(dmg * qteMultiplier * chargeMult * dawnBonus * duskBonus * pyreMult * glitchMult);
+                dmg = Math.floor(dmg * qteMultiplier * chargeMult * dawnBonus * duskBonus * pyreMult * glitchMult * lastStandBonus);
 
                 // Relic: Thorn Mail (+2 Block) — also triggered by Sentinel signature T3 for this combat
                 if(this.player.hasRelic('thorn_mail') || this._sigThornsActive) {
@@ -14039,6 +14056,15 @@ async startTurn() {
 
         // STANDARD LOGIC
         const isAnnihilator = this.player.classId === 'annihilator';
+
+        // Relic: SPARK BATTERY — first reroll each combat grants +1 mana.
+        // The flag is set on entering combat (false → fires once → true).
+        // Resets in setupCombat alongside the other per-combat counters.
+        if (this.player.hasRelic('spark_battery') && !this._sparkBatteryUsed) {
+            this._sparkBatteryUsed = true;
+            const got = this.gainMana(1, { silent: true });
+            if (got > 0) ParticleSys.createFloatingText(this.player.x, this.player.y - 110, "SPARK +1 MANA", COLORS.MANA);
+        }
 
         // Custom Run: Locked In — no rerolls at all.
         if (this._customDisableReroll) {
@@ -20981,7 +21007,22 @@ drawEntity(entity) {
                 animX = (Math.random() - 0.5) * 6;
                 animY = (Math.random() - 0.5) * 6;
                 scale = 1.1;
+            } else if (entity.anim.type === 'flinch') {
+                // Brief crush + sway when struck. Shorter than 'shake' so
+                // it doesn't fight other VFX layered on the same frame.
+                animX = Math.sin((1 - eased) * Math.PI * 3) * 4;
+                scale = 1.0 - (1 - eased) * 0.06;
             }
+        } else if (entity.anim && entity.anim.timer === 0 && Perf && Perf.tier === 'high') {
+            // Idle breathing — high-tier only because the cost is two sin()
+            // per entity per frame and the visual sells "alive" without
+            // mid/low needing the boost. 1.8% scale + 1.6px bob, phased
+            // by entity id so a row of minions doesn't pulse in lockstep.
+            if (entity._breathPhase == null) entity._breathPhase = Math.random() * Math.PI * 2;
+            const _bt = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+            const breath = Math.sin(_bt * 1.2 + entity._breathPhase);
+            scale = 1.0 + breath * 0.018;
+            animY = breath * 1.6;
         }
         
         const renderX = entity.x + animX;

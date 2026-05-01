@@ -419,7 +419,16 @@ const UPGRADES_POOL = [
     // --- Part 5 relic expansion ---
     { id: 'reinforced_shell',name: "Reinforced Shell",desc: "+20 Max HP.",                                                                        icon: ICONS.relicHull,     instant: true },
     { id: 'volt_primer',     name: "Volt Primer",     desc: "First attack each turn deals +5 flat DMG.",                                          icon: ICONS.overcharge },
-    { id: 'salvage_protocol',name: "Salvage Protocol",desc: "Gain 3 Fragments every time you kill an enemy.",                                     icon: ICONS.relicLoot }
+    { id: 'salvage_protocol',name: "Salvage Protocol",desc: "Gain 3 Fragments every time you kill an enemy.",                                     icon: ICONS.relicLoot },
+
+    // ── Module expansion (Sparks-rebalance batch) — these slot into
+    // existing resolution paths so adding the data here is almost
+    // sufficient. Each is referenced by id from game.js where it
+    // plumbs into damage / reroll / mana / shield events.
+    { id: 'kindling',        name: "Kindling",        desc: "Bleed and Poison ticks deal +1 damage per stack of Kindling.",                       icon: ICONS.bldAttack },
+    { id: 'last_stand',      name: "Last Stand",      desc: "Below 33% HP: +30% damage, +1 Reroll at turn start.",                                icon: ICONS.bldDefend },
+    { id: 'spark_battery',   name: "Spark Battery",   desc: "First reroll each combat grants +1 Mana.",                                           icon: ICONS.metaReroll },
+    { id: 'siphon_blade',    name: "Siphon Blade",    desc: "Killing an enemy heals 4 HP and refunds 1 Mana.",                                    icon: ICONS.bldAttack }
 ];
 
 const CORRUPTED_RELICS = [

@@ -703,6 +703,15 @@ class Entity {
             Game.player.heal(3 * stacks);
             ParticleSys.createFloatingText(Game.player.x, Game.player.y - 100, "MED +" + (3 * stacks), COLORS.NATURE_LIGHT);
         }
+        // Module: SIPHON BLADE — kills heal +4 HP and refund 1 Mana. Stacks
+        // multiply the heal but the mana refund stays at 1 (otherwise
+        // stacking trivialises the mana economy).
+        if (diedByPlayer && killedTargetIsHostile && Game.player && Game.player.hasRelic('siphon_blade')) {
+            const stacks = Game.stackCount('siphon_blade');
+            Game.player.heal(4 * stacks);
+            if (Game.gainMana) Game.gainMana(1, { silent: true });
+            ParticleSys.createFloatingText(Game.player.x, Game.player.y - 130, `SIPHON +${4*stacks}/+1M`, '#ff5577');
+        }
 
         // Run stats tracking — damage taken (player side) for the victory
         // breakdown. Counts only actual HP hits, not blocked damage.
@@ -962,7 +971,15 @@ class Entity {
             // entity is already dead from a prior tick this loop.
             if ((e.id === 'bleed' || e.id === 'poison') && this.currentHp > 0 && e.val > 0) {
                 const stacks = e.stacks || 1;
-                const tickDmg = e.val * stacks;
+                let tickDmg = e.val * stacks;
+                // Module: KINDLING — DoT ticks gain +1 damage per stack of
+                // Kindling the player owns. Stacks the relic by relic count
+                // rather than DoT count, so two Kindlings = +2 per tick on
+                // every active bleed/poison.
+                if (Game && Game.player && Game.player.hasRelic && Game.player.hasRelic('kindling')) {
+                    const kStacks = (Game.stackCount && Game.stackCount('kindling')) || 1;
+                    tickDmg += kStacks;
+                }
                 const color = e.id === 'poison' ? '#88ff00' : '#ff3333';
                 ParticleSys.createFloatingText(this.x, this.y - 80, `${e.id === 'poison' ? 'POISON' : 'BLEED'} ${tickDmg}`, color);
                 const isDead = this.takeDamage(tickDmg, null, true);
