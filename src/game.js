@@ -17972,8 +17972,15 @@ drawEffects() {
             });
         }
 
-        // 2. Pre-warm Particles
-        for(let i=0; i<50; i++) {
+        // 2. Pre-warm Particles. Tier-gated — at combat-start this used to
+        // unconditionally seed 50 particles, which then had to be iterated
+        // and drawn every frame for several seconds. With the spawn rate
+        // also reduced on mid/low (in drawAtmosphere), starting with a
+        // smaller pool keeps the steady-state count proportional.
+        const _prewarm = (typeof Perf !== 'undefined' && Perf.tier === 'low') ? 12
+                       : (typeof Perf !== 'undefined' && Perf.tier === 'mid') ? 25
+                       : 50;
+        for(let i=0; i<_prewarm; i++) {
             this.spawnBgParticle(type, true);
         }
     },
@@ -19356,8 +19363,14 @@ drawEffects() {
                     ctx.lineTo(b.x + b.w - 10, horizon - b.h);
                     ctx.lineTo(b.x + b.w + 10, horizon);
                     ctx.fill();
-                    // Smoke
-                    if (b.layer === 1 && Math.random() > 0.95) {
+                    // Smoke — tier-gated. This fires per-silhouette every
+                    // frame on top of the main particle spawner; on
+                    // sector-3 fights the layer-1 silhouettes (~6 of them)
+                    // each rolled the dice independently, so the actual
+                    // spawn cadence was ~6×0.05 = 0.3/frame compounding
+                    // with the main 0.2/frame loop. Halved on mid, off
+                    // on low.
+                    if (b.layer === 1 && Perf.tier !== 'low' && Math.random() > (Perf.tier === 'mid' ? 0.985 : 0.95)) {
                         this.spawnBgParticle('fire', false);
                     }
                 } else if (type === 'tech') {
@@ -19410,9 +19423,22 @@ drawEffects() {
         }
 
         // 5. Grid Floor
+        // Tier-gated. The base config drew 21 perspective lines + ~10
+        // horizontal stripes every frame, all unconditionally. The CAPS
+        // table already exposes a `gridFov` per tier (3.0 / 2.5 / 2.0)
+        // but the renderer was hardcoding fov=3.0 — wiring it through
+        // here, plus halving the line/stripe counts on mid and low,
+        // drops this loop's per-frame stroke count from 31 → ~16 on
+        // mid → ~8 on low. The stripe step also widens to 60/80 px so
+        // there are fewer rows to draw without changing the perspective
+        // read.
+        const _gridTier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
         const cx = w/2;
         const gridSpeed = 40;
         const offsetY = (time * gridSpeed) % 40;
+        const _gridLineMax = _gridTier === 'low' ? 5 : (_gridTier === 'mid' ? 7 : 10);
+        const _gridStripeStep = _gridTier === 'low' ? 80 : (_gridTier === 'mid' ? 60 : 40);
+        const fov = (Perf && Perf.caps && Perf.caps.gridFov) || 3.0;
 
         ctx.save();
         ctx.beginPath();
@@ -19430,20 +19456,19 @@ drawEffects() {
         ctx.strokeStyle = conf.grid;
         ctx.lineWidth = 2;
 
-        const fov = 3.0;
-        for (let i = -10; i <= 10; i++) {
+        for (let i = -_gridLineMax; i <= _gridLineMax; i++) {
             const x = cx + (i * 120);
             ctx.beginPath();
-            ctx.moveTo(cx, horizon - 20); 
+            ctx.moveTo(cx, horizon - 20);
             ctx.lineTo(x * fov + (cx * (1-fov)), h);
             ctx.stroke();
         }
 
-        for(let y = horizon; y < h; y += 40) {
+        for(let y = horizon; y < h; y += _gridStripeStep) {
             const dist = (y - horizon) / (h - horizon);
             const perspectiveY = horizon + (Math.pow(dist, 0.7)) * (h - horizon);
-            
-            const moveY = perspectiveY + (offsetY * (1-dist)); 
+
+            const moveY = perspectiveY + (offsetY * (1-dist));
             if (moveY > h) continue;
 
             ctx.globalAlpha = 0.1 + (dist * 0.4);
@@ -19455,8 +19480,12 @@ drawEffects() {
         ctx.globalAlpha = 1;
         ctx.restore();
 
-        // 6. Atmospheric Particles
-        if (Math.random() < 0.2) this.spawnBgParticle(type); // Spawn rate
+        // 6. Atmospheric Particles — spawn rate tier-gated. The base
+        // 0.2/frame (~12/sec) was building a steady-state pool of
+        // 80-120 particles in combat with each one iterated + drawn
+        // every frame; halved on mid, quartered on low.
+        const _bgSpawnRate = _gridTier === 'low' ? 0.05 : (_gridTier === 'mid' ? 0.1 : 0.2);
+        if (Math.random() < _bgSpawnRate) this.spawnBgParticle(type); // Spawn rate
 
         for (let i = this.bgState.particles.length - 1; i >= 0; i--) {
             let p = this.bgState.particles[i];
@@ -20809,20 +20838,27 @@ drawEntity(entity) {
                 const PURPLE = COLORS.PURPLE;
                 const LILAC = '#e0b0ff';
 
-                // 1. Twinkling starfield backdrop (deterministic seeds so they don't flicker chaotically)
-                ctx.save();
-                ctx.shadowBlur = 0;
-                for (let i = 0; i < 22; i++) {
-                    const seed = i * 73.91;
-                    const a = seed * 1.17 + time * 0.08;
-                    const r = 20 + (seed % (R + 34));
-                    const tw = 0.4 + 0.6 * Math.sin(time * 2 + seed);
-                    const sx = Math.cos(a) * r, sy = Math.sin(a) * r * 0.85;
-                    const sz = 0.7 + (seed % 1.4);
-                    ctx.fillStyle = i % 4 === 0 ? `rgba(255, 255, 255, ${tw * 0.85})` : `rgba(220, 170, 255, ${tw * 0.7})`;
-                    ctx.beginPath(); ctx.arc(sx, sy, sz, 0, Math.PI * 2); ctx.fill();
+                // 1. Twinkling starfield backdrop (deterministic seeds so they don't flicker chaotically).
+                // Star count tier-gated: was 22 stars × 60fps = 1320 arc+fills/sec
+                // unconditionally. Cut to 10 on mid, 0 on low (the disc/aura
+                // below already establishes the cosmic-sigil read; the
+                // starfield is decorative).
+                const _arcStars = _arcTier === 'low' ? 0 : (_arcTier === 'mid' ? 10 : 22);
+                if (_arcStars > 0) {
+                    ctx.save();
+                    ctx.shadowBlur = 0;
+                    for (let i = 0; i < _arcStars; i++) {
+                        const seed = i * 73.91;
+                        const a = seed * 1.17 + time * 0.08;
+                        const r = 20 + (seed % (R + 34));
+                        const tw = 0.4 + 0.6 * Math.sin(time * 2 + seed);
+                        const sx = Math.cos(a) * r, sy = Math.sin(a) * r * 0.85;
+                        const sz = 0.7 + (seed % 1.4);
+                        ctx.fillStyle = i % 4 === 0 ? `rgba(255, 255, 255, ${tw * 0.85})` : `rgba(220, 170, 255, ${tw * 0.7})`;
+                        ctx.beginPath(); ctx.arc(sx, sy, sz, 0, Math.PI * 2); ctx.fill();
+                    }
+                    ctx.restore();
                 }
-                ctx.restore();
 
                 // 2. Clean summoning disc — gradient cached.
                 ctx.save();
@@ -20837,12 +20873,16 @@ drawEntity(entity) {
                 ctx.beginPath();
                 ctx.ellipse(0, 0, (R + 30) * 1.3, (R + 30) * 0.36, 0, 0, Math.PI * 2);
                 ctx.fill();
-                // One slim rotating rune ring — deterministic, no jitter
+                // One slim rotating rune ring — deterministic, no jitter.
+                // shadowBlur dropped on mid/low.
                 ctx.save();
                 ctx.rotate(time * 0.12);
                 ctx.strokeStyle = 'rgba(224, 176, 255, 0.45)';
                 ctx.lineWidth = 1;
-                ctx.shadowColor = PURPLE; ctx.shadowBlur = 6;
+                if (_arcTier === 'high') {
+                    ctx.shadowColor = PURPLE;
+                    ctx.shadowBlur = 6;
+                }
                 ctx.setLineDash([4, 6]);
                 ctx.beginPath();
                 ctx.ellipse(0, 0, (R + 18) * 1.3, (R + 18) * 0.36, 0, 0, Math.PI * 2);
