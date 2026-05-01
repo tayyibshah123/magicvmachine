@@ -497,7 +497,7 @@ const DICE_UPGRADES = {
     BLD_ATTACK: { name: "Crimson Cascade",    desc: "Deal 9 DMG + 3 Bleed (3 DMG/turn, 2 turns). Lifesteal 2.", cost: 190, icon: ICONS.bldAttack },
     BLD_DEFEND: { name: "Transfusion",        desc: "Heal 5 HP. Overflow feeds the Blood Pool.", cost: 175, icon: ICONS.bldDefend },
     BLD_MANA:   { name: "Blood Tithe",        desc: "+3 Mana. Pay 1 HP. Apply Frail to enemy.", cost: 200, icon: ICONS.bldMana },
-    BLD_MINION: { name: "Alpha Thrall",       desc: "Raise L2 Thrall (+5 Block, +5 DMG).", cost: 200, icon: ICONS.bldMinion },
+    BLD_MINION: { name: "Alpha Thrall",       desc: "Raise L2 Thrall (+5 HP, +5 DMG). Damage it takes heals you ×2.", cost: 200, icon: ICONS.bldMinion },
 
     // ─── ANNIHILATOR ───
     ANH_ATTACK: { name: "Plasma Cannon",      desc: "Deal 12 DMG. +15 Heat. 20% AoE splash.", cost: 190, icon: ICONS.anhAttack },

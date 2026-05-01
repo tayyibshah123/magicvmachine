@@ -3975,7 +3975,7 @@ startQTE(type, x, y, callback, opts) {
             minion: "Pawn. A sturdy frontline that grants +1 reroll on the turn after it dies.",
             ability: "Command Track fills 1 pip per die used. Spend 3 pips for +1 reroll, +8 shield, or +5 damage primed on your next ATTACK.",
             attack: "Volley, Salvo, Checkmate. Damage and bonus rerolls scale with sector tier.",
-            combo:  "PINCER (ATK + DEF + MANA in one hand). +1 reroll now and all enemy intents stay revealed.",
+            combo:  "PINCER (ATK + DEF + MANA in one hand). +2 rerolls and breaks any active intent obscure (Panopticon Analyse).",
             difficulty: 2,
         },
         arcanist: {
@@ -5044,7 +5044,7 @@ triggerPhaseGlitch() {
                 { name: 'CHAIN (multi)', icon: '∞', color: '#00f3ff', body: 'Multi-hit attacks fire N waves in sequence. Tap each wave at the perfect window — final multiplier is the WORST quality across all waves.' }
             ],
             classes: [
-                { name: 'TACTICIAN',   icon: '◆', color: '#00f3ff', body: 'Pip Track fills as you play dice. Three pips → spend for +reroll, +shield, or +damage. Class combo: PINCER reveals intent.' },
+                { name: 'TACTICIAN',   icon: '◆', color: '#00f3ff', body: 'Pip Track fills as you play dice. Three pips → spend for +reroll, +shield, or +damage. Class combo: PINCER grants +2 rerolls and breaks intent-obscure.' },
                 { name: 'ARCANIST',    icon: '◉', color: '#bc13fe', body: 'Glyph cycle (Fire/Ice/Lightning) ticks each turn. Tap when the right glyph is lit for that effect. Mana scales attacks.' },
                 { name: 'BLOODSTALKER',icon: '☠', color: '#ff3355', body: 'Damage taken fills the Blood Pool. Spend for tributes: minor (+reroll), major (attack + bleed), grand (heavy strike + mana + rerolls).' },
                 { name: 'ANNIHILATOR', icon: '✸', color: '#ff8800', body: 'Heat fills as you play dice. Vent in yellow zone for ×1.4 next attack; vent in red zone for AoE blast (5 self-DMG).' },
@@ -6733,7 +6733,7 @@ triggerSystemCrash() {
                 break;
             }
             case 'aegis_primed':
-                body = `<strong>Aegis Primed</strong>. The next enemy attack is fully nullified. Consumes all 3 Sentinel plates.`;
+                body = `<strong>Aegis Primed</strong>. Fully nullifies the next enemy attack — including every hit of a multi-hit chain. Consumes all 3 Sentinel plates.`;
                 break;
             case 'firewall':
                 body = `<strong>Firewall</strong>: the first unblocked hit this turn is capped at 20 damage.`;
@@ -10809,7 +10809,7 @@ async startCombat(type) {
                 this.player.addShield(twist.startShield);
             }
             if (twist.bonusMana && this.player) {
-                this.player.mana = Math.min(this.player.maxMana || 99, (this.player.mana || 0) + twist.bonusMana);
+                this.gainMana(twist.bonusMana, { silent: true });
             }
             // dmg-out / dmg-in stack onto the customRun multipliers so a
             // player running both layers takes the combined hit. _customXxx
@@ -11000,9 +11000,21 @@ async startCombat(type) {
         this.player.mana = this.player.baseMana;
         // Reset per-combat class-rework counters so they don't leak across fights.
         this.player.bloodTier = 0;
-        this.player.qteRerolls = 0;
+        // Annihilator anti-snowball: grant a single starter QTE-token at
+        // combat open so a missed turn-1 QTE doesn't leave the class with
+        // zero rerolls AND a 20% maxHP-per-reroll cost. Other classes
+        // start at 0 (no change). Per-combat reset clears any pending
+        // token from the prior fight.
+        this.player.qteRerolls = (this.player.classId === 'annihilator') ? 1 : 0;
         this.player.bonusDrawNextTurn = 0;
         this.player._lastDamageDealt = 0;
+        // Reset per-combat Apex flag so the cap applies fresh in the next combat.
+        if (Array.isArray(this.player.minions)) {
+            this.player.minions.forEach(m => { if (m) m._apexedThisCombat = false; });
+        }
+        // Reset Sentinel Firewall trigger counter so the relic re-arms
+        // every combat (it was leaking across fights).
+        this.player._firewallTriggersUsed = 0;
 
         // Expansion (5.2.1) — Drone Swarmling & friends spawn extra minions on combat open.
         if (this.enemy && template && template.summonOnStart > 0) {
@@ -11029,9 +11041,21 @@ async startCombat(type) {
         }
 
         if(this.player.traits.startMinions) {
+            // Apply Summoner's `startMinionBuff` (+40% HP/DMG) to every
+            // per-combat re-spawn of starting minions. Previously the buff
+            // lived only in the Player constructor, so combat 1 honoured
+            // the +40% but every fight from sector 2 onward re-spawned
+            // base-stat minions — the class description was a lie outside
+            // the very first encounter.
+            const buff = this.player.traits.startMinionBuff || 1;
             for(let i=0; i<this.player.traits.startMinions; i++) {
                 const m = new Minion(0, 0, this.player.minions.length + 1, true);
-                if(this.player.traits.startShield) m.addShield(10); 
+                if (buff > 1) {
+                    m.maxHp = Math.floor(m.maxHp * buff);
+                    m.currentHp = m.maxHp;
+                    m.dmg = Math.max(1, Math.floor(m.dmg * buff));
+                }
+                if(this.player.traits.startShield) m.addShield(10);
                 this.player.minions.push(m);
             }
         }
@@ -11407,8 +11431,8 @@ async startTurn() {
 
         const manaStacks = this.stackCount('mana_syphon');
         if(manaStacks > 0) {
-            this.player.mana += manaStacks;
-            ParticleSys.createFloatingText(this.player.x, this.player.y - 120, `SYPHON +${manaStacks}`, COLORS.MANA);
+            const got = this.gainMana(manaStacks, { silent: true });
+            if (got > 0) ParticleSys.createFloatingText(this.player.x, this.player.y - 120, `SYPHON +${got}`, COLORS.MANA);
         }
 
         // Relic: STATIC CAPACITOR — zap random enemy for 10 DMG if holding 3+ Mana.
@@ -11477,9 +11501,8 @@ async startTurn() {
 
         if (this.player.hasRelic('solar_battery') && this.turnCount % 2 === 0) {
              const stacks = this.stackCount('solar_battery');
-             const flatMana = stacks; 
-             this.player.mana += flatMana;
-             ParticleSys.createFloatingText(this.player.x, this.player.y - 80, `SOLAR (+${flatMana})`, COLORS.GOLD);
+             const got = this.gainMana(stacks, { silent: true });
+             if (got > 0) ParticleSys.createFloatingText(this.player.x, this.player.y - 80, `SOLAR (+${got})`, COLORS.GOLD);
         }
         
         if (this.enemy && this.enemy.glitchMod && this.enemy.glitchMod.id === 'regen') {
@@ -11520,28 +11543,46 @@ async startTurn() {
          }
         
         if (this.deadMinionsThisTurn > 0) {
-            if (this.player.traits.diceCount === 6) {
+            // Tactician's "Pawn dies → +1 reroll next turn" trait. Previously
+            // gated only on `traits.diceCount === 6`, which Annihilator also
+            // has — so the Annihilator (with `noRerolls: true`!) was being
+            // handed free rerolls by Bomb Bot deaths. Gate explicitly on the
+            // class id and the no-rerolls flag.
+            if (this.player.classId === 'tactician' && !this.player.traits.noRerolls) {
                  this.rerolls += this.deadMinionsThisTurn;
                  ParticleSys.createFloatingText(this.player.x, this.player.y, `+${this.deadMinionsThisTurn} REROLLS`, "#00f3ff");
             }
             if (this.player.traits.baseMana === 5) {
-                 this.player.mana += this.deadMinionsThisTurn;
-                 ParticleSys.createFloatingText(this.player.x, this.player.y, `+${this.deadMinionsThisTurn} MANA`, "#bc13fe");
+                 const got = this.gainMana(this.deadMinionsThisTurn, { silent: true });
+                 if (got > 0) ParticleSys.createFloatingText(this.player.x, this.player.y, `+${got} MANA`, "#bc13fe");
             }
             // Relic: SHARD REACTOR — gain +1 Mana per minion death.
             if (this.player.hasRelic('shard_reactor')) {
                 const stacks = this.stackCount('shard_reactor');
                 const gain = this.deadMinionsThisTurn * stacks;
-                this.player.mana += gain;
-                ParticleSys.createFloatingText(this.player.x, this.player.y - 40, `SHARD +${gain}`, "#ff88cc");
+                const got = this.gainMana(gain, { silent: true });
+                if (got > 0) ParticleSys.createFloatingText(this.player.x, this.player.y - 40, `SHARD +${got}`, "#ff88cc");
             }
             // Relic: GHOST CACHE — once per run, revive a dead minion at 1 HP.
-            if (this.player.hasRelic('ghost_cache') && !this._ghostCacheUsed && this.player.minions.length > 0) {
-                this._ghostCacheUsed = true;
-                const revived = this.player.minions[0];
-                if (revived) {
+            // Previously this picked `minions[0]` after dead minions had
+            // already been spliced out — a STILL-ALIVE minion got its HP
+            // reset to 1, the *opposite* of the relic's promise. Now: spawn
+            // a fresh minion at 1 HP only if at least one minion actually
+            // died this turn AND we're under maxMinions, mirroring the
+            // class's normal summon path.
+            if (this.player.hasRelic('ghost_cache') && !this._ghostCacheUsed && this.deadMinionsThisTurn > 0) {
+                const cap = this.player.maxMinions || 2;
+                if (this.player.minions.length < cap) {
+                    this._ghostCacheUsed = true;
+                    const revived = new Minion(0, 0, this.player.minions.length + 1, true);
                     revived.currentHp = 1;
-                    ParticleSys.createFloatingText(revived.x, revived.y - 80, "GHOST REVIVE", "#aaffff");
+                    revived.spawnTimer = 1.0;
+                    this.player.minions.push(revived);
+                    requestAnimationFrame(() => {
+                        if (revived && revived.currentHp > 0) {
+                            ParticleSys.createFloatingText(revived.x, revived.y - 80, "GHOST REVIVE", "#aaffff");
+                        }
+                    });
                 }
             }
         }
@@ -11570,6 +11611,14 @@ async startTurn() {
             diceToRoll += this.player.bonusDrawNextTurn;
             ParticleSys.createFloatingText(this.player.x, this.player.y - 130, `+${this.player.bonusDrawNextTurn} DRAW`, "#00f3ff");
             this.player.bonusDrawNextTurn = 0;
+        }
+        // Tactician Volley signature (T1) banks +1 reroll for next turn so the
+        // desc "+1 Reroll next turn" matches the code. Drained here at the
+        // start of the new turn before rollDice runs.
+        if ((this.bonusRerollsNextTurn || 0) > 0) {
+            this.rerolls = (this.rerolls || 0) + this.bonusRerollsNextTurn;
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 160, `+${this.bonusRerollsNextTurn} REROLL`, "#00f3ff");
+            this.bonusRerollsNextTurn = 0;
         }
         // Arcanist Flux Regen: passive mana tick at the start of every turn.
         // Capped at baseMana + 5 so the Mana Bank can't balloon infinitely if
@@ -11737,6 +11786,40 @@ async startTurn() {
 
     _enemyMinions() {
         return (this.enemy && Array.isArray(this.enemy.minions)) ? this.enemy.minions : [];
+    },
+
+    /* Cull dead player minions in-place, applying the Summoner's 30%
+       revive trait to each downed minion before removing it. Centralises
+       the death/revive logic so AoE intents (aoe_sweep, frost_aoe,
+       immolate, etc.) honour the revive trait the single-target attack
+       branch already had. Returns the number of minions removed. */
+    _cullPlayerMinions() {
+        if (!this.player || !Array.isArray(this.player.minions)) return 0;
+        const arr = this.player.minions;
+        const survivors = [];
+        let removed = 0;
+        for (let i = 0; i < arr.length; i++) {
+            const m = arr[i];
+            if (!m) continue;
+            if (m.currentHp <= 0) {
+                // Spirit revive trait: 30% chance to bounce back at half HP.
+                // Gate on the Summoner-specific `maxMinions === 4` since
+                // that's the existing trait check used in the single-target
+                // path (entity.player.minions.maxMinions === 4 ⇒ Summoner).
+                if (this.player.traits && this.player.traits.maxMinions === 4 && Math.random() < 0.3) {
+                    m.currentHp = Math.max(1, Math.floor(m.maxHp / 2));
+                    ParticleSys.createFloatingText(m.x, m.y, "REVIVED!", "#00ff99");
+                    survivors.push(m);
+                } else {
+                    removed++;
+                    this.deadMinionsThisTurn = (this.deadMinionsThisTurn || 0) + 1;
+                }
+            } else {
+                survivors.push(m);
+            }
+        }
+        if (removed > 0) this.player.minions = survivors;
+        return removed;
     },
 
     /* Class-fantasy summon VFX dispatcher (Roadmap Part 26.2). Call this
@@ -12285,9 +12368,16 @@ async startTurn() {
 
             // Class-unique climaxes
             case 'PINCER': {
-                this.rerolls = (this.rerolls || 0) + 1;
-                if (this.enemy) this.enemy.intentRevealed = true;
-                this._pincerRevealActive = true;
+                // +2 rerolls (was +1 — bumped per audit) and clear any
+                // active Panopticon analyse-flag so the boss's intent
+                // obscuration is broken open. The `intentRevealed` flag
+                // and `_pincerRevealActive` were previously written but
+                // never read anywhere; removed as dead code.
+                this.rerolls = (this.rerolls || 0) + 2;
+                if (this.player && this.player._panopticonNullifyFirst) {
+                    this.player._panopticonNullifyFirst = false;
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 140, "ANALYSE BROKEN", "#00f3ff");
+                }
                 ParticleSys.createTacticianBurst(px, py);
                 ParticleSys.createShockwave(ex, ey, color, 28);
                 AudioMgr.playSound('beam');
@@ -12624,20 +12714,32 @@ async startTurn() {
         setTimeout(done, 480);
     },
 
-	gainMana(amount) {
-        this.player.mana += amount;
-        // Mana gain was silent — relics like Mana Syphon, Shard Reactor
-        // and Dervish Mode floated their own custom text, but the base
-        // gainMana path (turn-start tick, MANA dice, SOUL BATTERY heal,
-        // class arcanist resonance, etc.) had no feedback. Players
-        // could miss when their pool actually went up. Single floater
-        // + soft sting unifies all callers, with the existing mana
-        // dice burst (createClassBurst) still firing on top.
-        if (amount > 0 && this.player) {
-            ParticleSys.createFloatingText(this.player.x, this.player.y - 80, `+${amount} MANA`, '#aa00ff');
+	gainMana(amount, opts) {
+        if (!this.player) return 0;
+        // Cap mana at baseMana + 5 across every gain path. Previously only
+        // Flux Regen (turn-start passive) honoured the cap; CONVERGENCE,
+        // Resonance, Mana Syphon, Solar Battery, Wisp death, Shard Reactor,
+        // Channel die, signature die, etc. all bypassed it because they
+        // wrote `player.mana +=` directly or called gainMana without a cap.
+        // Net: late-game pools regularly hit 15-20+, then Flux Regen
+        // silently no-op'd. Single chokepoint here keeps every caller honest.
+        // Pass `{ silent: true }` from callers that already render their own
+        // floater (Mana Syphon, Resonance, etc.) to skip the generic one.
+        const silent = !!(opts && opts.silent);
+        const cap = (this.player.maxMana || ((this.player.baseMana || 3) + 5));
+        const before = this.player.mana || 0;
+        const next = Math.min(cap, before + amount);
+        const actual = next - before;
+        this.player.mana = next;
+        if (actual > 0 && !silent) {
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 80, `+${actual} MANA`, '#aa00ff');
             ParticleSys.createSparks(this.player.x, this.player.y - 30, '#aa00ff', 5);
             try { AudioMgr.playSound('mana'); } catch (_) {}
+        } else if (actual === 0 && amount > 0 && !silent) {
+            // At-cap feedback so the player knows the gain just no-op'd.
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 80, `MANA FULL`, '#aa00ff');
         }
+        return actual;
         if (this.player.hasRelic('recycle_bin')) {
             if (this.recycleBinCount < 5) {
                 this.player.heal(1);
@@ -12925,13 +13027,20 @@ async startTurn() {
                     ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 110, "MAX DMG", COLORS.GOLD);
                 }
                 
-                if(this.player.traits.lifesteal) {
-                    // Blood Tier bonus: each tier adds +bloodTierLifestealBonus to the base heal.
-                    const tier = this.player.bloodTier || 0;
-                    const bonus = (this.player.traits.bloodTierLifestealBonus || 0) * tier;
-                    this.player.heal(2 + bonus);
-                }
-                
+                // Lifesteal helper — fires once per actually-landed hit with
+                // a positive HP delta. Previously the heal applied BEFORE
+                // takeDamage, so phase-dodged attacks and corpse-hits still
+                // healed; AoE Blade Storm also healed only once for N targets
+                // despite the desc's "every hit" promise. Heal amount is
+                // independent of damage size; the delta check just gates that
+                // SOMETHING actually landed.
+                const applyLifesteal = (delta) => {
+                    if (!this.player.traits.lifesteal || delta <= 0) return;
+                    const lTier = this.player.bloodTier || 0;
+                    const lBonus = (this.player.traits.bloodTierLifestealBonus || 0) * lTier;
+                    this.player.heal(2 + lBonus);
+                };
+
                 // Blade Storm: 30% Chance (or combo FLURRY, guaranteed AoE).
                 const aoeThisHit = (isUpgraded && Math.random() < 0.30) || flurryActive;
                 if (aoeThisHit) {
@@ -12945,7 +13054,10 @@ async startTurn() {
                     let bossDead = false;
                     targets.forEach(t => {
                         this.triggerVFX('digital_sever', this.player, t);
-                        if(t.takeDamage(dmg)) {
+                        const beforeHp = t.currentHp;
+                        const killed = t.takeDamage(dmg, this.player);
+                        applyLifesteal(beforeHp - t.currentHp);
+                        if (killed) {
                             if(t === this.enemy) bossDead = true;
                             else if (this.enemy) this.enemy.minions = this.enemy.minions.filter(m => m !== t);
                         }
@@ -12960,7 +13072,10 @@ async startTurn() {
                     }
                     for (let h = 0; h < hits; h++) {
                         if (!finalEnemy || finalEnemy.currentHp <= 0) break;
-                        if (finalEnemy.takeDamage(dmg)) {
+                        const beforeHp = finalEnemy.currentHp;
+                        const killed = finalEnemy.takeDamage(dmg, this.player);
+                        applyLifesteal(beforeHp - finalEnemy.currentHp);
+                        if (killed) {
                             if (finalEnemy === this.enemy) { this.winCombat(); return; }
                             else {
                                 if (this.enemy) this.enemy.minions = this.enemy.minions.filter(m => m !== finalEnemy);
@@ -12977,11 +13092,17 @@ async startTurn() {
                 const classId = this.player.classId;
                 if (this._dieSlot(type) === 'attack' && classId) {
                     if (classId === 'tactician') {
-                        // If enemy intends attack, grant +1 reroll
+                        // If enemy intends attack, grant +1 reroll. Upgraded
+                        // ("Precision Strike") also adds +3 Shield — desc
+                        // promised it but the code never granted it.
                         if (this.enemy && this.enemy.nextIntents && this.enemy.nextIntents.some(i => i.type === 'attack' || i.type === 'multi_attack')) {
                             this.rerolls = (this.rerolls || 0) + 1;
                             this.updateHUD();
                             ParticleSys.createFloatingText(this.player.x, this.player.y - 170, "+1 REROLL", "#00f3ff");
+                            if (isUpgraded) {
+                                this.player.addShield(3);
+                                ParticleSys.createFloatingText(this.player.x, this.player.y - 200, "+3 SHIELD", COLORS.SHIELD);
+                            }
                         }
                     } else if (classId === 'bloodstalker') {
                         // Apply 2 bleed (upgraded: 3) for 2 turns
@@ -13009,8 +13130,8 @@ async startTurn() {
                 if (this.player.hasRelic('dervish_mode') && this.attacksThisTurn === 3) {
                     const stacks = this.stackCount('dervish_mode');
                     const manaGain = 2 * stacks;
-                    this.player.mana = Math.min(this.player.maxMana || 99, this.player.mana + manaGain);
-                    ParticleSys.createFloatingText(this.player.x, this.player.y - 160, `DERVISH +${manaGain}`, "#ff4400");
+                    const got = this.gainMana(manaGain, { silent: true });
+                    if (got > 0) ParticleSys.createFloatingText(this.player.x, this.player.y - 160, `DERVISH +${got}`, "#ff4400");
                 }
 
             } else if (this._dieSlot(type) === 'defend') {
@@ -13064,23 +13185,31 @@ async startTurn() {
                         // bar fill logic is shared). Makes the die still
                         // valuable when at full HP — you're charging the
                         // tribute bar instead of wasting the heal.
+                        // Route through `player.heal()` so Constrict (heal-
+                        // reduction debuff) actually applies — previous code
+                        // wrote currentHp directly and silently bypassed it.
                         const healAmt = isUpgraded ? 5 : 3;
                         const before = this.player.currentHp;
-                        const after = Math.min(this.player.maxHp, before + healAmt);
-                        const actualHeal = after - before;
-                        const overflow = healAmt - actualHeal;
-                        this.player.currentHp = after;
-                        if (actualHeal > 0) {
-                            ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `+${actualHeal} HP`, "#ff0000");
-                        }
+                        this.player.heal(healAmt);
+                        const actualHeal = this.player.currentHp - before;
+                        const overflow = Math.max(0, healAmt - actualHeal);
                         if (overflow > 0) {
                             ClassAbility.onEvent('damage_taken', { amount: overflow, source: 'sanguine_overflow' });
                             ParticleSys.createFloatingText(this.player.x, this.player.y - 140, `+${overflow} BLOOD POOL`, "#ff2244");
                         }
                     } else if (cid === 'annihilator') {
-                        // Ricochet — reduce incoming damage next turn by 20%, stacking
+                        // Ricochet — reduce incoming damage next turn, stacking.
+                        // Base: 20% per stack. Upgraded ("Deflector Array"):
+                        // 30% per stack AND reflects 5 dmg back on consumption.
+                        // Track the per-stack % and the reflect amount on the
+                        // player so the mitigation site (game.js attack-loop)
+                        // uses the same numbers the floater displays. Previous
+                        // code hard-coded 20% in the mitigation site via a
+                        // dead-code ternary, so the upgrade was paying nothing.
                         this.player.ricochetStacks = (this.player.ricochetStacks || 0) + 1;
-                        const pct = Math.min(100, this.player.ricochetStacks * (isUpgraded ? 30 : 20));
+                        this.player.ricochetPctPerStack = isUpgraded ? 30 : 20;
+                        this.player.ricochetReflectAmt = isUpgraded ? 5 : 0;
+                        const pct = Math.min(100, this.player.ricochetStacks * this.player.ricochetPctPerStack);
                         if (this.player.ricochetStacks >= 3) {
                             ParticleSys.createFloatingText(this.player.x, this.player.y - 170, "FULL IMMUNITY!", "#ff8800");
                         } else {
@@ -13131,37 +13260,56 @@ async startTurn() {
                         // Bonus mana if already have 3+
                         if (this.player.mana >= 3) {
                             const bonus = isUpgraded ? 3 : 2;
-                            this.player.mana += bonus - 1; // -1 because base already gave 1 extra (upgraded gives 2 base)
-                            ParticleSys.createFloatingText(this.player.x, this.player.y - 170, `RESONANCE +${bonus - 1}`, "#d070ff");
+                            const got = this.gainMana(bonus - 1, { silent: true });
+                            if (got > 0) ParticleSys.createFloatingText(this.player.x, this.player.y - 170, `RESONANCE +${got}`, "#d070ff");
                         }
                     } else if (cid === 'bloodstalker') {
                         // Blood Price: +2 mana total, -1 HP. Base mana die already
                         // awarded 1 mana above, so add 1 more here; pay 1 HP.
-                        this.player.mana = Math.min(this.player.maxMana || 99, this.player.mana + 1);
+                        this.gainMana(1, { silent: true });
                         const hpCost = 1;
-                        this.player.currentHp = Math.max(1, this.player.currentHp - hpCost);
-                        // Self-inflicted HP loss still feeds the Blood Pool.
-                        ClassAbility.onEvent('damage_taken', { amount: hpCost, source: 'self' });
-                        ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "+1 MANA / -1 HP", "#990000");
+                        // Compute the actual HP delta — at 1 HP, Math.max(1, ...)
+                        // clamps so no HP is actually lost. Previously the
+                        // damage_taken event still fired with the nominal cost,
+                        // letting players spam BLD_MANA at 1 HP for free Blood
+                        // Pool charge. Emit the actual delta only.
+                        const before = this.player.currentHp;
+                        this.player.currentHp = Math.max(1, before - hpCost);
+                        const actualHp = before - this.player.currentHp;
+                        if (actualHp > 0) {
+                            ClassAbility.onEvent('damage_taken', { amount: actualHp, source: 'self' });
+                        }
+                        ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `+1 MANA / -${actualHp} HP`, "#990000");
                         if (isUpgraded && this.enemy) {
                             this.enemy.addEffect('frail', 2, 0, '💢', '+30% Dmg Taken.', 'FRAIL');
                             ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "FRAIL", "#ff0055");
                         }
                     } else if (cid === 'annihilator') {
-                        // +5 heat (+8 upgraded)
+                        // +5 heat (+8 upgraded). The heat_add handler in
+                        // class-ability.js applies the bump after dice_used
+                        // has already added the base per-die heat.
                         ClassAbility.onEvent('heat_add', { amount: isUpgraded ? 8 : 5 });
-                        if (isUpgraded && ClassAbility._state && ClassAbility._state.heat > 50) {
-                            this.player.mana += 1;
-                            ParticleSys.createFloatingText(this.player.x, this.player.y - 170, "+1 BONUS MANA", "#ff4400");
+                        // Reactor Core (upgraded): +1 bonus mana when heat
+                        // is above 50% AFTER the heat_add fired. Read via
+                        // the public getHeat() — the previous `_state.heat`
+                        // path always read undefined (state is module-local
+                        // in class-ability.js) so the upgrade never paid out.
+                        if (isUpgraded && ClassAbility.getHeat && ClassAbility.getHeat() > 50) {
+                            const got = this.gainMana(1, { silent: true });
+                            if (got > 0) ParticleSys.createFloatingText(this.player.x, this.player.y - 170, "+1 BONUS MANA", "#ff4400");
                         }
                     } else if (cid === 'sentinel') {
-                        // +3 shield (+5 upgraded)
+                        // +3 shield (+5 upgraded). Route through addShield so
+                        // the `shield_gained` event fires — that's what the
+                        // Aegis plate buffer + Kinetic Battery + Warden
+                        // Protocol all listen to. Previous direct write
+                        // bypassed every shield-on-gain interaction (the
+                        // class's own plate accumulator included).
                         const shieldAmt = isUpgraded ? 5 : 3;
-                        this.player.shield = (this.player.shield || 0) + shieldAmt;
-                        ParticleSys.createFloatingText(this.player.x, this.player.y - 170, `+${shieldAmt} SHIELD`, "#e0e0e0");
-                        if (isUpgraded && this.player.shield > 15) {
-                            this.player.mana += 1;
-                            ParticleSys.createFloatingText(this.player.x, this.player.y - 200, "+1 BONUS MANA", "#ffffff");
+                        this.player.addShield(shieldAmt);
+                        if (isUpgraded && (this.player.shield || 0) > 15) {
+                            const got = this.gainMana(1, { silent: true });
+                            if (got > 0) ParticleSys.createFloatingText(this.player.x, this.player.y - 200, "+1 BONUS MANA", "#ffffff");
                         }
                     } else if (cid === 'summoner') {
                         // Grove Tap: heal player + all minions. Base 1 HP,
@@ -13642,29 +13790,51 @@ async startTurn() {
             // Falls back to the generic slash_heavy if the class is unknown.
             this.triggerSignatureVFX(classId, this.player, finalEnemy);
             AudioMgr.playSound('attack');
-            const dead = finalEnemy.takeDamage(dmg);
+            // Pass source so Mirror enemies can reflect, runStats picks up
+            // the hit, and on-hit relics (lifesteal etc) trigger correctly.
+            const dead = finalEnemy.takeDamage(dmg, this.player);
             ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 100, name.toUpperCase(), label);
             return dead;
         };
 
         if (classId === 'tactician') {
             const base = [7, 10, 14][tier - 1];
-            applyDmg(base);
-            const extra = [1, 1, 2][tier - 1];
-            this.rerolls = (this.rerolls || 0) + extra;
-            ParticleSys.createFloatingText(this.player.x, this.player.y - 110, `+${extra} REROLL`, COLORS.CYAN);
+            const dead = applyDmg(base);
+            // Per-tier reroll timing matches the desc verbatim:
+            //   T1 Volley:    +1 reroll NEXT turn      (bank)
+            //   T2 Salvo:     +1 reroll THIS turn      (grant now)
+            //   T3 Checkmate: +2 rerolls now + draw 1 die NEXT turn
+            if (tier === 1) {
+                this.bonusRerollsNextTurn = (this.bonusRerollsNextTurn || 0) + 1;
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 110, `+1 REROLL NEXT`, COLORS.CYAN);
+            } else if (tier === 2) {
+                this.rerolls = (this.rerolls || 0) + 1;
+                this.updateHUD && this.updateHUD();
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 110, `+1 REROLL`, COLORS.CYAN);
+            } else if (tier === 3) {
+                this.rerolls = (this.rerolls || 0) + 2;
+                this.player.bonusDrawNextTurn = (this.player.bonusDrawNextTurn || 0) + 1;
+                this.updateHUD && this.updateHUD();
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 110, `+2 REROLL`, COLORS.CYAN);
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 140, `+1 DRAW NEXT`, COLORS.CYAN);
+            }
+            // Combat already ended via signature kill — winCombat is the
+            // outer flow, not handled here, but skip post-effects on a corpse.
+            if (dead) return;
         } else if (classId === 'arcanist') {
             const base = [6, 12, 18][tier - 1];
-            applyDmg(base);
+            const dead = applyDmg(base);
+            if (dead) return; // skip mana gain / weak addEffect on a corpse
             const mana = [1, 2, 3][tier - 1];
             this.gainMana(mana);
-            if (tier === 3 && finalEnemy) finalEnemy.addEffect('weak', 2, 0, '🦠', '50% less Dmg.', 'WEAK');
+            if (tier === 3 && finalEnemy && finalEnemy.currentHp > 0) finalEnemy.addEffect('weak', 2, 0, '🦠', '50% less Dmg.', 'WEAK');
         } else if (classId === 'bloodstalker') {
             const base = [8, 12, 18][tier - 1];
-            applyDmg(base);
+            const dead = applyDmg(base);
             const heal = [3, 6, 10][tier - 1];
-            this.player.heal(heal);
-            if (tier === 3 && finalEnemy) finalEnemy.addEffect('frail', 2, 0, '💢', '+50% Dmg Taken.', 'FRAIL');
+            this.player.heal(heal); // heal is a player benefit; still apply
+            if (dead) return;
+            if (tier === 3 && finalEnemy && finalEnemy.currentHp > 0) finalEnemy.addEffect('frail', 2, 0, '💢', '+50% Dmg Taken.', 'FRAIL');
         } else if (classId === 'annihilator') {
             const base = [12, 18, 28][tier - 1];
             // Shield-ignoring hit: bypass the enemy's shield by adding the shield
@@ -15969,7 +16139,7 @@ drawEffects() {
                     });
                 }
                 this.player.minions.forEach(m => m.takeDamage(finalDmg, this.enemy));
-                this.player.minions = this.player.minions.filter(m => m.currentHp > 0);
+                this._cullPlayerMinions();
                 AudioMgr.playSound('explosion');
                 if (this.shake) this.shake(10);
                 continue;
@@ -15985,7 +16155,7 @@ drawEffects() {
                 if (this.player.takeDamage(finalDmg, this.enemy, true) && this.player.currentHp <= 0) { this.gameOver(); return; }
                 this.player.addEffect('weak', 2, 0, '🥶', 'Deals 50% less DMG.');
                 this.player.minions.forEach(m => m.takeDamage(Math.floor(finalDmg * 0.6), this.enemy));
-                this.player.minions = this.player.minions.filter(m => m.currentHp > 0);
+                this._cullPlayerMinions();
                 continue;
             }
             else if (intent.type === 'immolate') {
@@ -15997,7 +16167,7 @@ drawEffects() {
                 AudioMgr.playSound('explosion');
                 if (this.player.takeDamage(dmg, this.enemy, true) && this.player.currentHp <= 0) { this.gameOver(); return; }
                 this.player.minions.forEach(m => m.takeDamage(Math.floor(dmg * 0.8), this.enemy));
-                this.player.minions = this.player.minions.filter(m => m.currentHp > 0);
+                this._cullPlayerMinions();
                 // Geyser consumes itself — force a combat win.
                 this.enemy.currentHp = 0;
                 this.winCombat();
@@ -16188,7 +16358,18 @@ drawEffects() {
                     }
                     chainMultiplier = await this.startQTE('DEFEND', this.player.x, this.player.y, null, qteOpts);
                 }
+                // Per-intent state for the chain. These flags ensure once-
+                // per-attack-intent semantics so a 4-hit chain doesn't burn
+                // 4 Aegis blocks, fire 4 thorn reflects, or stack ricochet
+                // immunity infinitely. chainBroken short-circuits the loop
+                // when Aegis fully nullifies the intent or thorns kills.
+                let aegisBlockedIntent = false;
+                let thornsFiredThisIntent = false;
+                let chainBroken = false;
                 for(let h=0; h<hits; h++) {
+                    if (chainBroken) break;
+                    if (this.enemy && this.enemy.currentHp <= 0) break;
+                    if (this.player && this.player.currentHp <= 0) break;
                     // Slight delay between multi-hits
                     if (h > 0) await this.sleep(200);
 
@@ -16205,29 +16386,68 @@ drawEffects() {
                             // Ensure using effectiveVal (includes Weak/Constrict)
                             let dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
                             dmg = Math.floor(dmg * multiplier);
-                            // Sentinel SHIELD WALL: nullify incoming attack if primed.
-                            if (validTarget === this.player && ClassAbility.consumeAttackBlock()) {
+                            // Sentinel SHIELD WALL: nullify the WHOLE intent,
+                            // not just one hit of a chain. Aegis description
+                            // is "fully nullify the next enemy attack" — a
+                            // multi-hit chain is one attack. Once primed and
+                            // consumed, every subsequent hit in the chain is
+                            // also nullified via aegisBlockedIntent.
+                            if (!aegisBlockedIntent && validTarget === this.player && ClassAbility.consumeAttackBlock()) {
+                                aegisBlockedIntent = true;
+                                chainBroken = true;
                                 ParticleSys.createShockwave(this.player.x, this.player.y, '#ffffff', 40);
                                 if (this.shake) this.shake(8);
                                 return;
                             }
-                            // Annihilator RICOCHET: reduce incoming damage based on stacks
+                            if (aegisBlockedIntent) return;
+                            // Annihilator RICOCHET: reduce incoming damage based on stacks.
+                            // Now consumes stacks per hit so a 3-stack pile can't tank a
+                            // whole multi-hit chain. Immunity drains 3 stacks at once;
+                            // partial reduction drains 1. Per-stack % comes from the
+                            // player's `ricochetPctPerStack` (set by the defend die — 20%
+                            // base / 30% upgraded). Upgraded Deflector also reflects
+                            // `ricochetReflectAmt` back at the attacker on consumption.
                             if (validTarget === this.player && this.player.ricochetStacks > 0) {
+                                const pctPerStack = this.player.ricochetPctPerStack || 20;
+                                const reflectAmt = this.player.ricochetReflectAmt || 0;
+                                let stacksConsumed = 0;
                                 if (this.player.ricochetStacks >= 3) {
                                     dmg = 0;
                                     ParticleSys.createFloatingText(this.player.x, this.player.y - 170, "RICOCHET IMMUNE!", "#ff8800");
+                                    stacksConsumed = 3;
                                 } else {
-                                    const ricochetPct = this.player.ricochetStacks * (this.player.classId === 'annihilator' ? 20 : 20);
+                                    const ricochetPct = Math.min(100, this.player.ricochetStacks * pctPerStack);
                                     dmg = Math.floor(dmg * (1 - ricochetPct / 100));
                                     ParticleSys.createFloatingText(this.player.x, this.player.y - 170, `RICOCHET -${ricochetPct}%`, "#ff6600");
+                                    stacksConsumed = 1;
+                                }
+                                this.player.ricochetStacks = Math.max(0, this.player.ricochetStacks - stacksConsumed);
+                                if (reflectAmt > 0 && this.enemy && this.enemy.currentHp > 0) {
+                                    const refKill = this.enemy.takeDamage(reflectAmt, this.player);
+                                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, `DEFLECT ${reflectAmt}`, "#ff8800");
+                                    if (refKill && this.enemy.currentHp <= 0) {
+                                        chainBroken = true;
+                                        this.winCombat();
+                                        return;
+                                    }
                                 }
                             }
-                            // Sentinel TEMP THORNS: reflect damage back to attacker
-                            if (validTarget === this.player && this.player.tempThorns > 0 && this.enemy && this.enemy.currentHp > 0) {
-                                this.enemy.takeDamage(this.player.tempThorns);
-                                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, `THORNS ${this.player.tempThorns}`, "#ffffff");
+                            // Sentinel TEMP THORNS: reflect once per attack intent
+                            // (not per hit). Wraps takeDamage so a thorn kill triggers
+                            // winCombat — this was a softlock vector identical to the
+                            // parry one we just fixed.
+                            if (!thornsFiredThisIntent && validTarget === this.player && this.player.tempThorns > 0 && this.enemy && this.enemy.currentHp > 0) {
+                                thornsFiredThisIntent = true;
+                                const reflectAmt = this.player.tempThorns;
+                                const thornsKill = this.enemy.takeDamage(reflectAmt);
+                                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, `THORNS ${reflectAmt}`, "#ffffff");
+                                if (thornsKill && this.enemy && this.enemy.currentHp <= 0) {
+                                    chainBroken = true;
+                                    this.winCombat();
+                                    return;
+                                }
                             }
-                            if (validTarget.takeDamage(dmg, this.enemy, true) && validTarget === this.player) { this.gameOver(); return; }
+                            if (validTarget.takeDamage(dmg, this.enemy, true) && validTarget === this.player) { chainBroken = true; this.gameOver(); return; }
                         });
                     } else {
                         // Minion Target

@@ -10,10 +10,10 @@
 
 import { Analytics } from './analytics.js';
 
-// Bumped to _v3 alongside the post-class-update copy rewrite so existing
-// players who already dismissed the old briefings see the corrected
-// ability + signature descriptions on their next combat with each class.
-const KEY_SEEN = 'mvm_class_briefing_seen_v3';
+// Bumped to _v4 — copy now mentions Annihilator's QTE-crit reroll mechanic
+// and Bloodstalker's vulnerable trait + Thrall siphon, both previously
+// invisible to first-run players.
+const KEY_SEEN = 'mvm_class_briefing_seen_v4';
 
 // Per-class copy. `ability` describes the class ability widget; `signature`
 // describes the signature die. Matches the text in constants.js PLAYER_CLASSES
@@ -35,20 +35,20 @@ const COPY = {
     },
     bloodstalker: {
         headline: 'BLOODSTALKER',
-        pillars: 'HP as resource. Lifesteal sustain.',
-        ability: 'BLOOD POOL fills from damage taken. At full, spend HP for Minor (reroll), Major (20 damage + Bleed), or Grand Tribute (40 damage + Bleed + mana + rerolls).',
+        pillars: 'HP as resource. Lifesteal sustain. Vulnerable: takes +1 damage from every source.',
+        ability: 'BLOOD POOL fills from damage taken. At full, spend HP for Minor (reroll), Major (20 damage + Bleed), or Grand Tribute (40 damage + Bleed + mana + rerolls). Blood Thrall minion siphons damage it takes back to you as healing (x2 once upgraded).',
         signature: 'Bite: 8 damage and heal 3 HP.'
     },
     annihilator: {
         headline: 'ANNIHILATOR',
-        pillars: 'Glass cannon. Heat or pay HP for rerolls.',
-        ability: 'OVERHEAT CORE builds heat per die used. Vent yellow for x1.4 next attack. Vent red for 20 AoE and 5 self damage.',
+        pillars: 'Glass cannon. No baseline rerolls — earn them through perfect QTEs.',
+        ability: 'OVERHEAT CORE builds heat per die used. Vent yellow for x1.4 next attack. Vent red for 20 AoE and 5 self damage. Perfect QTE crits grant a single-use reroll token that bypasses the no-rerolls trait. Pay 20% MAX HP for an extra reroll any time.',
         signature: 'Blast: 12 damage that ignores shield.'
     },
     sentinel: {
         headline: 'SENTINEL',
         pillars: 'Wall, absorb, retaliate.',
-        ability: 'AEGIS PLATES bank 1 plate per 6 shield gained, across turns. At 3 plates the next enemy attack is fully nullified.',
+        ability: 'AEGIS PLATES bank 1 plate per 6 shield gained, across turns. At 3 plates the next enemy attack is fully nullified — every hit of a multi-hit chain.',
         signature: 'Bash: 10 shield and 4 damage.'
     },
     summoner: {

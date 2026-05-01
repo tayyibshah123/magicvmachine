@@ -227,12 +227,17 @@ class Entity {
                 this.heal(2 * stacks);
                 ParticleSys.createFloatingText(this.x, this.y - 100, "COOLANT +" + (2 * stacks), COLORS.SHIELD);
             }
-            // Sentinel trait: shield-break counterattack retaliates against the attacker.
+            // Sentinel trait: shield-break counterattack retaliates against
+            // the attacker. Damage scales with sector so Sector 5 bosses
+            // don't trivialise the trait — a base 4 dmg ping vs a 1000-HP
+            // boss is meaningless. Each sector adds a flat +2 on top of
+            // the trait's base value.
             if (this instanceof Player && shieldWas > 0 && this.shield === 0 && this.traits && this.traits.shieldCounter) {
-                const retaliateDmg = this.traits.shieldCounter;
+                const sectorScale = Math.max(0, ((Game && Game.sector) || 1) - 1) * 2;
+                const retaliateDmg = this.traits.shieldCounter + sectorScale;
                 const target = source || (Game && Game.enemy);
                 if (target && target.currentHp > 0 && target !== this) {
-                    ParticleSys.createFloatingText(this.x, this.y - 140, `COUNTER ${retaliateDmg}`, '#ffffff');
+                    ParticleSys.createFloatingText(target.x, target.y - 100, `COUNTER ${retaliateDmg}`, '#ffffff');
                     if (target.takeDamage(retaliateDmg)) _resolveEnemyKill(target);
                 }
             }
@@ -260,7 +265,22 @@ class Entity {
         if (this instanceof Player && this.traits.vulnerable && actualDmg > 0) {
             actualDmg += 1;
         }
-        
+
+        // Soft cap on a single player-bound hit so the multiplicative stack
+        // of c_entropy (×1.5) + frail (×1.3) + brittle hull + vulnerable
+        // can't one-shot a full-HP player from a sector-5 boss. Cap at
+        // 85% of maxHp before shield absorption — preserves the "you should
+        // feel that hit" tension while removing the unwinnable softlock
+        // vector the audit flagged for Bloodstalker. Boss-side damage
+        // (Enemy taking damage) is unaffected.
+        if (this instanceof Player && this.maxHp > 0 && actualDmg > 0) {
+            const burstCap = Math.floor(this.maxHp * 0.85);
+            if (actualDmg > burstCap) {
+                actualDmg = burstCap;
+                ParticleSys.createFloatingText(this.x, this.y - 200, "BURST CAP", "#ffd76a");
+            }
+        }
+
         // Hologram: 15% Dodge — routed through Game._luckyChance so
         // Ascension 17 (Aurelia's Curse) halves it as advertised.
         if (this instanceof Player && this.hasRelic('hologram')
@@ -339,21 +359,11 @@ class Entity {
             this.currentHp = Math.max(0, this.currentHp - actualDmg);
         }
 
-        // Bloodstalker — Blood Thrall siphon. When a player-side Blood
-        // Thrall takes damage, heal the player by the amount it lost
-        // (×2 if the thrall is level 2 / upgraded). Uses the HP delta
-        // rather than `actualDmg` so a hit that overkills the thrall
-        // only heals for what the thrall actually had left.
-        if (Minion && this instanceof Minion && this.isPlayerSide && Game.player
-            && Game.player.traits && Game.player.traits.minionName === 'Blood Thrall') {
-            const lost = _hpBeforeHit - this.currentHp;
-            if (lost > 0) {
-                const mult = (this.level && this.level >= 2) ? 2 : 1;
-                const healAmt = lost * mult;
-                Game.player.heal(healAmt);
-                ParticleSys.createFloatingText(this.x, this.y - 80, `SIPHON +${healAmt}`, '#ff5577');
-            }
-        }
+        // (Bloodstalker Blood Thrall siphon moved BELOW the Anchor clamp
+        // so the HP delta reflects the actual loss after Anchor floors a
+        // would-be-fatal hit at 1 HP. Without that ordering the thrall
+        // could be saved by Anchor yet still pay out a "thrall died"
+        // heal to the player.)
 
         // Archivist Phase 3+ — REWIND. A heavy single hit (≥80 raw dmg)
         // restores the boss back up by the value of the hit (capped at
@@ -655,6 +665,22 @@ class Entity {
             if (anchorAlive) {
                 this.currentHp = 1;
                 ParticleSys.createFloatingText(this.x, this.y - 120, "ANCHORED", "#ffdd33");
+            }
+        }
+
+        // Bloodstalker — Blood Thrall siphon. Runs AFTER the Anchor clamp
+        // above so a thrall whose hit was anchored back to 1 HP only pays
+        // out the actual HP lost (which can still be the full pre-anchor
+        // pool — e.g. 8 → 1 HP losing 7 — but no longer the imaginary
+        // "killed" amount). ×2 multiplier when the thrall is level ≥ 2.
+        if (Minion && this instanceof Minion && this.isPlayerSide && Game.player
+            && Game.player.traits && Game.player.traits.minionName === 'Blood Thrall') {
+            const lost = _hpBeforeHit - this.currentHp;
+            if (lost > 0) {
+                const mult = (this.level && this.level >= 2) ? 2 : 1;
+                const healAmt = lost * mult;
+                Game.player.heal(healAmt);
+                ParticleSys.createFloatingText(Game.player.x, Game.player.y - 100, `SIPHON +${healAmt}`, '#ff5577');
             }
         }
 

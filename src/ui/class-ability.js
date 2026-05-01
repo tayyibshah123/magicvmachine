@@ -31,7 +31,10 @@ const CFG = {
     arcanist: {
         cycleMs: 700,            // time one glyph stays active before the next
         fireDmg: 12,             // via calculateCardDamage
-        iceShield: 5,
+        iceShield: 8,            // base — scales by current mana so high-mana
+                                 // players are rewarded for hoarding when they
+                                 // commit to defence
+        iceShieldPerMana: 1,
         iceWeakTurns: 1,
         iceWeakVal: 0.5,         // halves enemy outgoing damage for 1 turn
         lightningRerolls: 1,
@@ -74,6 +77,19 @@ let widgetEl = null;
 let state = null;
 let classId = null;
 let arcanistTimer = null;
+// Cached widget node refs — populated in _build, cleared on combat end.
+// Renderers read from here instead of querySelectorAll-ing every event.
+let _nodeCache = null;
+// Last-rendered state signature so _renderXxx can short-circuit when
+// nothing visible has changed since the prior render.
+let _renderSig = null;
+// Singleton buff payloads + buffer for peekBuffs — avoids per-frame
+// object/array allocation when the status bar polls peekBuffs every
+// render. Mutate the singletons in place; the bar consumer never
+// retains references between frames.
+const _peekBuffsBuf = [];
+const _peekTactPrimed  = { id: 'tact_primed',  val: 0, duration: 0, _permanent: true, _hideCount: false };
+const _peekAegisPrimed = { id: 'aegis_primed', val: 0, duration: 0, _permanent: true, _hideCount: true };
 
 function $w() {
     if (!widgetEl) widgetEl = document.getElementById('class-ability-widget');
@@ -106,7 +122,7 @@ function _defaultState(cls) {
         case 'bloodstalker': return { bar: 0, ready: false };
         case 'annihilator':  return { heat: 0, pendingDmgMult: 0 };
         case 'sentinel':     return { plates: 0, blockReady: false, shieldBuffer: 0 };
-        case 'summoner':     return { plots: [0, 0, 0] };
+        case 'summoner':     return { plots: [0, 0, 0, 0] };
         default:             return null;
     }
 }
@@ -137,6 +153,8 @@ export const ClassAbility = {
     endCombat() {
         classId = null;
         state = null;
+        _nodeCache = null;
+        _renderSig = null;
         if (arcanistTimer) { clearInterval(arcanistTimer); arcanistTimer = null; }
         hide();
     },
@@ -160,8 +178,17 @@ export const ClassAbility = {
         // Annihilator: passive penalty if player lets the core hit 100%
         if (classId === 'annihilator' && state.heat >= 100) {
             if (Game.player) {
-                Game.player.takeDamage(CFG.annihilator.autoVentDmg);
+                // Softlock fix: a fatal autovent must trigger gameOver() —
+                // dropping takeDamage's return value and continuing the
+                // turn loop on a 0-HP player was the same parry-style
+                // bug pattern. Bail immediately on death so endTurn can't
+                // walk into a corpse.
+                const died = Game.player.takeDamage(CFG.annihilator.autoVentDmg);
                 ParticleSys.createFloatingText(Game.player.x, Game.player.y - 80, "OVERHEAT VENT", "#ff4400");
+                if (died && Game.player.currentHp <= 0 && Game.gameOver) {
+                    Game.gameOver();
+                    return;
+                }
             }
             state.heat = 0;
         }
@@ -262,6 +289,19 @@ export const ClassAbility = {
                 Hints.trigger && Hints.trigger('first_overheat_red');
             }
         }
+        // Annihilator mana die emits a `heat_add` after `dice_used` already
+        // bumped heat by `heatPerDie`. The desc on ANH_MANA promises an
+        // additional +5 (+8 upgraded) heat — previously the event was emitted
+        // but no handler accumulated it, so the additional heat never landed.
+        if (classId === 'annihilator' && type === 'heat_add') {
+            const amt = (payload && payload.amount) || 0;
+            if (amt > 0) {
+                state.heat = Math.min(100, state.heat + amt);
+                if (Game.player) {
+                    ParticleSys.createSparks(Game.player.x, Game.player.y - 40, '#ff8800', 4);
+                }
+            }
+        }
         if (classId === 'bloodstalker' && type === 'damage_taken') {
             // Blood Pool fills as the player loses HP. Once it tops up,
             // the three Tribute buttons unlock and the bar glows red.
@@ -341,16 +381,21 @@ export const ClassAbility = {
     // live on `entity.effects`. Returned as `{ id, val, duration, _permanent,
     // _hideCount }` so the unified status renderer treats them like real
     // effects (icon + tooltip). _permanent buffs persist until consumed.
+    // Returns a shared module-scope array (cleared + repopulated each call)
+    // so the per-frame status-bar render doesn't allocate a fresh array
+    // every paint. Singleton buff objects also avoid the per-call object
+    // churn the previous push-of-fresh-objects pattern caused.
     peekBuffs() {
-        const out = [];
-        if (!state) return out;
+        _peekBuffsBuf.length = 0;
+        if (!state) return _peekBuffsBuf;
         if (classId === 'tactician' && state.pendingAttackBonus > 0) {
-            out.push({ id: 'tact_primed', val: state.pendingAttackBonus, duration: 0, _permanent: true, _hideCount: false });
+            _peekTactPrimed.val = state.pendingAttackBonus;
+            _peekBuffsBuf.push(_peekTactPrimed);
         }
         if (classId === 'sentinel' && state.blockReady) {
-            out.push({ id: 'aegis_primed', val: 0, duration: 0, _permanent: true, _hideCount: true });
+            _peekBuffsBuf.push(_peekAegisPrimed);
         }
-        return out;
+        return _peekBuffsBuf;
     },
 
     // Called from useDie BEFORE damage is applied. Returns additive bonus.
@@ -380,6 +425,15 @@ export const ClassAbility = {
     },
 
     // Called from Enemy.attack: if true, the attack is nullified.
+    // Public read of class-ability state values for outside callers (e.g.
+    // game.js mana-die handlers that branch on heat / plates / blood pool).
+    // Previous code reached for `ClassAbility._state.heat` which never
+    // existed — `state` is module-private. These accessors expose just the
+    // readable scalars without leaking the whole state object.
+    getHeat()       { return (classId === 'annihilator' && state) ? state.heat : 0; },
+    getPlates()     { return (classId === 'sentinel'    && state) ? state.plates : 0; },
+    isBloodReady()  { return (classId === 'bloodstalker' && state) ? !!state.ready : false; },
+
     consumeAttackBlock() {
         if (!state) return false;
         if (classId === 'sentinel' && state.blockReady) {
@@ -536,7 +590,8 @@ export const ClassAbility = {
                         }
                         bossKilled = _resolveKill(Game.enemy);
                     }
-                    p.mana = Math.min(p.maxMana || 99, (p.mana || 0) + CFG.bloodstalker.grandManaGain);
+                    if (typeof Game.gainMana === 'function') Game.gainMana(CFG.bloodstalker.grandManaGain, { silent: true });
+                    else p.mana = Math.min(p.maxMana || 99, (p.mana || 0) + CFG.bloodstalker.grandManaGain);
                     Game.rerolls = (Game.rerolls || 0) + CFG.bloodstalker.grandRerolls;
                     const badge = document.getElementById('reroll-badge');
                     if (badge) badge.innerText = Game.rerolls;
@@ -553,6 +608,20 @@ export const ClassAbility = {
             case 'annihilator':
                 if (action !== 'heat-vent') return;
                 if (state.heat >= CFG.annihilator.redMin) {
+                    // Two-tap confirm when the red vent's self-damage would
+                    // kill the player outright. A stray finger on mobile
+                    // shouldn't end the run; require a second deliberate
+                    // tap within 3 seconds. Once-armed state is local to
+                    // this widget so it can't bleed across combats.
+                    if (p && p.currentHp <= CFG.annihilator.redSelfDmg && !state._redVentArmed) {
+                        state._redVentArmed = true;
+                        ParticleSys.createFloatingText(p.x, p.y - 80, "TAP AGAIN TO VENT", "#ff4400");
+                        AudioMgr.playSound('siren');
+                        // Auto-disarm after 3s so the next tap doesn't fire blindly.
+                        setTimeout(() => { if (state) state._redVentArmed = false; }, 3000);
+                        return;
+                    }
+                    if (state._redVentArmed) state._redVentArmed = false;
                     // Red release: AoE + self damage. Drain heat BEFORE the
                     // damage cascade — `p.takeDamage(redSelfDmg)` (and any
                     // reflect from the boss) can be fatal, and gameOver →
@@ -564,7 +633,15 @@ export const ClassAbility = {
                     const targets = Game.enemy && Game.enemy.minions ? [...Game.enemy.minions] : [];
                     if (Game.enemy && Game.enemy.currentHp > 0) Game.enemy.takeDamage(dmg);
                     targets.forEach(m => { if (m && m.currentHp > 0) m.takeDamage(dmg); });
-                    p.takeDamage(CFG.annihilator.redSelfDmg);
+                    // Softlock guard: a fatal red-vent self-hit must end
+                    // the run via gameOver. Previous code dropped the
+                    // takeDamage return; on a 0-HP player, the turn loop
+                    // would continue and then crash on missing state.
+                    const ventDied = p.takeDamage(CFG.annihilator.redSelfDmg);
+                    if (ventDied && p.currentHp <= 0 && Game.gameOver) {
+                        Game.gameOver();
+                        return;
+                    }
                     ParticleSys.createAnnihilatorBurst(p.x, p.y - 30);
                     ParticleSys.createExplosion(p.x, p.y, 40, "#ff4400");
                     ParticleSys.createShockwave(p.x, p.y, '#ff4400', 56);
@@ -611,13 +688,21 @@ export const ClassAbility = {
                 const isApex = !!(atMax && bloomCount >= 3);
                 if (isApex) {
                     const color = '#ffd76a';
-                    // Apex multiplier: 2× across every stat on every living
-                    // minion. Previously 3×, which made Summoner roll over
-                    // any boss that didn't clear the grove first turn.
+                    // Apex multiplier: 2× across every stat. Tag each
+                    // buffed minion so a re-bloom in the same combat can't
+                    // re-Apex it for ×4, ×8, etc. — a Wisp could otherwise
+                    // hit 4-digit stats by mid-Sector 5 with Neural Link
+                    // pre-buffs.
                     const mult = 2;
                     let buffed = 0;
+                    let skipped = 0;
                     p.minions.forEach(m => {
                         if (!m) return;
+                        if (m._apexedThisCombat) {
+                            skipped++;
+                            return;
+                        }
+                        m._apexedThisCombat = true;
                         m.maxHp = Math.floor((m.maxHp || 1) * mult);
                         m.currentHp = Math.floor((m.currentHp || 1) * mult);
                         m.dmg = Math.floor((m.dmg || 1) * mult);
@@ -626,6 +711,13 @@ export const ClassAbility = {
                         ParticleSys.createFloatingText(m.x, m.y - 50, 'APEX ×2', color);
                         buffed++;
                     });
+                    if (buffed === 0 && skipped > 0) {
+                        // Player tried to re-Apex an already-empowered grove —
+                        // refund the bloom rather than burning the canopy.
+                        ParticleSys.createFloatingText(p.x, p.y - 80, 'ALREADY APEXED', '#88eaff');
+                        AudioMgr.playSound('defend');
+                        break;
+                    }
                     // APEX consumes the entire canopy — every plot drains
                     // back to seed stage regardless of its current growth.
                     for (let i = 0; i < state.plots.length; i++) state.plots[i] = 0;
@@ -712,7 +804,12 @@ export const ClassAbility = {
     },
     _ice() {
         const p = Game.player;
-        p.addShield(CFG.arcanist.iceShield);
+        // Mana-scaled shield: previously a flat 5, which was useless vs
+        // sector-5 boss damage (50/hit). Now base 8 + 1 per current mana,
+        // so a hoarded pool actually pays off when committing to defence.
+        const manaPool = (p && p.mana) || 0;
+        const shieldAmt = (CFG.arcanist.iceShield || 0) + Math.floor(manaPool * (CFG.arcanist.iceShieldPerMana || 0));
+        p.addShield(shieldAmt);
         if (Game.enemy && Game.enemy.currentHp > 0) {
             Game.enemy.addEffect('weak', CFG.arcanist.iceWeakTurns, CFG.arcanist.iceWeakVal, '🌀', 'Weakened', 'WEAK');
             // Frost ring on the enemy so the WEAK debuff has a visible cause.
@@ -724,12 +821,16 @@ export const ClassAbility = {
         ParticleSys.createShockwave(p.x, p.y, '#88eaff', 28);
         AudioMgr.playSound('arcanist_chime');
         AudioMgr.playSound('defend');
-        ParticleSys.createFloatingText(p.x, p.y - 100, "GLYPH-ICE", "#88eaff");
+        ParticleSys.createFloatingText(p.x, p.y - 100, `GLYPH-ICE +${shieldAmt}`, "#88eaff");
     },
     _lightning() {
         const p = Game.player;
         Game.rerolls += CFG.arcanist.lightningRerolls;
-        document.getElementById('reroll-badge').innerText = Game.rerolls;
+        // Reroll badge can be transiently absent during DOM swaps (sector
+        // intro overlay, hint dismiss, mid-rebuild) — guarded write so the
+        // glyph tap doesn't throw inside an async DOM transition.
+        const rerollBadge = document.getElementById('reroll-badge');
+        if (rerollBadge) rerollBadge.innerText = Game.rerolls;
         // Yellow zigzag spark burst — distinct from fire-orange.
         ParticleSys.createSparks(p.x, p.y - 30, '#ffe040', 18);
         ParticleSys.createShockwave(p.x, p.y, '#ffe040', 28);
@@ -747,11 +848,17 @@ export const ClassAbility = {
         // the minion_summoned event).
         return import('../entities/minion.js').then(mod => {
             if (!Game.player) return;
+            // Honour maxMinions so the bloom-tap fallback path can't push a
+            // 5th minion past the class cap (the MINION-die path already has
+            // this guard; the fallback historically didn't).
+            const cap = Game.player.maxMinions || 2;
+            if (Game.player.minions.length >= cap) return;
             const m = new mod.Minion(0, 0, Game.player.minions.length + 1, true);
             m.spawnTimer = 1.0;
-            if (Game.player.hasRelic && Game.player.hasRelic('neural_link')) {
-                m.maxHp += 3; m.currentHp += 3; m.dmg += 3;
-            }
+            // Neural Link's +3 HP / +3 Dmg is already applied inside the
+            // Minion constructor (see minion.js:83-87). The previous
+            // duplicate apply here was double-paying — every Spirit
+            // spawned through this path got +6/+6 instead of +3/+3.
             Game.player.minions.push(m);
             if (Game.triggerVFX) Game.triggerVFX('materialize', null, { x: Game.player.x, y: Game.player.y });
         });
@@ -770,12 +877,43 @@ export const ClassAbility = {
         // Delegated click (touch → synthetic click, matching attachButtonEvent pattern)
         el.onclick = (e) => this._onClick(e);
         el.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: true });
+        // Cache the per-widget node refs once at build time. Renderers used
+        // to call `el.querySelectorAll('.ca-pip')` (and friends) on every
+        // event tick — Sentinel's plate buffer alone fires shield_gained
+        // dozens of times per turn, so the renderer was burning hundreds
+        // of selector queries per fight. Since the template is rebuilt
+        // exactly once per combat (via this._build), nodes captured here
+        // remain valid for the whole combat.
+        _nodeCache = {
+            pips:        el.querySelectorAll('.ca-pip'),
+            actions:     el.querySelectorAll('.ca-act'),
+            plates:      el.querySelectorAll('.ca-plate'),
+            plots:       el.querySelectorAll('.ca-plot'),
+            glyphs:      el.querySelectorAll('.ca-glyph'),
+            usedLabel:   el.querySelector('.ca-used-label'),
+            bloodFill:   el.querySelector('.ca-blood-fill'),
+            bloodRead:   el.querySelector('.ca-blood-readout'),
+            tributes:    el.querySelectorAll('.ca-tribute'),
+            heatFill:    el.querySelector('.ca-heat-fill'),
+            heatLabel:   el.querySelector('.ca-heat-label'),
+            heatVent:    el.querySelector('.ca-heat-vent'),
+        };
+        _renderSig = null; // force a fresh render after rebuild
 
         // Arcanist needs a tick to cycle the active glyph
         if (arcanistTimer) { clearInterval(arcanistTimer); arcanistTimer = null; }
         if (classId === 'arcanist') {
             arcanistTimer = setInterval(() => {
                 if (!state) return;
+                // Skip ticks while the page is hidden, the game is paused,
+                // or a QTE is active — the wheel keeping spinning under
+                // those would silently rotate the active glyph between
+                // when the player chose and when control resumed. Also
+                // skip if the widget is hidden via the `hidden` class
+                // (e.g. between combats) so we don't burn DOM updates.
+                if (typeof document !== 'undefined' && document.hidden) return;
+                if (Game && (Game.paused || (Game.qte && Game.qte.active))) return;
+                if (state.usedThisTurn) return;
                 state.activeGlyph = (state.activeGlyph + 1) % 3;
                 this._renderArcanist();
             }, CFG.arcanist.cycleMs);
@@ -995,6 +1133,7 @@ export const ClassAbility = {
                         <button class="ca-plot" data-action="plot-0" data-idx="0" title="Bloom to free-summon a Spirit"></button>
                         <button class="ca-plot" data-action="plot-1" data-idx="1" title="Bloom to free-summon a Spirit"></button>
                         <button class="ca-plot" data-action="plot-2" data-idx="2" title="Bloom to free-summon a Spirit"></button>
+                        <button class="ca-plot" data-action="plot-3" data-idx="3" title="Bloom to free-summon a Spirit"></button>
                     </div>`;
             default:
                 return '';
@@ -1032,35 +1171,50 @@ export const ClassAbility = {
 
     _renderTactician() {
         const el = $w(); if (!el) return;
-        el.querySelectorAll('.ca-pip').forEach(p => {
+        // Dirty-check on the visible scalars. Skip when nothing changed.
+        const sig = `t:${state.pips}`;
+        if (_renderSig === sig) return;
+        _renderSig = sig;
+        const pips = (_nodeCache && _nodeCache.pips) || el.querySelectorAll('.ca-pip');
+        const acts = (_nodeCache && _nodeCache.actions) || el.querySelectorAll('.ca-act');
+        pips.forEach(p => {
             const idx = parseInt(p.dataset.idx, 10);
             p.classList.toggle('lit', idx < state.pips);
         });
         const ready = state.pips >= CFG.tactician.pipMax;
         el.classList.toggle('ready', ready);
-        el.querySelectorAll('.ca-act').forEach(b => {
-            b.disabled = !ready;
-        });
+        acts.forEach(b => { b.disabled = !ready; });
     },
 
     _renderArcanist() {
         const el = $w(); if (!el) return;
-        el.querySelectorAll('.ca-glyph').forEach(g => {
+        // Glyph wheel ticks every 700ms; the active glyph index changes
+        // most renders. Dirty-check still cheap because the comparison is
+        // a single-string equality.
+        const sig = `a:${state.activeGlyph}|${state.usedThisTurn ? 1 : 0}`;
+        if (_renderSig === sig) return;
+        _renderSig = sig;
+        const glyphs = (_nodeCache && _nodeCache.glyphs) || el.querySelectorAll('.ca-glyph');
+        glyphs.forEach(g => {
             const idx = parseInt(g.dataset.idx, 10);
             g.classList.toggle('active', idx === state.activeGlyph);
         });
         el.classList.toggle('used', !!state.usedThisTurn);
-        const readyLabel = el.querySelector('.ca-used-label');
+        const readyLabel = (_nodeCache && _nodeCache.usedLabel) || el.querySelector('.ca-used-label');
         if (readyLabel) readyLabel.textContent = state.usedThisTurn ? 'USED' : 'READY';
     },
 
     _renderBloodstalker() {
         const el = $w(); if (!el) return;
+        const p = Game && Game.player;
+        const sig = `b:${state.bar}|${state.ready ? 1 : 0}|${p ? p.currentHp : 0}|${p ? p.maxHp : 0}`;
+        if (_renderSig === sig) return;
+        _renderSig = sig;
         const max = CFG.bloodstalker.damageToFill;
         const pct = Math.max(0, Math.min(100, (state.bar / max) * 100));
-        const fill = el.querySelector('.ca-blood-fill');
+        const fill = (_nodeCache && _nodeCache.bloodFill) || el.querySelector('.ca-blood-fill');
         if (fill) fill.style.width = pct + '%';
-        const readout = el.querySelector('.ca-blood-readout');
+        const readout = (_nodeCache && _nodeCache.bloodRead) || el.querySelector('.ca-blood-readout');
         if (readout) readout.textContent = `${state.bar} / ${max}`;
 
         // Heartbeat speed ramps with how full the pool is (1..3).
@@ -1069,8 +1223,8 @@ export const ClassAbility = {
         if (tier > 0) el.classList.add('charged-' + tier);
         el.classList.toggle('ready', !!state.ready);
 
-        const p = Game && Game.player;
-        el.querySelectorAll('.ca-tribute').forEach(btn => {
+        const tributes = (_nodeCache && _nodeCache.tributes) || el.querySelectorAll('.ca-tribute');
+        tributes.forEach(btn => {
             let costPct = 0;
             if (btn.classList.contains('ca-tribute-minor')) costPct = CFG.bloodstalker.minorPct;
             else if (btn.classList.contains('ca-tribute-major')) costPct = CFG.bloodstalker.majorPct;
@@ -1078,12 +1232,19 @@ export const ClassAbility = {
             const cost = p ? Math.max(1, Math.floor(p.maxHp * costPct)) : 0;
             const affordable = p ? p.currentHp > cost : false;
             btn.disabled = !state.ready || !affordable;
+            // Resolved-HP cost label so players don't have to math their
+            // own max HP against a percentage. Format: "5% (4 HP)".
+            const pctLabel = Math.round(costPct * 100);
+            btn.title = `Spend ${pctLabel}% (${cost} HP)`;
         });
     },
 
     _renderAnnihilator() {
         const el = $w(); if (!el) return;
-        const fill = el.querySelector('.ca-heat-fill');
+        const sig = `n:${state.heat}`;
+        if (_renderSig === sig) return;
+        _renderSig = sig;
+        const fill = (_nodeCache && _nodeCache.heatFill) || el.querySelector('.ca-heat-fill');
         if (fill) fill.style.width = state.heat + '%';
         const zone = state.heat >= CFG.annihilator.redMin ? 'red'
                    : state.heat >= CFG.annihilator.yellowMin ? 'yellow'
@@ -1094,7 +1255,11 @@ export const ClassAbility = {
 
     _renderSentinel() {
         const el = $w(); if (!el) return;
-        el.querySelectorAll('.ca-plate').forEach(p => {
+        const sig = `s:${state.plates}|${state.blockReady ? 1 : 0}`;
+        if (_renderSig === sig) return;
+        _renderSig = sig;
+        const plates = (_nodeCache && _nodeCache.plates) || el.querySelectorAll('.ca-plate');
+        plates.forEach(p => {
             const idx = parseInt(p.dataset.idx, 10);
             p.classList.toggle('lit', idx < state.plates);
         });
