@@ -1130,6 +1130,218 @@ const EVENTS_DB = [
                 return "Firmware combusts. +30 Fragments salvaged.";
             } }
         ]
+    },
+    /* ===== Events expansion (Sparks-aware) — significant narrative
+       outcomes that reward Sparks alongside Frag/HP trades. Each event
+       slots into the existing data shape; condition gates by sector
+       and/or class. ===== */
+    {
+        title: "CAPTIVE OPERATOR",
+        art: 'data-vault',
+        desc: "A meat-and-circuit silhouette twitches inside a holding cage. Their badge reads 'NULL-DIVISION 7' — the squad lost in Sector 2.",
+        condition: (g) => (g.sector || 1) >= 2,
+        options: [
+            { text: "Cut them free (+1 Reroll Token, +1 Spark)", icon: 'fist', effect: (g) => {
+                g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
+                g.grantSparks && g.grantSparks(1, 'event_free_operator');
+                return "They salute and vanish into the noise.";
+            } },
+            { text: "Trade them to the broker (+90 Fragments)", icon: 'coin-stack', effect: (g) => {
+                g.techFragments += 90;
+                return "Cage seals. Coin clinks. You don't look back.";
+            } },
+            { text: "Leave them (-2 HP)", icon: 'skull', effect: (g) => {
+                g.player.takeDamage(2);
+                return "Their static crawls under your skin.";
+            } }
+        ]
+    },
+    {
+        title: "BLOOD ARCHIVE",
+        art: 'relic-shrine',
+        desc: "A wet altar glistens in sub-basement light. The Stalker creed is etched in dried code: 'pay in vein, harvest in grain.'",
+        condition: (g) => (g.sector || 1) >= 2 && g.player && g.player.classId === 'bloodstalker',
+        options: [
+            { text: "Tithe deeply (-12 HP, +160 Fragments, +1 Spark)", icon: 'skull', effect: (g) => {
+                g.player.takeDamage(12); g.techFragments += 160;
+                g.grantSparks && g.grantSparks(1, 'event_blood_archive');
+                return "The altar drinks. The vault opens.";
+            } },
+            { text: "Tithe lightly (-5 HP, random Corrupted Module)", icon: 'gem', effect: (g) => {
+                g.player.takeDamage(5);
+                const pool = (typeof CORRUPTED_RELICS !== 'undefined') ? CORRUPTED_RELICS : [];
+                if (pool.length) {
+                    const item = pool[Math.floor(Math.random() * pool.length)];
+                    g.player.addRelic && g.player.addRelic(item);
+                    return "BLOOD GRANTED: " + item.name;
+                }
+                return "The altar receives. Nothing rises.";
+            } },
+            { text: "Spit on it (curse: next combat foes hit +10%)", icon: 'cross', effect: (g) => {
+                g.player.maxHp += 1;
+                g._archiveCurseTurns = 3;
+                return "The creed remembers.";
+            } }
+        ]
+    },
+    {
+        title: "TACTICIAN'S CACHE",
+        art: 'data-vault',
+        desc: "A locked footlocker with the old Joint Command sigil. Encryption is fifteen years stale.",
+        condition: (g) => g.player && g.player.classId === 'tactician',
+        options: [
+            { text: "Clean crack (+1 Reroll Token, +1 base reroll for the run)", icon: 'eye', effect: (g) => {
+                g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
+                g.maxRerolls = (g.maxRerolls || 2) + 1;
+                return "Lid hisses open. Doctrine rewards precision.";
+            } },
+            { text: "Brute force (-4 HP, +120 Fragments)", icon: 'fist', effect: (g) => {
+                g.player.takeDamage(4); g.techFragments += 120;
+                return "Hinges shred. So does your hand.";
+            } }
+        ]
+    },
+    {
+        title: "GROVE SAPLING",
+        art: 'relic-shrine',
+        desc: "A green code-spore has rooted in the floorpan. It hums when your minions pass.",
+        condition: (g) => g.player && g.player.classId === 'summoner' && (g.sector || 1) >= 2,
+        options: [
+            { text: "Graft it (+1 Max Minion this run)", icon: 'minion', effect: (g) => {
+                g.player.maxMinions = (g.player.maxMinions || 2) + 1;
+                return "Canopy widens.";
+            } },
+            { text: "Burn it (-1 HP, +60 Fragments)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(1); g.techFragments += 60;
+                return "Smoke smells of green static.";
+            } },
+            { text: "Feed a minion to it (+1 Spark)", icon: 'minion', effect: (g) => {
+                if (g.player.minions && g.player.minions.length > 0) {
+                    g.player.minions.shift();
+                    g.grantSparks && g.grantSparks(1, 'event_grove_sapling');
+                    return "Roots deepen. The grove remembers your name.";
+                }
+                return "No minion to give. Nothing happens.";
+            } }
+        ]
+    },
+    {
+        title: "AEGIS RECRUITMENT",
+        art: 'sentry',
+        desc: "An old Sentinel banner flies over a barricade. They've been holding this hall for eleven years.",
+        condition: (g) => g.player && g.player.classId === 'sentinel',
+        options: [
+            { text: "Stand the watch (+10 Max HP, +5 HP)", icon: 'shield', effect: (g) => {
+                g.player.maxHp += 10; g.player.heal && g.player.heal(5);
+                return "Plates fitted. Watch resumed.";
+            } },
+            { text: "March on (+1 Spark)", icon: 'walk-away', effect: (g) => {
+                g.grantSparks && g.grantSparks(1, 'event_aegis_recruitment');
+                return "Their salute follows you down the hall.";
+            } }
+        ]
+    },
+    {
+        title: "GLYPHWRIGHT'S DEBT",
+        art: 'obelisk',
+        desc: "A ghost-class Arcanist hangs in stasis, mid-spell. They owe you a favour from a run you don't remember.",
+        condition: (g) => g.player && g.player.classId === 'arcanist' && (g.sector || 1) >= 3,
+        options: [
+            { text: "Collect the debt (+3 Base Mana for the run)", icon: 'mana-drop', effect: (g) => {
+                g.player.baseMana = (g.player.baseMana || 3) + 3;
+                return "The flux ledger settles.";
+            } },
+            { text: "Forgive the debt (+1 Spark, random Module)", icon: 'star', effect: (g) => {
+                const pool = (typeof UPGRADES_POOL !== 'undefined') ? UPGRADES_POOL : [];
+                if (pool.length) {
+                    const item = pool[Math.floor(Math.random() * pool.length)];
+                    g.player.addRelic && g.player.addRelic(item);
+                    g.grantSparks && g.grantSparks(1, 'event_glyphwright_debt');
+                    return "Ghost bows. Gift remains: " + item.name;
+                }
+                g.grantSparks && g.grantSparks(1, 'event_glyphwright_debt');
+                return "Ghost bows once and is gone.";
+            } }
+        ]
+    },
+    {
+        title: "DETONATION DRILL",
+        art: 'combat-trial',
+        desc: "A rigged training course. Annihilator-spec, by the look of the scorch marks. Mistime one charge and they all go.",
+        condition: (g) => g.player && g.player.classId === 'annihilator',
+        options: [
+            { text: "Run the course (-6 HP, +1 Reroll Token, +1 base reroll)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(6);
+                g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
+                g.maxRerolls = (g.maxRerolls || 2) + 1;
+                return "You finish blackened. You finish faster.";
+            } },
+            { text: "Strip it for parts (+50 Fragments)", icon: 'gear', effect: (g) => {
+                g.techFragments += 50;
+                return "Charges defused. Scrap pocketed.";
+            } }
+        ]
+    },
+    {
+        title: "HEX-BREACHED SHRINE",
+        art: 'obelisk',
+        desc: "The hex grid has split open here. Something on the other side is whispering an offer.",
+        condition: (g) => (g.sector || 1) >= 3,
+        options: [
+            { text: "Reach through (-8 HP, random Module + random Corrupted)", icon: 'gem', effect: (g) => {
+                g.player.takeDamage(8);
+                const a = (typeof UPGRADES_POOL !== 'undefined') ? UPGRADES_POOL : [];
+                const b = (typeof CORRUPTED_RELICS !== 'undefined') ? CORRUPTED_RELICS : [];
+                if (a.length) g.player.addRelic && g.player.addRelic(a[Math.floor(Math.random() * a.length)]);
+                if (b.length) g.player.addRelic && g.player.addRelic(b[Math.floor(Math.random() * b.length)]);
+                return "The breach pays double, in two coins.";
+            } },
+            { text: "Seal it (+2 Sparks)", icon: 'shield', effect: (g) => {
+                g.grantSparks && g.grantSparks(2, 'event_hex_shrine_seal');
+                return "The whisper stops. Something nods, far away.";
+            } },
+            { text: "Listen only (-3 HP, +80 Fragments)", icon: 'eye', effect: (g) => {
+                g.player.takeDamage(3); g.techFragments += 80;
+                return "You wish you hadn't.";
+            } }
+        ]
+    },
+    {
+        title: "CARRION CONVOY",
+        art: 'merchant',
+        desc: "A train of dead drones rolls past on autopilot, every cargo bay still locked. Their navigator is wounded.",
+        condition: (g) => (g.sector || 1) >= 2 && (g.sector || 1) <= 4,
+        options: [
+            { text: "Loot the convoy (+100 Fragments)", icon: 'coin-stack', effect: (g) => {
+                g.techFragments += 100;
+                return "Bays empty. Navigator goes dark.";
+            } },
+            { text: "Escort to safety (+1 Spark)", icon: 'walk-away', effect: (g) => {
+                g.grantSparks && g.grantSparks(1, 'event_carrion_escort');
+                return "They make it. They remember.";
+            } }
+        ]
+    },
+    {
+        title: "NULL TERMINAL",
+        art: 'glitch',
+        desc: "A boot prompt blinks: '> WHO ARE YOU?'. Whatever you type, the terminal accepts.",
+        condition: (g) => (g.sector || 1) >= 4,
+        options: [
+            { text: "Type your name (+1 base reroll, +1 Spark)", icon: 'star', effect: (g) => {
+                g.maxRerolls = (g.maxRerolls || 2) + 1;
+                g.grantSparks && g.grantSparks(1, 'event_null_terminal_name');
+                return "The terminal remembers you. So does the network.";
+            } },
+            { text: "Type 'ROOT' (-6 HP, +80 Fragments)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(6); g.techFragments += 80;
+                return "Root maxed. The terminal's screen cracks.";
+            } },
+            { text: "Type nothing (-2 HP)", icon: 'skull', effect: (g) => {
+                g.player.takeDamage(2);
+                return "The cursor blinks once and goes still.";
+            } }
+        ]
     }
 ];
 

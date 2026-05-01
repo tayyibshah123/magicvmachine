@@ -8749,10 +8749,20 @@ triggerSystemCrash() {
         // FIX: Filter events based on conditions (e.g. don't show upgrade events if maxed)
         const validEvents = EVENTS_DB.filter(e => !e.condition || e.condition(this));
 
-        // Fallback to all events if filter leaves none (unlikely but safe)
-        const pool = validEvents.length > 0 ? validEvents : EVENTS_DB;
+        // Anti-repeat memory ring — track the last 2 event titles played
+        // this run. Filter the pool to avoid surfacing the same event
+        // back-to-back-to-back, which the audit flagged as a real
+        // immersion break in 22-event runs. Fall through if filtering
+        // empties the pool.
+        if (!Array.isArray(this._recentEvents)) this._recentEvents = [];
+        const fresh = validEvents.filter(e => !this._recentEvents.includes(e.title));
+        const pool = fresh.length > 0 ? fresh : (validEvents.length > 0 ? validEvents : EVENTS_DB);
 
         const event = pool[Math.floor(Math.random() * pool.length)];
+        if (event && event.title) {
+            this._recentEvents.push(event.title);
+            if (this._recentEvents.length > 2) this._recentEvents.shift();
+        }
 
         this.changeState(STATE.EVENT);
 
