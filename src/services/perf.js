@@ -134,6 +134,13 @@ export const Perf = {
             this.caps = CAPS[tier];
             try { localStorage.setItem(KEY_TIER, tier); } catch (e) {}
         }
+        // Mirror initial tier onto <body> so the CSS perf-gate kicks in
+        // immediately at boot — before any rAF samples have come back.
+        if (typeof document !== 'undefined' && document.body) {
+            const cl = document.body.classList;
+            cl.remove('perf-low', 'perf-mid', 'perf-high');
+            cl.add('perf-' + this.tier);
+        }
 
         // Background frame-rate probe — adjusts the tier downward if we're
         // hitting way under 60fps. Avoids tier-up on a laggy cold start.
@@ -153,6 +160,29 @@ export const Perf = {
         this.tier = tier;
         this.caps = CAPS[tier];
         try { localStorage.setItem(KEY_TIER, tier); } catch (e) {}
+        // Reset the runtime monitor's rolling FPS buffer. Without this, after
+        // a downgrade the next 3s of measurement averages in stale pre-downgrade
+        // samples — the user kept seeing "the same exact 47.8 fps" reported
+        // because the new (faster) post-tier-change frames were being mixed
+        // with 180 pre-change samples in the same Float32Array. Calling the
+        // hook here clears the window so the new tier's actual FPS is what
+        // the next threshold check sees.
+        if (typeof this._resetMonitorWindow === 'function') {
+            try { this._resetMonitorWindow(); } catch (_) {}
+        }
+        // Mirror the tier onto <body> so CSS can gate expensive animations
+        // (mix-blend-mode scanlines, animated drop-shadow, mask-image grid)
+        // without the JS perf path having to know about each rule. The intro
+        // and main-menu were averaging ~48fps on borderline desktops because
+        // those animations force a full layer paint every frame even when
+        // the canvas is idle. Stripping them when the device is already
+        // borderline keeps the tier from oscillating on screens that aren't
+        // even running the game's own render loop.
+        if (typeof document !== 'undefined' && document.body) {
+            const cl = document.body.classList;
+            cl.remove('perf-low', 'perf-mid', 'perf-high');
+            cl.add('perf-' + tier);
+        }
     },
 
     setOverride(tier) {
@@ -199,6 +229,18 @@ export const Perf = {
         let filled = 0;
         let sum = 0;
         let lastChange = performance.now();
+        // Expose a reset hook so setTier() can wipe the rolling window
+        // when the tier changes. Without this, a downgrade-to-mid was
+        // measured against 180 stale high-tier samples for the next
+        // ~3 seconds, which is why the same "47.8 fps" reading kept
+        // surfacing regardless of whether the new tier was actually
+        // running faster.
+        this._resetMonitorWindow = () => {
+            writeIdx = 0;
+            filled = 0;
+            sum = 0;
+            last = performance.now();
+        };
         // Anti-flap: track whether the previous transition was a downgrade.
         // If we then upgrade and downgrade again within FLAP_COOLDOWN_MS,
         // we've identified an oscillation — pin the lower tier and stop
@@ -256,6 +298,9 @@ export const Perf = {
             cancelAnimationFrame(this._monitor);
             this._monitor = null;
         }
+        // Drop the reset hook so a stale closure can't be invoked after
+        // the monitor has been torn down.
+        this._resetMonitorWindow = null;
     },
 
     // Convenience getters for hot-path code.
