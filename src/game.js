@@ -12785,6 +12785,10 @@ async startTurn() {
     grantSparks(amount, reason, opts) {
         if (!amount || amount <= 0) return 0;
         const silent = !!(opts && opts.silent);
+        // Track first-ever grant — surfaces the introductory hint after
+        // the splash so the player learns what ✦ means at the moment of
+        // earning, not on a passive menu pill.
+        const firstEverGrant = (this.sparksLifetime || 0) === 0;
         this.sparks = (this.sparks || 0) + amount;
         this.sparksLifetime = (this.sparksLifetime || 0) + amount;
         try {
@@ -12799,6 +12803,11 @@ async startTurn() {
             ParticleSys.createShockwave(this.player.x, this.player.y - 40, '#ffd76a', 22);
             ParticleSys.createSparks(this.player.x, this.player.y - 40, '#ffd76a', 12);
             try { AudioMgr.playSound && AudioMgr.playSound('upgrade'); } catch (_) {}
+        }
+        // First-ever Sparks grant → fire the introductory hint. Suppressed
+        // inside scripted tutorial combat so it doesn't fight tutorial UI.
+        if (firstEverGrant && this.currentState !== STATE.TUTORIAL_COMBAT) {
+            try { Hints && Hints.trigger && Hints.trigger('first_sparks'); } catch (_) {}
         }
         try { Analytics && Analytics.emit && Analytics.emit('sparks_grant', { amount, reason: reason || 'unknown', total: this.sparks }); } catch (_) {}
         return amount;
@@ -16055,6 +16064,18 @@ drawEffects() {
             // corpse and overwriting the death screen.
             if (this.currentState === STATE.GAMEOVER) return;
             if (this.player && this.player.currentHp <= 0) return;
+            // STUN consumer — boss/enemy is locked out for this turn. Show
+            // the effect, fire a brief audio cue, then skip the rest of
+            // the intent loop. The stun-effect duration ticks down on
+            // turn-start via the standard updateEffects pass so the enemy
+            // recovers next round automatically.
+            if (intent.type === 'stunned') {
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "STUNNED", "#bc13fe");
+                ParticleSys.createSparks(this.enemy.x, this.enemy.y - 30, "#bc13fe", 12);
+                try { AudioMgr.playSound && AudioMgr.playSound('defend'); } catch (_) {}
+                await this.sleep(700);
+                continue;
+            }
 
             this.enemy.playAnim('lunge');
             

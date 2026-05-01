@@ -110,7 +110,7 @@ const LORE_DATABASE = [
 // Keyed by tutorialStep (0..12). Each entry: short story line + one clear action.
 // Deliberately minimal — advanced tooltips teach the rest later.
 const TUTORIAL_NARRATION = [
-    { story: "Welcome, Operator.", action: "Tap anywhere to begin." },
+    { story: "Welcome, Operator.", action: "Tap the screen to begin." },
     { story: "Your HP keeps you alive.", action: "Tap to continue." },
     { story: "Read the machine's next move.", action: "Tap to continue." },
     { story: "Modules are your magic.", action: "Tap to continue." },
@@ -122,7 +122,7 @@ const TUTORIAL_NARRATION = [
     { story: "Read the strike. Tap the ring at the target zone to parry. Perfect parries halve the hit and reflect half of what you took.", action: "Tap the ring to parry the incoming attack." },
     { story: "Bad roll?", action: "Tap the reroll icon." },
     { story: "Call in reinforcements.", action: "Drag the MINION module onto empty space." },
-    { story: "Finish it.", action: "Attack to complete training." }
+    { story: "Finish it.", action: "One more attack ends the drill." }
 ];
 
 const TUTORIAL_PAGES = [

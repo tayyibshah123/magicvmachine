@@ -57,7 +57,14 @@ const HINTS = {
 
     // Endgame-mode discoverability (audit feedback F2/F3).
     first_pact_available:  { title: "PACTS AVAILABLE", body: "Sign for power. Stays for the run." },
-    first_archive_unlock:  { title: "ARCHIVE UNLOCKED",body: "Sector X. Solo prestige fight." }
+    first_archive_unlock:  { title: "ARCHIVE UNLOCKED",body: "Sector X. Solo prestige fight." },
+
+    // Sparks meta-currency. first_sparks fires the first time a Spark is
+    // ever granted (typically on first boss kill). first_sanctuary_spend
+    // fires when the player lands on the Sanctuary screen with Sparks
+    // banked but no upgrades purchased yet.
+    first_sparks:           { title: "✦ SPARKS",         body: "Permanent currency. Spend in Sanctuary." },
+    first_sanctuary_spend:  { title: "SANCTUARY",        body: "Tap a node to install. Costs Sparks." }
 };
 
 function readSeen() {

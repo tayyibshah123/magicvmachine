@@ -168,7 +168,11 @@ class Entity {
         }
         
         if (this.hasEffect('frail')) {
-            actualDmg = Math.floor(actualDmg * 1.3);
+            // Standardise frail multiplier at +50% to match every description
+            // that references it ("+50% Dmg Taken" — see SIG_BLOOD_3, SIG_ARC_3,
+            // BLD_MANA upgrade, etc). Code previously used 1.3, so debuff
+            // values silently underperformed their advertised power.
+            actualDmg = Math.floor(actualDmg * 1.5);
         }
 
         // Blood Pact: player's outgoing attacks deal +50%.

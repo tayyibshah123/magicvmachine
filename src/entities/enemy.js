@@ -85,6 +85,16 @@ class Enemy extends Entity {
         // Archivist rewind cooldown resets at the start of each round so the
         // boss can rewind once per player turn, not once per fight.
         this._rewindUsedThisTurn = false;
+        // STUN consumer — the effect was previously applied (e.g. SIG_ANNI_3)
+        // but never read. A stunned enemy queues a single 'stunned' intent
+        // (no actions) and the resolver short-circuits the turn loop. Stun
+        // duration ticks down via the standard updateEffects pass so the
+        // enemy returns to action automatically next turn.
+        if (this.hasEffect && this.hasEffect('stun')) {
+            this.nextIntents.push({ type: 'stunned', val: 0, target: null });
+            this.intentRefreshedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+            return;
+        }
         const actionCount = this.isBoss ? this.bossData.actionsPerTurn : 1;
 
         for(let i=0; i<actionCount; i++) {
