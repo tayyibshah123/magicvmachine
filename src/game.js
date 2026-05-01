@@ -17624,10 +17624,20 @@ drawEffects() {
         // The 95%→85% alpha fade isn't visually distinguishable behind the
         // shadowBlur=12 glow, and the live HP fill paints over the top half
         // immediately on the next pass.
+        // Tier-gated shadowBlur. drawHealthBar fires per entity per frame
+        // (player + up to 3 minions + enemy + enemy minions = 5-6 entities).
+        // The HP fill alone was running 5-6 shadowBlur=10 passes every
+        // frame; on top of that, any entity that just took damage added
+        // a shadowBlur=12 bleed-ribbon pass for ~250ms. Mid drops the
+        // bleed-ribbon shadow entirely (the colour already reads "damage")
+        // and uses a smaller blur on the live fill; low strips both glows.
+        const _hpTier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
         if (lagPct > pct + 0.001) {
             ctx.fillStyle = 'rgba(220, 50, 80, 0.92)';
-            ctx.shadowColor = '#ff3355';
-            ctx.shadowBlur = 12;
+            if (_hpTier === 'high') {
+                ctx.shadowColor = '#ff3355';
+                ctx.shadowBlur = 12;
+            }
             ctx.fillRect(x, y, width * lagPct, height);
             ctx.shadowBlur = 0;
         }
@@ -17641,8 +17651,19 @@ drawEffects() {
             ctx.fillStyle = `rgba(255, ${Math.floor(40 * pulse)}, ${Math.floor(85 * pulse)}, 1)`;
         }
 
-        ctx.shadowColor = ctx.fillStyle;
-        ctx.shadowBlur = isCritical ? 24 : 10;
+        // Critical-HP pulse keeps its glow on every tier (it's a load-bearing
+        // safety read), but the cosmetic 10px halo around the regular bar
+        // drops on mid and goes flat on low.
+        if (isCritical) {
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.shadowBlur = 24;
+        } else if (_hpTier === 'high') {
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.shadowBlur = 10;
+        } else if (_hpTier === 'mid') {
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.shadowBlur = 6;
+        }
         ctx.fillRect(x, y, width * pct, height);
         ctx.shadowBlur = 0;
 
@@ -20974,7 +20995,9 @@ drawEntity(entity) {
                 // toward the bottom so the floor-orbit doesn't muddle the silhouette.
                 ctx.save();
                 ctx.lineWidth = 1;
-                ctx.shadowColor = color; ctx.shadowBlur = 4;
+                if (_arcTier === 'high') {
+                    ctx.shadowColor = color; ctx.shadowBlur = 4;
+                }
                 for (let i = 0; i < TABLETS; i++) {
                     const p = tabletPositions[i], q = tabletPositions[(i + 1) % TABLETS];
                     // Fade arcs whose midpoint is below the body (keeps the bottom tidy)
@@ -20992,6 +21015,15 @@ drawEntity(entity) {
                 // count halved on mid (was 8 × TABLETS = 48 shadowBlur arcs).
                 ctx.save();
                 ctx.lineWidth = 2;
+                // shadowBlur is set ONCE up front instead of per-segment. The
+                // shadowColor + globalAlpha already encode the trail tail;
+                // dropping the per-segment blur on mid takes the per-frame
+                // op count from (TABLETS × trailSegs) shadowBlurs down to
+                // 1 (or 0 on mid). With TABLETS=3 and trailSegs=4 on mid
+                // that was 12 shadowBlur=6 fills per frame — gone.
+                if (_arcTier === 'high') {
+                    ctx.shadowColor = color; ctx.shadowBlur = 6;
+                }
                 for (let i = 0; i < TABLETS; i++) {
                     const p = tabletPositions[i];
                     const trailSegs = _arcTier === 'mid' ? 4 : 8;
@@ -21003,7 +21035,6 @@ drawEntity(entity) {
                         const ty = Math.sin(a) * orbitR * 0.55;
                         const alpha = (1 - s / trailSegs) * 0.32;
                         ctx.fillStyle = `rgba(188, 19, 254, ${alpha})`;
-                        ctx.shadowColor = color; ctx.shadowBlur = 6;
                         ctx.beginPath(); ctx.arc(tx, ty, 2.5 * (1 - s / trailSegs), 0, Math.PI * 2); ctx.fill();
                     }
                 }
@@ -21037,7 +21068,12 @@ drawEntity(entity) {
                     ctx.translate(p.x, p.y);
                     ctx.scale(Math.max(0.15, Math.abs(p.flip)), 0.9 + p.depth * 0.18);
                     ctx.fillStyle = _tabGrad; ctx.strokeStyle = PURPLE; ctx.lineWidth = 2;
-                    ctx.shadowColor = PURPLE; ctx.shadowBlur = 14;
+                    // shadowBlur dropped on mid (3 tablets × 14px blur was
+                    // 3 fresh re-rasters every frame on top of the 3 strokes
+                    // and 3 fills already happening per tablet).
+                    if (_arcTier === 'high') {
+                        ctx.shadowColor = PURPLE; ctx.shadowBlur = 14;
+                    }
                     ctx.beginPath();
                     ctx.moveTo(-10, -15); ctx.lineTo(10, -15); ctx.lineTo(13, 0);
                     ctx.lineTo(10, 15); ctx.lineTo(-10, 15); ctx.lineTo(-13, 0);
