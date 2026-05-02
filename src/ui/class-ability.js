@@ -690,36 +690,28 @@ export const ClassAbility = {
                 const isApex = !!(atMax && bloomCount >= state.plots.length);
                 if (isApex) {
                     const color = '#ffd76a';
-                    // Apex multiplier: 2× across every stat. Tag each
-                    // buffed minion so a re-bloom in the same combat can't
-                    // re-Apex it for ×4, ×8, etc. — a Wisp could otherwise
-                    // hit 4-digit stats by mid-Sector 5 with Neural Link
-                    // pre-buffs.
+                    // Apex stacks. Each successful canopy-full bloom doubles
+                    // every live minion again — players can chain Apex into
+                    // ×4, ×8, ×16 by re-blooming the canopy across multiple
+                    // turns. The whole-canopy cost is still paid each time
+                    // (every plot resets to seed), so ramping requires real
+                    // setup turns rather than a single button mash.
                     const mult = 2;
                     let buffed = 0;
-                    let skipped = 0;
                     p.minions.forEach(m => {
                         if (!m) return;
-                        if (m._apexedThisCombat) {
-                            skipped++;
-                            return;
-                        }
-                        m._apexedThisCombat = true;
+                        m._apexStacks = (m._apexStacks || 0) + 1;
                         m.maxHp = Math.floor((m.maxHp || 1) * mult);
                         m.currentHp = Math.floor((m.currentHp || 1) * mult);
                         m.dmg = Math.floor((m.dmg || 1) * mult);
                         if (typeof m.playAnim === 'function') m.playAnim('pulse');
                         ParticleSys.createShockwave(m.x, m.y, color, 30);
-                        ParticleSys.createFloatingText(m.x, m.y - 50, 'APEX ×2', color);
+                        const label = m._apexStacks > 1
+                            ? `APEX ×${Math.pow(2, m._apexStacks)}`
+                            : 'APEX ×2';
+                        ParticleSys.createFloatingText(m.x, m.y - 50, label, color);
                         buffed++;
                     });
-                    if (buffed === 0 && skipped > 0) {
-                        // Player tried to re-Apex an already-empowered grove —
-                        // refund the bloom rather than burning the canopy.
-                        ParticleSys.createFloatingText(p.x, p.y - 80, 'ALREADY APEXED', '#88eaff');
-                        AudioMgr.playSound('defend');
-                        break;
-                    }
                     // APEX consumes the entire canopy — every plot drains
                     // back to seed stage regardless of its current growth.
                     for (let i = 0; i < state.plots.length; i++) state.plots[i] = 0;

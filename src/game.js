@@ -791,7 +791,11 @@ const Game = {
             if (v) v.textContent = el.value + '%';
         });
         hookSetting('chk-reduced-motion', (el) => {
-            document.body.classList.toggle('reduced-motion', el.checked);
+            // User toggle is the "always apply" knob. Combat-scope auto-mode
+            // still kicks in regardless; this lets the player force reduced
+            // motion on every screen if they want it.
+            this._userReducedMotion = !!el.checked;
+            this._syncReducedMotion();
         });
         hookSetting('chk-high-contrast', (el) => {
             document.body.classList.toggle('high-contrast', el.checked);
@@ -1919,11 +1923,24 @@ startDrag(e, die, el) {
 
     // Single source of truth for reduced-motion checks across all
     // JS-driven motion paths (shake, screen flash, chromatic pulse,
-    // QTE label scaling, etc.). The body.reduced-motion class is
-    // toggled by the settings panel + auto-applied if the OS-level
-    // prefers-reduced-motion media query matches at boot.
+    // QTE label scaling, etc.). `body.reduced-motion` is the effective
+    // class CSS targets. It is composed from two inputs by
+    // `_syncReducedMotion()`:
+    //   1) user toggle in DISPLAY → Accessibility → Reduced motion
+    //   2) automatic combat scope (mobile perf) — combat screens are
+    //      heavy enough that animations cause sustained slowdown on
+    //      low-end Android, so reduced motion is forced ON in combat
+    //      regardless of the user toggle. Menus and other screens get
+    //      full motion unless the user explicitly opted in.
     _isReducedMotion() {
         return document.body.classList.contains('reduced-motion');
+    },
+
+    // Recompute the effective reduced-motion class. Call after either
+    // input changes (settings toggle, screen transition, loadSettings).
+    _syncReducedMotion() {
+        const eff = !!this._userReducedMotion || !!this._inCombatScreen;
+        document.body.classList.toggle('reduced-motion', eff);
     },
 
     // Briefly apply a hue-rotate / saturate canvas filter to sell the
@@ -3072,6 +3089,20 @@ startQTE(type, x, y, callback, opts) {
         }
 
         this.currentState = newState;
+        // Combat screens auto-apply reduced-motion for mobile perf. Menus,
+        // map, reward, story, etc. get full motion unless the user has
+        // toggled the always-on switch in DISPLAY → Accessibility.
+        // COMBAT_WIN keeps the combat backdrop frozen beneath an overlay,
+        // so we leave reduced motion on until the player advances out.
+        const isCombatScreen = (
+            newState === STATE.COMBAT ||
+            newState === STATE.TUTORIAL_COMBAT ||
+            newState === STATE.COMBAT_WIN
+        );
+        if (this._inCombatScreen !== isCombatScreen) {
+            this._inCombatScreen = isCombatScreen;
+            this._syncReducedMotion();
+        }
         const activate = (id) => {
             const el = document.getElementById(id);
             if(!el) return;
@@ -8547,32 +8578,21 @@ triggerSystemCrash() {
         try {
             const raw = localStorage.getItem('mvm_settings_v1');
             if (!raw) {
-                // First-launch defaults — Reduced Motion OFF by default.
-                // Players who want it can opt in via the in-game checkbox
-                // (DISPLAY → Accessibility → Reduced motion). The OS-level
-                // prefers-reduced-motion preference is intentionally NOT
-                // auto-applied because the menu / combat animations are a
-                // core part of the game's identity; any player who wants
-                // the OS pref honoured can flip the toggle once and the
-                // setting persists.
-                document.body.classList.remove('reduced-motion');
+                // First-launch defaults — user-toggle Reduced Motion OFF.
+                // Combat still auto-applies it (see _syncReducedMotion +
+                // changeState wiring) so mobile perf stays smooth in
+                // combat without the menus losing their animations.
+                this._userReducedMotion = false;
+                this._syncReducedMotion();
                 const el = document.getElementById('chk-reduced-motion');
                 if (el) el.checked = false;
                 return;
             }
             const s = JSON.parse(raw);
-            // Player override applies regardless of OS pref. If the saved
-            // setting is explicitly false, ensure the body class is OFF
-            // even when the OS reports reduced-motion preferred.
-            if (s.reducedMotion === false) {
-                document.body.classList.remove('reduced-motion');
-            } else if (s.reducedMotion === true) {
-                document.body.classList.add('reduced-motion');
-            } else {
-                // Saved settings exist but reducedMotion key is missing
-                // (older save format). Treat as OFF — same as first-run.
-                document.body.classList.remove('reduced-motion');
-            }
+            // The toggle is the "force on every screen" knob; combat scope
+            // is automatic on top of that.
+            this._userReducedMotion = (s.reducedMotion === true);
+            this._syncReducedMotion();
             const d = document;
             const setCheck = (id, val) => { const el = d.getElementById(id); if (el && val != null) el.checked = !!val; };
             const setVal = (id, val) => { const el = d.getElementById(id); if (el && val != null) el.value = val; };
@@ -8621,7 +8641,7 @@ triggerSystemCrash() {
                 document.documentElement.style.setProperty('--text-scale-multiplier', s.textScale / 100);
                 if (ParticleSys && ParticleSys._refreshTextScaleCache) ParticleSys._refreshTextScaleCache();
             }
-            document.body.classList.toggle('reduced-motion', !!s.reducedMotion);
+            // (reduced-motion already synced above via _syncReducedMotion)
             document.body.classList.toggle('high-contrast', !!s.highContrast);
             document.body.classList.toggle('dyslexic-font', !!s.dyslexicFont);
             document.body.classList.remove('cb-deuteranopia', 'cb-protanopia', 'cb-tritanopia');
@@ -11315,9 +11335,9 @@ async startCombat(type) {
         this.player.qteRerolls = (this.player.classId === 'annihilator') ? 1 : 0;
         this.player.bonusDrawNextTurn = 0;
         this.player._lastDamageDealt = 0;
-        // Reset per-combat Apex flag so the cap applies fresh in the next combat.
+        // Reset per-combat Apex stack count so the next combat starts at ×1.
         if (Array.isArray(this.player.minions)) {
-            this.player.minions.forEach(m => { if (m) m._apexedThisCombat = false; });
+            this.player.minions.forEach(m => { if (m) m._apexStacks = 0; });
         }
         // Per-combat one-shot relic flags reset alongside Apex.
         this._sparkBatteryUsed = false;
@@ -19879,6 +19899,72 @@ drawEffects() {
             return;
         }
 
+        if (sector === 6) {
+            // --- THE ARCHIVE (Sector X — Archivist arena) ---
+            // The fight lives outside the canonical sector chain so it
+            // skipped the boss backdrop, leaving the boss floating on the
+            // bare gradient sky. This case paints a brass-on-velvet
+            // archive vault: warm wash, distant ledger columns, slow
+            // floating dust motes. Tier-aware density.
+            const _tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+            const _isLow = _tier === 'low';
+            const _isMid = _tier === 'mid';
+            ctx.save();
+            // Velvet-burgundy wash overlaid on the sky.
+            ctx.fillStyle = this._cachedGradient('s6_sky', () => {
+                const g = ctx.createLinearGradient(0, 0, 0, horizon);
+                g.addColorStop(0, 'rgba(20, 8, 4, 0.78)');
+                g.addColorStop(1, 'rgba(50, 26, 12, 0.42)');
+                return g;
+            });
+            ctx.fillRect(0, 0, w, horizon);
+
+            // Ledger columns — distant tall silhouettes lined with brass
+            // bands. Read as the spines of an enormous archive vault.
+            const cols = _isLow ? 0 : (_isMid ? 6 : 10);
+            for (let i = 0; i < cols; i++) {
+                const cx = (i + 0.5) * (w / cols);
+                const sway = Math.sin(time * 0.4 + i) * 4;
+                ctx.fillStyle = '#0a0703';
+                ctx.fillRect(cx - 14 + sway, horizon * 0.35, 28, horizon * 0.6);
+                ctx.strokeStyle = 'rgba(255, 215, 106, 0.38)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(cx - 14 + sway, horizon * 0.35, 28, horizon * 0.6);
+                // Brass shelf bands every ~30px.
+                ctx.fillStyle = 'rgba(255, 215, 106, 0.22)';
+                for (let y = horizon * 0.4; y < horizon * 0.95; y += 28) {
+                    ctx.fillRect(cx - 14 + sway, y, 28, 2);
+                }
+            }
+
+            // Drifting dust motes — tiny brass specks rising slowly.
+            const motes = _isLow ? 0 : (_isMid ? 24 : 48);
+            ctx.fillStyle = 'rgba(255, 215, 106, 0.55)';
+            for (let i = 0; i < motes; i++) {
+                const seed = i * 73;
+                const mx = ((seed * 17) % w);
+                const my = ((seed * 31 - time * 18) % horizon + horizon) % horizon;
+                const tw = 0.4 + Math.abs(Math.sin(time * 1.2 + i)) * 0.6;
+                ctx.globalAlpha = tw * 0.6;
+                ctx.fillRect(mx, my, 1.6, 1.6);
+            }
+            ctx.globalAlpha = 1;
+
+            // Central spotlight — frames the boss against the velvet.
+            const cxc = w * 0.5, cyc = horizon * 0.55;
+            ctx.fillStyle = this._cachedGradient('s6_spot', () => {
+                const g = ctx.createRadialGradient(cxc, cyc, 60, cxc, cyc, 360);
+                g.addColorStop(0, 'rgba(0, 0, 0, 0)');
+                g.addColorStop(0.7, 'rgba(0, 0, 0, 0.4)');
+                g.addColorStop(1, 'rgba(0, 0, 0, 0.78)');
+                return g;
+            });
+            ctx.fillRect(0, 0, w, horizon);
+
+            ctx.restore();
+            return;
+        }
+
         // Fallback — use the regular celestial if sector is unrecognized.
         const conf = SECTOR_CONFIG[sector] || SECTOR_CONFIG[1];
         this.drawSectorCelestial(ctx, conf, conf.type, w, h, time);
@@ -24091,8 +24177,208 @@ drawEntity(entity) {
 
                     ctx.restore();
                 }
+
+                // --- SECTOR X: THE ARCHIVIST (Roadmap 24.2) ---
+                // Without this branch the Archivist had no body — the boss
+                // backdrop hands off to this block but `this.sector === 6`
+                // matched none of the existing 1-5 cases, leaving the
+                // canvas centre empty. Match by `name` too so any future
+                // archive-mode sector reshuffle still hits the renderer.
+                else if (this.sector === 6 || entity.name === 'THE ARCHIVIST') {
+                    ctx.save();
+                    const _atier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+                    const _aLow = _atier === 'low';
+                    const _aMid = _atier === 'mid';
+                    const enraged = entity.phase >= 4 || entity.archivistEnraged;
+                    const phase = entity.phase || 1;
+                    // Palette: brass/gold archive → bleed red on enrage.
+                    const brass    = enraged ? '#ff0055' : '#ffd76a';
+                    const filament = enraged ? '#ff77aa' : '#fff3c4';
+                    const ink      = enraged ? '#3a0010' : '#1c1306';
+
+                    // Body bobs gently — the boss reads as "floating archive sigil".
+                    const hover = Math.sin(time * 1.4) * 6;
+                    ctx.translate(0, hover);
+
+                    // 1. Aura disc — soft brass radial pool behind the sigil.
+                    if (!_aLow) {
+                        ctx.save();
+                        const auraR = 220;
+                        const aura = ctx.createRadialGradient(0, 0, 30, 0, 0, auraR);
+                        aura.addColorStop(0, enraged ? 'rgba(255, 0, 85, 0.32)' : 'rgba(255, 215, 106, 0.32)');
+                        aura.addColorStop(0.6, enraged ? 'rgba(255, 0, 85, 0.06)' : 'rgba(255, 215, 106, 0.06)');
+                        aura.addColorStop(1, 'transparent');
+                        ctx.fillStyle = aura;
+                        ctx.beginPath(); ctx.arc(0, 0, auraR, 0, Math.PI * 2); ctx.fill();
+                        ctx.restore();
+                    }
+
+                    // 2. Spinning archive reels — three counter-rotating
+                    // rings, each carrying tick marks that read as the
+                    // boss's stored "die memories". Tier-aware tick count.
+                    const reelTicks = _aLow ? 8 : (_aMid ? 14 : 22);
+                    for (let r = 0; r < 3; r++) {
+                        const radius = 110 + r * 26;
+                        const dir = (r % 2 === 0) ? 1 : -1;
+                        const speed = 0.18 + r * 0.07;
+                        ctx.save();
+                        ctx.rotate(time * speed * dir);
+                        // Reel hoop
+                        ctx.strokeStyle = `rgba(255, 215, 106, ${0.35 - r * 0.06})`;
+                        ctx.lineWidth = 1.5;
+                        if (!_aLow) {
+                            ctx.shadowColor = brass;
+                            ctx.shadowBlur = enraged ? 12 : 6;
+                        }
+                        ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.stroke();
+                        // Tick marks around the reel — small archived "tapes"
+                        ctx.strokeStyle = brass;
+                        ctx.lineWidth = 2;
+                        for (let i = 0; i < reelTicks; i++) {
+                            const a = (i / reelTicks) * Math.PI * 2;
+                            const x1 = Math.cos(a) * (radius - 6);
+                            const y1 = Math.sin(a) * (radius - 6);
+                            const x2 = Math.cos(a) * (radius + 6);
+                            const y2 = Math.sin(a) * (radius + 6);
+                            ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+                        }
+                        ctx.restore();
+                    }
+
+                    // 3. Outer rune ring — slowly counter-rotating glyphs.
+                    if (!_aLow) {
+                        ctx.save();
+                        ctx.rotate(-time * 0.12);
+                        ctx.strokeStyle = `rgba(255, 215, 106, 0.55)`;
+                        ctx.lineWidth = 1.6;
+                        ctx.shadowColor = brass; ctx.shadowBlur = 6;
+                        const glyphs = _aMid ? 8 : 12;
+                        for (let g = 0; g < glyphs; g++) {
+                            const a = g * (Math.PI * 2 / glyphs);
+                            const rx = Math.cos(a) * 200, ry = Math.sin(a) * 200;
+                            ctx.save(); ctx.translate(rx, ry); ctx.rotate(a);
+                            ctx.beginPath();
+                            // Variant glyphs hint at "many archived runs".
+                            if (g % 3 === 0)      { ctx.moveTo(-6, -6); ctx.lineTo(6, 0); ctx.lineTo(-6, 6); }
+                            else if (g % 3 === 1) { ctx.moveTo(-6, -4); ctx.lineTo(6, -4); ctx.moveTo(-4, 4); ctx.lineTo(4, 4); }
+                            else                  { ctx.arc(0, 0, 5, 0, Math.PI * 1.5); }
+                            ctx.stroke();
+                            ctx.restore();
+                        }
+                        ctx.restore();
+                    }
+
+                    // 4. Central seal — hexagram "archive sigil". Phase 2+
+                    // adds an inner annulus pulse to telegraph escalation.
+                    ctx.save();
+                    ctx.rotate(time * 0.35);
+                    ctx.strokeStyle = brass;
+                    ctx.lineWidth = 4;
+                    if (!_aLow) {
+                        ctx.shadowColor = brass; ctx.shadowBlur = enraged ? 30 : 18;
+                    }
+                    const drawHex = (rad) => {
+                        ctx.beginPath();
+                        for (let i = 0; i < 7; i++) {
+                            const ang = i * Math.PI / 3;
+                            const x = Math.cos(ang) * rad, y = Math.sin(ang) * rad;
+                            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                        }
+                        ctx.stroke();
+                    };
+                    drawHex(72);
+                    ctx.rotate(Math.PI / 6);
+                    ctx.strokeStyle = filament;
+                    ctx.lineWidth = 2;
+                    drawHex(72);
+                    ctx.restore();
+
+                    // 5. Phase pulse — concentric rings that punch outward
+                    // each phase, sells "the archive is escalating".
+                    if (phase >= 2 && !_aLow) {
+                        ctx.save();
+                        const phasePulse = 0.5 + Math.sin(time * (3 + phase)) * 0.5;
+                        ctx.strokeStyle = `rgba(255, 215, 106, ${0.4 * phasePulse})`;
+                        ctx.lineWidth = 2;
+                        for (let p = 0; p < phase - 1; p++) {
+                            ctx.beginPath();
+                            ctx.arc(0, 0, 50 + p * 14, 0, Math.PI * 2);
+                            ctx.stroke();
+                        }
+                        ctx.restore();
+                    }
+
+                    // 6. Eye core — a stylised brass eye that tracks the
+                    // player. Holds the silhouette together at distance.
+                    ctx.save();
+                    // Outer iris ring
+                    ctx.strokeStyle = brass;
+                    ctx.lineWidth = 3;
+                    ctx.fillStyle = ink;
+                    if (!_aLow) { ctx.shadowColor = brass; ctx.shadowBlur = 18; }
+                    ctx.beginPath(); ctx.ellipse(0, 0, 50, 28, 0, 0, Math.PI * 2);
+                    ctx.fill(); ctx.stroke();
+                    // Pupil tracks the player
+                    const tpx = (this.player ? (this.player.x - entity.x) : 0);
+                    const tpy = (this.player ? (this.player.y - entity.y) : 0);
+                    const tmag = Math.hypot(tpx, tpy) || 1;
+                    const px = (tpx / tmag) * 14;
+                    const py = (tpy / tmag) * 6;
+                    ctx.fillStyle = filament;
+                    ctx.beginPath(); ctx.arc(px, py, 9, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath(); ctx.arc(px - 2, py - 2, 3, 0, Math.PI * 2); ctx.fill();
+                    ctx.restore();
+
+                    // 7. Enrage tear — a jagged crimson rip across the
+                    // sigil once Phase 4 lands. Cheap (one stroke).
+                    if (enraged && !_aLow) {
+                        ctx.save();
+                        ctx.strokeStyle = '#ff2244';
+                        ctx.lineWidth = 3;
+                        ctx.shadowColor = '#ff2244';
+                        ctx.shadowBlur = 16;
+                        const tearWobble = Math.sin(time * 4) * 6;
+                        ctx.beginPath();
+                        ctx.moveTo(-90, -10 + tearWobble);
+                        ctx.lineTo(-30, 6);
+                        ctx.lineTo(20, -8);
+                        ctx.lineTo(70, 12 - tearWobble);
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+
+                    // 8. Floating tomes — three tiny rotating "archived
+                    // run" books drifting around the sigil. Skipped on
+                    // low tier.
+                    if (!_aLow) {
+                        ctx.save();
+                        const tomes = _aMid ? 2 : 3;
+                        for (let i = 0; i < tomes; i++) {
+                            const ang = time * 0.4 + i * (Math.PI * 2 / tomes);
+                            const rad = 170 + Math.sin(time * 1.2 + i) * 10;
+                            const tx = Math.cos(ang) * rad;
+                            const ty = Math.sin(ang) * rad * 0.55;
+                            ctx.save();
+                            ctx.translate(tx, ty);
+                            ctx.rotate(Math.sin(time + i) * 0.4);
+                            ctx.fillStyle = ink;
+                            ctx.strokeStyle = brass;
+                            ctx.lineWidth = 1.4;
+                            ctx.fillRect(-7, -10, 14, 20);
+                            ctx.strokeRect(-7, -10, 14, 20);
+                            // Spine glow
+                            ctx.fillStyle = brass;
+                            ctx.fillRect(-7, -10, 2, 20);
+                            ctx.restore();
+                        }
+                        ctx.restore();
+                    }
+
+                    ctx.restore();
+                }
             }
-            
+
             // =========================================================
             // STANDARD & ELITE ENEMIES (NOT BOSSES)
             // =========================================================
