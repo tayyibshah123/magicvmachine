@@ -11256,6 +11256,9 @@ async startCombat(type) {
         }
         // Per-combat one-shot relic flags reset alongside Apex.
         this._sparkBatteryUsed = false;
+        // OVERCHARGE VENT module — mana-spent tracker + perm bonus reset.
+        this._manaSpentThisCombat = 0;
+        if (this.player) this.player._overchargeVentBonus = 0;
         // (`_firewallTriggersUsed` is reset earlier in setupCombat at the
         // per-combat counter block — no duplicate needed here.)
 
@@ -11764,6 +11767,20 @@ async startTurn() {
         // next incoming hit takes +1 dmg. Set the flag here; consumed
         // in the attack path AND in entity.takeDamage on next hit.
         this.player._glassLensActive = this.player.hasRelic('glass_lens');
+        // Module: OVERCHARGE VENT — every 5 mana spent in combat grants
+        // +2 outgoing damage permanently (within the combat). Tracked
+        // via _overchargeVentBonus on the player; reset in setupCombat.
+        // Bonus accumulates here as the mana counter passes 5/10/15…
+        if (this.player.hasRelic && this.player.hasRelic('overcharge_vent')) {
+            const spent = this._manaSpentThisCombat || 0;
+            const expectedBonus = Math.floor(spent / 5) * 2;
+            const cur = this.player._overchargeVentBonus || 0;
+            if (expectedBonus > cur) {
+                const delta = expectedBonus - cur;
+                this.player._overchargeVentBonus = expectedBonus;
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 110, `OVERCHARGE +${delta} DMG`, COLORS.GOLD);
+            }
+        }
         // Module: ECHO ROUND — reset the per-turn attack counter (already
         // tracked via attacksThisTurn). Module reads it in the attack path.
         // Relic: LAST STAND — below 33% max HP, grant +1 reroll at turn
@@ -11939,6 +11956,13 @@ async startTurn() {
 
         // Class Ability: additive bonus (Tactician COMMAND +dmg pip)
         dmg += peek ? ClassAbility.peekPreDamageBonus(type) : ClassAbility.consumePreDamageBonus(type);
+
+        // Module: OVERCHARGE VENT — flat +2 per 5 mana spent in combat,
+        // banked into _overchargeVentBonus by the turn-start checker.
+        // Additive (not multiplicative) so it scales clean late-game.
+        if (this.player && this.player._overchargeVentBonus > 0) {
+            dmg += this.player._overchargeVentBonus;
+        }
 
         // Module: MUNITIONS BELT — skill dice (METEOR, EARTHQUAKE,
         // SIGNATURE) gain +25% effect. Applied at the base layer so
@@ -13283,6 +13307,9 @@ async startTurn() {
 
         if(effectiveCost > 0) {
             this.player.mana -= effectiveCost;
+            // OVERCHARGE VENT module — accumulate mana-spent so the
+            // +2 dmg perm-bonus tier check at next turn-start sees it.
+            this._manaSpentThisCombat = (this._manaSpentThisCombat || 0) + effectiveCost;
             Hints.trigger && Hints.trigger('first_mana_spent');
         }
         this.diceUsedThisTurn = (this.diceUsedThisTurn || 0) + 1;
