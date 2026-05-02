@@ -168,6 +168,21 @@ export const Achievements = {
         // Award fragments via Game (lazy global lookup so no circular import)
         if (typeof window !== 'undefined' && window.Game) {
             window.Game.techFragments = (window.Game.techFragments || 0) + (ach.frag || 0);
+            // Sparks reward — every achievement unlock pays a tier-scaled
+            // bonus in Sparks. Maps category → amount: first/combat/expl
+            // = 1, class = 3, build = 5, asc = 10. Silent so the
+            // achievement toast carries the moment instead of stacking
+            // floaters.
+            const sparkTier = (() => {
+                const cat = ach.category || ach.tier || '';
+                if (cat === 'asc' || cat === 'ascension') return 10;
+                if (cat === 'build') return 5;
+                if (cat === 'class') return 3;
+                return 1;
+            })();
+            if (window.Game.grantSparks) {
+                try { window.Game.grantSparks(sparkTier, 'achievement_' + id, { silent: true }); } catch (_) {}
+            }
         }
         _toastQueue.push(ach);
         _processQueue();

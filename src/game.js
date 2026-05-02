@@ -5914,6 +5914,19 @@ triggerPhaseGlitch() {
         const rv = parseInt(hx.slice(0,2), 16), gv = parseInt(hx.slice(2,4), 16), bv = parseInt(hx.slice(4,6), 16);
         this.triggerScreenFlash && this.triggerScreenFlash(`rgba(${rv},${gv},${bv},0.45)`, 380);
         await this.showPhaseBanner(enemy.name, subtitle, 'boss');
+        // Aftershock — two delayed shockwave rings in the phase-telegraph
+        // colour at 60% size after the banner clears. Confirms ground-truth
+        // that the new phase mechanics are live. Tier-gated; mid drops
+        // the second ring, low skips entirely.
+        const tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+        if (tier !== 'low' && ParticleSys.createShockwave) {
+            const aftercolor = enemy.phaseTelegraphColor || flashColor;
+            const ax = enemy.x, ay = enemy.y;
+            setTimeout(() => { try { ParticleSys.createShockwave(ax, ay, aftercolor, 28); } catch (_) {} }, 200);
+            if (tier === 'high') {
+                setTimeout(() => { try { ParticleSys.createShockwave(ax, ay, aftercolor, 22); } catch (_) {} }, 400);
+            }
+        }
     },
 
     // Victory fragment-tally banner — counter ticks up from 0 to the

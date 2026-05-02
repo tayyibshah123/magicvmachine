@@ -9,13 +9,14 @@ const KEY_GRACE_USED = 'mvm_streak_grace_last'; // date on which grace was consu
 const KEY_MILESTONES = 'mvm_streak_milestones'; // JSON array of claimed milestone days
 
 // Milestone reward table. Keys are day counts; values describe the grant.
+// `sparks` is granted via Game.grantSparks at the milestone resolve site.
 const MILESTONES = [
-    { day: 1,   fragments: 10,  title: "DAY 1",   sub: "Booting up." },
-    { day: 3,   fragments: 30,  title: "DAY 3",   sub: "Finding your footing." },
-    { day: 7,   fragments: 75,  relic: true, title: "DAY 7",   sub: "One week online." },
-    { day: 14,  fragments: 150, title: "DAY 14",  sub: "Two weeks deep." },
-    { day: 30,  fragments: 300, cosmetic: 'frame_d30', title: "DAY 30", sub: "A month in the grid." },
-    { day: 100, fragments: 1000, cosmetic: 'skin_d100', title: "DAY 100", sub: "Veteran of the resistance." }
+    { day: 1,   fragments: 10,  sparks: 0,                                title: "DAY 1",   sub: "Booting up." },
+    { day: 3,   fragments: 30,  sparks: 2,                                title: "DAY 3",   sub: "Finding your footing." },
+    { day: 7,   fragments: 75,  sparks: 5, relic: true,                   title: "DAY 7",   sub: "One week online." },
+    { day: 14,  fragments: 150, sparks: 10,                               title: "DAY 14",  sub: "Two weeks deep." },
+    { day: 30,  fragments: 300, sparks: 20, cosmetic: 'frame_d30',        title: "DAY 30",  sub: "A month in the grid." },
+    { day: 100, fragments: 1000,sparks: 50, cosmetic: 'skin_d100',        title: "DAY 100", sub: "Veteran of the resistance." }
 ];
 
 // Small repeating bonus once the user passes the top milestone, so daily
@@ -92,11 +93,18 @@ export const Streak = {
         // Check for milestone first-claim.
         const claimed = readClaimedMilestones();
         const hit = MILESTONES.find(m => m.day === streak && !claimed.includes(m.day));
+        let bonusSparks = 0;
         if (hit) {
             claimedMilestone = hit;
             bonus = hit.fragments || 0;
+            bonusSparks = hit.sparks || 0;
             claimed.push(hit.day);
             writeClaimedMilestones(claimed);
+            // Grant Sparks via Game (lazy global lookup, same pattern as
+            // achievements). Silent so the streak banner carries the moment.
+            if (bonusSparks > 0 && typeof window !== 'undefined' && window.Game && window.Game.grantSparks) {
+                try { window.Game.grantSparks(bonusSparks, 'streak_d' + hit.day, { silent: true }); } catch (_) {}
+            }
         } else if (streak > 100) {
             // Daily tail reward past the top milestone.
             bonus = TAIL_DAILY_BONUS;
@@ -112,6 +120,7 @@ export const Streak = {
             newStreak: streak,
             claimedReward: bonus > 0,
             bonusFragments: bonus,
+            bonusSparks,
             milestone: claimedMilestone,
             usedGrace
         };
