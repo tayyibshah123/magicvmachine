@@ -8547,16 +8547,17 @@ triggerSystemCrash() {
         try {
             const raw = localStorage.getItem('mvm_settings_v1');
             if (!raw) {
-                // First-launch defaults — apply OS preference for reduced
-                // motion. Player can flip the in-game toggle later to
-                // override the OS pref; their choice then wins because
-                // the CSS now reads `body.reduced-motion`, not the @media
-                // query directly.
-                if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-                    document.body.classList.add('reduced-motion');
-                    const el = document.getElementById('chk-reduced-motion');
-                    if (el) el.checked = true;
-                }
+                // First-launch defaults — Reduced Motion OFF by default.
+                // Players who want it can opt in via the in-game checkbox
+                // (DISPLAY → Accessibility → Reduced motion). The OS-level
+                // prefers-reduced-motion preference is intentionally NOT
+                // auto-applied because the menu / combat animations are a
+                // core part of the game's identity; any player who wants
+                // the OS pref honoured can flip the toggle once and the
+                // setting persists.
+                document.body.classList.remove('reduced-motion');
+                const el = document.getElementById('chk-reduced-motion');
+                if (el) el.checked = false;
                 return;
             }
             const s = JSON.parse(raw);
@@ -8567,6 +8568,10 @@ triggerSystemCrash() {
                 document.body.classList.remove('reduced-motion');
             } else if (s.reducedMotion === true) {
                 document.body.classList.add('reduced-motion');
+            } else {
+                // Saved settings exist but reducedMotion key is missing
+                // (older save format). Treat as OFF — same as first-run.
+                document.body.classList.remove('reduced-motion');
             }
             const d = document;
             const setCheck = (id, val) => { const el = d.getElementById(id); if (el && val != null) el.checked = !!val; };
