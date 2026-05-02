@@ -7451,6 +7451,127 @@ body.reduced-motion .tutorial-narration {
     animation: none;
     transition: top 120ms linear, bottom 120ms linear;
 }
+
+/* ──────────────────────────────────────────────────────────────────
+ * BREAKOUT (Sector 0) tutorial overrides
+ * The legacy tutorial pane was designed to advance on tap — its host
+ * had `pointer-events: auto` so the player could click through the
+ * tutorial steps. The Breakout uses combat-engine fights where the
+ * player drags dice onto enemies, and the pane sits over the enemy
+ * row at top of canvas. Inheriting `pointer-events: auto` made the
+ * pane swallow drag drops. While the BREAKOUT body class is on, the
+ * narration pane is render-only (pointer-events: none) so drags pass
+ * through, AND it pins to the top edge in a thin banner so nothing
+ * material is hidden behind it. */
+body.breakout-active .tutorial-narration {
+    pointer-events: none;
+    /* Slim banner at the very top of the canvas frame. The full
+       enemy row + dice tray below remain unblocked. */
+    top: 6px !important;
+    width: 88%;
+    max-width: 360px;
+    padding: 6px 10px 8px;
+    border-color: rgba(255, 64, 96, 0.55);
+    box-shadow: 0 0 16px rgba(255, 64, 96, 0.32), 0 4px 8px rgba(0, 0, 0, 0.55);
+}
+body.breakout-active .tutorial-narration-story {
+    color: #ff8aa0;
+    text-shadow: 0 0 8px rgba(255, 64, 96, 0.55);
+    font-size: calc(var(--text-sm) * 0.78);
+}
+body.breakout-active .tutorial-narration-action {
+    font-size: calc(var(--text-md) * 0.82);
+}
+/* The Warden's "system bulletin" subtext — vibrates beneath the
+   action line. Reads as a cold, threatening computer alert layered
+   on top of the warden's voice. Shows when the controller writes
+   into #breakout-warden-sub; hidden by default. */
+.breakout-warden-sub {
+    display: block;
+    margin-top: 4px;
+    font-family: var(--font-cyber);
+    font-size: calc(var(--text-sm) * 0.66);
+    letter-spacing: 0.18em;
+    color: #ff3355;
+    text-shadow: 0 0 6px rgba(255, 51, 85, 0.6), 0 0 12px rgba(255, 51, 85, 0.35);
+    text-align: center;
+    text-transform: uppercase;
+    animation: wardenJitter 130ms steps(2, end) infinite;
+}
+.breakout-warden-sub:empty { display: none; }
+@keyframes wardenJitter {
+    0%   { transform: translate(0, 0); opacity: 1; }
+    25%  { transform: translate(-0.6px, 0.4px); opacity: 0.92; }
+    50%  { transform: translate(0.7px, -0.3px); opacity: 1; }
+    75%  { transform: translate(-0.4px, 0.6px); opacity: 0.88; }
+    100% { transform: translate(0, 0); opacity: 1; }
+}
+body.reduced-motion .breakout-warden-sub {
+    animation: none;
+}
+
+/* Storyboard interlude — full-screen fade between rooms. Carries
+   the narrative beats ("the cell wall cracks…") between mechanical
+   teaching combats so the prologue feels like a story, not a drill. */
+.breakout-storyboard {
+    position: fixed;
+    inset: 0;
+    z-index: 7000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: radial-gradient(ellipse at center, rgba(8, 0, 16, 0.92) 0%, rgba(0, 0, 0, 0.98) 70%);
+    color: #fff;
+    padding: 8% 9%;
+    opacity: 0;
+    pointer-events: auto;
+    transition: opacity 380ms ease-out;
+}
+.breakout-storyboard.show { opacity: 1; }
+.breakout-storyboard .sb-title {
+    font-family: var(--font-cyber);
+    font-size: calc(var(--text-xl) * 0.95);
+    letter-spacing: 0.22em;
+    color: #ff3355;
+    text-shadow: 0 0 12px rgba(255, 51, 85, 0.7);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+}
+.breakout-storyboard .sb-body {
+    font-family: var(--font-main);
+    font-size: calc(var(--text-md) * 1.05);
+    line-height: 1.45;
+    color: #e7eaf2;
+    max-width: 520px;
+    margin: 0 auto 22px;
+}
+.breakout-storyboard .sb-tag {
+    font-family: var(--font-cyber);
+    font-size: calc(var(--text-sm) * 0.78);
+    letter-spacing: 0.22em;
+    color: #ffd76a;
+    text-shadow: 0 0 8px rgba(255, 215, 106, 0.55);
+    margin-bottom: 18px;
+    text-transform: uppercase;
+}
+.breakout-storyboard .sb-cta {
+    font-family: var(--font-cyber);
+    font-size: calc(var(--text-sm) * 0.74);
+    letter-spacing: 0.18em;
+    color: #88eaff;
+    opacity: 0.75;
+    text-transform: uppercase;
+    animation: sbCtaPulse 1500ms ease-in-out infinite;
+}
+@keyframes sbCtaPulse {
+    0%, 100% { opacity: 0.5; }
+    50%      { opacity: 0.95; }
+}
+body.reduced-motion .breakout-storyboard .sb-cta {
+    animation: none;
+}
 body.reduced-motion .tutorial-narration.narration-switching {
     opacity: 1;
     transform: translate(-50%, 0);

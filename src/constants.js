@@ -46,6 +46,12 @@ const IMPACT_COLORS = {
 
 // UPDATED: Added 'type' for background generation
 const SECTOR_CONFIG = {
+    // Sector 0 — The Breakout (cyber-prison prologue). Cold red/black
+    // palette so the prologue reads visibly distinct from the cyan
+    // Sector 1 chrome. Custom backdrop in drawSectorCelestial sector-0
+    // branch handles the cell-bar overlay; this entry only feeds the
+    // sky gradient + grid colour.
+    0: { type: 'prison', bgTop: '#0a0207', bgMid: '#1c0610', bgBot: '#000000', sun: ['#ff3355', '#ff8aa0'],  grid: '#ff335544' },
     // Richer two-stop gradients + primary/secondary celestial colours. `bgMid` is an
     // intermediate stop used by the enhanced backdrop for richer horizon lighting.
     1: { type: 'city',   bgTop: '#11023d', bgMid: '#3c0855', bgBot: '#050015', sun: ['#ff5eb9', '#00f3ff'],  grid: '#00f3ff55' },

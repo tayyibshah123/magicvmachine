@@ -63,14 +63,18 @@ const ROOMS = [
             // Two attack dice — first room is a free swing.
             return [cd.attack, cd.attack];
         },
+        // Story slate shown BEFORE the room's combat. Players read this,
+        // then tap to drop into the fight.
+        storyboard: {
+            tag: 'PRISON BLOCK 7 · CELL 14',
+            title: 'BREATHING DETECTED',
+            body: 'Your eyes open inside a holographic cell. A surveillance drone hovers at the bars. The Warden\'s voice comes through the seam.'
+        },
         warden: [
             {
                 story: 'Operator. The Warden hears you breathing inside the cell.',
-                action: 'Drag a die ONTO the drone to strike. Release to commit.'
-            },
-            {
-                story: 'Good. The first lock is electrical, not mechanical.',
-                action: 'Use both dice. The drone falls in two strikes.'
+                action: 'Drag a die ONTO the drone to strike. Release to commit.',
+                sub: 'TARGET: PRISONER · STATUS: AWAKE · LETHAL FORCE PERMITTED'
             }
         ]
     },
@@ -85,10 +89,16 @@ const ROOMS = [
             const cd = classDice(classId);
             return [cd.defend, cd.attack];
         },
+        storyboard: {
+            tag: 'CORRIDOR · BLOCK 7',
+            title: 'SHOCK PROTOCOL ENGAGED',
+            body: 'The drone is dust. A shock-sentry pivots out of an alcove and locks on. Its strike is telegraphed — the red icon above its head shows what it will do next turn.'
+        },
         warden: [
             {
                 story: 'The collar telegraphs before it bites. See the red icon.',
-                action: 'Drag the SHIELD die onto YOURSELF first. Then attack.'
+                action: 'Drag the SHIELD die onto YOURSELF first. Then attack.',
+                sub: 'ESCAPE ATTEMPTED · ELIMINATION AUTHORIZED'
             }
         ]
     },
@@ -109,10 +119,16 @@ const ROOMS = [
             const cd = classDice(classId);
             return [cd.attack, cd.defend];
         },
+        storyboard: {
+            tag: 'CHECKPOINT B-12',
+            title: 'EXECUTIONER DISPATCHED',
+            body: 'A hulking unit drops from the ceiling. Heavier. Slower. Each swing is a death sentence — but the wind-up is long enough to read. Time it right and you blunt the blow.'
+        },
         warden: [
             {
                 story: 'This one swings hard. Time the QTE — green ring is perfect.',
-                action: 'Defend the strike. Tap inside the ring at the right moment.'
+                action: 'Defend the strike. Tap inside the ring at the right moment.',
+                sub: 'EXECUTOR-CLASS DISPATCHED · CONTAIN AT ALL COSTS'
             }
         ]
     },
@@ -128,10 +144,16 @@ const ROOMS = [
             // Mismatched hand on purpose so the player learns reroll.
             return [cd.defend, cd.defend];
         },
+        storyboard: {
+            tag: 'DATA-VAULT 9',
+            title: 'CORRUPTED PROTOCOL',
+            body: 'A glitched warden looms in the next chamber. Your dice come up wrong — two shields, no edge. You have one chance to cycle them into something that hits.'
+        },
         warden: [
             {
                 story: 'Bad hand? You have rerolls. Cycle them until you get a strike.',
-                action: 'Tap the reroll dial (left). Reroll BOTH dice into attacks.'
+                action: 'Tap the reroll dial (left). Reroll BOTH dice into attacks.',
+                sub: 'PROTOCOL GLITCH · REWRITE PERMITTED'
             }
         ]
     },
@@ -147,70 +169,125 @@ const ROOMS = [
             { type: 'attack', val: 6, label: 'STRIKE 6' }
         ],
         diceFn: null, // real combat — natural roll
+        storyboard: {
+            tag: 'OUTER GATE · WARDEN\'S DOMAIN',
+            title: 'CAGE GUARDIAN',
+            body: 'The cell wall fractures. Light pours through the seams. The CAGE GUARDIAN steps through the breach — the Warden\'s lieutenant. Beat it and the Panopticon learns your name.'
+        },
         warden: [
             {
                 story: 'The cell wall cracks. The CAGE GUARDIAN steps through.',
-                action: 'Use everything you learned. Shield. Strike. Parry.'
+                action: 'Use everything you learned. Shield. Strike. Parry.',
+                sub: 'CONTAINMENT BREACH · GUARDIAN ENGAGED · TERMINATE'
             }
         ]
     }
 ];
 
-// Per-class Room 3 specs. The signature die varies, the enemy and intent
-// are tuned so the player's class fantasy lands cleanly.
+// Per-class Room 3 specs. Uses ONLY the class's own base dice
+// (cd.attack/defend/mana/minion). Earlier drafts referenced signature
+// dice (STALK, GLYPH_INTERRUPT, OVERCHARGE, STRATAGEM) which don't
+// exist in DICE_TYPES — `safeType()` would silently fall back to
+// TAC_ATTACK, breaking the per-class fantasy. Sticking to base dice
+// keeps every class's room playable and the narration honest. The
+// signature-die teaching beat lives in the real run, after the
+// prologue.
 const CLASS_ROOM_3 = {
     bloodstalker: {
-        enemy:  { name: 'WOUNDED HUNTER', hp: 22, dmg: 4 },
+        // Wounded prey — narrative seam without needing a dedicated
+        // STALK die. Player simply lands two clean attacks.
+        enemy:  { name: 'WOUNDED HUNTER', hp: 12, dmg: 4 },
         intents: [{ type: 'attack', val: 4, label: 'STRIKE 4' }],
-        diceFn: (cd) => [cd.attack, 'STALK'],
+        storyboard: {
+            tag: 'BLOCK 7 · SHADOWED WING',
+            title: 'WOUNDED HUNTER',
+            body: 'A scout-unit limps through the corridor — already bleeding from someone else\'s pass. The Bloodstalker recognises the tell. Two clean strikes finish what was started.'
+        },
+        diceFn: (cd) => [cd.attack, cd.attack],
         warden: [{
-            story: 'Wounded prey. STALK reveals their seam.',
-            action: 'Play STALK first, then strike the marked seam for double.'
+            story: 'Wounded prey. The bloodstalker reads the seam.',
+            action: 'Hit it twice. The second strike opens the bleed.',
+            sub: 'BLOODSTALKER VARIANT · TARGET PRIORITY: BLEED'
         }]
     },
     arcanist: {
-        enemy:  { name: 'CORRUPTED PROCESS', hp: 18, dmg: 14 },
-        intents: [{ type: 'attack', val: 14, label: 'CORRUPT 14' }],
-        diceFn: (cd) => [cd.mana, 'GLYPH_INTERRUPT'],
+        // Mana setup → strike. Mana die teaches the resource curve;
+        // attack die spends it. Enemy HP tuned so [mana, attack]
+        // cleanly resolves.
+        enemy:  { name: 'CORRUPTED PROCESS', hp: 12, dmg: 4 },
+        intents: [{ type: 'attack', val: 4, label: 'CORRUPT 4' }],
+        storyboard: {
+            tag: 'DATA-VAULT 4',
+            title: 'CORRUPTED PROCESS',
+            body: 'Glyphs flicker against the wall. The Arcanist channels mana through the corruption — one charge, one cast. The room teaches the rhythm.'
+        },
+        diceFn: (cd) => [cd.mana, cd.attack],
         warden: [{
-            story: 'A heavy attack winds up. Glyph it before it lands.',
-            action: 'Drag the GLYPH onto the enemy to interrupt. Then mana up.'
+            story: 'Mana feeds the glyph. Charge first, then strike.',
+            action: 'Drag MANA onto yourself. Then ATTACK to spend it.',
+            sub: 'ARCANIST VARIANT · ELEVATED MANA SIGNATURE'
         }]
     },
     sentinel: {
-        enemy:  { name: 'BARRAGE TURRET', hp: 22, dmg: 4 },
-        intents: [{ type: 'multi_attack', val: 4, hits: 3, label: 'BARRAGE x3' }],
+        enemy:  { name: 'BARRAGE TURRET', hp: 14, dmg: 3 },
+        intents: [{ type: 'multi_attack', val: 3, hits: 3, label: 'BARRAGE x3' }],
+        storyboard: {
+            tag: 'CORRIDOR · BARRAGE LANE',
+            title: 'BARRAGE TURRET',
+            body: 'A wall-mounted turret unloads a three-shot barrage. The Sentinel\'s plates eat the burst — every defend die layers another plate on top of the first.'
+        },
         diceFn: (cd) => [cd.defend, cd.defend],
         warden: [{
-            story: 'Multi-strike incoming. PLATES stack one for each hit.',
-            action: 'Stack two defend dice. Plates absorb the barrage, not HP.'
+            story: 'Multi-strike incoming. Plates absorb each hit.',
+            action: 'Stack two DEFEND dice. The barrage breaks on you.',
+            sub: 'SENTINEL VARIANT · KINETIC PLATING DETECTED'
         }]
     },
     annihilator: {
-        enemy:  { name: 'OVERHEATED GUARD', hp: 6, dmg: 5 },
-        intents: [{ type: 'attack', val: 5, label: 'STRIKE 5' }],
-        diceFn: (cd) => [cd.attack, 'OVERCHARGE'],
+        // Low-HP enemy primed for the kill shot. Two attack dice
+        // overlap so the player can crit-finish on the second swing.
+        enemy:  { name: 'OVERHEATED GUARD', hp: 9, dmg: 3 },
+        intents: [{ type: 'attack', val: 3, label: 'STRIKE 3' }],
+        storyboard: {
+            tag: 'FOUNDRY ANNEX',
+            title: 'OVERHEATED GUARD',
+            body: 'A guard-unit is venting coolant — already half-dead from heat. The Annihilator\'s rhythm is exactly this: find the wound, finish it.'
+        },
+        diceFn: (cd) => [cd.attack, cd.attack],
         warden: [{
-            story: 'One HP from death. Push it over with OVERCHARGE.',
-            action: 'OVERCHARGE the attack die. Land the kill shot.'
+            story: 'Half-dead. Finish it before the second swing lands.',
+            action: 'Strike, then strike again. Land the kill shot.',
+            sub: 'ANNIHILATOR VARIANT · TERMINAL VELOCITY'
         }]
     },
     tactician: {
-        enemy:  { name: 'PROTOCOL OFFICER', hp: 18, dmg: 6 },
-        intents: [{ type: 'buff', val: 0, label: 'STRENGTHEN' }],
-        diceFn: (cd) => [cd.attack, 'STRATAGEM'],
+        enemy:  { name: 'PROTOCOL OFFICER', hp: 14, dmg: 3 },
+        intents: [{ type: 'attack', val: 3, label: 'STRIKE 3' }],
+        storyboard: {
+            tag: 'COMMAND VESTIBULE',
+            title: 'PROTOCOL OFFICER',
+            body: 'A planner-unit reads the Tactician like a bad hand. Match its play — two clean dice, one rhythm. The Tactician wins fights that look like spreadsheets.'
+        },
+        diceFn: (cd) => [cd.attack, cd.defend],
         warden: [{
-            story: 'It is buffing itself. Strip the protocol with STRATAGEM.',
-            action: 'STRATAGEM removes the buff. Then strike clean.'
+            story: 'Read its rhythm. Defend the strike, then return it.',
+            action: 'Defend the incoming hit. Counter on the next pass.',
+            sub: 'TACTICIAN VARIANT · PATTERN-MATCH ACTIVE'
         }]
     },
     summoner: {
-        enemy:  { name: 'SWARM AGITATOR', hp: 24, dmg: 5 },
-        intents: [{ type: 'attack', val: 5, label: 'STRIKE 5' }],
+        enemy:  { name: 'SWARM AGITATOR', hp: 14, dmg: 4 },
+        intents: [{ type: 'attack', val: 4, label: 'STRIKE 4' }],
+        storyboard: {
+            tag: 'SACRED HOLLOW',
+            title: 'SWARM AGITATOR',
+            body: 'The cell wall thins around root-veins. The Summoner plants a Wisp; the grove blooms. The agitator hits the Wisp, not you.'
+        },
         diceFn: (cd) => [cd.minion, cd.attack],
         warden: [{
-            story: 'Sacred Grove answers. Plant a Wisp; it eats the next hit.',
-            action: 'Play MINION. The grove blooms. Then strike with the survivor.'
+            story: 'Plant a Wisp. The grove answers. The hit lands on it.',
+            action: 'Drag MINION into play. Then ATTACK to finish.',
+            sub: 'SUMMONER VARIANT · GROVE SIGNAL DETECTED'
         }]
     }
 };
@@ -263,6 +340,14 @@ function roomFor(roomIdx, classId) {
             enemy: spec.enemy,
             intents: spec.intents,
             diceFn: () => spec.diceFn(cd),
+            // Per-class spec carries its own storyboard so the player
+            // gets context tuned to their class. Falls back to a
+            // generic line if the class spec hasn't shipped one.
+            storyboard: spec.storyboard || {
+                tag: 'TRAINING WING',
+                title: 'CLASS PROVING',
+                body: 'A class-tuned encounter. Everything you have built into your dice answers this room.'
+            },
             warden: spec.warden
         };
     }
@@ -320,7 +405,10 @@ export const Breakout = {
         this._roomIdx = 0;
         this._wardenStep = 0;
         this._active = true;
-        // Hint banner so the player knows the map will follow afterwards.
+        // Body class drives Breakout-only CSS — narration pane becomes
+        // pointer-events: none so drag drops pass through to the
+        // canvas, and warden subtext styling activates.
+        try { document.body.classList.add('breakout-active'); } catch (_) {}
         try {
             game.changeState(STATE.BREAKOUT);
         } catch (_) {}
@@ -335,16 +423,19 @@ export const Breakout = {
         this._active = false;
         this._grantCellkey(game);
         this.markComplete();
+        try { document.body.classList.remove('breakout-active'); } catch (_) {}
         // Reset run-start flags the breakout had toggled, then continue
         // into the regular run flow at the sector map.
         game._breakoutForcedDice = null;
         game._breakoutScript = null;
+        game.sector = 1;
         game.changeState(STATE.MAP);
     },
 
-    /* Build + enter the current room. Spawns the scripted enemy, installs
-     * the dice + intent overrides, opens the narration pane, and routes
-     * into the existing combat pipeline. */
+    /* Build + enter the current room. Shows the storyboard slate first,
+     * then spawns the scripted enemy, installs the dice + intent
+     * overrides, opens the narration pane, and routes into the existing
+     * combat pipeline. */
     _enterRoom() {
         const game = this._game;
         if (!game) return;
@@ -355,6 +446,22 @@ export const Breakout = {
             this._finish();
             return;
         }
+        // Storyboard interlude before the combat. Tap-to-continue, then
+        // _buildRoom() takes over. Skipped if the room has no story
+        // slate defined (defensive — every room ships with one).
+        if (room.storyboard) {
+            this._showStoryboard(room.storyboard, () => this._buildRoom(room));
+        } else {
+            this._buildRoom(room);
+        }
+    },
+
+    /* Per-room combat spawn, called after the storyboard slate is
+     * dismissed. Separated from _enterRoom so the slate's tap-to-
+     * continue handler has a clean continuation. */
+    _buildRoom(room) {
+        const game = this._game;
+        if (!game) return;
         // Forced dice override — read by Game.rollDice's BREAKOUT branch.
         if (typeof room.diceFn === 'function') {
             const types = (room.diceFn() || []).map((t, i) => safeType(t, i === 0 ? 'TAC_ATTACK' : 'TAC_DEFEND'));
@@ -369,9 +476,6 @@ export const Breakout = {
             cursor: 0
         };
 
-        // Open the narration pane with the first warden line. Fall back
-        // to a transient floating text if the pane element is missing
-        // (e.g. legacy DOM).
         this._wardenStep = 0;
         this._showWarden(room);
 
@@ -389,6 +493,42 @@ export const Breakout = {
         }
     },
 
+    /* Show the full-screen storyboard slate. Fades in, listens for one
+     * tap, fades out, then runs the supplied callback. */
+    _showStoryboard(sb, onContinue) {
+        const host = document.getElementById('breakout-storyboard');
+        const tag = document.getElementById('breakout-storyboard-tag');
+        const title = document.getElementById('breakout-storyboard-title');
+        const body = document.getElementById('breakout-storyboard-body');
+        if (!host || !tag || !title || !body) {
+            // Element missing — skip straight to the room build.
+            if (typeof onContinue === 'function') onContinue();
+            return;
+        }
+        tag.textContent = sb.tag || '';
+        title.textContent = sb.title || '';
+        body.textContent = sb.body || '';
+        host.style.display = 'flex';
+        // Force reflow so the opacity transition fires.
+        // eslint-disable-next-line no-unused-expressions
+        host.offsetHeight;
+        host.classList.add('show');
+
+        const advance = () => {
+            host.removeEventListener('click', advance);
+            host.classList.remove('show');
+            setTimeout(() => {
+                host.style.display = 'none';
+                if (typeof onContinue === 'function') onContinue();
+            }, 380);
+        };
+        // Small delay so the same tap that closed the previous screen
+        // can't immediately advance the slate.
+        setTimeout(() => {
+            host.addEventListener('click', advance, { once: true });
+        }, 350);
+    },
+
     _showWarden(room) {
         const lines = (room && room.warden) || [];
         const line = lines[this._wardenStep] || lines[0] || null;
@@ -397,26 +537,48 @@ export const Breakout = {
         const pane = document.getElementById('tutorial-narration');
         const story = document.getElementById('tutorial-narration-story');
         const action = document.getElementById('tutorial-narration-action');
+        const sub = document.getElementById('breakout-warden-sub');
         if (pane) pane.classList.remove('hidden');
         if (story) story.textContent = line.story || '';
         if (action) action.textContent = line.action || '';
+        // Warden "system bulletin" — vibrating red sub-line. Empty
+        // string clears the subtext (CSS hides empty `:empty`).
+        if (sub) sub.textContent = line.sub || '';
     },
 
     /* Called after the player kills the room's scripted enemy. Advances
      * the room cursor, runs a beat of warden flavour, and opens the
-     * next room. */
+     * next room.
+     *
+     * Idempotency: a deferred VFX kill (Bomb Bot, lifesteal, reflect,
+     * thorns, etc.) can fire `winCombat` a second time on the same
+     * dead enemy. The combat-side guard (`_winCombatRunning`) catches
+     * most of those, but the BREAKOUT branch resets the flag eagerly
+     * to allow the next room's combat to proceed — leaving a small
+     * window where a second `onCombatWin` could double-advance the
+     * room cursor. The `_advancing` latch closes that window. */
     onCombatWin() {
         if (!this._active) return;
+        if (this._advancing) return;
+        this._advancing = true;
         const game = this._game;
         const room = roomFor(this._roomIdx, game && game.player && game.player.classId);
         // Last room = guardian → grant relic + finish.
         if (room && room.id === 'guardian') {
+            this._advancing = false;
             this._finish();
             return;
         }
         this._roomIdx++;
         // Brief delay so the kill VFX lands before the next spawn.
-        setTimeout(() => this._enterRoom(), 600);
+        setTimeout(() => {
+            this._advancing = false;
+            // Defensive: a state change during the timeout (e.g.
+            // selectClass re-entry, manual skip) could deactivate the
+            // flow. Don't spawn a room into a dead controller.
+            if (!this._active) return;
+            this._enterRoom();
+        }, 600);
     },
 
     /* Called when the player's HP hits 0 inside a breakout room. The
@@ -424,17 +586,25 @@ export const Breakout = {
      * print a Warden ribbing line. */
     onPlayerWouldDie() {
         const game = this._game;
-        if (!game || !game.player) return;
+        if (!game || !game.player || !this._active) return;
         game.player.currentHp = Math.max(1, Math.floor(game.player.maxHp * 0.5));
         // Re-spawn the same room so the player can try again. Keeps run
         // intact (no death cinematic, no GAMEOVER state).
         const pane = document.getElementById('tutorial-narration');
         const story = document.getElementById('tutorial-narration-story');
         const action = document.getElementById('tutorial-narration-action');
+        const sub = document.getElementById('breakout-warden-sub');
         if (story) story.textContent = 'The cage holds. Try again — there is no penalty here.';
         if (action) action.textContent = 'Resetting room...';
+        if (sub) sub.textContent = 'CONTAINMENT FAILSAFE · RESPAWN AUTHORIZED';
         if (pane) pane.classList.remove('hidden');
-        setTimeout(() => this._enterRoom(), 900);
+        setTimeout(() => {
+            // Defensive: if the controller was deactivated during the
+            // delay (e.g. user skipped, app backgrounded + lifecycle
+            // restarted), don't spawn a room into stale state.
+            if (!this._active) return;
+            this._enterRoom();
+        }, 900);
     },
 
     /* Final beat: grant Cellkey Shard, set persistence flag, route into
@@ -446,6 +616,7 @@ export const Breakout = {
         this._active = false;
         this._grantCellkey(game);
         this.markComplete();
+        try { document.body.classList.remove('breakout-active'); } catch (_) {}
         game._breakoutForcedDice = null;
         game._breakoutScript = null;
         game._inBreakout = false;

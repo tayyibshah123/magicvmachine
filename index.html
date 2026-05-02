@@ -789,8 +789,23 @@
             <div id="tutorial-narration" class="tutorial-narration hidden">
                 <div class="tutorial-narration-story" id="tutorial-narration-story"></div>
                 <div class="tutorial-narration-action" id="tutorial-narration-action"></div>
+                <!-- Sector 0 Breakout — Warden "system bulletin" subtext.
+                     Empty by default so the legacy tutorial doesn't display
+                     it. The Breakout controller writes into this node and
+                     the CSS jitter animation kicks in automatically. -->
+                <div class="breakout-warden-sub" id="breakout-warden-sub"></div>
             </div>
             <button id="btn-tutorial-skip" class="btn ghost tutorial-skip-btn hidden">SKIP TUTORIAL</button>
+
+            <!-- Sector 0 Breakout — full-screen storyboard interlude
+                 between rooms. Hidden until the Breakout controller writes
+                 into it, then fades in for ~3s before the next combat. -->
+            <div id="breakout-storyboard" class="breakout-storyboard" style="display:none;">
+                <div class="sb-tag" id="breakout-storyboard-tag"></div>
+                <div class="sb-title" id="breakout-storyboard-title"></div>
+                <div class="sb-body" id="breakout-storyboard-body"></div>
+                <div class="sb-cta">TAP TO CONTINUE</div>
+            </div>
 
             <!-- Story / Outro Screen -->
             <div id="screen-story" class="screen hidden">

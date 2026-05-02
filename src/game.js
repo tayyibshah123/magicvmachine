@@ -11031,6 +11031,10 @@ updateHexBreach(dt) {
      * helper handles a single room's setup. */
     _buildBreakoutCombat(room) {
         if (!room || !room.enemy) return;
+        // Sector chrome — pin the HUD label to PRISON during the
+        // prologue so the chip doesn't read "SECTOR 0" / "SECTOR 1".
+        const sectorDisplay = document.getElementById('sector-display');
+        if (sectorDisplay) sectorDisplay.innerText = 'PRISON';
         // Reset combat-side state that startCombat normally clears so
         // dice/turn counters/effects don't leak between rooms.
         this._combatGen = (this._combatGen || 0) + 1;
@@ -20395,6 +20399,123 @@ drawEffects() {
         const _celLow  = _celTier === 'low';
         const _celMid  = _celTier === 'mid';
 
+        if (type === 'prison') {
+            // ── SECTOR 0 — THE BREAKOUT (cyber-prison) ──
+            // Bespoke backdrop framed as the inside of a holographic
+            // cell block. Reads as: blood-red surveillance hex,
+            // vertical cell bars overhead, scrolling scanlines down
+            // the wall, "RECORDING" decals, and the central spotlight
+            // hot on the boss/drone the player is escaping past.
+            ctx.save();
+            // 1. Distant cell-block wall — pillars of pixel-thin
+            //    vertical stripes that vibrate slightly so the
+            //    "live surveillance feed" reads as alive.
+            const stripes = _celLow ? 14 : (_celMid ? 26 : 44);
+            const stripeW = w / stripes;
+            for (let i = 0; i < stripes; i++) {
+                const sx = i * stripeW;
+                const flicker = 0.6 + 0.4 * Math.sin(time * 1.7 + i * 0.7);
+                ctx.fillStyle = `rgba(40, 0, 8, ${0.45 + 0.25 * flicker})`;
+                ctx.fillRect(sx, 0, Math.max(1, stripeW * 0.5), horizon);
+            }
+
+            // 2. Cell bars — heavy vertical bars in the foreground top
+            //    third, each with a subtle highlight pulse.
+            const bars = _celLow ? 4 : 6;
+            const barGap = w / (bars + 1);
+            ctx.fillStyle = 'rgba(180, 8, 24, 0.22)';
+            for (let b = 1; b <= bars; b++) {
+                const bx = b * barGap - 6;
+                ctx.fillRect(bx, 0, 12, horizon * 0.85);
+                // Bar highlight
+                const hl = 0.55 + 0.35 * Math.sin(time * 1.2 + b);
+                ctx.save();
+                ctx.shadowColor = '#ff3355';
+                ctx.shadowBlur = _celLow ? 0 : 12 * hl;
+                ctx.fillStyle = `rgba(255, 60, 100, ${0.18 + 0.18 * hl})`;
+                ctx.fillRect(bx + 4, 0, 4, horizon * 0.85);
+                ctx.restore();
+            }
+
+            // 3. "Surveillance hex" — a central faint red hexagon
+            //    pulsing behind everything. Reads as the watchful eye.
+            const cx = w * 0.5, cy = horizon * 0.5;
+            const hexR = 180 + Math.sin(time * 1.1) * 12;
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 51, 85, 0.35)';
+            ctx.lineWidth = 2;
+            if (!_celLow) { ctx.shadowColor = '#ff3355'; ctx.shadowBlur = 24; }
+            ctx.beginPath();
+            for (let v = 0; v < 7; v++) {
+                const a = v * Math.PI / 3 + time * 0.08;
+                const x = cx + Math.cos(a) * hexR;
+                const y = cy + Math.sin(a) * hexR * 0.55;
+                if (v === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            ctx.restore();
+
+            // 4. "REC" indicator (top-right) — small flashing red dot
+            //    + label. Reinforces "you are being watched". Never
+            //    overlaps the narration pane (pinned top-center).
+            if (!_celLow) {
+                ctx.save();
+                const recPulse = 0.5 + 0.5 * Math.sin(time * 4);
+                ctx.fillStyle = `rgba(255, 51, 85, ${0.55 + recPulse * 0.4})`;
+                ctx.shadowColor = '#ff3355';
+                ctx.shadowBlur = 12;
+                ctx.beginPath(); ctx.arc(w - 80, 50, 7, 0, Math.PI * 2); ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = 'rgba(255, 90, 120, 0.85)';
+                ctx.font = "bold 14px 'Orbitron', monospace";
+                ctx.fillText('REC', w - 60, 55);
+                ctx.restore();
+            }
+
+            // 5. Scrolling scan lines — diagonal bands down the wall
+            //    so the prison feels surveilled in motion.
+            const scanCount = _celLow ? 0 : (_celMid ? 6 : 12);
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 51, 85, 0.18)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < scanCount; i++) {
+                const offset = ((time * 32) + i * 60) % horizon;
+                ctx.beginPath();
+                ctx.moveTo(0, offset);
+                ctx.lineTo(w, offset + 24);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // 6. Floor-level lock seal — embossed Warden insignia low
+            //    on the wall, just above the perspective grid.
+            ctx.save();
+            const sealY = horizon - 30;
+            ctx.strokeStyle = 'rgba(255, 51, 85, 0.5)';
+            ctx.lineWidth = 2;
+            if (!_celLow) { ctx.shadowColor = '#ff3355'; ctx.shadowBlur = 8; }
+            ctx.beginPath(); ctx.arc(cx, sealY, 18, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(cx, sealY, 9, 0, Math.PI * 2); ctx.stroke();
+            ctx.fillStyle = 'rgba(255, 51, 85, 0.6)';
+            ctx.fillRect(cx - 1, sealY - 6, 2, 12);
+            ctx.fillRect(cx - 6, sealY - 1, 12, 2);
+            ctx.restore();
+
+            // 7. Central darkening vignette — hot spotlight on the
+            //    enemy/silhouette area so the boss reads against the
+            //    busy backdrop.
+            ctx.fillStyle = this._cachedGradient('s0_spot', () => {
+                const g = ctx.createRadialGradient(cx, cy, 60, cx, cy, 360);
+                g.addColorStop(0, 'rgba(0, 0, 0, 0)');
+                g.addColorStop(0.7, 'rgba(0, 0, 0, 0.35)');
+                g.addColorStop(1, 'rgba(0, 0, 0, 0.78)');
+                return g;
+            });
+            ctx.fillRect(0, 0, w, horizon);
+            ctx.restore();
+            return;
+        }
+
         if (type === 'city') {
             // 1. Neon moon with concentric rings
             const moonX = w * 0.72, moonY = horizon * 0.55;
@@ -20711,9 +20832,11 @@ drawEffects() {
 
         // 3. Dynamic Skyline (Parallax) — skipped during boss fights so the
         //     bespoke boss backdrop isn't cluttered with generic silhouettes.
+        //     Also skipped for Sector 0 (Breakout) since the cyber-prison
+        //     cell-bar art already fills the upper canvas.
         const horizon = h * 0.45;
 
-        if (!isBossFight) {
+        if (!isBossFight && this.sector !== 0) {
             const skyline = this.bgState.skyline;
             // Hoist tier reads + per-frame derived constants out of the
             // per-silhouette loop. The fire-smoke threshold roll was
