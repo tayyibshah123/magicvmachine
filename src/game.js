@@ -8119,6 +8119,13 @@ triggerSystemCrash() {
             const showPact = this.challengeMode && remaining.length > 0;
             if (btnPact)   btnPact.classList.toggle('hidden', !showPact);
             if (btnModule) btnModule.classList.toggle('hidden', showPact);
+            // Defensive: if the build is missing the module button (e.g.
+            // an old deployed APK whose assets predate the module slot),
+            // log it so the dev console flags the deployment issue. The
+            // bottom-right would otherwise silently render empty.
+            if (!btnModule && !showPact) {
+                console.warn('[rest] btn-rest-module missing from DOM — Android assets likely out of sync. Run `npm run android:sync` to refresh.');
+            }
             if (showPact) {
                 // First-time discoverability — surface a hint the moment
                 // the Pact option becomes pickable so players notice the
