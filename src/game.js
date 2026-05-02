@@ -2814,6 +2814,8 @@ startQTE(type, x, y, callback, opts) {
                          color: COLORS.GOLD
                      });
                      this.triggerSlowMo && this.triggerSlowMo(0.1, 0.085);
+                     // Momentum: perfect parry is a high-value beat.
+                     if (this._tickMomentum) this._tickMomentum('parry', 1);
                      // Riposte: 50% of the damage the player took (which is
                      // itself half of the incoming) bounces back. Falls back
                      // to the legacy baseDmg-derived value when the call
@@ -5746,6 +5748,40 @@ triggerPhaseGlitch() {
         this.screenFlashUntil = performance.now() + durationMs;
         this.screenFlashStart = performance.now();
         this.screenFlashDuration = durationMs;
+    },
+
+    /* Increment combat momentum from a triggering event. Reasons accepted
+     * by the system: 'combo' (combo set fully consumed), 'parry' (perfect
+     * parry resolved), 'kill' (enemy died on player turn), 'apex_consume'
+     * (negative — APEX consumed, drop to 0). Tier banners fire one-shot
+     * when crossing 2/4/6. APEX flag is read by the next-attack damage
+     * path. */
+    _tickMomentum(reason, delta) {
+        if (typeof this.momentum !== 'number') this.momentum = 0;
+        const before = this.momentum;
+        if (reason === 'apex_consume') {
+            this.momentum = 0;
+            this._momentumApexArmed = false;
+            return;
+        }
+        this.momentum = Math.max(0, Math.min(6, this.momentum + (delta || 1)));
+        this._momentumTriggeredThisTurn = true;
+        if (this.momentum === before) return;
+        // Cross-threshold floaters at 2 / 4 / 6.
+        if (this.player) {
+            if (before < 2 && this.momentum >= 2) {
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 180, "FLOW", '#6fe8ff');
+            } else if (before < 4 && this.momentum >= 4) {
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 200, "SURGE", '#ffd76a');
+                ParticleSys.createShockwave && ParticleSys.createShockwave(this.player.x, this.player.y, '#ffd76a', 24);
+            } else if (before < 6 && this.momentum >= 6) {
+                this._momentumApexArmed = true;
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 220, "APEX READY", '#ff3300');
+                ParticleSys.createShockwave && ParticleSys.createShockwave(this.player.x, this.player.y, '#ff3300', 36);
+                if (this.shake) this.shake(8);
+                if (AudioMgr && AudioMgr.playSound) AudioMgr.playSound('upgrade');
+            }
+        }
     },
 
     /* Compose-a-hit helper — single call replaces the 6-line cluster of
@@ -11509,6 +11545,18 @@ async startTurn() {
         this.diceUsedThisTurn = 0; // Paradox Loop + future per-turn counters
         this.firstDefendUsedThisTurn = false;
         this._duskPopThisTurn = false;
+        // Momentum / groove system — accumulates from combo-completes,
+        // perfect parries, and enemy kills on the player's turn; decays
+        // by 1 each turn the player triggers nothing. Tier thresholds:
+        // 2 (FLOW = +20% on first attack), 4 (SURGE = early-release of
+        // any combo this turn), 6 (APEX = next attack auto-crits +
+        // shield-pierce + reset). Visualised next to reroll badge.
+        if (typeof this.momentum !== 'number') this.momentum = 0;
+        // Decay if the previous turn registered no momentum-trigger flag.
+        if (this.momentum > 0 && !this._momentumTriggeredThisTurn) {
+            this.momentum = Math.max(0, this.momentum - 1);
+        }
+        this._momentumTriggeredThisTurn = false;
         this._tickSealedDie();
         // Per-turn stats for end-of-turn summary popup
         this.turnStats = { dmgDealt: 0, dmgTaken: 0, rerollsUsed: 0, healed: 0, shieldGained: 0 };
@@ -12479,6 +12527,8 @@ async startTurn() {
             const set = this.comboSets[id];
             this._playComboClimax(id, set);
             delete this.comboSets[id];
+            // Momentum: combo set fully consumed → +1 to the meter.
+            if (this._tickMomentum) this._tickMomentum('combo', 1);
         }
     },
 
@@ -13129,6 +13179,18 @@ async startTurn() {
                 // Relic: LAST STAND — +30% damage while below 33% HP. Flag
                 // is set/cleared at startTurn.
                 const lastStandBonus = this.player._lastStandActive ? 1.3 : 1.0;
+                // Momentum APEX — when the player has built to tier 6, the
+                // next attack auto-crits AND ignores enemy shield. Consumes
+                // the apex flag (resets momentum to 0). One-shot per build.
+                let apexBonus = 1.0;
+                let apexBypassShield = false;
+                if (this._momentumApexArmed) {
+                    apexBonus = 2.0;
+                    apexBypassShield = true;
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 240, "APEX STRIKE", '#ff3300');
+                    if (this.triggerScreenFlash) this.triggerScreenFlash('rgba(255, 90, 30, 0.5)', 220);
+                    if (this._tickMomentum) this._tickMomentum('apex_consume', 0);
+                }
                 if (this._dieSlot(type) === 'attack') {
                     this.attacksThisTurn++;
                     const rStacks = this.stackCount('relentless');
@@ -13211,7 +13273,7 @@ async startTurn() {
                     glitchMult = 1 + Math.random() * 2;
                     ParticleSys.createFloatingText(this.player.x, this.player.y - 140, `GLITCH x${glitchMult.toFixed(1)}`, "#ff00ff");
                 }
-                dmg = Math.floor(dmg * qteMultiplier * chargeMult * dawnBonus * duskBonus * pyreMult * glitchMult * lastStandBonus);
+                dmg = Math.floor(dmg * qteMultiplier * chargeMult * dawnBonus * duskBonus * pyreMult * glitchMult * lastStandBonus * apexBonus);
 
                 // Relic: Thorn Mail (+2 Block) — also triggered by Sentinel signature T3 for this combat
                 if(this.player.hasRelic('thorn_mail') || this._sigThornsActive) {
@@ -13301,7 +13363,8 @@ async startTurn() {
                     for (let h = 0; h < hits; h++) {
                         if (!finalEnemy || finalEnemy.currentHp <= 0) break;
                         const beforeHp = finalEnemy.currentHp;
-                        const killed = finalEnemy.takeDamage(dmg, this.player);
+                        // APEX consumes the player's shield-bypass flag for THIS hit only.
+                        const killed = finalEnemy.takeDamage(dmg, this.player, false, apexBypassShield);
                         applyLifesteal(beforeHp - finalEnemy.currentHp);
                         if (killed) {
                             if (finalEnemy === this.enemy) { this.winCombat(); return; }

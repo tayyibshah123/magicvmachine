@@ -703,6 +703,10 @@ class Entity {
             Game.player.heal(3 * stacks);
             ParticleSys.createFloatingText(Game.player.x, Game.player.y - 100, "MED +" + (3 * stacks), COLORS.NATURE_LIGHT);
         }
+        // Momentum: every player-side kill bumps combat momentum.
+        if (diedByPlayer && killedTargetIsHostile && Game._tickMomentum) {
+            try { Game._tickMomentum('kill', 1); } catch (_) {}
+        }
         // Module: SIPHON BLADE — kills heal +4 HP and refund 1 Mana. Stacks
         // multiply the heal but the mana refund stays at 1 (otherwise
         // stacking trivialises the mana economy).
