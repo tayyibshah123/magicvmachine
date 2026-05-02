@@ -829,11 +829,11 @@
                     <div class="settings-tabs" role="tablist">
                         <button class="settings-tab active" data-tab="audio" role="tab" aria-label="Audio">
                             <span class="settings-tab-full">AUDIO</span>
-                            <span class="settings-tab-short">AUD</span>
+                            <span class="settings-tab-short">AUDIO</span>
                         </button>
-                        <button class="settings-tab" data-tab="display" role="tab" aria-label="Display">
+                        <button class="settings-tab" data-tab="display" role="tab" aria-label="Display and accessibility">
                             <span class="settings-tab-full">DISPLAY</span>
-                            <span class="settings-tab-short">DSP</span>
+                            <span class="settings-tab-short">DISPLAY</span>
                         </button>
                         <button class="settings-tab" data-tab="gameplay" role="tab" aria-label="Gameplay">
                             <span class="settings-tab-full">GAMEPLAY</span>
@@ -841,7 +841,7 @@
                         </button>
                         <button class="settings-tab" data-tab="credits" role="tab" aria-label="Credits">
                             <span class="settings-tab-full">CREDITS</span>
-                            <span class="settings-tab-short">CRED</span>
+                            <span class="settings-tab-short">CREDITS</span>
                         </button>
                         <button class="settings-tab" data-tab="dev" role="tab" aria-label="Dev">
                             <span class="settings-tab-full">DEV</span>
@@ -886,13 +886,14 @@
 
                         <!-- DISPLAY TAB -->
                         <div class="settings-pane" data-pane="display">
+                            <div class="settings-section-label">Accessibility</div>
                             <div class="setting-row setting-slider">
                                 <label for="sld-text-scale">Text size</label>
                                 <input type="range" id="sld-text-scale" min="80" max="140" step="5" value="100">
                                 <span class="setting-value" data-for="sld-text-scale">100%</span>
                             </div>
                             <div class="setting-row">
-                                <label for="chk-reduced-motion">Reduced motion</label>
+                                <label for="chk-reduced-motion">Reduced motion <span class="setting-hint">(disable to enable menu animations)</span></label>
                                 <input type="checkbox" id="chk-reduced-motion">
                             </div>
                             <div class="setting-row">

@@ -14227,3 +14227,31 @@ body.perf-low .menu-radar,
 body.perf-low .menu-glyphs { display: none; }
 body.perf-mid .menu-radar { opacity: 0.3; animation-duration: 28s; }
 body.perf-mid .menu-glyphs span:nth-child(n+4) { display: none; }
+
+/* Settings panel — section labels + setting hints. The DISPLAY tab
+   houses both display tuning (text size) AND accessibility toggles
+   (reduced motion, high contrast, dyslexic font, colorblind), so
+   labelling the section makes the latter discoverable. */
+.settings-section-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    color: var(--neon-gold);
+    margin: 4px 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255, 215, 0, 0.25);
+    text-transform: uppercase;
+}
+.settings-section-label + .setting-row {
+    margin-top: 6px;
+}
+/* Inline hint text that sits next to a label. Smaller, dimmer,
+   parenthetical so the primary label still reads clearly. */
+.setting-hint {
+    display: block;
+    font-size: 0.7rem;
+    opacity: 0.6;
+    font-weight: normal;
+    letter-spacing: 0.04em;
+    margin-top: 1px;
+}
