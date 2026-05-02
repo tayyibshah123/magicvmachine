@@ -11940,6 +11940,15 @@ async startTurn() {
         // Class Ability: additive bonus (Tactician COMMAND +dmg pip)
         dmg += peek ? ClassAbility.peekPreDamageBonus(type) : ClassAbility.consumePreDamageBonus(type);
 
+        // Module: MUNITIONS BELT — skill dice (METEOR, EARTHQUAKE,
+        // SIGNATURE) gain +25% effect. Applied at the base layer so
+        // every downstream multiplier (titan, charge, dawn, etc.)
+        // composes on top.
+        if ((type === 'METEOR' || type === 'EARTHQUAKE' || type === 'SIGNATURE')
+            && this.player && this.player.hasRelic && this.player.hasRelic('munitions_belt')) {
+            dmg = Math.floor(dmg * 1.25);
+        }
+
         // Meta: Solar Flare (+30%)
         if(this.hasMetaUpgrade('m_dmg')) {
             dmg = Math.floor(dmg * 1.3);
@@ -12565,6 +12574,33 @@ async startTurn() {
             announce('SIBLING_BOND', 'SIBLING BOND', '#00ff99', minionIds);
         }
 
+        // ── New cross-slot combos. These detect on top of the per-slot
+        // ones above so a hand can stack multiple climaxes (e.g. 2 ATK
+        // + 2 DEF triggers DOUBLE STRIKE + BULWARK + MIRROR HAND).
+
+        // TRINITY — exactly one of every slot in hand. Heal + shield + mana
+        // + reroll on climax. Pays for hand variety as the opposite fork
+        // from FLURRY / OVERFLOW / SIBLING BOND. Detection on the count,
+        // not exact equality, so the hand can also have skill dice.
+        if (attackIds.length === 1 && defendIds.length === 1 && manaIds.length === 1 && minionIds.length === 1) {
+            this.comboTrinity = true;
+            announce('TRINITY', 'TRINITY', '#ffd76a', [attackIds[0], defendIds[0], manaIds[0], minionIds[0]]);
+        }
+
+        // MIRROR HAND — 2 ATK + 2 DEF + 0 MANA in hand. Climax stages a
+        // flat damage buffer for the next attack equal to 5 per defend.
+        if (attackIds.length === 2 && defendIds.length === 2 && manaIds.length === 0) {
+            this.comboMirrorHand = true;
+            announce('MIRROR_HAND', 'MIRROR HAND', '#88aaff', [...attackIds, ...defendIds]);
+        }
+
+        // HEMORRHAGE — 2+ ATK in hand AND target has bleed. Refreshes
+        // bleed duration and adds a stack per attack played.
+        if (attackIds.length >= 2 && this.enemy && this.enemy.hasEffect && this.enemy.hasEffect('bleed')) {
+            this.comboHemorrhage = true;
+            announce('HEMORRHAGE', 'HEMORRHAGE', '#ff1a3a', attackIds);
+        }
+
         // Class-unique combo — one per class. Payload applies as the climax.
         const cid = this.player && this.player.classId;
         if (cid === 'tactician' && attackIds.length && defendIds.length && manaIds.length) {
@@ -12649,6 +12685,54 @@ async startTurn() {
                 AudioMgr.playSound('upgrade');
                 banner('SIBLING BOND!', { x: px, y: py });
                 break;
+
+            // ── Cross-slot combo climaxes
+            case 'TRINITY': {
+                // Heal 4 + shield 4 + mana 1 + reroll 1. Token reward
+                // for hand variety. Rounds up the existing cluster so
+                // every slot in the hand contributes to the payout.
+                if (this.player) {
+                    this.player.heal && this.player.heal(4);
+                    this.player.addShield && this.player.addShield(4);
+                }
+                this.gainMana && this.gainMana(1, { silent: true });
+                this.rerolls = (this.rerolls || 0) + 1;
+                ParticleSys.createShockwave(px, py, '#ffd76a', 36);
+                ParticleSys.createSparks(px, py, '#ffd76a', 14);
+                AudioMgr.playSound('upgrade');
+                banner('TRINITY!', { x: px, y: py });
+                break;
+            }
+            case 'MIRROR_HAND': {
+                // Stage +5 flat damage on next attack per defend in hand.
+                // Reuses the existing nextAttackFlatBonus accumulator so
+                // every consumer of nextAttackFlatBonus already honours
+                // the buff. comboMirrorHand was 2 defends → +10 flat.
+                if (this.player) {
+                    this.player.nextAttackFlatBonus = (this.player.nextAttackFlatBonus || 0) + 10;
+                }
+                ParticleSys.createShockwave(px, py, '#88aaff', 30);
+                ParticleSys.createSparks(px, py, '#88aaff', 12);
+                AudioMgr.playSound('defend');
+                banner('MIRROR HAND!', { x: px, y: py });
+                break;
+            }
+            case 'HEMORRHAGE': {
+                // Refresh bleed on the boss + add a stack. Extends the
+                // DoT window the player is committing to. Capped at 3
+                // stacks via the existing addEffect stacking rule in
+                // entity.js so it can't grow unbounded.
+                if (this.enemy && this.enemy.hasEffect && this.enemy.hasEffect('bleed')) {
+                    const cur = this.enemy.hasEffect('bleed');
+                    const tickDmg = (cur && cur.val) || 3;
+                    this.enemy.addEffect('bleed', 3, tickDmg, '🩸', `Takes ${tickDmg} DMG at end of turn.`, 'BLEED');
+                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 130, "BLEED REFRESHED", '#ff1a3a');
+                }
+                ParticleSys.createShockwave(px, py, '#ff1a3a', 26);
+                AudioMgr.playSound('hit');
+                banner('HEMORRHAGE!', { x: px, y: py });
+                break;
+            }
 
             // Class-unique climaxes
             case 'PINCER': {
@@ -13542,7 +13626,13 @@ async startTurn() {
                     }
                     // Arcanist: mana-scaling already handled via base damage calc
                     // Annihilator: heat added via ClassAbility.onEvent
-                    // Sentinel: shield-bash scaling handled via base damage calc
+                    // Sentinel — SUNDER: while shield > 40, attacks apply
+                    // Frail (+50% incoming) for 2 turns. Class fantasy:
+                    // standing behind a wall lets you read openings.
+                    if (classId === 'sentinel' && (this.player.shield || 0) > 40 && finalEnemy && finalEnemy.currentHp > 0) {
+                        finalEnemy.addEffect('frail', 2, 0, '💢', '+50% Dmg Taken.', 'FRAIL');
+                        ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 130, "SUNDER", '#88aaff');
+                    }
                     // Summoner: minion-scaling handled via base damage calc
                 }
 
