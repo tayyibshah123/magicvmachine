@@ -250,39 +250,41 @@ body.reduced-motion .landscape-hint-icon { animation: none; }
    `body.reduced-motion`: the media query catches OS-level preference;
    the body class is the in-game settings toggle. Either applies the
    same suppression. */
-@media (prefers-reduced-motion: reduce) {
-    :root { --motion-scale: 0.001; }
-    html { scroll-behavior: auto !important; }
-
-    /* Animations only — transitions are intentionally untouched.
-       Universal selector; high-specificity-via-!important so nothing in
-       the cascade can re-enable a long animation by accident.
-       Elements with .rm-keep opt out and keep their declared
-       animation (escape hatch). */
-    *:not(.rm-keep),
-    *:not(.rm-keep)::before,
-    *:not(.rm-keep)::after {
-        animation-duration: 0.001ms !important;
-        animation-delay: 0ms !important;
-        animation-iteration-count: 1 !important;
-    }
-
-    /* Hard-kills for vestibular triggers — screen flashes, violent shakes,
-       slam-zoom cinematics. Removing the animation entirely (rather than
-       letting the blanket above tick a single frame) avoids a one-frame
-       white flash on entry. */
-    .rm-vestibular,
-    .rm-vestibular::before,
-    .rm-vestibular::after,
-    .intro-scanbeam,
-    .intro-rays,
-    #screen-flash,
-    .hit-flash,
-    #gameCanvas.boss-zoom {
-        animation: none !important;
-        transform: none !important;
-    }
+/* Universal reduced-motion kills. Gated on the body.reduced-motion
+   class (set by the in-game Settings toggle and auto-applied at boot
+   when the OS pref matches AND the player hasn't explicitly opted in
+   to motion). Switching this away from the raw @media query is what
+   lets a player on a reduced-motion-preferred OS turn animations BACK
+   ON via the in-game checkbox — toggling the class wins immediately. */
+body.reduced-motion { --motion-scale: 0.001; }
+body.reduced-motion html { scroll-behavior: auto !important; }
+body.reduced-motion *:not(.rm-keep),
+body.reduced-motion *:not(.rm-keep)::before,
+body.reduced-motion *:not(.rm-keep)::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
 }
+
+/* Hard-kills for vestibular triggers — screen flashes, violent shakes,
+   slam-zoom cinematics. Removing the animation entirely (rather than
+   letting the blanket above tick a single frame) avoids a one-frame
+   white flash on entry. */
+body.reduced-motion .rm-vestibular,
+body.reduced-motion .rm-vestibular::before,
+body.reduced-motion .rm-vestibular::after,
+body.reduced-motion .intro-scanbeam,
+body.reduced-motion .intro-rays,
+body.reduced-motion #screen-flash,
+body.reduced-motion .hit-flash,
+body.reduced-motion #gameCanvas.boss-zoom {
+    animation: none !important;
+    transform: none !important;
+}
+
+/* Duplicate kill rules (legacy fallback for the `body.reduced-motion`
+   path before the universal block above was class-gated). Kept for
+   safety; both paths produce the same end-state. */
 body.reduced-motion { --motion-scale: 0.001; }
 body.reduced-motion *:not(.rm-keep),
 body.reduced-motion *:not(.rm-keep)::before,
