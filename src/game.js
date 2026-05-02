@@ -18602,11 +18602,15 @@ drawEffects() {
         const spacing = 280;
         const ROW2_DX = Math.floor(spacing * 0.55);
         const ROW2_DY = 160; // magnitude; sign set per-side so layouts mirror
-        // Shared positioner — layouts 0/1 flank the owner, extras stack on
+        // Shared positioner — layouts 0/1 flank the owner, slots 2-3 sit on
         // a second row offset toward the owner's side of the battlefield.
         //   enemy side: second row is ABOVE the first (dy = -160, behind)
         //   player side: second row is BELOW (dy = +160, front)
-        // Caps at 5 positions; any extras beyond that collide onto slot 4.
+        // Slot 4 (the 5th minion) is centred on the owner's column —
+        // directly underneath the player on the player side, directly
+        // above the boss on the enemy side — so a full grove reads as
+        // a clean "+" formation instead of three offset minions piled
+        // down one diagonal. Anything past slot 4 collides onto slot 4.
         const placeMinions = (list, ownerX, ownerY, dyDir) => {
             if (!list || !list.length) return;
             for (let i = 0, n = list.length; i < n; i++) {
@@ -18614,13 +18618,9 @@ drawEffects() {
                 if (!m) continue;
                 if (i === 0)      { m.x = ownerX - spacing;       m.y = ownerY; }
                 else if (i === 1) { m.x = ownerX + spacing;       m.y = ownerY; }
-                else {
-                    const j = i - 2;
-                    const side = (j % 2 === 0) ? -1 : 1;
-                    const tier = (j >>> 1);
-                    m.x = ownerX + side * ROW2_DX;
-                    m.y = ownerY + dyDir * (ROW2_DY + tier * 140);
-                }
+                else if (i === 2) { m.x = ownerX - ROW2_DX;       m.y = ownerY + dyDir * ROW2_DY; }
+                else if (i === 3) { m.x = ownerX + ROW2_DX;       m.y = ownerY + dyDir * ROW2_DY; }
+                else              { m.x = ownerX;                 m.y = ownerY + dyDir * (ROW2_DY + 140); }
             }
         };
         if (this.player) {
