@@ -8547,7 +8547,11 @@ triggerSystemCrash() {
         try {
             const raw = localStorage.getItem('mvm_settings_v1');
             if (!raw) {
-                // First-launch defaults — still apply OS preference for reduced motion
+                // First-launch defaults — apply OS preference for reduced
+                // motion. Player can flip the in-game toggle later to
+                // override the OS pref; their choice then wins because
+                // the CSS now reads `body.reduced-motion`, not the @media
+                // query directly.
                 if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
                     document.body.classList.add('reduced-motion');
                     const el = document.getElementById('chk-reduced-motion');
@@ -8556,6 +8560,14 @@ triggerSystemCrash() {
                 return;
             }
             const s = JSON.parse(raw);
+            // Player override applies regardless of OS pref. If the saved
+            // setting is explicitly false, ensure the body class is OFF
+            // even when the OS reports reduced-motion preferred.
+            if (s.reducedMotion === false) {
+                document.body.classList.remove('reduced-motion');
+            } else if (s.reducedMotion === true) {
+                document.body.classList.add('reduced-motion');
+            }
             const d = document;
             const setCheck = (id, val) => { const el = d.getElementById(id); if (el && val != null) el.checked = !!val; };
             const setVal = (id, val) => { const el = d.getElementById(id); if (el && val != null) el.value = val; };

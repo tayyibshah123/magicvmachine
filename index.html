@@ -179,13 +179,41 @@
                     <span id="menu-sparks">0</span>
                     <span class="meta-sparks-label">SPARKS</span>
                 </div>
-                <!-- Ambient scan-line layer behind the menu chrome. Tier-
-                     gated via CSS @media (prefers-reduced-motion); set to
-                     transform-only translate so the GPU compositor handles
-                     it cheaply. -->
+                <!-- Ambient atmosphere layer behind the menu chrome.
+                     Each child is transform/opacity-only and sits on a
+                     dedicated compositor layer (will-change), so the GPU
+                     handles them and the CPU never paints them per frame.
+                     Strip the lot via body.reduced-motion or .perf-low. -->
                 <div class="menu-ambient" aria-hidden="true">
+                    <!-- HUD lattice — slow drift of fine perspective grid
+                         lines, sells the "operator interface" aesthetic. -->
+                    <div class="menu-lattice"></div>
+                    <!-- Two diagonal scan-lines drifting at different
+                         speeds + colours. -->
                     <span class="menu-scan"></span>
                     <span class="menu-scan menu-scan--alt"></span>
+                    <!-- Animated radar sweep — circular gradient slowly
+                         rotates around the viewport centre. -->
+                    <div class="menu-radar"></div>
+                    <!-- Floating glyph particles — small Unicode code-
+                         shaped specks drifting upward from the bottom. -->
+                    <div class="menu-glyphs">
+                        <span style="--gx: 8%;  --gd: 0s;   --gs: 18s;">◆</span>
+                        <span style="--gx: 22%; --gd: 4s;   --gs: 22s;">●</span>
+                        <span style="--gx: 38%; --gd: 9s;   --gs: 19s;">▲</span>
+                        <span style="--gx: 56%; --gd: 2s;   --gs: 24s;">◇</span>
+                        <span style="--gx: 71%; --gd: 12s;  --gs: 21s;">★</span>
+                        <span style="--gx: 86%; --gd: 6s;   --gs: 17s;">○</span>
+                    </div>
+                    <!-- Decorative HUD readouts — tiny corner labels that
+                         feel like a status panel. Static text but with
+                         flicker/blink animations on dot indicators. -->
+                    <div class="menu-hud-tag menu-hud-tl">
+                        <span class="menu-hud-dot"></span> SYS // ONLINE
+                    </div>
+                    <div class="menu-hud-tag menu-hud-bl">
+                        UPLINK <span class="menu-hud-dot menu-hud-dot--alt"></span>
+                    </div>
                 </div>
                 <div class="glow-container">
                     <!-- Archivist Slain cosmetic frame (Roadmap Part 24.2).
@@ -221,15 +249,20 @@
                 <button id="btn-load-save" class="btn primary hidden menu-cta menu-cta-resume">RESUME RUN</button>
                 <button id="btn-start" class="btn primary menu-cta menu-cta-primary"><span id="btn-start-label">INITIATE RUN</span><span id="btn-start-warn" class="btn-start-warn hidden">DISCARDS CURRENT RUN</span></button>
 
-                <!-- Run modes — alt run types. CHALLENGE status (last
-                     score) lives BELOW the button as a sub-line, not
-                     inline, so the button label never truncates. -->
-                <div class="menu-row menu-row-modes">
-                    <button id="btn-challenge" class="btn secondary neon-border-gold menu-cta-alt">CHALLENGE</button>
-                    <button id="btn-archive" class="btn secondary neon-border-gold menu-cta-alt hidden">ARCHIVE</button>
+                <!-- Run modes — alt run types. Each button + its status
+                     sub-line live in their own column container so the
+                     status sits directly UNDER its button (was stacking
+                     both lines under the same column). -->
+                <div class="menu-row menu-row-modes menu-row-with-substatus">
+                    <div class="menu-col">
+                        <button id="btn-challenge" class="btn secondary neon-border-gold menu-cta-alt">CHALLENGE</button>
+                        <div id="challenge-status-line" class="menu-substatus" style="opacity:0.7;"></div>
+                    </div>
+                    <div class="menu-col">
+                        <button id="btn-archive" class="btn secondary neon-border-gold menu-cta-alt hidden">ARCHIVE</button>
+                        <div id="archive-status-line" class="menu-substatus" style="opacity:0.7; display:none;"></div>
+                    </div>
                 </div>
-                <div id="challenge-status-line" class="menu-substatus" style="opacity:0.7;"></div>
-                <div id="archive-status-line" class="menu-substatus" style="opacity:0.7; display:none;"></div>
 
                 <!-- Meta nav — sanctuary / codex / save management. Each
                      button is feature-gated via Unlocks; locked entries
