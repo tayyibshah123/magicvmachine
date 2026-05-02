@@ -27,6 +27,7 @@ import { Onboarding } from './services/onboarding.js';
 import { ClassBriefing } from './services/class-briefing.js';
 import { Perf } from './services/perf.js';
 import { Diag } from './services/diag.js';
+import { Breakout } from './services/breakout.js';
 import { getMatchupHint } from './data/matchup-hints.js';
 
 registerEntityClasses(Player, Minion, Enemy);
@@ -1142,7 +1143,7 @@ const Game = {
                 }
              }
 
-             if ((this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT) && this.enemy && this.enemy.currentHp > 0) {
+             if ((this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT || this.currentState === STATE.BREAKOUT) && this.enemy && this.enemy.currentHp > 0) {
                 const _edx = this.mouseX - this.enemy.x, _edy = this.mouseY - this.enemy.y;
                 const _er = this.enemy.radius;
                 if (_edx * _edx + _edy * _edy < _er * _er) {
@@ -1381,7 +1382,7 @@ const Game = {
     },
 
     handleCanvasHover(screenX, screenY) {
-        if(this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT) { TooltipMgr.hide(); return; }
+        if(this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT && this.currentState !== STATE.BREAKOUT) { TooltipMgr.hide(); return; }
         if (this.dragState.active || this.qte.active) { TooltipMgr.hide(); return; }
 
         // First-pass: check if cursor is over an enemy intent badge (drawn above the enemy).
@@ -2163,7 +2164,7 @@ startQTE(type, x, y, callback, opts) {
                     return;
                 }
                 if (this.qte.active && this.qte.id === now &&
-                   (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT)) {
+                   (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT || this.currentState === STATE.BREAKOUT)) {
                     console.log("QTE Failsafe Triggered");
                     this.resolveQTE('fail');
                 }
@@ -2997,7 +2998,7 @@ startQTE(type, x, y, callback, opts) {
         }
         // Direction inference: forward states (deeper into a run) slide left;
         // back/menu states slide right; lateral states (shop/event/etc.) fade up.
-        const FORWARD = new Set([STATE.CHAR_SELECT, STATE.MAP, STATE.COMBAT, STATE.TUTORIAL_COMBAT, STATE.REWARD, STATE.COMBAT_WIN, STATE.SHOP, STATE.EVENT, STATE.HEX, STATE.STORY, STATE.ENDING, STATE.VICTORY]);
+        const FORWARD = new Set([STATE.CHAR_SELECT, STATE.MAP, STATE.COMBAT, STATE.TUTORIAL_COMBAT, STATE.BREAKOUT, STATE.REWARD, STATE.COMBAT_WIN, STATE.SHOP, STATE.EVENT, STATE.HEX, STATE.STORY, STATE.ENDING, STATE.VICTORY]);
         const BACKWARD = new Set([STATE.MENU, STATE.GAMEOVER]);
         const prev = this.currentState;
         // Drain combat-scoped tracked timers when leaving combat so a long
@@ -3005,7 +3006,7 @@ startQTE(type, x, y, callback, opts) {
         // states (REWARD, COMBAT_WIN) keep timers — they're transient
         // post-combat overlays that share lifecycle with the just-ended
         // fight.
-        const COMBAT_LIKE = new Set([STATE.COMBAT, STATE.TUTORIAL_COMBAT, STATE.REWARD, STATE.COMBAT_WIN]);
+        const COMBAT_LIKE = new Set([STATE.COMBAT, STATE.TUTORIAL_COMBAT, STATE.REWARD, STATE.COMBAT_WIN, STATE.BREAKOUT]);
         if (COMBAT_LIKE.has(prev) && !COMBAT_LIKE.has(newState)) {
             this.clearTrackedTimers();
         }
@@ -3039,8 +3040,10 @@ startQTE(type, x, y, callback, opts) {
         if (_tSpot) _tSpot.classList.add('hidden');
 
         // Defensive: narration pane (and its sibling skip button) must
-        // only appear in TUTORIAL_COMBAT.
-        if (newState !== STATE.TUTORIAL_COMBAT) {
+        // only appear in TUTORIAL_COMBAT or BREAKOUT — both flows share
+        // the same on-canvas narration overlay (Sector 0 reuses the
+        // existing pane to avoid a duplicate UI surface).
+        if (newState !== STATE.TUTORIAL_COMBAT && newState !== STATE.BREAKOUT) {
             const narrPane = document.getElementById('tutorial-narration');
             if (narrPane) narrPane.classList.add('hidden');
             const skipBtn = document.getElementById('btn-tutorial-skip');
@@ -3097,7 +3100,8 @@ startQTE(type, x, y, callback, opts) {
         const isCombatScreen = (
             newState === STATE.COMBAT ||
             newState === STATE.TUTORIAL_COMBAT ||
-            newState === STATE.COMBAT_WIN
+            newState === STATE.COMBAT_WIN ||
+            newState === STATE.BREAKOUT
         );
         if (this._inCombatScreen !== isCombatScreen) {
             this._inCombatScreen = isCombatScreen;
@@ -3210,9 +3214,17 @@ startQTE(type, x, y, callback, opts) {
                 setTimeout(() => this.renderShop(), 280);
                 this.showHintOnce('first_shop', "SHOP: spend Fragments on new Modules. Rarer modules scale stronger.");
                 break;
-            case STATE.COMBAT: 
+            case STATE.COMBAT:
                 document.getElementById('hud').classList.remove('hidden');
-                this.renderRelics(); 
+                this.renderRelics();
+                break;
+            // Sector 0 — Breakout. Same HUD as COMBAT; the Breakout
+            // service drives the combat overrides. Activating no extra
+            // screen because the canvas + HUD ARE the screen — the
+            // narration pane sits on top.
+            case STATE.BREAKOUT:
+                document.getElementById('hud').classList.remove('hidden');
+                this.renderRelics();
                 break;
             case STATE.REWARD: {
                 activate('screen-reward');
@@ -4725,6 +4737,21 @@ startQTE(type, x, y, callback, opts) {
         // First-run auto-tutorial (Phase 3). Profile-level flag (persists across runs).
         const firstRunDone = localStorage.getItem('mvm_first_run_done') === '1';
         if (!firstRunDone) {
+            // Sector 0 — The Breakout. New cyber-prison prologue replaces
+            // the legacy auto-tutorial for fresh installs. Walks the
+            // player through 5 mechanic-teaching rooms + a Cage Guardian
+            // boss, then drops them into Sector 1 with the Cellkey Shard
+            // relic. Only fires the FIRST time per profile (own flag).
+            // Veterans (`mvm_breakout_done === '1'`) fall back to the
+            // legacy auto-tutorial OR are skipped depending on their
+            // preference; we keep the legacy path live so existing
+            // first-run-done players who have NEVER seen the breakout
+            // still see something on a class swap.
+            if (Breakout.shouldOffer()) {
+                Breakout.start(this);
+                this.saveGame();
+                return;
+            }
             this.tutorialAutoRun = true;
             this.startTutorial();
             this.saveGame();
@@ -5408,8 +5435,9 @@ triggerPhaseGlitch() {
                 return;
             }
 
-            // Combat-only shortcuts
-            if (this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT) return;
+            // Combat-only shortcuts (incl. Sector 0 Breakout, which uses
+            // the combat engine).
+            if (this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT && this.currentState !== STATE.BREAKOUT) return;
 
             if (e.key === ' ' || e.code === 'Space') {
                 // Space → end turn
@@ -5492,7 +5520,8 @@ triggerPhaseGlitch() {
                 // (menu, map, shop) can resume seamlessly — they're
                 // not time-pressured.
                 const inCombat = (this.currentState === STATE.COMBAT
-                    || this.currentState === STATE.TUTORIAL_COMBAT);
+                    || this.currentState === STATE.TUTORIAL_COMBAT
+                    || this.currentState === STATE.BREAKOUT);
                 if (inCombat) {
                     this._showPauseOverlay();
                 } else {
@@ -10994,6 +11023,85 @@ updateHexBreach(dt) {
         });
     },
 
+    /* Lightweight combat spawn for the Sector 0 Breakout. Bypasses the
+     * heavy startCombat path because the prologue rooms don't need
+     * sector configs, boss intros, or rare relic hooks — just an enemy
+     * facing the player with a known intent script and a clean dice
+     * pool. The Breakout service drives the room transitions; this
+     * helper handles a single room's setup. */
+    _buildBreakoutCombat(room) {
+        if (!room || !room.enemy) return;
+        // Reset combat-side state that startCombat normally clears so
+        // dice/turn counters/effects don't leak between rooms.
+        this._combatGen = (this._combatGen || 0) + 1;
+        this._endTurnRunning = false;
+        this.effects = [];
+        ParticleSys.clear();
+        if (CombatLog && CombatLog.clear) CombatLog.clear();
+        if (this.player) {
+            this.player.minions = [];
+            this.player.shield = 0;
+            // Top up HP between rooms so the prologue stays on-rails;
+            // the prologue isn't about HP attrition, it's about
+            // teaching mechanics.
+            this.player.currentHp = this.player.maxHp;
+        }
+        this.firstAttackDealt = false;
+        this.firstDefendUsedThisTurn = false;
+        this.freeRerollUsedThisTurn = false;
+        this.turnCount = 0;
+        this.runStats = this.runStats || { turns: 0, totalDamage: 0, highestHit: 0, kills: 0, rerollsUsed: 0, perfectQTEs: 0, damageTaken: 0, synergies: [] };
+        // Reset turn count for the new room so the cellkey-shard reroll
+        // grant fires on this room's turn 1 too.
+        this.runStats.turns = 0;
+
+        // Build the enemy directly. Tier 1, non-elite. The Enemy
+        // constructor reads `template.hp`/`dmg`; we pass the scripted
+        // values straight through.
+        const template = { name: room.enemy.name, hp: room.enemy.hp, dmg: room.enemy.dmg };
+        this.enemy = new Enemy(template, 1);
+        this.enemy.maxHp = room.enemy.hp;
+        this.enemy.currentHp = room.enemy.hp;
+        this.enemy.baseDmg = room.enemy.dmg;
+        this.enemy.dmg = room.enemy.dmg;
+        this.enemy.isBreakoutEnemy = true;
+        this.enemy.isBoss = !!room.enemy.isBoss;
+        // Patch bossData so decideTurn's `actionsPerTurn` lookup
+        // doesn't read undefined when the room marks the enemy as
+        // boss. The Cage Guardian fights with one scripted intent per
+        // turn, cycling on the script's queue.
+        this.enemy.bossData = Object.assign({}, this.enemy.bossData || {}, {
+            actionsPerTurn: 1,
+            moves: ['attack'],
+            shieldVal: 8
+        });
+        // Centre the enemy in the upper half of the canvas so the
+        // breakout fights frame cleanly. Existing combat layout
+        // assumptions are preserved by mirroring startCombat's offsets.
+        this.enemy.x = (CONFIG && CONFIG.CANVAS_WIDTH ? CONFIG.CANVAS_WIDTH : 1080) / 2;
+        this.enemy.y = (CONFIG && CONFIG.CANVAS_HEIGHT ? CONFIG.CANVAS_HEIGHT : 1920) * 0.28;
+        if (this.player) {
+            this.player.x = this.enemy.x;
+            this.player.y = (CONFIG && CONFIG.CANVAS_HEIGHT ? CONFIG.CANVAS_HEIGHT : 1920) * 0.72;
+        }
+
+        // Scripted intent — first move shown immediately so the player
+        // can read the telegraph from the first frame.
+        this.enemy.decideTurn();
+
+        // Roll the room's forced hand. Rolling deals from
+        // _breakoutForcedDice (set by Breakout._enterRoom) when state
+        // is BREAKOUT.
+        this.dicePool = [];
+        this.rerolls = 1;
+        if (this.player && this.player.diceCount) {
+            this.rollDice(Math.max(2, this.player.diceCount));
+        } else {
+            this.rollDice(2);
+        }
+        this.renderRelics();
+    },
+
 async startCombat(type) {
         // --- CLEANUP PHASE ---
         // Combat-generation counter — incremented every time a new combat
@@ -11897,6 +12005,14 @@ async startTurn() {
         let rerollStacks = this.stackCount('reroll_chip');
         let gamblerStacks = this.stackCount('gamblers_chip');
         if(this.hasMetaUpgrade('m_reroll')) rerollStacks++;
+        // CELLKEY SHARD — Sector 0 Breakout reward. Grants a single
+        // bonus reroll on TURN 1 of each combat (the first time a turn
+        // resolves after combat start). Applied as a stack bump only on
+        // the inaugural turn so the relic doesn't trivialise late-game.
+        if (this.player && this.player.hasRelic && this.player.hasRelic('cellkey_shard')
+            && (this.runStats ? this.runStats.turns === 0 : true)) {
+            rerollStacks += 1;
+        }
 
         this.player.updateEffects();
         
@@ -12484,7 +12600,28 @@ async startTurn() {
 
     rollDice(count) {
         this.dicePool = [];
-        
+
+        // BREAKOUT RIGGING — Sector 0 prologue. Each room declares the
+        // hand the player should see (`Breakout.forcedHand()`); we deal
+        // exactly that hand. If the room left it null, fall through to
+        // natural rolling (e.g. the Cage Guardian fight, where players
+        // practise on a real hand).
+        if (this.currentState === STATE.BREAKOUT) {
+            const forced = Breakout.forcedHand();
+            if (forced && forced.length) {
+                this.dicePool = forced.map((type, i) => ({
+                    id: i,
+                    type,
+                    used: false,
+                    selected: false
+                }));
+                this.renderDiceUI();
+                return;
+            }
+            // No forced hand — fall through to standard rolling. The
+            // run continues to ignore the legacy TUTORIAL_COMBAT branch.
+        }
+
         // TUTORIAL RIGGING — uses class-specific dice
         if (this.currentState === STATE.TUTORIAL_COMBAT) {
             const cd = this.player && this.player.classId
@@ -16438,7 +16575,7 @@ drawEffects() {
       // turn 1 and kicking the enemy phase before the player could act.
       if (this._endTurnRunning) return;
       if (this._combatStartedAt && (Date.now() - this._combatStartedAt) < 500) return;
-      if (this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT) return;
+      if (this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT && this.currentState !== STATE.BREAKOUT) return;
       this._endTurnRunning = true;
       // Capture the generation at entry. If a new combat starts while this
       // endTurn is still suspended on an await (sleep / VFX callback), the
@@ -17428,6 +17565,27 @@ drawEffects() {
         if (this._winCombatRunning) return;
         this._winCombatRunning = true;
         try {
+        // BREAKOUT — Sector 0 prologue rooms terminate here. The Breakout
+        // service drives room→room transitions; we just need to play
+        // the kill VFX (handled below) then hand control back to it.
+        // The relic grant + final transition to the sector map happens
+        // inside Breakout.onCombatWin / _finish, not via this method.
+        if (this.currentState === STATE.BREAKOUT) {
+            // Allow the kill VFX to run, then defer the room advance so
+            // the player sees the floating "VICTORY" stings before the
+            // next enemy spawns.
+            const enemyRef = this.enemy;
+            if (enemyRef) {
+                ParticleSys.createShockwave(enemyRef.x, enemyRef.y, COLORS.GOLD, 48);
+                ParticleSys.createExplosion(enemyRef.x, enemyRef.y, 32, COLORS.GOLD);
+                AudioMgr.playSound('upgrade');
+                this.shake(enemyRef.isBoss ? 18 : 8);
+            }
+            this._winCombatRunning = false;
+            try { Breakout.onCombatWin(); } catch (e) { console.warn('breakout advance failed', e); }
+            return;
+        }
+
         // Victory fanfare — particle shower at enemy + audio sting so every
         // kill lands before the slow-mo cinematic takes over. Non-blocking.
         if (this.enemy) {
@@ -18245,6 +18403,15 @@ drawEffects() {
     },
 
     gameOver() {
+        // BREAKOUT death-shield. Sector 0 rooms must never end the run;
+        // the prologue is meant to teach, not punish. If the player's HP
+        // crosses zero in a Breakout room, restore HP and reset the
+        // current room — the Breakout controller owns the recovery
+        // flow. Bail before the regular game-over cinematic.
+        if (this.currentState === STATE.BREAKOUT && Breakout.isActive()) {
+            try { Breakout.onPlayerWouldDie(); } catch (e) {}
+            return;
+        }
         AudioMgr.stopSectorAmbient && AudioMgr.stopSectorAmbient();
         AudioMgr.clearSectorMusic && AudioMgr.clearSectorMusic();
         this._activeSectorMech = null;
@@ -21014,7 +21181,7 @@ drawEffects() {
             this.updateMinionPositions();
             Perf.trace.mark('updateMinionPositions');
 
-            if ((this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT) && this.player && this.enemy) {
+            if ((this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT || this.currentState === STATE.BREAKOUT) && this.player && this.enemy) {
                 // Hot-path: plain for-loops instead of forEach to avoid allocating
                 // a closure per call per frame (×4 — drawEntity + drawHealthBar for
                 // both sides' minions). Adds up on mid-tier mobile.
@@ -21074,7 +21241,7 @@ drawEffects() {
             // Skipped on low tier (gradient creation per frame is expensive).
             // Gradient is cached at full strength per tint colour; per-frame work
             // is just a globalAlpha paint + rect fill.
-            if (Perf.tier !== 'low' && (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT) && this.player && this.enemy) {
+            if (Perf.tier !== 'low' && (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT || this.currentState === STATE.BREAKOUT) && this.player && this.enemy) {
                 // Compare against pre-multiplied 0.3 * maxHp to skip the HP ratio
                 // division on every frame when nobody's in the danger band.
                 const pMax = this.player.maxHp || 1;

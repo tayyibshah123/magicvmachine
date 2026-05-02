@@ -83,7 +83,13 @@ const STATE = {
     ENDING: 16, VICTORY: 17,
     COMBAT_WIN: 18,
     ACHIEVEMENTS: 19,
-    CODEX: 20
+    CODEX: 20,
+    // Sector 0 — The Breakout. Scripted prologue tutorial (5 rooms +
+    // Cage Guardian boss) that frames new players with cyber-prison
+    // story, per-class forced-die scripts, and a guaranteed first
+    // relic on completion. Replaces the legacy Training Mode for
+    // first-time players; veterans can skip in one tap.
+    BREAKOUT: 21
 };
 
 const LORE_DATABASE = [
@@ -439,7 +445,14 @@ const UPGRADES_POOL = [
     { id: 'echo_round',      name: "Echo Round",      desc: "Every 3rd attack also hits a random enemy for 50% damage.",                          icon: ICONS.attack },
     { id: 'tidal_recycler',  name: "Tidal Recycler",  desc: "When Shield > Max HP/2 at turn start, gain +1 Mana.",                                icon: ICONS.relicShieldGen },
     { id: 'munitions_belt',  name: "Munitions Belt",  desc: "Skill dice (Meteor, Earthquake, etc.) gain +25% effect.",                            icon: ICONS.classAnnihilator },
-    { id: 'tacticians_eye',  name: "Tactician's Eye", desc: "Each die rolled with matching slot (2+ same): +2 to its effect.",                    icon: ICONS.classTactician }
+    { id: 'tacticians_eye',  name: "Tactician's Eye", desc: "Each die rolled with matching slot (2+ same): +2 to its effect.",                    icon: ICONS.classTactician },
+
+    // --- Sector 0 Breakout reward — Cellkey Shard ---
+    // Awarded once, on completion of the Cage Guardian fight in the
+    // prologue. Modest first-run boost: +3 Max HP and a free reroll on
+    // turn 1 of every combat. Read by Player on combat start (turn 1
+    // reroll grant) and by the player constructor (HP).
+    { id: 'cellkey_shard',   name: "Cellkey Shard",   desc: "+3 Max HP. First turn of every combat starts with +1 Reroll.",                       icon: ICONS.metaReroll, rarity: 'gold' }
 ];
 
 const CORRUPTED_RELICS = [

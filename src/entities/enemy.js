@@ -2,6 +2,7 @@ import { AudioMgr } from '../audio.js';
 import { ParticleSys } from '../effects/particles.js';
 import { Entity } from './entity.js';
 import { Game } from '../game.js';
+import { STATE } from '../constants.js';
 
 
 class Enemy extends Entity {
@@ -146,6 +147,22 @@ class Enemy extends Entity {
     }
 
     generateSingleIntent() {
+        // BREAKOUT scripting — Sector 0 prologue. The Breakout service
+        // pre-loads each room's intent queue; the enemy plays it in
+        // order, cycling if combat outlasts the script. Skipped when
+        // we're not in a Breakout fight, so no overhead in normal
+        // combat.
+        if (Game && Game.currentState === STATE.BREAKOUT && Game._breakoutScript) {
+            const s = Game._breakoutScript;
+            if (s.intents && s.intents.length) {
+                const intent = Object.assign({}, s.intents[s.cursor % s.intents.length]);
+                s.cursor++;
+                if (intent.type !== 'idle' && intent.target == null) {
+                    intent.target = Game.player;
+                }
+                return intent;
+            }
+        }
         // Targeting Logic — slight finisher bias: 50% player, 50% minion,
         // but when minions exist, 70% of the minion-target picks go to the
         // lowest-HP player minion (so enemies feel tactical and finish off
