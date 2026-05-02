@@ -11752,6 +11752,20 @@ async startTurn() {
 
         // Relic: STATIC CAPACITOR — reset per-turn mana counter for trigger.
         this._staticCapMana = 0;
+        // Module: TIDAL RECYCLER — when shield > maxHp/2 at turn start,
+        // gain +1 mana (per stack). Routes through gainMana for the
+        // cap; silent because we render our own custom floater.
+        if (this.player.hasRelic('tidal_recycler') && this.player.shield > Math.floor((this.player.maxHp || 0) / 2)) {
+            const stacks = this.stackCount('tidal_recycler');
+            const got = this.gainMana(stacks, { silent: true });
+            if (got > 0) ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `TIDAL +${got}`, COLORS.SHIELD);
+        }
+        // Module: GLASS LENS — first attack each turn deals +50% but
+        // next incoming hit takes +1 dmg. Set the flag here; consumed
+        // in the attack path AND in entity.takeDamage on next hit.
+        this.player._glassLensActive = this.player.hasRelic('glass_lens');
+        // Module: ECHO ROUND — reset the per-turn attack counter (already
+        // tracked via attacksThisTurn). Module reads it in the attack path.
         // Relic: LAST STAND — below 33% max HP, grant +1 reroll at turn
         // start AND a +30% outgoing damage flag (read in the attack
         // damage path). Stacks add nothing; the relic is a binary
@@ -13259,6 +13273,23 @@ async startTurn() {
                 // Relic: LAST STAND — +30% damage while below 33% HP. Flag
                 // is set/cleared at startTurn.
                 const lastStandBonus = this.player._lastStandActive ? 1.3 : 1.0;
+                // Module: GLASS LENS — first attack each turn deals +50%.
+                // Consumes the per-turn flag (set in startTurn) and primes
+                // a pending +1 incoming-damage payload on the player so
+                // the next hit lands harder. The +1 is consumed by the
+                // entity.takeDamage block reading `_glassLensIncomingDebt`.
+                let glassLensBonus = 1.0;
+                if (this.player._glassLensActive) {
+                    this.player._glassLensActive = false;
+                    glassLensBonus = 1.5;
+                    this.player._glassLensIncomingDebt = (this.player._glassLensIncomingDebt || 0) + 1;
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 160, "GLASS LENS +50%", '#88aaff');
+                }
+                // Module: ECHO ROUND — every 3rd attack repeats at 50% damage
+                // to a random enemy. We mark the trigger here; the actual
+                // splash fires after the primary hit lands so the visual
+                // sequencing reads as "main hit, then echo".
+                const echoRoundActive = this.player.hasRelic('echo_round') && this.attacksThisTurn > 0 && (this.attacksThisTurn % 3) === 0;
                 // Momentum APEX — when the player has built to tier 6, the
                 // next attack auto-crits AND ignores enemy shield. Consumes
                 // the apex flag (resets momentum to 0). One-shot per build.
@@ -13353,7 +13384,7 @@ async startTurn() {
                     glitchMult = 1 + Math.random() * 2;
                     ParticleSys.createFloatingText(this.player.x, this.player.y - 140, `GLITCH x${glitchMult.toFixed(1)}`, "#ff00ff");
                 }
-                dmg = Math.floor(dmg * qteMultiplier * chargeMult * dawnBonus * duskBonus * pyreMult * glitchMult * lastStandBonus * apexBonus);
+                dmg = Math.floor(dmg * qteMultiplier * chargeMult * dawnBonus * duskBonus * pyreMult * glitchMult * lastStandBonus * apexBonus * glassLensBonus);
 
                 // Relic: Thorn Mail (+2 Block) — also triggered by Sentinel signature T3 for this combat
                 if(this.player.hasRelic('thorn_mail') || this._sigThornsActive) {
@@ -13459,6 +13490,22 @@ async startTurn() {
                     }
                 }
 
+                // Module: ECHO ROUND — every 3rd attack of the turn echoes
+                // 50% damage to a random other enemy (boss + minions, exc.
+                // primary target). One-shot per attack to keep cost low.
+                if (echoRoundActive && finalEnemy && finalEnemy.currentHp > 0) {
+                    const candidates = [this.enemy, ...this._enemyMinions()].filter(e => e && e !== finalEnemy && e.currentHp > 0);
+                    if (candidates.length > 0) {
+                        const echo = candidates[Math.floor(Math.random() * candidates.length)];
+                        const echoDmg = Math.max(1, Math.floor(dmg * 0.5));
+                        const dead = echo.takeDamage(echoDmg, this.player);
+                        ParticleSys.createFloatingText(echo.x, echo.y - 100, `ECHO ${echoDmg}`, COLORS.MANA);
+                        if (dead) {
+                            if (echo === this.enemy) { this.winCombat(); return; }
+                            else if (this.enemy) this.enemy.minions = this.enemy.minions.filter(m => m !== echo);
+                        }
+                    }
+                }
                 // CLASS-SPECIFIC ATTACK BONUSES
                 const classId = this.player.classId;
                 if (this._dieSlot(type) === 'attack' && classId) {
@@ -16140,6 +16187,25 @@ drawEffects() {
         // Relic: TEMPO LOOP — count unused dice for next-turn shield bonus.
         if (this.player && this.player.hasRelic && this.player.hasRelic('tempo_loop')) {
             this._carriedUnusedDice = (this.dicePool || []).filter(d => !d.used).length;
+        }
+        // Module: PRESSURE VALVE — at turn end, each unspent mana point
+        // converts to 4 damage on a random enemy. Stacks add nothing
+        // (otherwise mana hoarders trivialise late-game). Skipped in
+        // tutorial so the dummy isn't randomly dropped.
+        if (this.player && this.player.hasRelic && this.player.hasRelic('pressure_valve')
+            && this.currentState !== STATE.TUTORIAL_COMBAT) {
+            const unspent = this.player.mana || 0;
+            if (unspent > 0 && this.enemy && this.enemy.currentHp > 0) {
+                const candidates = [this.enemy, ...this._enemyMinions()].filter(e => e && e.currentHp > 0);
+                if (candidates.length > 0) {
+                    const dmg = unspent * 4;
+                    const target = candidates[Math.floor(Math.random() * candidates.length)];
+                    ParticleSys.createFloatingText(target.x, target.y - 100, `VALVE ${dmg}`, '#ff8800');
+                    const dead = target.takeDamage(dmg, this.player);
+                    if (dead && target === this.enemy) { this.winCombat(); this._endTurnRunning = false; return; }
+                    if (dead && this.enemy) this.enemy.minions = this.enemy.minions.filter(m => m !== target);
+                }
+            }
         }
         // Sector 3 — Heat Tiles. Molten ground burns the player AND every
         // player minion each turn end. Ignores the shield (it's

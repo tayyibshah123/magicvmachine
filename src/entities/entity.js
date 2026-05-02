@@ -269,6 +269,13 @@ class Entity {
         if (this instanceof Player && this.traits.vulnerable && actualDmg > 0) {
             actualDmg += 1;
         }
+        // Module: GLASS LENS — pending +1 incoming-damage debt from a
+        // previous turn's lens-empowered first attack. Consumes one
+        // stack per hit landed.
+        if (this instanceof Player && (this._glassLensIncomingDebt || 0) > 0 && actualDmg > 0) {
+            actualDmg += 1;
+            this._glassLensIncomingDebt -= 1;
+        }
 
         // Soft cap on a single player-bound hit so the multiplicative stack
         // of c_entropy (×1.5) + frail (×1.3) + brittle hull + vulnerable
