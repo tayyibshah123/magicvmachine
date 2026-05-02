@@ -18752,7 +18752,13 @@ drawEffects() {
                 exposed:     '#ff3355'
             };
 
-            statusList.forEach((eff, i) => {
+            // Indexed for-loop — closure churn × N entities × 60 fps was
+            // a real allocation hotspot. The status renderer body is
+            // ~80 lines; keeping it as for-loop saves ~6-10 entity-
+            // closure allocations per frame.
+            for (let _si = 0, _sn = statusList.length; _si < _sn; _si++) {
+                const eff = statusList[_si];
+                const i = _si;
                 const ix = barX + padding + (iconWidth / 2) + (i * iconWidth);
                 const iy = barY + (barHeight / 2);
                 // Pass colourblind mode so the sprite gets baked with the
@@ -18789,7 +18795,7 @@ drawEffects() {
                     ctx.fillText(count, bx, by + 0.5);
                     ctx.restore();
                 }
-            });
+            }
         }
     },
 
@@ -20284,6 +20290,15 @@ drawEffects() {
 
         if (!isBossFight) {
             const skyline = this.bgState.skyline;
+            // Hoist tier reads + per-frame derived constants out of the
+            // per-silhouette loop. The fire-smoke threshold roll was
+            // recomputing the ternary on every silhouette every frame
+            // (~6 layer-1 silhouettes × 60 fps = 360 wasted re-evals/s).
+            const _silTier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+            const _smokeRollAllowed = _silTier !== 'low';
+            const _smokeThreshold = _silTier === 'mid' ? 0.985 : 0.95;
+            const _silShadowDark  = 'rgba(0,0,0,0.8)';
+            const _silShadowLight = 'rgba(0,0,0,0.5)';
             for (let si = 0, sn = skyline.length; si < sn; si++) {
                 const b = skyline[si];
                 // Move
@@ -20291,7 +20306,7 @@ drawEffects() {
                 if (b.x + b.w < 0) b.x = w + 50; // Wrap around
 
                 // Draw
-                ctx.fillStyle = b.layer === 0 ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.8)'; // Dark silhouettes
+                ctx.fillStyle = b.layer === 0 ? _silShadowLight : _silShadowDark; // Dark silhouettes (hoisted)
 
                 // Shape based on sector type
                 if (type === 'city') {
@@ -20327,7 +20342,7 @@ drawEffects() {
                     // spawn cadence was ~6×0.05 = 0.3/frame compounding
                     // with the main 0.2/frame loop. Halved on mid, off
                     // on low.
-                    if (b.layer === 1 && Perf.tier !== 'low' && Math.random() > (Perf.tier === 'mid' ? 0.985 : 0.95)) {
+                    if (b.layer === 1 && _smokeRollAllowed && Math.random() > _smokeThreshold) {
                         this.spawnBgParticle('fire', false);
                     }
                 } else if (type === 'tech') {
