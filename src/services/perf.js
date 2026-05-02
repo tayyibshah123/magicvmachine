@@ -269,6 +269,8 @@ export const Perf = {
                 if (fps < DOWNGRADE_FPS && this.tier !== 'low') {
                     const nextTier = this.tier === 'high' ? 'mid' : 'low';
                     console.warn(`[Perf] auto-downgrade → ${nextTier} (avg ${fps.toFixed(1)} fps)`);
+                    // Diag log — tier-change events make the dump's gameplay log.
+                    try { if (typeof window !== 'undefined' && window.__diag) window.__diag.event('tier_down', { from: this.tier, to: nextTier, fps: Math.round(fps) }); } catch (_) {}
                     this.setTier(nextTier);
                     lastChange = now;
                     if (lastDirection === 'up') {
@@ -281,11 +283,13 @@ export const Perf = {
                     lastDirection = 'down';
                 } else if (fps > UPGRADE_FPS && this.tier === 'low' && !inFlapLockout) {
                     console.info(`[Perf] auto-upgrade → mid (avg ${fps.toFixed(1)} fps)`);
+                    try { if (typeof window !== 'undefined' && window.__diag) window.__diag.event('tier_up', { from: 'low', to: 'mid', fps: Math.round(fps) }); } catch (_) {}
                     this.setTier('mid');
                     lastChange = now;
                     lastDirection = 'up';
                 } else if (fps > UPGRADE_FPS && this.tier === 'mid' && !inFlapLockout) {
                     console.info(`[Perf] auto-upgrade → high (avg ${fps.toFixed(1)} fps)`);
+                    try { if (typeof window !== 'undefined' && window.__diag) window.__diag.event('tier_up', { from: 'mid', to: 'high', fps: Math.round(fps) }); } catch (_) {}
                     this.setTier('high');
                     lastChange = now;
                     lastDirection = 'up';

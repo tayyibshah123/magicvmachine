@@ -26,6 +26,7 @@ import { SaveSync } from './services/save-sync.js';
 import { Onboarding } from './services/onboarding.js';
 import { ClassBriefing } from './services/class-briefing.js';
 import { Perf } from './services/perf.js';
+import { Diag } from './services/diag.js';
 import { getMatchupHint } from './data/matchup-hints.js';
 
 registerEntityClasses(Player, Minion, Enemy);
@@ -204,6 +205,18 @@ const Game = {
         //   __perf.startTrace({ thresholdMs: 18 })    // tighter
         //   __perf.stopTrace()
         try { if (typeof window !== 'undefined') window.__perf = Perf; } catch (_) {}
+
+        // --- Diagnostic dump system ---
+        // Always-on: rolling frame stats, error capture, gameplay event
+        // log. Hand-paste the report from the dev console with:
+        //    __diag.dump()           // print + return text
+        //    __diag.dump({copy:true}) // also copy to clipboard
+        // Auto-fires on gameOver and run-win.
+        try {
+            Diag.init();
+            if (typeof window !== 'undefined') window.__diag = Diag;
+            Diag.event('boot', { tier: Perf.tier });
+        } catch (_) {}
         ParticleSys.quality = Perf.particleQuality();
         if (Perf.tier === 'low') ParticleSys.maxParticles = 128;
         else if (Perf.tier === 'mid') ParticleSys.maxParticles = 220;
@@ -4582,7 +4595,9 @@ startQTE(type, x, y, callback, opts) {
 
     selectClass(cls) {
         AudioMgr.playSound('click');
-        
+        // Diag — run start event for the dump's gameplay log.
+        try { Diag.event('run_start', { classId: cls && cls.id, asc: (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0 }); } catch (_) {}
+
         // Wipe the active run save
         this._clearSave();
         document.getElementById('btn-load-save').style.display = "none";
@@ -17404,6 +17419,11 @@ drawEffects() {
                 Unlocks.grant('intel', 'first_boss_defeated');
                 // Clear the assist streak for this sector on victory.
                 Assist.recordWin(this.sector);
+                // Diag — boss kill event for the dump's gameplay log.
+                try { Diag.event('boss_kill', {
+                    name: this.enemy.name, sector: this.sector,
+                    turns: this.turnCount || 0
+                }); } catch (_) {}
                 // SPARKS — boss kill is a "significant event". Reward
                 // scales with sector so a Sector-5 boss is worth more
                 // than a Sector-1 one. Gate on tutorial flag is already
@@ -17418,6 +17438,15 @@ drawEffects() {
                     const ascLevel = (Ascension && Ascension.getSelected) ? Ascension.getSelected() : 0;
                     const winSparks = 15 + Math.max(0, ascLevel) * 3;
                     this.grantSparks(winSparks, 'run_win_asc' + ascLevel);
+                    // Diag — run-win event + auto-dump.
+                    try {
+                        Diag.event('run_win', {
+                            asc: ascLevel,
+                            classId: this.player && this.player.classId,
+                            turns: this.turnCount || 0
+                        });
+                        Diag.dump();
+                    } catch (_) {}
                     Analytics.emit('run_end', {
                         won: true,
                         sector: this.sector,
@@ -18137,6 +18166,18 @@ drawEffects() {
             mechPillGO.removeAttribute('title');
             mechPillGO.onmouseenter = mechPillGO.onmouseleave = mechPillGO.ontouchstart = null;
         }
+        // Diag — record the loss + auto-dump so the diagnostic report is
+        // sitting in the console for the player to copy. Wrapped so a
+        // diag failure can't block the game-over flow.
+        try {
+            Diag.event('run_loss', {
+                sector: this.sector || 0,
+                turn: this.turnCount || 0,
+                classId: this.player && this.player.classId,
+                enemy: this.enemy && this.enemy.name
+            });
+            Diag.dump();
+        } catch (_) {}
         Hints.trigger('first_death');
         Unlocks.grant('daily', 'first_run_ended');
         // Record loss for the sector the run ended in — feeds dynamic assist.
