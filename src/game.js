@@ -18640,6 +18640,53 @@ drawEffects() {
             ctx.restore();
         }
 
+        // --- MOMENTUM PIPS (Player only) ---
+        // Six small chevron pips above the HP bar showing the current
+        // momentum tier. Tier crossings (2/4/6) tint differently so the
+        // player reads progress at a glance: cyan up to FLOW, gold to
+        // SURGE, hot-red at APEX. Skipped on low tier and when the meter
+        // is at 0 (HUD doesn't compete for attention idle).
+        if (entity instanceof Player && (this.momentum || 0) > 0) {
+            const _mTier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+            if (_mTier !== 'low') {
+                const pipCount = 6;
+                const pipW = 14, pipGap = 4;
+                const stripW = pipCount * pipW + (pipCount - 1) * pipGap;
+                const sX = entity.x - stripW / 2;
+                const sY = y - 16;
+                for (let pi = 0; pi < pipCount; pi++) {
+                    const lit = pi < this.momentum;
+                    const px = sX + pi * (pipW + pipGap);
+                    let pColor = '#1a2030';
+                    if (lit) {
+                        if (this.momentum >= 6) pColor = '#ff3300';
+                        else if (this.momentum >= 4) pColor = '#ffd76a';
+                        else pColor = '#6fe8ff';
+                    }
+                    ctx.fillStyle = pColor;
+                    if (lit && _mTier === 'high') {
+                        ctx.shadowColor = pColor;
+                        ctx.shadowBlur = 8;
+                    }
+                    ctx.beginPath();
+                    ctx.moveTo(px, sY + 8);
+                    ctx.lineTo(px + pipW / 2, sY);
+                    ctx.lineTo(px + pipW, sY + 8);
+                    ctx.lineTo(px + pipW / 2, sY + 12);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+                // APEX READY label when meter is at 6
+                if (this._momentumApexArmed) {
+                    ctx.font = 'bold 11px "Orbitron"';
+                    ctx.fillStyle = '#ff3300';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('APEX READY', entity.x, sY - 4);
+                }
+            }
+        }
+
         // --- STATUS BAR (UNIFIED: effects + derived flags + affixes) ---
         // Builds a virtual effects list per frame that includes the entity's
         // real .effects array PLUS synthesized entries for persistent states

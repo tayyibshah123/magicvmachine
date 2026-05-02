@@ -86,6 +86,16 @@ class Minion extends Entity {
             this.dmg += 3;
         }
 
+        // Module: PHALANX DRIVE — minion damage scales by the count of
+        // OTHER minion-affecting modules the player owns. Counts
+        // neural_link, wisp_hp, warden_protocol, nano_forge, minion_core,
+        // ghost_cache. +1 dmg per matching module.
+        if (isPlayerSide && Game.player && Game.player.hasRelic && Game.player.hasRelic('phalanx_drive')) {
+            const minionRelics = ['neural_link', 'wisp_hp', 'warden_protocol', 'nano_forge', 'minion_core', 'ghost_cache'];
+            const owned = minionRelics.reduce((n, id) => n + (Game.player.hasRelic(id) ? 1 : 0), 0);
+            if (owned > 0) this.dmg += owned;
+        }
+
         // Broadcast player-minion summon so class-ability widgets (e.g. the
         // Summoner Grove) can react to ANY summon source, not just the MINION
         // die. Routed via ClassAbility.onEvent. Late-imported to dodge the
