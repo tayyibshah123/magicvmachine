@@ -2587,11 +2587,19 @@ startQTE(type, x, y, callback, opts) {
         const radius = this.qte.radius;
         const targetRadius = 30 * scale;
         const diff = Math.abs(radius - targetRadius);
-        // Tightened windows. Old: perfect ±32, good ±55 (huge auto-perfect).
-        // New: perfect ±10, good ±22. Combined with the removed
-        // deceleration zone, perfect is now an actual read, not a freebie.
-        const perfectTol = 10 * scale;
-        const goodTol = 22 * scale;
+        // Per-pattern window sizing — `accelerate` widens slightly because
+        // the last-frame snap eats reaction time; `pulse` stays tight;
+        // low-tier devices (older phones with input latency) get +3/+5
+        // forgiveness across the board.
+        let perfectTol = 10 * scale;
+        let goodTol    = 22 * scale;
+        const _pat = this.qte.pattern;
+        if (_pat === 'accelerate') { perfectTol = 14 * scale; goodTol = 28 * scale; }
+        else if (_pat === 'multi') { perfectTol = 12 * scale; goodTol = 22 * scale; }
+        if (typeof Perf !== 'undefined' && Perf.tier === 'low') {
+            perfectTol += 3 * scale;
+            goodTol    += 5 * scale;
+        }
 
         let quality = 'fail';
 
@@ -5830,6 +5838,29 @@ triggerPhaseGlitch() {
         if (this.shake) this.shake(10);
         if (tier !== 'low') this.triggerScreenFlash && this.triggerScreenFlash('rgba(255, 220, 80, 0.4)', 220);
         if (tier === 'high' && this.triggerSlowMo) this.triggerSlowMo(0.55, 0.22);
+    },
+
+    /* Death-burst VFX — fires once per killed enemy/minion. Distinct from
+     * the per-hit composeImpactFrame so the kill itself reads as a
+     * cinematic moment. Tier-gated; mid drops the implosion phase, low
+     * drops the white outer ring. */
+    deathBurst(entity, opts) {
+        if (!entity) return;
+        const tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+        const x = entity.x, y = entity.y;
+        const isEnemySide = !entity.isPlayerSide && (typeof Player !== 'undefined' && !(entity instanceof Player));
+        const baseColor = isEnemySide ? '#ff3300' : '#6fe8ff';
+        // Outward burst — sized to the entity radius so a boss reads bigger.
+        const radius = Math.max(28, (entity.radius || 50) * 0.7);
+        ParticleSys.createExplosion && ParticleSys.createExplosion(x, y, Math.floor(radius * 0.7), baseColor);
+        ParticleSys.createSparks    && ParticleSys.createSparks(x, y, baseColor, 14);
+        ParticleSys.createShockwave && ParticleSys.createShockwave(x, y, baseColor, radius);
+        if (tier !== 'low') {
+            ParticleSys.createShockwave && ParticleSys.createShockwave(x, y, '#ffffff', radius + 12);
+        }
+        if (this.hitStop) this.hitStop(60);
+        if (this.shake) this.shake(entity.isBoss ? 14 : 6);
+        if (tier === 'high' && this.triggerSlowMo) this.triggerSlowMo(0.6, 0.18);
     },
 
     async triggerBossPhaseTransition(enemy, phase = 2) {

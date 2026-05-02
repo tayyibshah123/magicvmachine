@@ -707,6 +707,13 @@ class Entity {
         if (diedByPlayer && killedTargetIsHostile && Game._tickMomentum) {
             try { Game._tickMomentum('kill', 1); } catch (_) {}
         }
+        // Death-burst VFX — fire once per non-boss kill. Boss deaths run
+        // their dedicated `_runBossDeathDissolve` cinematic separately so
+        // we skip them here to avoid double-blast. Skipped on tutorial
+        // dummy and non-hostile target sides.
+        if (this.currentHp <= 0 && killedTargetIsHostile && !this.isBoss && !this.isTutorialDummy && Game.deathBurst) {
+            try { Game.deathBurst(this, { hostile: true }); } catch (_) {}
+        }
         // Module: SIPHON BLADE — kills heal +4 HP and refund 1 Mana. Stacks
         // multiply the heal but the mana refund stays at 1 (otherwise
         // stacking trivialises the mana economy).
