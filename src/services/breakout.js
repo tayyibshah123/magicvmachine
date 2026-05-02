@@ -34,6 +34,23 @@
 import { STATE, DICE_TYPES, PLAYER_CLASSES, UPGRADES_POOL } from '../constants.js';
 
 // ────────────────────────────────────────────────────────────────────
+// STORYBOARD GLYPHS
+// ────────────────────────────────────────────────────────────────────
+// Inline SVG line-drawings stamped at the centre of each storyboard
+// slate. 60x60 viewBox; CSS handles colour + glow + float animation.
+// One glyph per room; each is a simple silhouette of the threat the
+// player is about to face — drone, sentry, blade, glitch-X, warden
+// seal — so the slate reads as a "wanted poster" / dossier file.
+const GLYPHS = {
+    drone:        '<svg viewBox="0 0 60 60"><circle cx="30" cy="32" r="13"/><circle cx="30" cy="32" r="5"/><path d="M10 22 L18 26 M50 22 L42 26 M30 14 L30 18 M30 50 L30 54"/></svg>',
+    sentry:       '<svg viewBox="0 0 60 60"><path d="M30 8 L40 22 L36 22 L42 36 L36 36 L44 52 L16 52 L24 36 L18 36 L24 22 L20 22 Z"/><circle cx="30" cy="42" r="3" fill="currentColor" stroke="none"/></svg>',
+    crest:        '<svg viewBox="0 0 60 60"><path d="M30 8 L48 18 L48 34 L30 52 L12 34 L12 18 Z"/><path d="M30 18 L30 38 M22 28 L38 28"/></svg>',
+    executioner:  '<svg viewBox="0 0 60 60"><path d="M30 50 L30 12 M30 12 L18 4 L42 4 Z M22 18 L38 18"/><circle cx="30" cy="50" r="4"/></svg>',
+    glitch:       '<svg viewBox="0 0 60 60"><path d="M14 14 L46 46 M46 14 L14 46"/><path d="M8 30 L20 30 M40 30 L52 30 M30 8 L30 20 M30 40 L30 52"/></svg>',
+    seal:         '<svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="20"/><circle cx="30" cy="30" r="10"/><path d="M30 12 L30 48 M12 30 L48 30 M16 16 L44 44 M44 16 L16 44"/></svg>'
+};
+
+// ────────────────────────────────────────────────────────────────────
 // ROOM SCRIPTS
 // ────────────────────────────────────────────────────────────────────
 //
@@ -68,7 +85,8 @@ const ROOMS = [
         storyboard: {
             tag: 'PRISON BLOCK 7 · CELL 14',
             title: 'BREATHING DETECTED',
-            body: 'Your eyes open inside a holographic cell. A surveillance drone hovers at the bars. The Warden\'s voice comes through the seam.'
+            body: 'Your eyes open inside a holographic cell. A surveillance drone hovers at the bars. The Warden\'s voice comes through the seam.',
+            glyph: 'drone'
         },
         warden: [
             {
@@ -92,7 +110,8 @@ const ROOMS = [
         storyboard: {
             tag: 'CORRIDOR · BLOCK 7',
             title: 'SHOCK PROTOCOL ENGAGED',
-            body: 'The drone is dust. A shock-sentry pivots out of an alcove and locks on. Its strike is telegraphed — the red icon above its head shows what it will do next turn.'
+            body: 'The drone is dust. A shock-sentry pivots out of an alcove and locks on. Its strike is telegraphed — the red icon above its head shows what it will do next turn.',
+            glyph: 'sentry'
         },
         warden: [
             {
@@ -122,7 +141,8 @@ const ROOMS = [
         storyboard: {
             tag: 'CHECKPOINT B-12',
             title: 'EXECUTIONER DISPATCHED',
-            body: 'A hulking unit drops from the ceiling. Heavier. Slower. Each swing is a death sentence — but the wind-up is long enough to read. Time it right and you blunt the blow.'
+            body: 'A hulking unit drops from the ceiling. Heavier. Slower. Each swing is a death sentence — but the wind-up is long enough to read. Time it right and you blunt the blow.',
+            glyph: 'executioner'
         },
         warden: [
             {
@@ -147,7 +167,8 @@ const ROOMS = [
         storyboard: {
             tag: 'DATA-VAULT 9',
             title: 'CORRUPTED PROTOCOL',
-            body: 'A glitched warden looms in the next chamber. Your dice come up wrong — two shields, no edge. You have one chance to cycle them into something that hits.'
+            body: 'A glitched warden looms in the next chamber. Your dice come up wrong — two shields, no edge. You have one chance to cycle them into something that hits.',
+            glyph: 'glitch'
         },
         warden: [
             {
@@ -172,7 +193,8 @@ const ROOMS = [
         storyboard: {
             tag: 'OUTER GATE · WARDEN\'S DOMAIN',
             title: 'CAGE GUARDIAN',
-            body: 'The cell wall fractures. Light pours through the seams. The CAGE GUARDIAN steps through the breach — the Warden\'s lieutenant. Beat it and the Panopticon learns your name.'
+            body: 'The cell wall fractures. Light pours through the seams. The CAGE GUARDIAN steps through the breach — the Warden\'s lieutenant. Beat it and the Panopticon learns your name.',
+            glyph: 'seal'
         },
         warden: [
             {
@@ -201,7 +223,8 @@ const CLASS_ROOM_3 = {
         storyboard: {
             tag: 'BLOCK 7 · SHADOWED WING',
             title: 'WOUNDED HUNTER',
-            body: 'A scout-unit limps through the corridor — already bleeding from someone else\'s pass. The Bloodstalker recognises the tell. Two clean strikes finish what was started.'
+            body: 'A scout-unit limps through the corridor — already bleeding from someone else\'s pass. The Bloodstalker recognises the tell. Two clean strikes finish what was started.',
+            glyph: 'crest'
         },
         diceFn: (cd) => [cd.attack, cd.attack],
         warden: [{
@@ -219,7 +242,8 @@ const CLASS_ROOM_3 = {
         storyboard: {
             tag: 'DATA-VAULT 4',
             title: 'CORRUPTED PROCESS',
-            body: 'Glyphs flicker against the wall. The Arcanist channels mana through the corruption — one charge, one cast. The room teaches the rhythm.'
+            body: 'Glyphs flicker against the wall. The Arcanist channels mana through the corruption — one charge, one cast. The room teaches the rhythm.',
+            glyph: 'crest'
         },
         diceFn: (cd) => [cd.mana, cd.attack],
         warden: [{
@@ -234,7 +258,8 @@ const CLASS_ROOM_3 = {
         storyboard: {
             tag: 'CORRIDOR · BARRAGE LANE',
             title: 'BARRAGE TURRET',
-            body: 'A wall-mounted turret unloads a three-shot barrage. The Sentinel\'s plates eat the burst — every defend die layers another plate on top of the first.'
+            body: 'A wall-mounted turret unloads a three-shot barrage. The Sentinel\'s plates eat the burst — every defend die layers another plate on top of the first.',
+            glyph: 'crest'
         },
         diceFn: (cd) => [cd.defend, cd.defend],
         warden: [{
@@ -251,7 +276,8 @@ const CLASS_ROOM_3 = {
         storyboard: {
             tag: 'FOUNDRY ANNEX',
             title: 'OVERHEATED GUARD',
-            body: 'A guard-unit is venting coolant — already half-dead from heat. The Annihilator\'s rhythm is exactly this: find the wound, finish it.'
+            body: 'A guard-unit is venting coolant — already half-dead from heat. The Annihilator\'s rhythm is exactly this: find the wound, finish it.',
+            glyph: 'crest'
         },
         diceFn: (cd) => [cd.attack, cd.attack],
         warden: [{
@@ -266,7 +292,8 @@ const CLASS_ROOM_3 = {
         storyboard: {
             tag: 'COMMAND VESTIBULE',
             title: 'PROTOCOL OFFICER',
-            body: 'A planner-unit reads the Tactician like a bad hand. Match its play — two clean dice, one rhythm. The Tactician wins fights that look like spreadsheets.'
+            body: 'A planner-unit reads the Tactician like a bad hand. Match its play — two clean dice, one rhythm. The Tactician wins fights that look like spreadsheets.',
+            glyph: 'crest'
         },
         diceFn: (cd) => [cd.attack, cd.defend],
         warden: [{
@@ -281,7 +308,8 @@ const CLASS_ROOM_3 = {
         storyboard: {
             tag: 'SACRED HOLLOW',
             title: 'SWARM AGITATOR',
-            body: 'The cell wall thins around root-veins. The Summoner plants a Wisp; the grove blooms. The agitator hits the Wisp, not you.'
+            body: 'The cell wall thins around root-veins. The Summoner plants a Wisp; the grove blooms. The agitator hits the Wisp, not you.',
+            glyph: 'crest'
         },
         diceFn: (cd) => [cd.minion, cd.attack],
         warden: [{
@@ -500,6 +528,7 @@ export const Breakout = {
         const tag = document.getElementById('breakout-storyboard-tag');
         const title = document.getElementById('breakout-storyboard-title');
         const body = document.getElementById('breakout-storyboard-body');
+        const glyph = document.getElementById('breakout-storyboard-glyph');
         if (!host || !tag || !title || !body) {
             // Element missing — skip straight to the room build.
             if (typeof onContinue === 'function') onContinue();
@@ -508,6 +537,13 @@ export const Breakout = {
         tag.textContent = sb.tag || '';
         title.textContent = sb.title || '';
         body.textContent = sb.body || '';
+        // Stamp the per-room glyph SVG. Falls back to the seal if the
+        // room hasn't declared one (defensive — every room ships with
+        // a glyph in the data).
+        if (glyph) {
+            const key = sb.glyph || 'seal';
+            glyph.innerHTML = GLYPHS[key] || GLYPHS.seal;
+        }
         host.style.display = 'flex';
         // Force reflow so the opacity transition fires.
         // eslint-disable-next-line no-unused-expressions
