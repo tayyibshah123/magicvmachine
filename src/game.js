@@ -13400,9 +13400,12 @@ async startTurn() {
         }
         this.diceUsedThisTurn = (this.diceUsedThisTurn || 0) + 1;
         // Diag — count dice used + attacks for the diagnostic dump.
-        try { Diag.event && Diag.event('die_used', { type }); } catch (_) {}
-        if (this._dieSlot && this._dieSlot(type) === 'attack') {
-            try { Diag.event && Diag.event('attack', { type }); } catch (_) {}
+        // NOTE: `type` is declared later via `const type = die.type;` so
+        // referencing the bare symbol here was a TDZ error. Read straight
+        // off `die.type` since this fires before the local alias exists.
+        try { Diag.event && Diag.event('die_used', { type: die.type }); } catch (_) {}
+        if (this._dieSlot && this._dieSlot(die.type) === 'attack') {
+            try { Diag.event && Diag.event('attack', { type: die.type }); } catch (_) {}
         }
 
         TooltipMgr.hide();
