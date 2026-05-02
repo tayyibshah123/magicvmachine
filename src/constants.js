@@ -492,7 +492,14 @@ const SYNERGIES = [
     { id: 'frugal',       name: "FRUGAL",       ids: ['loot_bot', 'stim_pack'],                 desc: "Greed is good." },
     { id: 'crit_artisan', name: "CRIT ARTISAN", ids: ['crit_lens', 'c_quantum_core'],           desc: "Every strike precise." },
     { id: 'power_plant',  name: "POWER PLANT",  ids: ['solar_battery', 'mana_syphon', 'recycle_bin'], desc: "Mana overflow." },
-    { id: 'gambler_king', name: "GAMBLER KING", ids: ['gamblers_chip', 'reroll_chip'],          desc: "House always wins." }
+    { id: 'gambler_king', name: "GAMBLER KING", ids: ['gamblers_chip', 'reroll_chip'],          desc: "House always wins." },
+
+    // ── New build clusters surfacing the expanded module pool. Each
+    // bundles 3-4 ids that pay off as a coherent identity. The detect-
+    // and-banner path in game.js already iterates this array.
+    { id: 'skill_caster',  name: "SKILL CASTER",   ids: ['hex_fragment', 'echo_chamber', 'munitions_belt', 'overcharge_vent'], desc: "Skills are your weapon." },
+    { id: 'dot_stalker',   name: "DOT STALKER",    ids: ['venom_edge', 'kindling', 'siphon_blade', 'last_stand'],              desc: "Bleed them dry." },
+    { id: 'shield_engine', name: "SHIELD ENGINE",  ids: ['iron_vault', 'tidal_recycler', 'iron_lung', 'kinetic_battery'],      desc: "The wall pays you back." }
 ];
 
 const GLITCH_MODIFIERS = [
