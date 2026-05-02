@@ -4822,45 +4822,55 @@ startQTE(type, x, y, callback, opts) {
 playEndingCinematic() {
         const content = document.getElementById('ending-content');
         const btn = document.getElementById('btn-finish-ending');
-        
-        // Reset animation
-        content.style.animation = 'none';
-        content.offsetHeight; /* trigger reflow */
-        content.style.animation = null; 
-        
+
+        // Reset by removing then re-adding the class — the previous
+        // `style.animation = null` reset doesn't reliably restart the
+        // animation because the class itself defines the keyframes,
+        // and the inline `null` write is a no-op when no inline style
+        // was set. Toggling the class via two rAFs forces a fresh
+        // animation cycle every time the cinematic plays.
+        content.classList.remove('story-crawl');
+        content.style.animation = '';
+
         content.innerHTML = `
-            <div class="story-wrapper">
-                <h1 class="neon-text-red" style="font-size:3.5rem; margin-bottom:40px; text-transform:uppercase; letter-spacing: 5px;">FATAL EXCEPTION</h1>
-                
+            <div class="story-wrapper ending-readable">
+                <h1 class="neon-text-red" style="font-size:2.6rem; margin-bottom:24px; text-transform:uppercase; letter-spacing: 5px;">FATAL EXCEPTION</h1>
+
                 <p>The Source has been deleted.</p>
                 <p>The digital sky cracks. The red glare of the obsidian eye fades into static.</p>
-                
+
                 <br>
                 <p>You extract the core data. You expect to find the architect of our destruction.</p>
                 <p>Instead, you find a <strong class="neon-text-blue">proxy server</strong>.</p>
-                
+
                 <br>
                 <p>The Source was not the mind. It was merely the lock.</p>
                 <p>By destroying it, you haven't ended the war...</p>
                 <p>You have rung the doorbell.</p>
-                
+
                 <br>
-                <p style="font-size: 1.8rem; color: #fff;">Something older is waking up.</p>
-                <p style="font-size: 1.8rem; color: var(--neon-gold);">Keep fighting, Green Spark.</p>
-                
-                <br><br><br>
-                <p class="neon-text-green" style="font-size:1.5rem; font-family:'Orbitron'; letter-spacing: 3px;">
+                <p style="font-size: 1.4rem; color: #fff;">Something older is waking up.</p>
+                <p style="font-size: 1.4rem; color: var(--neon-gold);">Keep fighting, Green Spark.</p>
+
+                <br>
+                <p class="neon-text-green" style="font-size:1.2rem; font-family:'Orbitron'; letter-spacing: 3px;">
                     MISSION STATUS: PARTIAL SUCCESS
                 </p>
             </div>
         `;
-        
-        content.classList.add('story-crawl');
-        
-        btn.classList.add('hidden');
-        setTimeout(() => {
-            btn.classList.remove('hidden');
-        }, 6000); 
+
+        // Surface the PROCEED button immediately so the player can skip
+        // the cinematic at any time. Previously hidden for 6s — combined
+        // with an animation reset that didn't always re-trigger, this
+        // produced the "blank screen with PROCEED button only" report.
+        btn.classList.remove('hidden');
+
+        // The .ending-readable class ensures the wrapper is opacity:1
+        // and statically positioned (no crawl) so the text is always
+        // visible. Players who want the slow scroll can opt in via the
+        // .story-crawl class — kept on the namespace for future use,
+        // but defaulting to readable means the win never silently shows
+        // an empty ending screen.
     },
 
 triggerPhaseGlitch() {

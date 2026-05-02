@@ -13790,3 +13790,60 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     border: 1px solid rgba(255, 215, 106, 0.4);
     border-radius: 8px;
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Reward screen: anchor the title at top, give the card list its own
+   scrollable region so a 4-option augmentation card stack doesn't
+   clip the bottom card off the viewport. Previous behaviour was
+   `justify-content: center` from the generic .screen rule, which
+   pushed the lower cards past the visible edge with no scroll.
+   ───────────────────────────────────────────────────────────────── */
+#screen-reward {
+    justify-content: flex-start;
+    padding-top: 32px;
+    padding-bottom: 24px;
+    gap: 6px;
+}
+#screen-reward h2 { flex-shrink: 0; }
+#screen-reward > p { flex-shrink: 0; margin-bottom: 8px; }
+#screen-reward #reward-options {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 4px 6px 24px;
+    /* Soft fade at the bottom edge so the player gets a visual cue
+       that there's more below the fold when the list scrolls. */
+    -webkit-mask-image: linear-gradient(180deg, #000 88%, transparent 100%);
+            mask-image: linear-gradient(180deg, #000 88%, transparent 100%);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Ending screen — readable mode. The original .story-crawl uses an
+   80-100s vertical scroll animation that sometimes failed to re-
+   trigger between runs, leaving the player on a blank screen with
+   only the PROCEED button visible. This rule pins the ending text
+   in place at full opacity so the cinematic is always legible. The
+   PROCEED button now appears immediately, letting the player skip
+   to the Victory card whenever they're ready.
+   ───────────────────────────────────────────────────────────────── */
+#screen-ending {
+    justify-content: flex-start;
+    padding-top: 24px;
+    padding-bottom: 100px; /* room above the absolute-positioned PROCEED */
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+#ending-content.story-crawl .ending-readable,
+#ending-content .ending-readable {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+    text-align: center;
+    max-width: 760px;
+    width: 92%;
+    margin: 0 auto;
+    color: #e0e0e0;
+    font-family: 'Rajdhani', sans-serif;
+    line-height: 1.55;
+}
