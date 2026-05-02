@@ -110,32 +110,44 @@ export const PerfTrace = {
 
     beginFrame() {
         // Always-on: stamp frame start so endFrame can compute total dt
-        // even when the verbose console reporter is off. Active-mode
-        // additionally clears the per-frame log + label cursor so the
-        // mark()/endFrame() sequence works.
+        // AND reset the mark cursor so per-section accumulator picks
+        // up every frame, not just verbose-mode frames. The per-frame
+        // log array is only cleared in active mode (it's a debug tool).
         const now = performance.now();
         frameStart = now;
-        if (!this.active) return;
         lastMarkAt = now;
         lastLabel = '__begin';
-        frameLog.length = 0;
+        if (this.active) {
+            frameLog.length = 0;
+        }
     },
 
     mark(label) {
-        if (!this.active) return;
+        // Always-on path runs even when the verbose console reporter is
+        // off, so the Diag dump's per-section cost table populates from
+        // every real combat frame. The active-mode console accumulator
+        // is only updated when `active` is true.
+        if (lastMarkAt === 0 || !lastLabel) {
+            // First mark of a fresh frame — set the cursor without any
+            // accumulation since there's no prior section to close.
+            lastMarkAt = performance.now();
+            lastLabel = label;
+            return;
+        }
         const now = performance.now();
         const dt = now - lastMarkAt;
-        const e = getEntry(lastLabel);
-        e.sum += dt;
-        e.count++;
-        if (dt > e.max) e.max = dt;
-        // Always-on accumulator for Diag — even when the verbose console
-        // reporter is off, we record per-section costs so the dump has
-        // something to show.
+        // Always-on accumulator (Diag dump source).
         let ae = alwaysSections.get(lastLabel);
         if (!ae) { ae = { sum: 0, count: 0, max: 0 }; alwaysSections.set(lastLabel, ae); }
         ae.sum += dt; ae.count++; if (dt > ae.max) ae.max = dt;
-        frameLog.push({ label: lastLabel, ms: dt });
+        // Active-mode console accumulator + per-frame log.
+        if (this.active) {
+            const e = getEntry(lastLabel);
+            e.sum += dt;
+            e.count++;
+            if (dt > e.max) e.max = dt;
+            frameLog.push({ label: lastLabel, ms: dt });
+        }
         lastMarkAt = now;
         lastLabel = label;
     },
@@ -257,5 +269,14 @@ export const PerfTrace = {
         const n = limit || 10;
         const start = Math.max(0, slowRing.length - n);
         return slowRing.slice(start);
+    },
+
+    /* Snapshot the current rolling-window stats. Used by Diag to
+     * checkpoint frame stats at significant gameplay moments (boss
+     * kill, sector clear, run end) so the dump reflects ACTUAL
+     * combat frames rather than the post-victory idle state at
+     * dump-time. Returns the same shape as frameStats(). */
+    snapshotStats() {
+        return this.frameStats();
     }
 };

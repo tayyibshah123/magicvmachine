@@ -44,6 +44,24 @@ const counters = {
     autoTierUpgrades: 0
 };
 
+// Frame-stat checkpoints captured at gameplay milestones so the dump
+// shows REAL combat frames, not the idle post-victory state at
+// dump-time. Each entry is { label, stats: { count, avgMs, p50, p95,
+// p99, maxMs, fps60Pct, fps30Pct, lt30Pct } } from PerfTrace at the
+// moment the checkpoint fired. Capped to last 8 to keep the dump
+// scannable.
+const CHECKPOINT_MAX = 8;
+const checkpoints = [];
+
+function pushCheckpoint(label) {
+    try {
+        const stats = (typeof PerfTrace !== 'undefined' && PerfTrace.snapshotStats) ? PerfTrace.snapshotStats() : null;
+        if (!stats || stats.count < 30) return; // skip empty / under-sampled windows
+        checkpoints.push({ t: ts(), label, stats });
+        if (checkpoints.length > CHECKPOINT_MAX) checkpoints.shift();
+    } catch (_) {}
+}
+
 function ts() {
     return (typeof performance !== 'undefined') ? performance.now() : Date.now();
 }
@@ -100,7 +118,12 @@ function gameSnapshot() {
     if (!G) return null;
     const p = G.player;
     const e = G.enemy;
-    const tier = (w.Perf && w.Perf.tier) || G.Perf && G.Perf.tier || '?';
+    // Perf is exposed on the game window as `__perf` (see init), not as
+    // `window.Perf`. Fall through both for safety + read the tier off
+    // the live module so the dump's tier label matches the engine's
+    // current decision.
+    const perfModule = w.__perf || w.Perf || (G && G.Perf);
+    const tier = (perfModule && perfModule.tier) || '?';
     return {
         currentState: G.currentState || '?',
         sector: G.sector || 0,
@@ -216,6 +239,13 @@ export const Diag = {
         else if (name === 'run_loss')      counters.runsLost++;
         else if (name === 'tier_down')     counters.autoTierDowngrades++;
         else if (name === 'tier_up')       counters.autoTierUpgrades++;
+        // Snapshot frame stats at major milestones so the dump shows
+        // real combat-frame quality at the moment, not the idle state
+        // at dump-time.
+        if (name === 'boss_kill' || name === 'sector_clear' || name === 'run_win' || name === 'run_loss') {
+            const lbl = name + (data && data.sector ? ' s' + data.sector : '') + (data && data.name ? ' ' + data.name : '');
+            pushCheckpoint(lbl);
+        }
     },
 
     /* Manually log an error to the ring (for app code that catches
@@ -287,6 +317,17 @@ export const Diag = {
             for (let i = 0; i < slow.length; i++) {
                 const f = slow[i];
                 lines.push(`  +${(f.t / 1000).toFixed(1)}s  total ${fmtMs(f.total)}ms  ${f.breakdown || ''}`);
+            }
+        }
+
+        if (checkpoints.length > 0) {
+            lines.push('');
+            lines.push(`--- Frame stats at milestones (last ${checkpoints.length} checkpoints) ---`);
+            for (let i = 0; i < checkpoints.length; i++) {
+                const c = checkpoints[i];
+                const s = c.stats;
+                lines.push(`  +${(c.t / 1000).toFixed(1)}s ${c.label}`);
+                lines.push(`    n=${s.count} | avg ${fmtMs(s.avgMs)}ms | p95 ${fmtMs(s.p95)} | p99 ${fmtMs(s.p99)} | max ${fmtMs(s.maxMs)} | 60fps ${s.fps60Pct.toFixed(0)}% | <30fps ${s.lt30Pct.toFixed(1)}%`);
             }
         }
 
@@ -365,6 +406,7 @@ export const Diag = {
     reset() {
         errorRing.length = 0;
         eventRing.length = 0;
+        checkpoints.length = 0;
         Object.keys(counters).forEach(k => counters[k] = 0);
         console.info('[Diag] rings + counters reset');
     },

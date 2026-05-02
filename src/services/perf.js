@@ -249,9 +249,37 @@ export const Perf = {
         // upgrading attempts until the cooldown clears.
         let lastDirection = null;       // 'down' | 'up' | null
         let flapDetectedUntil = 0;
+        // Anti tab-blur false-flap: when the document is hidden (tab
+        // switch, screen off, alt-tab) the browser pauses rAF, then
+        // releases a single huge frame on resume. That frame's dt can
+        // be 1-30 SECONDS, which the rolling average reads as fps=0
+        // and the monitor would auto-downgrade. The diag dump from a
+        // 137-min session showed 6 downgrades, 5 of them at fps=0 —
+        // every single one a tab-blur false positive. Two-layer guard:
+        //   (a) skip the sample entirely when document.hidden is true
+        //   (b) drop any single dt > 250ms (well above any real frame)
+        //       and reset the window so the post-resume samples don't
+        //       poison the rolling avg.
+        const isPageHidden = () => (typeof document !== 'undefined' && document.hidden);
         const tick = (now) => {
             const dt = now - last;
             last = now;
+            // Skip sampling when the page is backgrounded.
+            if (isPageHidden()) {
+                this._monitor = requestAnimationFrame(tick);
+                return;
+            }
+            // Drop monstrous frames (post-resume dump from a paused
+            // rAF). A 250ms frame is ~4fps which is well below any
+            // genuine sustained-fps reading; treat it as a stutter
+            // artefact and reset the window.
+            if (dt > 250) {
+                writeIdx = 0;
+                filled = 0;
+                sum = 0;
+                this._monitor = requestAnimationFrame(tick);
+                return;
+            }
             if (filled < WINDOW) {
                 deltas[writeIdx] = dt;
                 sum += dt;

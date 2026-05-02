@@ -714,6 +714,13 @@ class Entity {
         if (diedByPlayer && killedTargetIsHostile && Game._tickMomentum) {
             try { Game._tickMomentum('kill', 1); } catch (_) {}
         }
+        // Diag — record every player-side enemy kill (boss kills are
+        // recorded separately at the winCombat path so they don't
+        // double-count).
+        if (diedByPlayer && killedTargetIsHostile && !this.isBoss
+            && typeof window !== 'undefined' && window.__diag) {
+            try { window.__diag.event('enemy_kill', { name: this.name || '?' }); } catch (_) {}
+        }
         // Death-burst VFX — fire once per non-boss kill. Boss deaths run
         // their dedicated `_runBossDeathDissolve` cinematic separately so
         // we skip them here to avoid double-blast. Skipped on tutorial

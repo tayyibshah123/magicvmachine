@@ -2724,9 +2724,16 @@ startQTE(type, x, y, callback, opts) {
 
         this.player.anim.type = 'idle';
         if (this.enemy) this.enemy.anim.type = 'idle';
-        
+
+        // Diag — count QTE outcomes for the diagnostic dump.
+        try {
+            if (quality === 'perfect') Diag.event && Diag.event('qte_perfect', { qteType: this.qte.type });
+            else if (quality === 'good') Diag.event && Diag.event('qte_good', { qteType: this.qte.type });
+            else Diag.event && Diag.event('qte_fail', { qteType: this.qte.type, reason: quality });
+        } catch (_) {}
+
         let multiplier = 1.0;
-        let msg = "TOO LATE"; 
+        let msg = "TOO LATE";
         let color = "#888";
 
         if (quality === 'early') {
@@ -2844,6 +2851,9 @@ startQTE(type, x, y, callback, opts) {
                      this.triggerSlowMo && this.triggerSlowMo(0.1, 0.085);
                      // Momentum: perfect parry is a high-value beat.
                      if (this._tickMomentum) this._tickMomentum('parry', 1);
+                     // Diag — count perfect parries separately from QTE
+                     // perfects since the parry is a defensive read.
+                     try { Diag.event && Diag.event('parry_perfect'); } catch (_) {}
                      // Riposte: 50% of the damage the player took (which is
                      // itself half of the incoming) bounces back. Falls back
                      // to the legacy baseDmg-derived value when the call
@@ -13360,6 +13370,11 @@ async startTurn() {
             Hints.trigger && Hints.trigger('first_mana_spent');
         }
         this.diceUsedThisTurn = (this.diceUsedThisTurn || 0) + 1;
+        // Diag — count dice used + attacks for the diagnostic dump.
+        try { Diag.event && Diag.event('die_used', { type }); } catch (_) {}
+        if (this._dieSlot && this._dieSlot(type) === 'attack') {
+            try { Diag.event && Diag.event('attack', { type }); } catch (_) {}
+        }
 
         TooltipMgr.hide();
         die.used = true;
@@ -14630,6 +14645,8 @@ async startTurn() {
         } else {
             this.rerolls--;
         }
+        // Diag — count rerolls for the diagnostic dump.
+        try { Diag.event && Diag.event('reroll'); } catch (_) {}
 
         const availableTypes = this._getAvailableDiceTypes();
         // Once-per-hand types already on dice we aren't rerolling stay reserved.
@@ -17993,6 +18010,8 @@ drawEffects() {
             if (wasBoss && !this.challengeMode && !this.archiveMode) {
                 this.bossDefeated = false;
                 this.sector++;
+                // Diag — sector clear is a milestone event for the dump.
+                try { Diag.event && Diag.event('sector_clear', { sector: this.sector }); } catch (_) {}
                 this.generateMap();
                 const sectorDisplay = document.getElementById('sector-display');
                 if (sectorDisplay) sectorDisplay.innerText = `SECTOR ${this.sector}`;
