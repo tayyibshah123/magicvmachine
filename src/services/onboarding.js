@@ -104,38 +104,43 @@ export const Onboarding = {
         // — see Game.openPostTutorial() — so first-time players land in
         // gameplay sooner. Stage 1 now hands directly to Stage 3.
         const renderStage1 = () => {
+            // Minimal opening: a single question + input + START. The
+            // earlier card carried the game title, the lore paragraph,
+            // and a SKIP button. The title is already on the main menu
+            // so repeating it here was noise; the lore lands harder
+            // inside the Sector 0 storyboard than on a boot card; SKIP
+            // was an unnecessary off-ramp on a 2-second flow. Keeping
+            // the callsign input optional (placeholder defaults to
+            // OPERATOR if blank).
             root.innerHTML = `
-                <div class="onb-card">
-                    <div class="onb-header">// SYSTEM BOOT</div>
-                    <h1 class="onb-title">MAGIC <span class="onb-vs">v</span> MACHINE</h1>
-                    <p class="onb-body">
-                        You are the last Operator. The Silicon Empire has paved the oceans
-                        with glass and silenced every analog signal. You are the glitch
-                        they didn't catch.
-                    </p>
-                    <label class="onb-label" for="onb-name">Callsign (optional):</label>
-                    <input type="text" id="onb-name" class="onb-input" maxlength="16" placeholder="OPERATOR" value="${state.name === 'OPERATOR' ? '' : state.name}">
-                    <div class="onb-actions">
-                        <button class="btn secondary onb-skip" id="onb-skip-1">SKIP</button>
+                <div class="onb-card onb-card-minimal">
+                    <h1 class="onb-title onb-title-question">Who Are You?</h1>
+                    <input type="text" id="onb-name" class="onb-input" maxlength="16" placeholder="OPERATOR" value="${state.name === 'OPERATOR' ? '' : state.name}" autofocus>
+                    <div class="onb-actions onb-actions-single">
                         <button class="btn primary onb-next" id="onb-next-1">START</button>
                     </div>
                 </div>
             `;
-            // Stage 3 was a "LIVE-FIRE DRILL / DEPLOY" teaser card. It served
-            // no real purpose because the tutorial itself is skippable from
-            // the in-combat skip button at the bottom of the screen, so the
-            // welcome card now hands straight off to the tutorial.
             const handoffToTutorial = () => {
                 emitStage('1_welcome');
                 finish();
                 if (onStartTutorial) onStartTutorial();
             };
-            document.getElementById('onb-skip-1').onclick = skip;
             document.getElementById('onb-next-1').onclick = () => {
                 const input = document.getElementById('onb-name');
                 state.name = this.setName(input.value);
                 handoffToTutorial();
             };
+            // Enter-key on the input commits the same as tapping START.
+            const nameInput = document.getElementById('onb-name');
+            if (nameInput) {
+                nameInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        state.name = this.setName(nameInput.value);
+                        handoffToTutorial();
+                    }
+                });
+            }
             resetIdle(() => {
                 state.name = this.setName(document.getElementById('onb-name').value);
                 emitStage('1_welcome_idle');

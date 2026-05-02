@@ -3232,6 +3232,31 @@ body.reduced-motion .intel-crawl-scanlines {
 }
 .onb-skip { opacity: 0.8; }
 
+/* Minimal welcome card — single question + input + START. Replaces
+   the old four-element title card. Drops the subtitle/header strip,
+   centres the question, and lets the input + START do the work. */
+.onb-card-minimal {
+    padding: 32px 28px 24px;
+    text-align: center;
+}
+.onb-title-question {
+    /* Slightly smaller + warmer than the bombastic MAGIC v MACHINE
+       title — this card is intimate, not a logo card. */
+    font-size: 1.6rem;
+    margin: 4px 0 22px;
+    text-shadow: 0 0 14px var(--neon-blue);
+    letter-spacing: 0.02em;
+}
+.onb-actions-single {
+    /* Single START button — centre and give it a comfortable width
+       so it doesn't span the full card edge-to-edge. */
+    justify-content: center;
+}
+.onb-actions-single .btn {
+    flex: 0 1 200px;
+    max-width: 220px;
+}
+
 /* =========================================
    CODEX SCREEN
    ========================================= */
