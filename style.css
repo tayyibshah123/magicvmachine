@@ -13847,3 +13847,178 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     font-family: 'Rajdhani', sans-serif;
     line-height: 1.55;
 }
+
+/* =================================================================
+   MAIN MENU REDESIGN — progression-gated, animated, auto-fitting.
+   - Locked features collapse out of layout (display:none) so a
+     fresh-install menu shows just INITIATE RUN + the gear icon.
+   - Buttons grow to fit their label so text never truncates.
+   - Ambient scan-line + button shimmer add motion without paint
+     storms (transform-only on a compositor layer).
+   - Honours prefers-reduced-motion: animations replaced with the
+     static end-state for accessibility.
+   ================================================================= */
+.feature-locked-hidden { display: none !important; }
+
+/* Buttons grow to fit label. Min-width keeps a tap target on tiny
+   strings; max-width caps wide labels on narrow screens. */
+.menu-cta {
+    min-width: clamp(220px, 70%, 320px);
+    max-width: 92%;
+    padding: 14px 28px;
+    white-space: nowrap;
+}
+.menu-cta-primary {
+    background:
+        linear-gradient(180deg, rgba(0, 243, 255, 0.18), rgba(0, 243, 255, 0.06)),
+        rgba(8, 14, 26, 0.85);
+    box-shadow:
+        0 0 24px rgba(0, 243, 255, 0.32),
+        inset 0 0 14px rgba(0, 243, 255, 0.18);
+    animation: menu-cta-pulse 2.6s ease-in-out infinite;
+}
+@keyframes menu-cta-pulse {
+    0%, 100% { transform: translateY(0); box-shadow: 0 0 24px rgba(0,243,255,0.32), inset 0 0 14px rgba(0,243,255,0.18); }
+    50%      { transform: translateY(-1px); box-shadow: 0 0 36px rgba(0,243,255,0.55), inset 0 0 18px rgba(0,243,255,0.30); }
+}
+
+.menu-cta-alt, .menu-cta-meta {
+    flex: 1 1 auto;
+    min-width: 132px;
+    max-width: 220px;
+    padding: 10px 18px;
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+}
+
+/* Subtitle row under CHALLENGE / ARCHIVE — small uppercase status
+   that does not clutter the button itself. */
+.menu-substatus {
+    font-family: var(--font-orbitron, Orbitron), sans-serif;
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    text-align: center;
+    color: var(--neon-gold);
+    margin: -6px 0 4px;
+    min-height: 1em;
+}
+
+/* Menu rows — gap + center, wrap rather than clip on narrow screens. */
+.menu-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    width: 92%;
+    max-width: 540px;
+    margin-bottom: 8px;
+}
+
+/* Stagger entry: each menu CTA fades + slides in on its own delay. */
+@keyframes menu-entry {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.screen.active .menu-cta-alt,
+.screen.active .menu-cta-meta {
+    animation-name: menu-entry;
+    animation-duration: 460ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    animation-iteration-count: 1;
+    animation-fill-mode: backwards;
+}
+.screen.active .menu-cta-alt:nth-of-type(1) { animation-delay: 80ms; }
+.screen.active .menu-cta-alt:nth-of-type(2) { animation-delay: 140ms; }
+.screen.active .menu-cta-meta:nth-of-type(1) { animation-delay: 220ms; }
+.screen.active .menu-cta-meta:nth-of-type(2) { animation-delay: 280ms; }
+.screen.active .menu-cta-meta:nth-of-type(3) { animation-delay: 340ms; }
+
+/* Idle button shimmer — subtle diagonal sheen sweeping across every
+   few seconds. Pure ::after pseudo, transform-only, GPU-cheap. */
+.menu-cta::after, .menu-cta-alt::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.10) 48%, transparent 64%);
+    transform: translateX(-120%);
+    animation: menu-shimmer 5.2s ease-in-out infinite;
+    animation-delay: 1.4s;
+    mix-blend-mode: screen;
+}
+.menu-cta-alt::after { animation-delay: 2.4s; }
+@keyframes menu-shimmer {
+    0%, 33%, 100% { transform: translateX(-120%); }
+    50%           { transform: translateX(120%); }
+    51%, 99%      { transform: translateX(120%); }
+}
+
+.menu-cta, .menu-cta-alt, .menu-cta-meta { position: relative; overflow: hidden; }
+
+/* Ambient scan-line layer — two slow horizontal sweeps drifting at
+   different speeds. Stays behind the title/buttons. */
+.menu-ambient {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    overflow: hidden;
+}
+.menu-scan {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(0,243,255,0.32), transparent);
+    box-shadow: 0 0 14px rgba(0,243,255,0.35);
+    transform: translateY(-20vh);
+    animation: menu-scan-drift 9s linear infinite;
+}
+.menu-scan--alt {
+    background: linear-gradient(90deg, transparent, rgba(255,0,85,0.22), transparent);
+    box-shadow: 0 0 14px rgba(255,0,85,0.30);
+    animation: menu-scan-drift 14s linear infinite reverse;
+    animation-delay: 3s;
+}
+@keyframes menu-scan-drift {
+    0%   { transform: translateY(-10%); opacity: 0; }
+    8%   { opacity: 0.65; }
+    92%  { opacity: 0.65; }
+    100% { transform: translateY(110vh); opacity: 0; }
+}
+
+/* Just-unlocked highlight — gold pulse + outline glow for ~5s the
+   first time a player sees a newly-unlocked menu surface. */
+.just-unlocked {
+    animation: menu-just-unlocked 1.6s ease-in-out 0s infinite;
+    border-color: var(--neon-gold) !important;
+    box-shadow: 0 0 24px rgba(255, 215, 0, 0.55);
+}
+@keyframes menu-just-unlocked {
+    0%, 100% { box-shadow: 0 0 24px rgba(255,215,0,0.55); transform: translateY(0); }
+    50%      { box-shadow: 0 0 40px rgba(255,215,0,0.80); transform: translateY(-1px); }
+}
+
+#screen-start .version {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    margin-top: 24px;
+    opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .menu-cta-primary { animation: none; }
+    .menu-cta::after, .menu-cta-alt::after { animation: none; opacity: 0; }
+    .menu-scan { animation: none; opacity: 0; }
+    .screen.active .menu-cta-alt,
+    .screen.active .menu-cta-meta { animation: none; opacity: 1; transform: none; }
+    .just-unlocked { animation: none; }
+}
+body.perf-low .menu-cta-primary { animation: none; }
+body.perf-low .menu-scan { display: none; }
+body.perf-low .menu-cta::after,
+body.perf-low .menu-cta-alt::after { animation: none; opacity: 0; }

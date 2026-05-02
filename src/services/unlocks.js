@@ -9,11 +9,13 @@ import { Analytics } from './analytics.js';
 const KEY = 'mvm_unlocks_v1';
 
 const DEFAULT = {
-    daily: false,       // first run complete (win or lose)
-    ascension: false,   // first Sector 5 clear
+    daily: false,       // first run complete (win or lose) → CHALLENGE
+    ascension: false,   // first Sector 5 clear → ARCHIVE / Ascension picker
     corrupted: false,   // first event reward choice
-    intel: false,       // first boss elite drop
-    shop: false         // first shop visit (visual only — doesn't hide button)
+    intel: false,       // first boss elite drop → INTEL
+    shop: false,        // first shop visit (visual only — doesn't hide button)
+    sanctuary: false,   // first Spark earned → SANCTUARY
+    saves: false        // first run started → SAVES
 };
 
 function read() {
@@ -52,30 +54,44 @@ export const Unlocks = {
     },
 
     // Apply gating to the main menu. Called when the menu opens.
+    // New players see ONLY the INITIATE RUN button + settings gear.
+    // Other entries reveal as their unlock conditions trigger so the
+    // first-run experience is uncluttered. Each unlock plays a brief
+    // "just-unlocked" pulse the next time the menu is reached.
     applyMenuVisibility() {
-        // Only gate buttons that actually exist on the main menu. Ascension is a
-        // run-start modifier (shown on char-select), not a standalone menu item.
         const map = {
-            // Legacy `daily` unlock key still gates the menu button — now
-            // surfaced as the Challenge Mode entry point. Key kept for save
-            // compatibility with existing player progress.
-            daily: 'btn-challenge',
-            intel: 'btn-intel'
+            // Legacy `daily` unlock key now drives the CHALLENGE entry.
+            daily:     'btn-challenge',
+            intel:     'btn-intel',
+            sanctuary: 'btn-upgrades',
+            saves:     'btn-save-slots',
+            ascension: 'btn-archive'
         };
         for (const [key, id] of Object.entries(map)) {
             const el = document.getElementById(id);
             if (!el) continue;
-            if (this.has(key)) {
-                el.classList.remove('locked-feature');
-                // Badge "+NEW" on newly unlocked
-                if (document.body.dataset.newUnlock === key) {
-                    el.classList.add('just-unlocked');
-                    setTimeout(() => el.classList.remove('just-unlocked'), 5000);
-                    delete document.body.dataset.newUnlock;
-                }
-            } else {
-                el.classList.add('locked-feature');
+            const unlocked = this.has(key);
+            // Fully hide locked features (was: dim only). Cleaner first-
+            // run menu — only the primary CTA shows until the player
+            // actually unlocks each surface. The container row collapses
+            // when all of its children are hidden via CSS rules.
+            el.classList.toggle('feature-locked-hidden', !unlocked);
+            el.classList.toggle('locked-feature', !unlocked); // legacy hook for any styling
+            if (unlocked && document.body.dataset.newUnlock === key) {
+                el.classList.add('just-unlocked');
+                setTimeout(() => el.classList.remove('just-unlocked'), 5000);
+                delete document.body.dataset.newUnlock;
             }
         }
+        // Daily-twist pill is conditional on Challenge being unlocked.
+        const twist = document.getElementById('challenge-daily-twist');
+        if (twist) twist.classList.toggle('feature-locked-hidden', !this.has('daily'));
+        // Also hide the entire menu row when every button inside is
+        // locked, so we don't render an empty bordered row.
+        document.querySelectorAll('.menu-row').forEach(row => {
+            const visible = Array.from(row.querySelectorAll('.btn'))
+                .some(b => !b.classList.contains('feature-locked-hidden') && !b.classList.contains('hidden'));
+            row.classList.toggle('feature-locked-hidden', !visible);
+        });
     }
 };

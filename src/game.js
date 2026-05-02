@@ -4607,6 +4607,9 @@ startQTE(type, x, y, callback, opts) {
         AudioMgr.playSound('click');
         // Diag — run start event for the dump's gameplay log.
         try { Diag.event('run_start', { classId: cls && cls.id, asc: (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0 }); } catch (_) {}
+        // Unlock the SAVES menu surface — once a run has been started,
+        // the save-slot picker becomes meaningful.
+        try { Unlocks.grant && Unlocks.grant('saves', 'first_run_started'); } catch (_) {}
 
         // Wipe the active run save
         this._clearSave();
@@ -7733,16 +7736,19 @@ triggerSystemCrash() {
                     }
                 }
             }
-            const statusArch = document.getElementById('archive-status');
+            // Archive status moved to a sub-line below the button, same
+            // pattern as Challenge — the button label stays clean.
+            const statusArch = document.getElementById('archive-status-line');
             if (unlocked && statusArch) {
-                // Surface the latest Archive run's score — a single fight, so
-                // the most recent attempt is the most useful number to show.
+                statusArch.style.display = '';
                 const last = (Archive.getHistory() || [])[0];
                 if (last) {
-                    statusArch.textContent = `· LAST · ${last.turns || 0}T · A${last.ascension || 0}`;
+                    statusArch.textContent = `LAST · ${last.turns || 0}T · A${last.ascension || 0}`;
                 } else {
-                    statusArch.textContent = '· READY';
+                    statusArch.textContent = 'READY';
                 }
+            } else if (statusArch) {
+                statusArch.style.display = 'none';
             }
             // Personal-best line — separate from Challenge so the player
             // sees the Archive track on its own ladder.
@@ -7764,17 +7770,17 @@ triggerSystemCrash() {
             }
         }
 
-        const statusEl = document.getElementById('challenge-status');
+        // Challenge status — written to a sub-line BELOW the button so
+        // the button label itself stays uncluttered and never clips.
+        const statusEl = document.getElementById('challenge-status-line');
         const challengeBtn = document.getElementById('btn-challenge');
         if (statusEl && challengeBtn) {
-            // No daily lockout — Challenge is always available. Surface the
-            // last completion so players can see their most recent score.
             const history = Challenge.getHistory();
             const last = history && history[0];
             if (last) {
-                statusEl.textContent = `· LAST · ${last.fragments || 0} FRAG · ${last.turns || 0}T`;
+                statusEl.textContent = `LAST · ${last.fragments || 0} FRAG · ${last.turns || 0}T`;
             } else {
-                statusEl.textContent = '· READY';
+                statusEl.textContent = 'READY';
             }
             challengeBtn.style.opacity = '1';
         }
@@ -13257,6 +13263,12 @@ async startTurn() {
         // inside scripted tutorial combat so it doesn't fight tutorial UI.
         if (firstEverGrant && this.currentState !== STATE.TUTORIAL_COMBAT) {
             try { Hints && Hints.trigger && Hints.trigger('first_sparks'); } catch (_) {}
+        }
+        // Unlock the SANCTUARY menu surface on the first Spark earned —
+        // the menu button + ✦ pill stay hidden for fresh installs and
+        // reveal the moment they become meaningful.
+        if (firstEverGrant) {
+            try { Unlocks.grant && Unlocks.grant('sanctuary', 'first_spark'); } catch (_) {}
         }
         try { Analytics && Analytics.emit && Analytics.emit('sparks_grant', { amount, reason: reason || 'unknown', total: this.sparks }); } catch (_) {}
         return amount;

@@ -169,13 +169,23 @@
                 <div style="position: absolute; top: 20px; right: 20px; z-index: 20;">
                     <button id="btn-settings-main" class="btn-icon" aria-label="Settings"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5 L20 7 L20 17 L12 21.5 L4 17 L4 7 Z" fill="currentColor" fill-opacity="0.14"/><circle cx="12" cy="12" r="4.5" fill="none"/><path d="M12 5.5 L12 7.5 M12 16.5 L12 18.5 M5.5 12 L7.5 12 M16.5 12 L18.5 12 M7.6 7.6 L9 9 M15 15 L16.4 16.4 M16.4 7.6 L15 9 M7.6 16.4 L9 15" stroke-width="1.4"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg></button>
                 </div>
-                <!-- Sparks (persistent meta-currency). Earned at significant
-                     events: boss kills, sector clears, run wins, hex breaches,
-                     first-of-class wins. Spent in Sanctuary. -->
-                <div class="meta-sparks-pill" aria-label="Sparks">
+                <!-- Sparks (persistent meta-currency). Hidden via the
+                     `sanctuary` unlock until the player has earned at
+                     least one. Earned at significant events: boss kills,
+                     sector clears, run wins, hex breaches, first-of-class
+                     wins. Spent in Sanctuary. -->
+                <div id="menu-sparks-pill" class="meta-sparks-pill feature-locked-hidden" aria-label="Sparks">
                     <span class="meta-sparks-glyph" aria-hidden="true">✦</span>
                     <span id="menu-sparks">0</span>
                     <span class="meta-sparks-label">SPARKS</span>
+                </div>
+                <!-- Ambient scan-line layer behind the menu chrome. Tier-
+                     gated via CSS @media (prefers-reduced-motion); set to
+                     transform-only translate so the GPU compositor handles
+                     it cheaply. -->
+                <div class="menu-ambient" aria-hidden="true">
+                    <span class="menu-scan"></span>
+                    <span class="menu-scan menu-scan--alt"></span>
                 </div>
                 <div class="glow-container">
                     <!-- Archivist Slain cosmetic frame (Roadmap Part 24.2).
@@ -209,23 +219,29 @@
                 <!-- Primary actions — RESUME above INITIATE so the in-progress run is the
                      first thing a returning player sees. -->
                 <button id="btn-load-save" class="btn primary hidden menu-cta menu-cta-resume">RESUME RUN</button>
-                <button id="btn-start" class="btn primary menu-cta"><span id="btn-start-label">INITIATE RUN</span><span id="btn-start-warn" class="btn-start-warn hidden">DISCARDS CURRENT RUN</span></button>
+                <button id="btn-start" class="btn primary menu-cta menu-cta-primary"><span id="btn-start-label">INITIATE RUN</span><span id="btn-start-warn" class="btn-start-warn hidden">DISCARDS CURRENT RUN</span></button>
 
-                <!-- Run modes — gold-bordered alt run types in a single row. -->
+                <!-- Run modes — alt run types. CHALLENGE status (last
+                     score) lives BELOW the button as a sub-line, not
+                     inline, so the button label never truncates. -->
                 <div class="menu-row menu-row-modes">
-                    <button id="btn-challenge" class="btn secondary neon-border-gold">CHALLENGE <span id="challenge-status" style="opacity:0.7; font-size:0.85em;"></span></button>
-                    <button id="btn-archive" class="btn secondary neon-border-gold hidden">ARCHIVE <span id="archive-status" style="opacity:0.7; font-size:0.85em;"></span></button>
+                    <button id="btn-challenge" class="btn secondary neon-border-gold menu-cta-alt">CHALLENGE</button>
+                    <button id="btn-archive" class="btn secondary neon-border-gold menu-cta-alt hidden">ARCHIVE</button>
                 </div>
+                <div id="challenge-status-line" class="menu-substatus" style="opacity:0.7;"></div>
+                <div id="archive-status-line" class="menu-substatus" style="opacity:0.7; display:none;"></div>
 
-                <!-- Meta nav — sanctuary, codex, save management. Tighter row. -->
+                <!-- Meta nav — sanctuary / codex / save management. Each
+                     button is feature-gated via Unlocks; locked entries
+                     hide entirely until the player triggers the unlock. -->
                 <div class="menu-row menu-row-meta">
-                    <button id="btn-upgrades" class="btn secondary neon-border-gold">SANCTUARY</button>
-                    <button id="btn-intel" class="btn secondary">INTEL</button>
-                    <button id="btn-save-slots" class="btn secondary">SAVES</button>
+                    <button id="btn-upgrades" class="btn secondary neon-border-gold menu-cta-meta feature-locked-hidden">SANCTUARY</button>
+                    <button id="btn-intel" class="btn secondary menu-cta-meta feature-locked-hidden">INTEL</button>
+                    <button id="btn-save-slots" class="btn secondary menu-cta-meta feature-locked-hidden">SAVES</button>
                 </div>
 
                 <div id="login-streak" class="login-streak hidden"></div>
-                <div class="version" style="font-family: 'Orbitron'; margin-top: 20px; opacity: 0.5;">ALPHA V1</div>
+                <div class="version">ALPHA V1</div>
             </div>
 
             <!-- Character Select -->
