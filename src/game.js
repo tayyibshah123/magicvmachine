@@ -12537,6 +12537,21 @@ async startTurn() {
         for (const d of this.dicePool) {
             const slot = Game._dieSlot(d.type);
             if (slot && bySlot[slot]) bySlot[slot].push(d.id);
+            // Clear last-roll's Tactician's Eye flag so a reroll that
+            // breaks the matching-slot pair correctly drops the buff.
+            d._tacticiansEye = false;
+        }
+        // Module: TACTICIAN'S EYE — every die rolled with a matching-
+        // slot peer (2+ same slot) earns a +2 effect bonus. Set a flag
+        // on each member die for the damage/shield/heal handlers to
+        // read. No-op when the player doesn't own the module.
+        if (this.player && this.player.hasRelic && this.player.hasRelic('tacticians_eye')) {
+            for (const d of this.dicePool) {
+                const slot = Game._dieSlot(d.type);
+                if (slot && bySlot[slot] && bySlot[slot].length >= 2) {
+                    d._tacticiansEye = true;
+                }
+            }
         }
 
         const announce = (id, name, color, memberIds) => {
@@ -13477,6 +13492,14 @@ async startTurn() {
                     dmg = isUpgraded ? 10 : 5;
                 }
                 dmg = this.calculateCardDamage(dmg, type);
+                // Module: TACTICIAN'S EYE — die rolled with a matching-slot
+                // peer adds +2 flat to its base effect. Flag set in
+                // _detectAndApplyCombos at roll time. Read here for ATK
+                // dice; analogous reads below for DEF (shield) and MANA.
+                if (die._tacticiansEye) {
+                    dmg += 2;
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 110, "EYE +2", "#00f3ff");
+                }
                 // Relic: AEGIS CYCLER — next-attack flat bonus from shield conversion.
                 if (this.player.nextAttackFlatBonus) {
                     dmg += this.player.nextAttackFlatBonus;
@@ -13682,6 +13705,11 @@ async startTurn() {
             } else if (this._dieSlot(type) === 'defend') {
                 const defendClassId = this.player.classId;
                 let shieldAmt = isUpgraded ? 10 : 5;
+                // Module: TACTICIAN'S EYE — matching-slot peer = +2 shield.
+                if (die._tacticiansEye) {
+                    shieldAmt += 2;
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 110, "EYE +2", "#00f3ff");
+                }
                 // Combo: BULWARK doubles the first shield gained this roll.
                 if (this.comboBulwark) {
                     shieldAmt *= 2;
@@ -13780,7 +13808,15 @@ async startTurn() {
                 }
 
             } else if (this._dieSlot(type) === 'mana') {
-                this.gainMana(isUpgraded ? 2 : 1);
+                // Module: TACTICIAN'S EYE — matching mana peer adds +1
+                // mana on top of the base. Smaller bonus than +2 dmg/
+                // shield because mana caps tighter and a +2 mana on a
+                // 5-cap pool is way over-powered.
+                let manaGain = (isUpgraded ? 2 : 1) + (die._tacticiansEye ? 1 : 0);
+                this.gainMana(manaGain);
+                if (die._tacticiansEye) {
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 110, "EYE +1", "#00f3ff");
+                }
                 if(isUpgraded) {
                     this.player.heal(1); // Skill: Soul Battery (Heal 1)
                 }
