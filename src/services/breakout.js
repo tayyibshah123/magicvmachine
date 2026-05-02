@@ -31,7 +31,7 @@
  * and a freshly-rolled run map.
  */
 
-import { STATE, DICE_TYPES, PLAYER_CLASSES, UPGRADES_POOL, ICONS } from '../constants.js';
+import { STATE, DICE_TYPES, PLAYER_CLASSES, UPGRADES_POOL } from '../constants.js';
 
 // ────────────────────────────────────────────────────────────────────
 // ROOM SCRIPTS
@@ -479,10 +479,12 @@ export const Breakout = {
     _grantCellkey(game) {
         if (!game || !game.player || !game.player.addRelic) return;
         if (game.player.hasRelic && game.player.hasRelic('cellkey_shard')) return;
-        const relic = (UPGRADES_POOL && UPGRADES_POOL.find(r => r.id === 'cellkey_shard')) || {
-            id: 'cellkey_shard', name: 'Cellkey Shard', desc: '+3 Max HP. First turn each combat: +1 Reroll.',
-            icon: ICONS && ICONS.metaReroll, rarity: 'gold'
-        };
+        // The relic is always defined in UPGRADES_POOL (constants.js).
+        // No icon-set fallback needed — if the pool entry is missing,
+        // something has gone very wrong upstream and a synthetic
+        // relic without a real icon would just paper over the bug.
+        const relic = UPGRADES_POOL && UPGRADES_POOL.find(r => r.id === 'cellkey_shard');
+        if (!relic) return;
         game.player.addRelic(relic);
         // Apply the Max HP portion immediately. Reroll behaviour is
         // wired in Game.endTurn via hasRelic('cellkey_shard').
