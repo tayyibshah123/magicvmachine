@@ -1824,7 +1824,9 @@ startDrag(e, die, el) {
         // dummy is the player's first taste of timing — exposing them to
         // accelerate/multi here would teach the wrong reflex. The free-
         // play first encounter is when patterns start flexing.
-        if (this.currentState === STATE.TUTORIAL_COMBAT) {
+        // Sector 0 Breakout uses the same simplification — the prologue
+        // is for teaching the parry rhythm, not stress-testing it.
+        if (this.currentState === STATE.TUTORIAL_COMBAT || this.currentState === STATE.BREAKOUT) {
             return { pattern: 'steady', waves: 1 };
         }
         if (type === 'DEFEND') {
@@ -12062,6 +12064,11 @@ async startTurn() {
              }
              this.enemy.decideTurn();
         }
+        // Sector 0 Breakout — enemy phase resolved, new turn beginning.
+        // Fires beats keyed on `wait: 'enemy_turn'`.
+        if (Breakout && Breakout.isActive && Breakout.isActive()) {
+            try { Breakout.notify('enemy_turn', {}); } catch (_) {}
+        }
 
          this.rerolls = (this.player.traits.noRerolls) ? 0 : (2 + rerollStacks + (gamblerStacks * 2));
          // Ascension reroll penalty (clamp ≥ 0)
@@ -13100,6 +13107,12 @@ async startTurn() {
     renderDiceUI() {
         const container = document.getElementById('dice-container');
         container.innerHTML = '';
+        // Sector 0 Breakout — schedule a spotlight refresh for AFTER
+        // the dice are appended so any die-targeted spotlight tracks
+        // the new positions (rerolls, turn starts, etc.).
+        if (Breakout && Breakout.isActive && Breakout.isActive() && Breakout.refreshSpotlight) {
+            requestAnimationFrame(() => Breakout.refreshSpotlight());
+        }
 
         // Crescent layout: wider span + taller arc so edge dice lift higher and
         // value chips stay legible without hovering. Viewport-aware so we never
@@ -13597,6 +13610,17 @@ async startTurn() {
         try { Diag.event && Diag.event('die_used', { type: die.type }); } catch (_) {}
         if (this._dieSlot && this._dieSlot(die.type) === 'attack') {
             try { Diag.event && Diag.event('attack', { type: die.type }); } catch (_) {}
+        }
+        // Sector 0 Breakout — notify the controller so the current
+        // teaching beat can advance on the right kind of die-play.
+        // The controller maps `slot` to its `wait: 'die_used:slot'`
+        // condition (attack/defend/mana/minion). `signature` is set
+        // when the die is the SIGNATURE die so the class-proving
+        // beats can advance on it specifically.
+        if (Breakout && Breakout.isActive && Breakout.isActive()) {
+            const slot = this._dieSlot ? this._dieSlot(die.type) : null;
+            const isSig = (DICE_TYPES[die.type] && DICE_TYPES[die.type].isSignature) || die.type === 'SIGNATURE';
+            try { Breakout.notify('die_used', { slot, signature: isSig }); } catch (_) {}
         }
 
         TooltipMgr.hide();
@@ -14767,6 +14791,12 @@ async startTurn() {
     },
 
     rerollDice() {
+        // Sector 0 Breakout — let the teaching controller know the
+        // player rerolled so beats keyed on `wait: 'reroll'` can
+        // advance.
+        if (Breakout && Breakout.isActive && Breakout.isActive()) {
+            try { Breakout.notify('reroll', {}); } catch (_) {}
+        }
         // TUTORIAL RIGGING
         if (this.currentState === STATE.TUTORIAL_COMBAT && this.tutorialStep === 10) {
             const cd = this.player && this.player.classId

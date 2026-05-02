@@ -1,10 +1,31 @@
 /* Sector 0 — The Breakout
  *
  * A scripted, hand-authored prologue that replaces the legacy auto-tutorial
- * for first-time players. Five short combats teach one mechanic each, plus
- * a 2-phase Cage Guardian mini-boss as synthesis. On completion the player
- * is granted the Cellkey Shard relic and dropped into Sector 1 with their
- * already-selected class.
+ * for first-time players. Five short combats, each one a multi-beat
+ * teaching sequence (intro → spotlight intent → spotlight die → wait for
+ * action → spotlight next → resolve). On completion the player is granted
+ * the Cellkey Shard relic and dropped into Sector 1 with their selected
+ * class.
+ *
+ * Sequence model
+ * --------------
+ * Each room declares a `sequence: [...]` of beats. Each beat is:
+ *   {
+ *     story:   warden voice (one-line lore framing, optional)
+ *     action:  imperative instruction (the one-liner the player obeys)
+ *     sub:     vibrating red "system bulletin" line (optional)
+ *     spot:    spotlight target ('enemy' | 'enemy_intent' | 'player' |
+ *              'die:attack' | 'die:defend' | 'die:mana' | 'die:minion' |
+ *              'die:signature' | 'reroll' | 'end_turn' | null)
+ *     wait:    advancement trigger ('tap' | 'die_used' |
+ *              'die_used:attack/defend/mana/minion/signature' |
+ *              'reroll' | 'enemy_turn' | 'enemy_dies' | null)
+ *     autoMs:  optional auto-advance after N ms regardless of wait
+ *   }
+ *
+ * The controller runs beats in order. When a beat's `wait` condition is
+ * met (Game calls Breakout.notify(event, data)), it advances. The final
+ * beat usually waits for `enemy_dies` so the room ends with the kill.
  *
  * Design intent
  * -------------
@@ -97,11 +118,41 @@ const ROOMS = [
             body: 'You wake up inside a holographic cell. A surveillance drone hovers at the bars and locks on. It will strike next turn — read its intent and decide: shield first, or burn it before it fires.',
             glyph: 'drone'
         },
-        warden: [
+        sequence: [
             {
-                story: 'A drone. The first lock is electrical, not mechanical.',
-                action: 'SHIELD onto yourself first. Then ATTACK to break the lock.',
-                sub: 'TARGET: PRISONER · LETHAL FORCE PERMITTED'
+                story: 'The red icon above its head is its INTENT — what it will do next turn.',
+                action: 'Read the STRIKE 5 telegraph. The drone will hit for 5 damage.',
+                sub: 'INTENT TELEMETRY ENABLED',
+                spot: 'enemy_intent',
+                wait: 'tap'
+            },
+            {
+                story: 'SHIELD blocks incoming damage.',
+                action: 'Drag the cyan SHIELD die ONTO YOURSELF (the player at the bottom).',
+                sub: 'DEFENSIVE PROTOCOL · TAP TO CONTINUE',
+                spot: 'die:defend',
+                wait: 'die_used:defend'
+            },
+            {
+                story: 'Now the strike will land on shield, not HP.',
+                action: 'ATTACK — drag the red ATTACK die ONTO the drone.',
+                sub: 'OFFENSIVE PROTOCOL · STRIKE AUTHORIZED',
+                spot: 'die:attack',
+                wait: 'die_used:attack'
+            },
+            {
+                story: 'When you run out of dice, end the turn so the drone moves.',
+                action: 'Press the END TURN button on the right.',
+                sub: 'TURN PHASE · YIELD TO ENEMY',
+                spot: 'end_turn',
+                wait: 'enemy_turn'
+            },
+            {
+                story: 'Repeat the rhythm. Shield, strike, end turn, until it falls.',
+                action: 'Finish the drone.',
+                sub: 'TARGET DEGRADED · CONTINUE',
+                spot: null,
+                wait: 'enemy_dies'
             }
         ]
     },
@@ -139,11 +190,48 @@ const ROOMS = [
             body: 'The drone\'s death rouses something deeper. A hive-fragment crawls from a service shaft — armoured legs, a swarmling already breaking out of its underbelly. Plant a Wisp; let it eat the brood while you strike the parent.',
             glyph: 'hive'
         },
-        warden: [
+        sequence: [
             {
-                story: 'It will spawn a brood next turn. Plant your own first.',
-                action: 'MANA up. Summon a WISP. Then strike the parent.',
-                sub: 'INFESTATION DETECTED · QUARANTINE FAILED'
+                story: 'The hive\'s intent is SPAWN BROOD — it will summon a minion next turn.',
+                action: 'Read the intent. You will face two enemies soon.',
+                sub: 'INFESTATION INCOMING',
+                spot: 'enemy_intent',
+                wait: 'tap'
+            },
+            {
+                story: 'MANA dice charge your reserves. Skill and signature dice spend mana.',
+                action: 'Drag the MANA die ONTO YOURSELF. Watch your mana pip fill.',
+                sub: 'MANA STREAM · ELEVATED',
+                spot: 'die:mana',
+                wait: 'die_used:mana'
+            },
+            {
+                story: 'MINION dice summon a Wisp on your side — it absorbs hits and attacks back.',
+                action: 'Drag the green MINION die ONTO empty space.',
+                sub: 'WISP DEPLOYMENT AUTHORIZED',
+                spot: 'die:minion',
+                wait: 'die_used:minion'
+            },
+            {
+                story: 'The hive is the threat. Strike the parent, the brood will follow.',
+                action: 'Drag ATTACK ONTO the hive (top of screen).',
+                sub: 'TARGET PRIMARY: HIVE PARENT',
+                spot: 'die:attack',
+                wait: 'die_used:attack'
+            },
+            {
+                story: 'End the turn. Your wisp will fight while the hive spawns its brood.',
+                action: 'Press END TURN.',
+                sub: 'TURN PHASE · WISP DEPLOYED',
+                spot: 'end_turn',
+                wait: 'enemy_turn'
+            },
+            {
+                story: 'Multiple enemies on the field — ATTACK dice can target either one.',
+                action: 'Finish the hive. Drop them both.',
+                sub: 'CLEANUP PROTOCOL ACTIVE',
+                spot: null,
+                wait: 'enemy_dies'
             }
         ]
     },
@@ -180,11 +268,48 @@ const ROOMS = [
             body: 'A cipher unit phases out of the wall — half-corrupted, half-spider. Its first move applies WEAK (you deal 50% less damage). Its second is an EXECUTE-class strike. Time the parry on the heavy swing.',
             glyph: 'glitch'
         },
-        warden: [
+        sequence: [
             {
-                story: 'It will WEAKEN you, then swing hard. Time the parry.',
-                action: 'DEFEND when the EXECUTE icon shows. Tap inside the green ring.',
-                sub: 'CIPHER PROTOCOL ACTIVE · STATUS DECAY APPLIED'
+                story: 'CIPHER WAVE applies WEAK to you — your damage gets cut in half.',
+                action: 'Read the intent. The wave hits everyone on your side.',
+                sub: 'STATUS DECAY · WEAK INCOMING',
+                spot: 'enemy_intent',
+                wait: 'tap'
+            },
+            {
+                story: 'SHIELD blunts the wave. Plant your defend first.',
+                action: 'Drag the SHIELD die ONTO YOURSELF.',
+                sub: 'STATUS RESIST · DEFENSIVE ACTIVE',
+                spot: 'die:defend',
+                wait: 'die_used:defend'
+            },
+            {
+                story: 'End the turn. Take the wave on shield, then plan your counter.',
+                action: 'Press END TURN.',
+                sub: 'TURN PHASE · ABSORB INCOMING',
+                spot: 'end_turn',
+                wait: 'enemy_turn'
+            },
+            {
+                story: 'Now it loads EXECUTE 12 — twelve damage in one hit. PARRY it.',
+                action: 'A SHIELD die now triggers a timing-ring QTE. Tap inside the green inner ring.',
+                sub: 'EXECUTE INCOMING · PARRY WINDOW',
+                spot: 'enemy_intent',
+                wait: 'tap'
+            },
+            {
+                story: 'Drag SHIELD onto yourself. The QTE will fire automatically.',
+                action: 'When the ring shrinks to GREEN — tap. Earlier = miss, later = miss.',
+                sub: 'TIMING PROTOCOL · GREEN ZONE = PERFECT',
+                spot: 'die:defend',
+                wait: 'die_used:defend'
+            },
+            {
+                story: 'Cipher cracked. Finish it.',
+                action: 'ATTACK to drop the cipher.',
+                sub: 'TARGET DEGRADED · TERMINATE',
+                spot: 'die:attack',
+                wait: 'enemy_dies'
             }
         ]
     },
@@ -234,11 +359,27 @@ const ROOMS = [
             body: 'The cell wall fractures. Light pours through the seams. The CAGE GUARDIAN steps through the breach — the Warden\'s lieutenant. Hulking, plated, slow but devastating. Use everything: shield through plating turns, strike through gaps, parry the executes.',
             glyph: 'seal'
         },
-        warden: [
+        sequence: [
             {
-                story: 'The cell wall cracks. Beat the Guardian and the Panopticon learns your name.',
-                action: 'Shield through PLATING. Strike between attacks. Parry the EXECUTE.',
-                sub: 'CONTAINMENT BREACH · GUARDIAN ENGAGED · TERMINATE'
+                story: 'The Guardian rotates four moves: STRIKE, PLATING, EXECUTE, BARRAGE.',
+                action: 'Read its intent every turn. The icon tells you exactly what is coming.',
+                sub: 'BOSS ENCOUNTER · CAGE GUARDIAN',
+                spot: 'enemy_intent',
+                wait: 'tap'
+            },
+            {
+                story: 'You now roll a NATURAL HAND — the dice are class-mixed, not forced.',
+                action: 'You can REROLL bad hands. Tap the dial on the left to cycle dice.',
+                sub: 'REROLL ENABLED · TWO PER TURN',
+                spot: 'reroll',
+                wait: 'tap'
+            },
+            {
+                story: 'Free combat now. Shield the EXECUTE. Strike between PLATING turns.',
+                action: 'Drop the Guardian. Use everything you have learned.',
+                sub: 'CONTAINMENT BREACH · TERMINATE',
+                spot: null,
+                wait: 'enemy_dies'
             }
         ]
     }
@@ -264,11 +405,29 @@ const CLASS_ROOM_3 = {
             glyph: 'crest'
         },
         diceFn: (cd) => ['SIGNATURE', cd.attack, cd.defend],
-        warden: [{
-            story: 'BITE feeds you. Strike and heal in the same swing.',
-            action: 'Drag the BITE die onto the hunter. Watch your HP refill.',
-            sub: 'BLOODSTALKER PROTOCOL · LIFESIPHON DETECTED'
-        }]
+        sequence: [
+            {
+                story: 'Your SIGNATURE die is gold. For the Bloodstalker, that is BITE.',
+                action: 'BITE deals 8 damage AND heals you 3 HP every time it lands.',
+                sub: 'BLOODSTALKER PROTOCOL · LIFESIPHON DETECTED',
+                spot: 'die:signature',
+                wait: 'tap'
+            },
+            {
+                story: 'Drag BITE onto the hunter. Trade HP — and come out richer.',
+                action: 'Cast BITE on the wounded hunter.',
+                sub: 'TARGET: WOUNDED · LIFESIPHON ARMED',
+                spot: 'die:signature',
+                wait: 'die_used'
+            },
+            {
+                story: 'Defend the strike, then finish the hunter.',
+                action: 'SHIELD up. Then ATTACK to drop the kill.',
+                sub: 'TERMINATE · BLEED DETECTED',
+                spot: null,
+                wait: 'enemy_dies'
+            }
+        ]
     },
     arcanist: {
         // Spark (SIG_ARC_1) — 6 dmg + 1 mana. Enemy with a small HP
@@ -282,11 +441,29 @@ const CLASS_ROOM_3 = {
             glyph: 'crest'
         },
         diceFn: (cd) => ['SIGNATURE', cd.defend, cd.mana],
-        warden: [{
-            story: 'SPARK refunds mana. The cycle never stops.',
-            action: 'Cast SPARK. Then DEFEND the corrupt strike.',
-            sub: 'ARCANIST PROTOCOL · MANA LOOP STABILIZED'
-        }]
+        sequence: [
+            {
+                story: 'Your SIGNATURE die is gold. For the Arcanist, that is SPARK.',
+                action: 'SPARK deals 6 damage AND refunds 1 mana every cast.',
+                sub: 'ARCANIST PROTOCOL · MANA LOOP STABILIZED',
+                spot: 'die:signature',
+                wait: 'tap'
+            },
+            {
+                story: 'Cast SPARK on the corrupted process. Watch the mana pip refill.',
+                action: 'Drag SPARK onto the enemy.',
+                sub: 'GLYPH IGNITION · CYCLING',
+                spot: 'die:signature',
+                wait: 'die_used'
+            },
+            {
+                story: 'It will hit hard. Defend the strike, then chain another SPARK next turn.',
+                action: 'SHIELD yourself. End turn. Then strike again.',
+                sub: 'PROTOCOL CYCLE · DEFEND',
+                spot: 'die:defend',
+                wait: 'enemy_dies'
+            }
+        ]
     },
     sentinel: {
         // Bash (SIG_SENT_1) — 10 shield + 4 dmg. Enemy is a multi-hit
@@ -301,11 +478,29 @@ const CLASS_ROOM_3 = {
             glyph: 'crest'
         },
         diceFn: (cd) => ['SIGNATURE', cd.defend, cd.attack],
-        warden: [{
-            story: 'BASH walls and strikes. Both at once.',
-            action: 'BASH first — eat the barrage on shield. Then strike.',
-            sub: 'SENTINEL PROTOCOL · KINETIC PLATING ACTIVE'
-        }]
+        sequence: [
+            {
+                story: 'Your SIGNATURE die is gold. For the Sentinel, that is BASH.',
+                action: 'BASH grants 10 SHIELD AND deals 4 damage in one play.',
+                sub: 'SENTINEL PROTOCOL · KINETIC PLATING',
+                spot: 'die:signature',
+                wait: 'tap'
+            },
+            {
+                story: 'Drag BASH onto the turret. The shield will eat the barrage.',
+                action: 'Cast BASH first.',
+                sub: 'TARGET: BARRAGE TURRET · WALL ARMED',
+                spot: 'die:signature',
+                wait: 'die_used'
+            },
+            {
+                story: 'Stack a second SHIELD die for the multi-hit barrage.',
+                action: 'DEFEND for the chained strikes. End turn.',
+                sub: 'BARRAGE INCOMING · PLATES STACKING',
+                spot: 'die:defend',
+                wait: 'enemy_dies'
+            }
+        ]
     },
     annihilator: {
         // Blast (SIG_ANNI_1) — 12 dmg, ignore shield. Enemy carries
@@ -319,11 +514,29 @@ const CLASS_ROOM_3 = {
             glyph: 'crest'
         },
         diceFn: (cd) => ['SIGNATURE', cd.attack, cd.defend],
-        warden: [{
-            story: 'BLAST punches through plating like it\'s wet paper.',
-            action: 'Drag BLAST onto the plated guard. Watch the shield evaporate.',
-            sub: 'ANNIHILATOR PROTOCOL · ARMOR PIERCING ACTIVE'
-        }]
+        sequence: [
+            {
+                story: 'Your SIGNATURE die is gold. For the Annihilator, that is BLAST.',
+                action: 'BLAST deals 12 damage AND ignores enemy SHIELD entirely.',
+                sub: 'ANNIHILATOR PROTOCOL · ARMOR PIERCING',
+                spot: 'die:signature',
+                wait: 'tap'
+            },
+            {
+                story: 'The Plated Guard has 12 SHIELD. Normal hits stop on it. BLAST does not.',
+                action: 'Drag BLAST onto the plated guard. Watch the shield drop to zero.',
+                sub: 'TARGET: PLATED · ARMOR BREACH AUTHORIZED',
+                spot: 'die:signature',
+                wait: 'die_used'
+            },
+            {
+                story: 'Plate down. Finish it.',
+                action: 'ATTACK to finish. SHIELD if it hits hard.',
+                sub: 'PLATE NEUTRALIZED · TERMINATE',
+                spot: null,
+                wait: 'enemy_dies'
+            }
+        ]
     },
     tactician: {
         // Volley (SIG_TACT_1) — 7 dmg + 1 reroll next turn. Enemy
@@ -337,11 +550,29 @@ const CLASS_ROOM_3 = {
             glyph: 'crest'
         },
         diceFn: (cd) => ['SIGNATURE', cd.defend, cd.attack],
-        warden: [{
-            story: 'VOLLEY pays you back next turn. Tempo wins fights.',
-            action: 'Open with VOLLEY. Stack the reroll for next turn.',
-            sub: 'TACTICIAN PROTOCOL · TEMPO LOOP DETECTED'
-        }]
+        sequence: [
+            {
+                story: 'Your SIGNATURE die is gold. For the Tactician, that is VOLLEY.',
+                action: 'VOLLEY deals 7 damage AND grants +1 REROLL next turn.',
+                sub: 'TACTICIAN PROTOCOL · TEMPO LOOP',
+                spot: 'die:signature',
+                wait: 'tap'
+            },
+            {
+                story: 'Cast VOLLEY now. The bonus reroll banks for your next hand.',
+                action: 'Drag VOLLEY onto the protocol officer.',
+                sub: 'TARGET: PROTOCOL · TEMPO ARMED',
+                spot: 'die:signature',
+                wait: 'die_used'
+            },
+            {
+                story: 'Defend, end turn, then use the bonus reroll to find the kill shot.',
+                action: 'SHIELD up. End turn. Then REROLL to chase another VOLLEY.',
+                sub: 'CYCLE STABLE · ROLL FOR KILL',
+                spot: 'die:defend',
+                wait: 'enemy_dies'
+            }
+        ]
     },
     summoner: {
         // Call (SIG_SUM_1) — summon a spirit + 4 dmg. Enemy is a
@@ -356,11 +587,29 @@ const CLASS_ROOM_3 = {
             glyph: 'crest'
         },
         diceFn: (cd) => ['SIGNATURE', cd.minion, cd.attack],
-        warden: [{
-            story: 'CALL plants a spirit. The grove answers.',
-            action: 'Drag CALL onto the agitator. The spirit appears next to you.',
-            sub: 'SUMMONER PROTOCOL · GROVE SIGNAL DETECTED'
-        }]
+        sequence: [
+            {
+                story: 'Your SIGNATURE die is gold. For the Summoner, that is CALL.',
+                action: 'CALL summons a spirit AND deals 4 damage in one play.',
+                sub: 'SUMMONER PROTOCOL · GROVE SIGNAL',
+                spot: 'die:signature',
+                wait: 'tap'
+            },
+            {
+                story: 'Cast CALL on the agitator. A spirit appears beside you.',
+                action: 'Drag CALL onto the swarm agitator.',
+                sub: 'TARGET: AGITATOR · SPIRIT INBOUND',
+                spot: 'die:signature',
+                wait: 'die_used'
+            },
+            {
+                story: 'Two on the field now — your spirit fights with you.',
+                action: 'MINION die plants another. ATTACK to finish.',
+                sub: 'GROVE EXPANDING · TERMINATE',
+                spot: null,
+                wait: 'enemy_dies'
+            }
+        ]
     }
 };
 
@@ -420,7 +669,13 @@ function roomFor(roomIdx, classId) {
                 title: 'CLASS PROVING',
                 body: 'A class-tuned encounter. Everything you have built into your dice answers this room.'
             },
-            warden: spec.warden
+            sequence: spec.sequence || [{
+                story: 'Practise your class signature.',
+                action: 'Use your dice to drop the enemy.',
+                sub: '',
+                spot: null,
+                wait: 'enemy_dies'
+            }]
         };
     }
     return r;
@@ -484,6 +739,24 @@ export const Breakout = {
         try {
             game.changeState(STATE.BREAKOUT);
         } catch (_) {}
+        // Tap-advance — beats with `wait: 'tap'` arm `_tapAdvanceArmed`
+        // so any pointerdown anywhere on the screen advances. Listener
+        // is installed once for the lifetime of the breakout, removed
+        // in _finish/skip. Capture phase so it sees the event before
+        // child handlers (the dice tray's drag handler will still fire
+        // if the player drags a die — that's covered by die_used:slot
+        // beat advance).
+        if (!this._tapHandler) {
+            this._tapHandler = (e) => {
+                if (!this._active || !this._tapAdvanceArmed) return;
+                // Don't steal taps from the storyboard slate (it has
+                // its own click handler).
+                if (e.target && e.target.closest && e.target.closest('#breakout-storyboard')) return;
+                this._tapAdvanceArmed = false;
+                this._advanceBeat();
+            };
+            document.addEventListener('pointerdown', this._tapHandler, true);
+        }
         this._enterRoom();
     },
 
@@ -496,6 +769,13 @@ export const Breakout = {
         this._grantCellkey(game);
         this.markComplete();
         try { document.body.classList.remove('breakout-active'); } catch (_) {}
+        // Drop the global tap-advance listener so menu/map taps after
+        // the breakout don't accidentally pulse a stale advance.
+        if (this._tapHandler) {
+            try { document.removeEventListener('pointerdown', this._tapHandler, true); } catch (_) {}
+            this._tapHandler = null;
+        }
+        this._setSpotlight(null);
         // Reset run-start flags the breakout had toggled, then continue
         // into the regular run flow at the sector map.
         game._breakoutForcedDice = null;
@@ -548,8 +828,11 @@ export const Breakout = {
             cursor: 0
         };
 
-        this._wardenStep = 0;
-        this._showWarden(room);
+        // Sequenced teaching beats — drives the per-step narration +
+        // spotlight + waitFor advancement.
+        this._room = room;
+        this._beatIdx = 0;
+        this._tapAdvanceArmed = false;
 
         // Sector 0 — light-weight spawn. We deliberately bypass the
         // heavy `startCombat` path because it expects a valid
@@ -563,6 +846,208 @@ export const Breakout = {
         if (typeof game._buildBreakoutCombat === 'function') {
             game._buildBreakoutCombat(room);
         }
+
+        // Run the first beat AFTER the combat is built so spotlights
+        // can resolve to real entity/DOM positions.
+        this._runBeat(0);
+    },
+
+    /* ────────────────────────────────────────────────────────────────
+     * SEQUENCE RUNNER
+     * ────────────────────────────────────────────────────────────────
+     *
+     * _runBeat(idx) — show beat N's narration, place its spotlight,
+     * arm its wait condition. notify() drains the wait condition and
+     * advances when matched. */
+    _runBeat(idx) {
+        if (!this._active || !this._room) return;
+        const seq = this._room.sequence;
+        if (!Array.isArray(seq) || seq.length === 0) return;
+        if (idx >= seq.length) return; // sequence ended; combat continues
+        this._beatIdx = idx;
+        const beat = seq[idx];
+        // Render warden text from beat fields (story / action / sub).
+        const pane = document.getElementById('tutorial-narration');
+        const story = document.getElementById('tutorial-narration-story');
+        const action = document.getElementById('tutorial-narration-action');
+        const sub = document.getElementById('breakout-warden-sub');
+        if (pane) pane.classList.remove('hidden');
+        if (story) story.textContent = beat.story || '';
+        if (action) action.textContent = beat.action || '';
+        if (sub) sub.textContent = beat.sub || '';
+        // Spotlight placement.
+        this._setSpotlight(beat.spot || null);
+        // Tap-advance arming. The capture-phase listener was added once
+        // in start() and stays for the lifetime of the breakout.
+        this._tapAdvanceArmed = (beat.wait === 'tap');
+        // Optional auto-advance (used for purely cinematic beats).
+        if (typeof beat.autoMs === 'number' && beat.autoMs > 0) {
+            setTimeout(() => {
+                if (this._active && this._beatIdx === idx) this._advanceBeat();
+            }, beat.autoMs);
+        }
+    },
+
+    _advanceBeat() {
+        if (!this._active || !this._room) return;
+        this._tapAdvanceArmed = false;
+        const next = this._beatIdx + 1;
+        const seq = this._room.sequence;
+        if (next >= seq.length) {
+            // Sequence ended — clear spotlight, leave the last beat's
+            // text up. Combat continues normally; onCombatWin closes
+            // the room when the enemy dies.
+            this._setSpotlight(null);
+            return;
+        }
+        this._runBeat(next);
+    },
+
+    /* Game-side hook. Called from useDie / rerollDice / endTurn /
+     * winCombat with a labelled event. If the current beat's `wait`
+     * matches, advance. */
+    notify(event, data) {
+        if (!this._active || !this._room) return;
+        const beat = this._room.sequence && this._room.sequence[this._beatIdx];
+        if (!beat || !beat.wait) return;
+        const w = beat.wait;
+        // Compose extended event keys for die-slot matching.
+        // event === 'die_used' with data.slot === 'attack' →
+        //   'die_used' OR 'die_used:attack' both match.
+        let matched = false;
+        if (w === event) matched = true;
+        else if (event === 'die_used' && data && data.slot && w === ('die_used:' + data.slot)) matched = true;
+        else if (event === 'die_used' && data && data.signature && w === 'die_used:signature') matched = true;
+        if (matched) this._advanceBeat();
+    },
+
+    /* Re-apply the current beat's spotlight. Game.renderDiceUI calls
+     * this on every dice rebuild so a die-targeted spotlight tracks
+     * to the new DOM node (rerolls + turn starts re-render the tray). */
+    refreshSpotlight() {
+        if (!this._active || !this._room) return;
+        const beat = this._room.sequence && this._room.sequence[this._beatIdx];
+        if (!beat) return;
+        this._setSpotlight(beat.spot || null);
+    },
+
+    /* Spotlight target router. Resolves the named target into a screen
+     * rect and writes it onto #tutorial-spotlight. Falls back to a
+     * hidden state if the target isn't found (e.g. dice tray hasn't
+     * rendered yet). */
+    _setSpotlight(target) {
+        const spotlight = document.getElementById('tutorial-spotlight');
+        if (!spotlight) return;
+        if (!target) {
+            spotlight.classList.add('hidden');
+            return;
+        }
+        const rect = this._resolveSpotTarget(target);
+        if (!rect) {
+            spotlight.classList.add('hidden');
+            return;
+        }
+        const containerRect = this._gameContainerRect();
+        const top  = rect.top  - (containerRect ? containerRect.top  : 0);
+        const left = rect.left - (containerRect ? containerRect.left : 0);
+        spotlight.style.top = `${top}px`;
+        spotlight.style.left = `${left}px`;
+        spotlight.style.width = `${rect.width}px`;
+        spotlight.style.height = `${rect.height}px`;
+        spotlight.style.borderRadius = (target === 'enemy' || target === 'player') ? '50%' : '8px';
+        spotlight.classList.remove('hidden');
+    },
+
+    _gameContainerRect() {
+        const c = document.getElementById('game-container');
+        return c ? c.getBoundingClientRect() : null;
+    },
+
+    /* Translate a named spotlight target into a screen rect. */
+    _resolveSpotTarget(target) {
+        const game = this._game;
+        // ── Canvas-space targets (enemy + player) ──
+        if (target === 'enemy' || target === 'enemy_intent' || target === 'player') {
+            const canvas = document.getElementById('gameCanvas');
+            if (!canvas || !game) return null;
+            const r = canvas.getBoundingClientRect();
+            const W = (typeof CONFIG !== 'undefined') ? CONFIG.CANVAS_WIDTH : 1080;
+            const H = (typeof CONFIG !== 'undefined') ? CONFIG.CANVAS_HEIGHT : 1920;
+            const sx = r.width / W, sy = r.height / H;
+            let entity = null;
+            if (target === 'player') entity = game.player;
+            else                     entity = game.enemy;
+            if (!entity) return null;
+            const ex = r.left + entity.x * sx;
+            const ey = r.top  + entity.y * sy;
+            const radius = (entity.radius || 75) * sx;
+            if (target === 'enemy_intent') {
+                // Above the enemy where the intent icon sits.
+                const w = 90, h = 90;
+                return { top: ey - radius * sy / sx - h - 16, left: ex - w / 2, width: w, height: h };
+            }
+            return { top: ey - radius - 12, left: ex - radius - 12, width: radius * 2 + 24, height: radius * 2 + 24 };
+        }
+        // ── DOM targets ──
+        if (target === 'reroll') {
+            const el = document.getElementById('btn-reroll');
+            return el ? this._padRect(el.getBoundingClientRect(), 12) : null;
+        }
+        if (target === 'end_turn') {
+            const el = document.getElementById('btn-end-turn');
+            return el ? this._padRect(el.getBoundingClientRect(), 12) : null;
+        }
+        if (target && target.indexOf('die:') === 0) {
+            // Find a die element in the tray matching the requested
+            // slot. Each die has data-slot or its type maps to one.
+            const slot = target.slice(4); // attack | defend | mana | minion | signature
+            const matched = this._findDieElement(slot);
+            return matched ? this._padRect(matched.getBoundingClientRect(), 6) : null;
+        }
+        return null;
+    },
+
+    _padRect(r, pad) {
+        return {
+            top:    r.top    - pad,
+            left:   r.left   - pad,
+            width:  r.width  + pad * 2,
+            height: r.height + pad * 2
+        };
+    },
+
+    _findDieElement(slot) {
+        // Dice are rendered as children of #dice-container. Each die
+        // gets `data-slot` set from its DICE_TYPES.slot (attack /
+        // defend / mana / minion / skill). Signature dice are tagged
+        // separately — the renderer doesn't write a 'signature' slot,
+        // so for that case we fall back to scanning dicePool for the
+        // isSignature flag and matching by index against the
+        // container's children.
+        const container = document.getElementById('dice-container');
+        if (!container) return null;
+        if (slot !== 'signature') {
+            const found = container.querySelector(`.die[data-slot="${slot}"]`);
+            return found || null;
+        }
+        // Signature path — match by dicePool index.
+        const game = this._game;
+        if (!game || !Array.isArray(game.dicePool)) return null;
+        for (let i = 0; i < game.dicePool.length; i++) {
+            const die = game.dicePool[i];
+            if (!die || die.used) continue;
+            const isSig = (DICE_TYPES && DICE_TYPES[die.type] && DICE_TYPES[die.type].isSignature) || die.type === 'SIGNATURE';
+            if (!isSig) continue;
+            // The die element sits inside a `.die-slot` wrapper; the
+            // wrappers appear in dicePool order so the i-th die-slot
+            // contains the i-th die.
+            const slotEl = container.children[i];
+            if (slotEl) {
+                const dieEl = slotEl.querySelector('.die');
+                if (dieEl) return dieEl;
+            }
+        }
+        return null;
     },
 
     /* Show the full-screen storyboard slate. Fades in, listens for one
@@ -609,22 +1094,8 @@ export const Breakout = {
         }, 350);
     },
 
-    _showWarden(room) {
-        const lines = (room && room.warden) || [];
-        const line = lines[this._wardenStep] || lines[0] || null;
-        if (!line) return;
-        // Reuse the existing tutorial-narration pane if present.
-        const pane = document.getElementById('tutorial-narration');
-        const story = document.getElementById('tutorial-narration-story');
-        const action = document.getElementById('tutorial-narration-action');
-        const sub = document.getElementById('breakout-warden-sub');
-        if (pane) pane.classList.remove('hidden');
-        if (story) story.textContent = line.story || '';
-        if (action) action.textContent = line.action || '';
-        // Warden "system bulletin" — vibrating red sub-line. Empty
-        // string clears the subtext (CSS hides empty `:empty`).
-        if (sub) sub.textContent = line.sub || '';
-    },
+    /* (Legacy `_showWarden` removed — replaced by `_runBeat()` which
+     * drives the same DOM nodes from the room's `sequence` data.) */
 
     /* Called after the player kills the room's scripted enemy. Advances
      * the room cursor, runs a beat of warden flavour, and opens the
@@ -697,6 +1168,11 @@ export const Breakout = {
         this._grantCellkey(game);
         this.markComplete();
         try { document.body.classList.remove('breakout-active'); } catch (_) {}
+        if (this._tapHandler) {
+            try { document.removeEventListener('pointerdown', this._tapHandler, true); } catch (_) {}
+            this._tapHandler = null;
+        }
+        this._setSpotlight(null);
         game._breakoutForcedDice = null;
         game._breakoutScript = null;
         game._inBreakout = false;
