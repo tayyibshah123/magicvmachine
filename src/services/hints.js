@@ -64,7 +64,10 @@ const HINTS = {
     // fires when the player lands on the Sanctuary screen with Sparks
     // banked but no upgrades purchased yet.
     first_sparks:           { title: "✦ SPARKS",         body: "Permanent currency. Spend in Sanctuary." },
-    first_sanctuary_spend:  { title: "SANCTUARY",        body: "Tap a node to install. Costs Sparks." }
+    first_sanctuary_spend:  { title: "SANCTUARY",        body: "Tap a node to install. Costs Sparks." },
+    // Combat depth onboarding — fires once for each new mechanic.
+    first_chain:            { title: "CHAIN HIT",        body: "Each wave matters. Worst tap caps the chain." },
+    first_momentum:         { title: "MOMENTUM",         body: "Combos and parries fill it. Apex auto-crits." }
 };
 
 function readSeen() {

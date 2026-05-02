@@ -2060,7 +2060,14 @@ startQTE(type, x, y, callback, opts) {
                 elapsed: 0,
                 type: type,
                 pattern: pat.pattern,
-                waveTotal: pat.waves,
+                waveTotal: (() => {
+                    // First-time multi-wave QTE → fire the chain hint so
+                    // the player knows worst-of-N caps the result.
+                    if (pat.waves > 1) {
+                        try { Hints && Hints.trigger && Hints.trigger('first_chain'); } catch (_) {}
+                    }
+                    return pat.waves;
+                })(),
                 waveIdx: 0,
                 waveQualities: [],
                 anchorX: x,           // original entity position (for a connector line)
@@ -5775,6 +5782,12 @@ triggerPhaseGlitch() {
         this.momentum = Math.max(0, Math.min(6, this.momentum + (delta || 1)));
         this._momentumTriggeredThisTurn = true;
         if (this.momentum === before) return;
+        // First-time-on-momentum hint — fires when the player first
+        // reaches FLOW (tier 2) so the system is taught at the moment
+        // of earning, not via wiki.
+        if (before < 2 && this.momentum >= 2) {
+            try { Hints && Hints.trigger && Hints.trigger('first_momentum'); } catch (_) {}
+        }
         // Cross-threshold floaters at 2 / 4 / 6.
         if (this.player) {
             if (before < 2 && this.momentum >= 2) {
@@ -13023,6 +13036,29 @@ async startTurn() {
         // the splash so the player learns what ✦ means at the moment of
         // earning, not on a passive menu pill.
         const firstEverGrant = (this.sparksLifetime || 0) === 0;
+        // Catch-up bonus — if the player hasn't earned a Spark in 72+
+        // hours, this single grant gets a 1.5× kicker. Capped to once
+        // per 7-day window (mvm_sparks_catchup_used_week) so engaged
+        // players don't farm it. Skipped on first-ever grant since the
+        // last-ts is unset.
+        if (!firstEverGrant) {
+            try {
+                const now = Date.now();
+                const lastTs = parseInt(localStorage.getItem('mvm_sparks_last_grant_ts') || '0', 10);
+                const lastCatchup = parseInt(localStorage.getItem('mvm_sparks_catchup_used_week') || '0', 10);
+                const HOURS_72 = 72 * 60 * 60 * 1000;
+                const DAYS_7   = 7  * 24 * 60 * 60 * 1000;
+                if (lastTs > 0 && (now - lastTs) > HOURS_72 && (now - lastCatchup) > DAYS_7) {
+                    const bonus = Math.ceil(amount * 0.5);
+                    amount += bonus;
+                    localStorage.setItem('mvm_sparks_catchup_used_week', String(now));
+                    if (this.player && !silent) {
+                        ParticleSys.createFloatingText(this.player.x, this.player.y - 260, `WELCOME BACK +${bonus}`, '#ffd76a');
+                    }
+                }
+                localStorage.setItem('mvm_sparks_last_grant_ts', String(now));
+            } catch (_) {}
+        }
         this.sparks = (this.sparks || 0) + amount;
         this.sparksLifetime = (this.sparksLifetime || 0) + amount;
         try {
