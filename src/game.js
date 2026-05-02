@@ -11061,8 +11061,15 @@ updateHexBreach(dt) {
 
         // Build the enemy directly. Tier 1, non-elite. The Enemy
         // constructor reads `template.hp`/`dmg`; we pass the scripted
-        // values straight through.
-        const template = { name: room.enemy.name, hp: room.enemy.hp, dmg: room.enemy.dmg };
+        // values straight through, plus a `shape` so the standard
+        // enemy renderer picks the right silhouette (drone / spider /
+        // tank).
+        const template = {
+            name: room.enemy.name,
+            hp: room.enemy.hp,
+            dmg: room.enemy.dmg,
+            shape: room.enemy.shape || 'drone'
+        };
         this.enemy = new Enemy(template, 1);
         this.enemy.maxHp = room.enemy.hp;
         this.enemy.currentHp = room.enemy.hp;
@@ -11070,6 +11077,20 @@ updateHexBreach(dt) {
         this.enemy.dmg = room.enemy.dmg;
         this.enemy.isBreakoutEnemy = true;
         this.enemy.isBoss = !!room.enemy.isBoss;
+        // Custom radius — sells the "hulking" feeling for boss + late
+        // rooms. Default radius from Enemy constructor is ~75, so the
+        // Cage Guardian's 140 reads as roughly twice as tall on
+        // screen. Drag-drop hit detection uses radius too, so big
+        // enemies are easier to target.
+        if (typeof room.enemy.radius === 'number') {
+            this.enemy.radius = room.enemy.radius;
+        }
+        // Optional starting shield — used by the Plated Guard
+        // (annihilator class-fantasy room) so the BLAST die's
+        // ignore-shield property is teachable.
+        if (typeof room.enemy.shield === 'number') {
+            this.enemy.shield = room.enemy.shield;
+        }
         // Patch bossData so decideTurn's `actionsPerTurn` lookup
         // doesn't read undefined when the room marks the enemy as
         // boss. The Cage Guardian fights with one scripted intent per
@@ -11079,6 +11100,15 @@ updateHexBreach(dt) {
             moves: ['attack'],
             shieldVal: 8
         });
+
+        // Register the player's class signature die so DICE_TYPES.SIGNATURE
+        // resolves in the rollDice override. The CLASS_ROOM_3 forced
+        // hands reference the literal 'SIGNATURE' key — without this
+        // sync the breakout's class-proving room would show a black
+        // empty die slot. Idempotent; safe to call every room build.
+        if (typeof this._syncSignatureDie === 'function') {
+            this._syncSignatureDie();
+        }
         // Centre the enemy in the upper half of the canvas so the
         // breakout fights frame cleanly. Existing combat layout
         // assumptions are preserved by mirroring startCombat's offsets.

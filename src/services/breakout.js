@@ -43,9 +43,8 @@ import { STATE, DICE_TYPES, PLAYER_CLASSES, UPGRADES_POOL } from '../constants.j
 // seal — so the slate reads as a "wanted poster" / dossier file.
 const GLYPHS = {
     drone:        '<svg viewBox="0 0 60 60"><circle cx="30" cy="32" r="13"/><circle cx="30" cy="32" r="5"/><path d="M10 22 L18 26 M50 22 L42 26 M30 14 L30 18 M30 50 L30 54"/></svg>',
-    sentry:       '<svg viewBox="0 0 60 60"><path d="M30 8 L40 22 L36 22 L42 36 L36 36 L44 52 L16 52 L24 36 L18 36 L24 22 L20 22 Z"/><circle cx="30" cy="42" r="3" fill="currentColor" stroke="none"/></svg>',
+    hive:         '<svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="14"/><circle cx="30" cy="30" r="3" fill="currentColor" stroke="none"/><path d="M16 16 L8 8 M44 16 L52 8 M16 44 L8 52 M44 44 L52 52 M30 4 L30 12 M30 48 L30 56 M4 30 L12 30 M48 30 L56 30"/></svg>',
     crest:        '<svg viewBox="0 0 60 60"><path d="M30 8 L48 18 L48 34 L30 52 L12 34 L12 18 Z"/><path d="M30 18 L30 38 M22 28 L38 28"/></svg>',
-    executioner:  '<svg viewBox="0 0 60 60"><path d="M30 50 L30 12 M30 12 L18 4 L42 4 Z M22 18 L38 18"/><circle cx="30" cy="50" r="4"/></svg>',
     glitch:       '<svg viewBox="0 0 60 60"><path d="M14 14 L46 46 M46 14 L14 46"/><path d="M8 30 L20 30 M40 30 L52 30 M30 8 L30 20 M30 40 L30 52"/></svg>',
     seal:         '<svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="20"/><circle cx="30" cy="30" r="10"/><path d="M30 12 L30 48 M12 30 L48 30 M16 16 L44 44 M44 16 L16 44"/></svg>'
 };
@@ -68,254 +67,299 @@ const GLYPHS = {
 //               { story } prints in the Warden's voice; { action }
 //               tells the player what to do.
 const ROOMS = [
+    // ──────────────────────────────────────────────────────────────
+    // ROOM 1 — FIRST STRIKE
+    // Mechanics: attack + defend
+    // Compact drone, telegraphed strike, player learns the basic
+    // "swing then guard" rhythm. Hand starts mixed so the player
+    // has to figure out which die goes where.
+    // ──────────────────────────────────────────────────────────────
     {
-        id: 'cell-block',
-        teaches: 'drag-to-aim attack basics',
-        enemy: { name: 'CELL DRONE', hp: 8, dmg: 2 },
-        intents: [
-            { type: 'idle', val: 0, label: 'SCANNING' }
-        ],
-        diceFn: (classId) => {
-            const cd = classDice(classId);
-            // Two attack dice — first room is a free swing.
-            return [cd.attack, cd.attack];
+        id: 'first-strike',
+        teaches: 'attack + defend basics, intent reading',
+        enemy: {
+            name: 'SURVEILLANCE DRONE',
+            hp: 14,
+            dmg: 5,
+            shape: 'drone',
+            radius: 70
         },
-        // Story slate shown BEFORE the room's combat. Players read this,
-        // then tap to drop into the fight.
-        storyboard: {
-            tag: 'PRISON BLOCK 7 · CELL 14',
-            title: 'BREATHING DETECTED',
-            body: 'Your eyes open inside a holographic cell. A surveillance drone hovers at the bars. The Warden\'s voice comes through the seam.',
-            glyph: 'drone'
-        },
-        warden: [
-            {
-                story: 'Operator. The Warden hears you breathing inside the cell.',
-                action: 'Drag a die ONTO the drone to strike. Release to commit.',
-                sub: 'TARGET: PRISONER · STATUS: AWAKE · LETHAL FORCE PERMITTED'
-            }
-        ]
-    },
-    {
-        id: 'shock-collar',
-        teaches: 'reading enemy intent + defending',
-        enemy: { name: 'SHOCK SENTRY', hp: 14, dmg: 6 },
         intents: [
-            { type: 'attack', val: 6, label: 'STRIKE 6' }
+            { type: 'attack', val: 5, label: 'STRIKE 5' }
         ],
         diceFn: (classId) => {
             const cd = classDice(classId);
             return [cd.defend, cd.attack];
         },
         storyboard: {
-            tag: 'CORRIDOR · BLOCK 7',
-            title: 'SHOCK PROTOCOL ENGAGED',
-            body: 'The drone is dust. A shock-sentry pivots out of an alcove and locks on. Its strike is telegraphed — the red icon above its head shows what it will do next turn.',
-            glyph: 'sentry'
+            tag: 'PRISON BLOCK 7 · CELL 14',
+            title: 'BREATHING DETECTED',
+            body: 'You wake up inside a holographic cell. A surveillance drone hovers at the bars and locks on. It will strike next turn — read its intent and decide: shield first, or burn it before it fires.',
+            glyph: 'drone'
         },
         warden: [
             {
-                story: 'The collar telegraphs before it bites. See the red icon.',
-                action: 'Drag the SHIELD die onto YOURSELF first. Then attack.',
-                sub: 'ESCAPE ATTEMPTED · ELIMINATION AUTHORIZED'
+                story: 'A drone. The first lock is electrical, not mechanical.',
+                action: 'SHIELD onto yourself first. Then ATTACK to break the lock.',
+                sub: 'TARGET: PRISONER · LETHAL FORCE PERMITTED'
             }
         ]
     },
-    // Room 3 — class signature beat. Per-class enemy + intent + dice.
+
+    // ──────────────────────────────────────────────────────────────
+    // ROOM 2 — HIVE FRAGMENT
+    // Mechanics: mana economy + minion summon + multiple targets
+    // The fight has the boss enemy AND a swarmling that spawns on
+    // turn 2. Player has [mana, minion, attack] dice — has to spend
+    // mana to charge a Wisp, then chain attacks across two enemies.
+    // Larger spider-shape enemy reads as bigger threat than room 1.
+    // ──────────────────────────────────────────────────────────────
     {
-        id: 'class-fantasy',
-        teaches: 'class signature mechanic',
-        // populated dynamically in roomFor() based on player class.
-    },
-    {
-        id: 'parry-window',
-        teaches: 'QTE / parry timing',
-        enemy: { name: 'EXECUTIONER', hp: 24, dmg: 12 },
+        id: 'hive-fragment',
+        teaches: 'mana spend + minion summon + multi-target',
+        enemy: {
+            name: 'HIVE FRAGMENT',
+            hp: 22,
+            dmg: 4,
+            shape: 'spider',
+            radius: 90
+        },
         intents: [
+            { type: 'attack', val: 4, label: 'STRIKE 4' },
+            { type: 'summon', val: 0, label: 'SPAWN BROOD' },
+            { type: 'attack', val: 4, label: 'STRIKE 4' }
+        ],
+        diceFn: (classId) => {
+            const cd = classDice(classId);
+            return [cd.mana, cd.minion, cd.attack];
+        },
+        storyboard: {
+            tag: 'CORRIDOR · NESTING SHAFT',
+            title: 'HIVE FRAGMENT',
+            body: 'The drone\'s death rouses something deeper. A hive-fragment crawls from a service shaft — armoured legs, a swarmling already breaking out of its underbelly. Plant a Wisp; let it eat the brood while you strike the parent.',
+            glyph: 'hive'
+        },
+        warden: [
+            {
+                story: 'It will spawn a brood next turn. Plant your own first.',
+                action: 'MANA up. Summon a WISP. Then strike the parent.',
+                sub: 'INFESTATION DETECTED · QUARANTINE FAILED'
+            }
+        ]
+    },
+
+    // ──────────────────────────────────────────────────────────────
+    // ROOM 3 — GLITCH CIPHER
+    // Mechanics: status effects (Weak debuff) + parry timing on a
+    // heavy strike. The cipher applies WEAK to the player on its
+    // first action (50% damage cut), then loads a heavy strike on
+    // turn 2 that the player has to parry. Player has a 3-die hand
+    // including a defend so they can buffer the heavy hit.
+    // ──────────────────────────────────────────────────────────────
+    {
+        id: 'glitch-cipher',
+        teaches: 'status effects + parry timing',
+        enemy: {
+            name: 'GLITCH CIPHER',
+            hp: 26,
+            dmg: 12,
+            shape: 'spider',
+            radius: 95
+        },
+        intents: [
+            { type: 'frost_aoe', val: 4, label: 'CIPHER WAVE', isAOE: true },
             { type: 'attack', val: 12, label: 'EXECUTE 12' }
         ],
         diceFn: (classId) => {
             const cd = classDice(classId);
-            return [cd.attack, cd.defend];
-        },
-        storyboard: {
-            tag: 'CHECKPOINT B-12',
-            title: 'EXECUTIONER DISPATCHED',
-            body: 'A hulking unit drops from the ceiling. Heavier. Slower. Each swing is a death sentence — but the wind-up is long enough to read. Time it right and you blunt the blow.',
-            glyph: 'executioner'
-        },
-        warden: [
-            {
-                story: 'This one swings hard. Time the QTE — green ring is perfect.',
-                action: 'Defend the strike. Tap inside the ring at the right moment.',
-                sub: 'EXECUTOR-CLASS DISPATCHED · CONTAIN AT ALL COSTS'
-            }
-        ]
-    },
-    {
-        id: 'reroll-room',
-        teaches: 'rerolls + module synergy',
-        enemy: { name: 'GLITCH WARDEN', hp: 20, dmg: 8 },
-        intents: [
-            { type: 'attack', val: 8, label: 'STRIKE 8' }
-        ],
-        diceFn: (classId) => {
-            const cd = classDice(classId);
-            // Mismatched hand on purpose so the player learns reroll.
-            return [cd.defend, cd.defend];
+            return [cd.defend, cd.attack, cd.mana];
         },
         storyboard: {
             tag: 'DATA-VAULT 9',
-            title: 'CORRUPTED PROTOCOL',
-            body: 'A glitched warden looms in the next chamber. Your dice come up wrong — two shields, no edge. You have one chance to cycle them into something that hits.',
+            title: 'GLITCH CIPHER',
+            body: 'A cipher unit phases out of the wall — half-corrupted, half-spider. Its first move applies WEAK (you deal 50% less damage). Its second is an EXECUTE-class strike. Time the parry on the heavy swing.',
             glyph: 'glitch'
         },
         warden: [
             {
-                story: 'Bad hand? You have rerolls. Cycle them until you get a strike.',
-                action: 'Tap the reroll dial (left). Reroll BOTH dice into attacks.',
-                sub: 'PROTOCOL GLITCH · REWRITE PERMITTED'
+                story: 'It will WEAKEN you, then swing hard. Time the parry.',
+                action: 'DEFEND when the EXECUTE icon shows. Tap inside the green ring.',
+                sub: 'CIPHER PROTOCOL ACTIVE · STATUS DECAY APPLIED'
             }
         ]
     },
-    // Boss room — real combat against the Cage Guardian.
+
+    // ──────────────────────────────────────────────────────────────
+    // ROOM 4 — CLASS PROVING
+    // Mechanics: the player's class signature die + signature kit
+    // (heal, mana feedback, plate, armour pierce, tempo, summon).
+    // Per-class data lives in CLASS_ROOM_3 below. Each class's
+    // signature die is forced into the hand alongside their attack
+    // and defend so the player sees the full class identity.
+    // ──────────────────────────────────────────────────────────────
+    {
+        id: 'class-fantasy',
+        teaches: 'class signature die + kit',
+        // populated dynamically in roomFor() based on player class.
+    },
+
+    // ──────────────────────────────────────────────────────────────
+    // ROOM 5 — CAGE GUARDIAN (boss)
+    // Synthesis fight. Tank-shape, ×2 radius (visually hulking),
+    // 4-intent rotation cycling on a queue. Real natural-roll dice
+    // (forcedHand=null) so the player practises a real run hand
+    // before they leave the prologue. The Warden's lieutenant.
+    // ──────────────────────────────────────────────────────────────
     {
         id: 'guardian',
-        teaches: 'synthesis fight',
-        enemy: { name: 'CAGE GUARDIAN', hp: 70, dmg: 8, isBoss: true },
+        teaches: 'synthesis — everything together',
+        enemy: {
+            name: 'CAGE GUARDIAN',
+            hp: 80,
+            dmg: 8,
+            shape: 'tank',
+            radius: 140,
+            isBoss: true
+        },
         intents: [
             { type: 'attack', val: 6, label: 'STRIKE 6' },
             { type: 'shield', val: 8, label: 'PLATING +8' },
             { type: 'attack', val: 10, label: 'EXECUTE 10' },
-            { type: 'attack', val: 6, label: 'STRIKE 6' }
+            { type: 'multi_attack', val: 4, hits: 2, label: 'BARRAGE x2' }
         ],
         diceFn: null, // real combat — natural roll
         storyboard: {
             tag: 'OUTER GATE · WARDEN\'S DOMAIN',
             title: 'CAGE GUARDIAN',
-            body: 'The cell wall fractures. Light pours through the seams. The CAGE GUARDIAN steps through the breach — the Warden\'s lieutenant. Beat it and the Panopticon learns your name.',
+            body: 'The cell wall fractures. Light pours through the seams. The CAGE GUARDIAN steps through the breach — the Warden\'s lieutenant. Hulking, plated, slow but devastating. Use everything: shield through plating turns, strike through gaps, parry the executes.',
             glyph: 'seal'
         },
         warden: [
             {
-                story: 'The cell wall cracks. The CAGE GUARDIAN steps through.',
-                action: 'Use everything you learned. Shield. Strike. Parry.',
+                story: 'The cell wall cracks. Beat the Guardian and the Panopticon learns your name.',
+                action: 'Shield through PLATING. Strike between attacks. Parry the EXECUTE.',
                 sub: 'CONTAINMENT BREACH · GUARDIAN ENGAGED · TERMINATE'
             }
         ]
     }
 ];
 
-// Per-class Room 3 specs. Uses ONLY the class's own base dice
-// (cd.attack/defend/mana/minion). Earlier drafts referenced signature
-// dice (STALK, GLYPH_INTERRUPT, OVERCHARGE, STRATAGEM) which don't
-// exist in DICE_TYPES — `safeType()` would silently fall back to
-// TAC_ATTACK, breaking the per-class fantasy. Sticking to base dice
-// keeps every class's room playable and the narration honest. The
-// signature-die teaching beat lives in the real run, after the
-// prologue.
+// Per-class Room 4 — class proving. Each class gets a tuned encounter
+// that puts their signature die front-and-centre alongside their base
+// kit. The signature die is registered as DICE_TYPES.SIGNATURE by
+// `_syncSignatureDie()` (called from _buildBreakoutCombat) so we can
+// reference the literal 'SIGNATURE' key here. Per-class enemies have
+// distinct shapes + radii so each fight reads visually different.
 const CLASS_ROOM_3 = {
     bloodstalker: {
-        // Wounded prey — narrative seam without needing a dedicated
-        // STALK die. Player simply lands two clean attacks.
-        enemy:  { name: 'WOUNDED HUNTER', hp: 12, dmg: 4 },
-        intents: [{ type: 'attack', val: 4, label: 'STRIKE 4' }],
+        // Bite (SIG_BLOOD_1) — 8 dmg + 3 heal. Enemy chosen so the
+        // heal matters: HP-swap encounter where a normal attack
+        // sequence would leave the player low.
+        enemy:  { name: 'WOUNDED HUNTER', hp: 22, dmg: 7, shape: 'spider', radius: 80 },
+        intents: [{ type: 'attack', val: 7, label: 'STRIKE 7' }],
         storyboard: {
             tag: 'BLOCK 7 · SHADOWED WING',
             title: 'WOUNDED HUNTER',
-            body: 'A scout-unit limps through the corridor — already bleeding from someone else\'s pass. The Bloodstalker recognises the tell. Two clean strikes finish what was started.',
+            body: 'A scout-unit limps through the corridor — already bleeding from someone else\'s pass. The BITE die heals you for 3 every time it lands. The Bloodstalker\'s fantasy: trade HP and come out richer for it.',
             glyph: 'crest'
         },
-        diceFn: (cd) => [cd.attack, cd.attack],
+        diceFn: (cd) => ['SIGNATURE', cd.attack, cd.defend],
         warden: [{
-            story: 'Wounded prey. The bloodstalker reads the seam.',
-            action: 'Hit it twice. The second strike opens the bleed.',
-            sub: 'BLOODSTALKER VARIANT · TARGET PRIORITY: BLEED'
+            story: 'BITE feeds you. Strike and heal in the same swing.',
+            action: 'Drag the BITE die onto the hunter. Watch your HP refill.',
+            sub: 'BLOODSTALKER PROTOCOL · LIFESIPHON DETECTED'
         }]
     },
     arcanist: {
-        // Mana setup → strike. Mana die teaches the resource curve;
-        // attack die spends it. Enemy HP tuned so [mana, attack]
-        // cleanly resolves.
-        enemy:  { name: 'CORRUPTED PROCESS', hp: 12, dmg: 4 },
-        intents: [{ type: 'attack', val: 4, label: 'CORRUPT 4' }],
+        // Spark (SIG_ARC_1) — 6 dmg + 1 mana. Enemy with a small HP
+        // pool but high damage so the mana-positive cycle matters.
+        enemy:  { name: 'CORRUPTED PROCESS', hp: 18, dmg: 9, shape: 'drone', radius: 80 },
+        intents: [{ type: 'attack', val: 9, label: 'CORRUPT 9' }],
         storyboard: {
             tag: 'DATA-VAULT 4',
             title: 'CORRUPTED PROCESS',
-            body: 'Glyphs flicker against the wall. The Arcanist channels mana through the corruption — one charge, one cast. The room teaches the rhythm.',
+            body: 'Glyphs flicker against the wall. The SPARK die deals damage AND refunds a mana. The Arcanist\'s fantasy: every cast feeds the next. Strike, refill, strike again.',
             glyph: 'crest'
         },
-        diceFn: (cd) => [cd.mana, cd.attack],
+        diceFn: (cd) => ['SIGNATURE', cd.defend, cd.mana],
         warden: [{
-            story: 'Mana feeds the glyph. Charge first, then strike.',
-            action: 'Drag MANA onto yourself. Then ATTACK to spend it.',
-            sub: 'ARCANIST VARIANT · ELEVATED MANA SIGNATURE'
+            story: 'SPARK refunds mana. The cycle never stops.',
+            action: 'Cast SPARK. Then DEFEND the corrupt strike.',
+            sub: 'ARCANIST PROTOCOL · MANA LOOP STABILIZED'
         }]
     },
     sentinel: {
-        enemy:  { name: 'BARRAGE TURRET', hp: 14, dmg: 3 },
-        intents: [{ type: 'multi_attack', val: 3, hits: 3, label: 'BARRAGE x3' }],
+        // Bash (SIG_SENT_1) — 10 shield + 4 dmg. Enemy is a multi-hit
+        // turret so the shield gain matters: the BASH die is the
+        // wall, not just a hit.
+        enemy:  { name: 'BARRAGE TURRET', hp: 24, dmg: 4, shape: 'tank', radius: 95 },
+        intents: [{ type: 'multi_attack', val: 4, hits: 3, label: 'BARRAGE x3' }],
         storyboard: {
             tag: 'CORRIDOR · BARRAGE LANE',
             title: 'BARRAGE TURRET',
-            body: 'A wall-mounted turret unloads a three-shot barrage. The Sentinel\'s plates eat the burst — every defend die layers another plate on top of the first.',
+            body: 'A wall-mounted turret loads a three-shot barrage. The BASH die grants shield AND deals damage. The Sentinel\'s fantasy: every swing is also a wall.',
             glyph: 'crest'
         },
-        diceFn: (cd) => [cd.defend, cd.defend],
+        diceFn: (cd) => ['SIGNATURE', cd.defend, cd.attack],
         warden: [{
-            story: 'Multi-strike incoming. Plates absorb each hit.',
-            action: 'Stack two DEFEND dice. The barrage breaks on you.',
-            sub: 'SENTINEL VARIANT · KINETIC PLATING DETECTED'
+            story: 'BASH walls and strikes. Both at once.',
+            action: 'BASH first — eat the barrage on shield. Then strike.',
+            sub: 'SENTINEL PROTOCOL · KINETIC PLATING ACTIVE'
         }]
     },
     annihilator: {
-        // Low-HP enemy primed for the kill shot. Two attack dice
-        // overlap so the player can crit-finish on the second swing.
-        enemy:  { name: 'OVERHEATED GUARD', hp: 9, dmg: 3 },
-        intents: [{ type: 'attack', val: 3, label: 'STRIKE 3' }],
+        // Blast (SIG_ANNI_1) — 12 dmg, ignore shield. Enemy carries
+        // shield so the armor-pierce reads.
+        enemy:  { name: 'PLATED GUARD', hp: 18, dmg: 6, shield: 12, shape: 'tank', radius: 90 },
+        intents: [{ type: 'attack', val: 6, label: 'STRIKE 6' }],
         storyboard: {
             tag: 'FOUNDRY ANNEX',
-            title: 'OVERHEATED GUARD',
-            body: 'A guard-unit is venting coolant — already half-dead from heat. The Annihilator\'s rhythm is exactly this: find the wound, finish it.',
+            title: 'PLATED GUARD',
+            body: 'A guard-unit drops, plated to the eyes. Normal hits stop on the shield. The BLAST die ignores it entirely. The Annihilator\'s fantasy: armour is for other people.',
             glyph: 'crest'
         },
-        diceFn: (cd) => [cd.attack, cd.attack],
+        diceFn: (cd) => ['SIGNATURE', cd.attack, cd.defend],
         warden: [{
-            story: 'Half-dead. Finish it before the second swing lands.',
-            action: 'Strike, then strike again. Land the kill shot.',
-            sub: 'ANNIHILATOR VARIANT · TERMINAL VELOCITY'
+            story: 'BLAST punches through plating like it\'s wet paper.',
+            action: 'Drag BLAST onto the plated guard. Watch the shield evaporate.',
+            sub: 'ANNIHILATOR PROTOCOL · ARMOR PIERCING ACTIVE'
         }]
     },
     tactician: {
-        enemy:  { name: 'PROTOCOL OFFICER', hp: 14, dmg: 3 },
-        intents: [{ type: 'attack', val: 3, label: 'STRIKE 3' }],
+        // Volley (SIG_TACT_1) — 7 dmg + 1 reroll next turn. Enemy
+        // with two-turn structure so the next-turn reroll matters.
+        enemy:  { name: 'PROTOCOL OFFICER', hp: 22, dmg: 5, shape: 'drone', radius: 80 },
+        intents: [{ type: 'attack', val: 5, label: 'STRIKE 5' }],
         storyboard: {
             tag: 'COMMAND VESTIBULE',
             title: 'PROTOCOL OFFICER',
-            body: 'A planner-unit reads the Tactician like a bad hand. Match its play — two clean dice, one rhythm. The Tactician wins fights that look like spreadsheets.',
+            body: 'A planner-unit reads the Tactician like a bad hand. The VOLLEY die deals damage AND grants a reroll next turn. The Tactician\'s fantasy: every move is also a setup for the next.',
             glyph: 'crest'
         },
-        diceFn: (cd) => [cd.attack, cd.defend],
+        diceFn: (cd) => ['SIGNATURE', cd.defend, cd.attack],
         warden: [{
-            story: 'Read its rhythm. Defend the strike, then return it.',
-            action: 'Defend the incoming hit. Counter on the next pass.',
-            sub: 'TACTICIAN VARIANT · PATTERN-MATCH ACTIVE'
+            story: 'VOLLEY pays you back next turn. Tempo wins fights.',
+            action: 'Open with VOLLEY. Stack the reroll for next turn.',
+            sub: 'TACTICIAN PROTOCOL · TEMPO LOOP DETECTED'
         }]
     },
     summoner: {
-        enemy:  { name: 'SWARM AGITATOR', hp: 14, dmg: 4 },
-        intents: [{ type: 'attack', val: 4, label: 'STRIKE 4' }],
+        // Call (SIG_SUM_1) — summon a spirit + 4 dmg. Enemy is a
+        // swarm-spawner so two minion bodies on the field is the
+        // play.
+        enemy:  { name: 'SWARM AGITATOR', hp: 22, dmg: 5, shape: 'spider', radius: 90 },
+        intents: [{ type: 'attack', val: 5, label: 'STRIKE 5' }],
         storyboard: {
             tag: 'SACRED HOLLOW',
             title: 'SWARM AGITATOR',
-            body: 'The cell wall thins around root-veins. The Summoner plants a Wisp; the grove blooms. The agitator hits the Wisp, not you.',
+            body: 'The cell wall thins around root-veins. The CALL die plants a spirit AND strikes. The Summoner\'s fantasy: never fight alone.',
             glyph: 'crest'
         },
-        diceFn: (cd) => [cd.minion, cd.attack],
+        diceFn: (cd) => ['SIGNATURE', cd.minion, cd.attack],
         warden: [{
-            story: 'Plant a Wisp. The grove answers. The hit lands on it.',
-            action: 'Drag MINION into play. Then ATTACK to finish.',
-            sub: 'SUMMONER VARIANT · GROVE SIGNAL DETECTED'
+            story: 'CALL plants a spirit. The grove answers.',
+            action: 'Drag CALL onto the agitator. The spirit appears next to you.',
+            sub: 'SUMMONER PROTOCOL · GROVE SIGNAL DETECTED'
         }]
     }
 };
