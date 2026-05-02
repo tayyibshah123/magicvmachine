@@ -13490,6 +13490,16 @@ async startTurn() {
                     }
                 }
 
+                // Bloodstalker — PREDATOR state. When the target has bleed
+                // and is below 50% HP, the bloodstalker's attacks deal +50%.
+                // Class-fantasy reward for landing the bleed → finish loop.
+                if (this.player.classId === 'bloodstalker' && finalEnemy
+                    && finalEnemy.currentHp > 0
+                    && finalEnemy.hasEffect && finalEnemy.hasEffect('bleed')
+                    && finalEnemy.currentHp <= Math.floor((finalEnemy.maxHp || 1) / 2)) {
+                    dmg = Math.floor(dmg * 1.5);
+                    ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 130, "PREDATOR ×1.5", '#ff1a3a');
+                }
                 // Module: ECHO ROUND — every 3rd attack of the turn echoes
                 // 50% damage to a random other enemy (boss + minions, exc.
                 // primary target). One-shot per attack to keep cost low.
@@ -18237,7 +18247,8 @@ drawEffects() {
                 { label: 'PERFECT QTE', value: perfectQTEs },
                 { label: 'HP LOST',    value: dmgTaken.toLocaleString() },
                 { label: 'RELICS',     value: relics },
-                { label: 'FRAGMENTS',  value: frags }
+                { label: 'FRAGMENTS',  value: frags },
+                { label: '✦ SPARKS',   value: (this.sparks || 0).toLocaleString() }
             ].map(s => `
                 <div class="victory-stat">
                     <div class="victory-stat-label">${s.label}</div>
