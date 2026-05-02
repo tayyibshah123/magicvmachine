@@ -428,7 +428,18 @@ const UPGRADES_POOL = [
     { id: 'kindling',        name: "Kindling",        desc: "Bleed and Poison ticks deal +1 damage per stack of Kindling.",                       icon: ICONS.bldAttack },
     { id: 'last_stand',      name: "Last Stand",      desc: "Below 33% HP: +30% damage, +1 Reroll at turn start.",                                icon: ICONS.bldDefend },
     { id: 'spark_battery',   name: "Spark Battery",   desc: "First reroll each combat grants +1 Mana.",                                           icon: ICONS.metaReroll },
-    { id: 'siphon_blade',    name: "Siphon Blade",    desc: "Killing an enemy heals 4 HP and refunds 1 Mana.",                                    icon: ICONS.bldAttack }
+    { id: 'siphon_blade',    name: "Siphon Blade",    desc: "Killing an enemy heals 4 HP and refunds 1 Mana.",                                    icon: ICONS.bldAttack },
+
+    // ── Module expansion (round 2) — synergy fillers and class-leaning
+    // payoffs. All slot into existing turn-start / damage / kill paths.
+    { id: 'glass_lens',      name: "Glass Lens",      desc: "First attack each turn deals +50% damage but you take +1 from next hit.",            icon: ICONS.relicCrit },
+    { id: 'pressure_valve',  name: "Pressure Valve",  desc: "End of turn: each unspent Mana deals 4 damage to a random enemy.",                   icon: ICONS.overcharge },
+    { id: 'overcharge_vent', name: "Overcharge Vent", desc: "Every 5 Mana spent in a combat: +2 damage until combat ends (perm).",                icon: ICONS.relicBattery },
+    { id: 'phalanx_drive',   name: "Phalanx Drive",   desc: "Minions: +1 damage per other minion-affecting Module owned.",                        icon: ICONS.constrict },
+    { id: 'echo_round',      name: "Echo Round",      desc: "Every 3rd attack also hits a random enemy for 50% damage.",                          icon: ICONS.attack },
+    { id: 'tidal_recycler',  name: "Tidal Recycler",  desc: "When Shield > Max HP/2 at turn start, gain +1 Mana.",                                icon: ICONS.relicShieldGen },
+    { id: 'munitions_belt',  name: "Munitions Belt",  desc: "Skill dice (Meteor, Earthquake, etc.) gain +25% effect.",                            icon: ICONS.classAnnihilator },
+    { id: 'tacticians_eye',  name: "Tactician's Eye", desc: "Each die rolled with matching slot (2+ same): +2 to its effect.",                    icon: ICONS.classTactician }
 ];
 
 const CORRUPTED_RELICS = [
@@ -445,7 +456,30 @@ const CORRUPTED_RELICS = [
     { id: 'c_fracture',      name: "Fracture",      desc: "Rerolls cost 2 HP instead of a reroll token. Rerolls never deplete.",                  icon: ICONS.corUnstable, rarity: 'corrupted' },
     { id: 'c_void_siphon',   name: "Void Siphon",   desc: "Killing an enemy grants +1 Max Mana. Max HP -5 on pickup.",                             icon: ICONS.corVoid,     rarity: 'corrupted', minAscension: 1 },
     { id: 'c_mirror_shard',  name: "Mirror Shard",  desc: "50% of damage taken is also dealt to a random enemy.",                                 icon: ICONS.corGlitch,   rarity: 'corrupted' },
-    { id: 'c_pyre',          name: "Pyre",          desc: "Attacks deal +30% DMG but you take +1 DMG per attack made.",                           icon: ICONS.corBlood,    rarity: 'corrupted' }
+    { id: 'c_pyre',          name: "Pyre",          desc: "Attacks deal +30% DMG but you take +1 DMG per attack made.",                           icon: ICONS.corBlood,    rarity: 'corrupted' },
+
+    // ── Corrupted expansion (round 2)
+    { id: 'c_amputation',  name: "Amputation",  desc: "Lose 1 die slot. Remaining dice deal +50% effect.",                                          icon: ICONS.corBlood,    rarity: 'corrupted', minAscension: 2 },
+    { id: 'c_oracle',      name: "Oracle's Tax", desc: "See enemy intents 2 turns ahead. Pay HP equal to current sector at combat start.",          icon: ICONS.corVoid,     rarity: 'corrupted', minAscension: 1 },
+    { id: 'c_thanatos',    name: "Thanatos",    desc: "Killing an enemy stuns you for 1 turn. Kills grant +2 Mana, +20 Frags.",                    icon: ICONS.corQuantum,  rarity: 'corrupted', minAscension: 3 },
+    { id: 'c_inferno',     name: "Inferno",     desc: "All attacks deal +5 flat damage. You ignite for 5 DMG/turn (resets each combat).",          icon: ICONS.corBlood,    rarity: 'corrupted' }
+];
+
+// SPARKS_UPGRADES — persistent meta unlocks bought with Sparks. Unlike
+// META_UPGRADES (Fragment-spend, raw stat creep), every entry here is
+// content/option/quality-of-life — never raw power. The Sanctuary UI
+// renders this list under the "SPARKS" tab.
+const SPARKS_UPGRADES = [
+    { id: 's_archive',      name: "Run Archive",      cost: 5,  category: 'codex',    desc: "Every completed run is saved to a Sanctuary library tab." },
+    { id: 's_corrupt_pool', name: "Corruption Index", cost: 8,  category: 'codex',    desc: "Glitch events show one extra Corrupted Module option." },
+    { id: 's_event_pool',   name: "Anomaly Detector", cost: 8,  category: 'modifier', desc: "Unlock 4 new event branches with rare narrative outcomes." },
+    { id: 's_extra_choice', name: "Foresight",        cost: 10, category: 'loadout',  desc: "Every reward screen shows one extra option to choose from." },
+    { id: 's_skill_seed',   name: "Skill Database",   cost: 10, category: 'modifier', desc: "Voodoo / Overcharge / Reckless relics appear as +1 extra option." },
+    { id: 's_dice_seed',    name: "Tactic Library",   cost: 12, category: 'loadout',  desc: "Start each run with one random Dice Upgrade pre-installed." },
+    { id: 's_class_unlock', name: "Heretic Protocol", cost: 12, category: 'modifier', desc: "Unlock the HERETIC custom-run modifier (start with 1 Corrupted Module, +25% Frags)." },
+    { id: 's_relic_pick',   name: "Curator's Choice", cost: 15, category: 'loadout',  desc: "Pick your starting Module from 3 options." },
+    { id: 's_signature',    name: "Signature Forge",  cost: 20, category: 'class',    desc: "Choose your Signature T2 form between two variants per class." },
+    { id: 's_endless',      name: "Endless Spire",    cost: 25, category: 'marquee',  desc: "After Sector 5, continue into escalating Endless Sectors with personal-best tracking." }
 ];
 
 // Synergies: when the player owns ALL listed ids, a one-time banner fires.
@@ -1413,4 +1447,4 @@ const CUSTOM_RUN_MODIFIERS = [
    modifier needs wiring, disable temporarily here while the handler lands. */
 const FEATURE_CUSTOM_RUNS = true;
 
-export { CONFIG, COLORS, IMPACT_COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS };
+export { CONFIG, COLORS, IMPACT_COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, SPARKS_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS };

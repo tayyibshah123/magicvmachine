@@ -1,4 +1,4 @@
-import { CONFIG, COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS } from './constants.js';
+import { CONFIG, COLORS, IMPACT_COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, SPARKS_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS } from './constants.js';
 import { AudioMgr } from './audio.js';
 import { Entity, registerEntityClasses } from './entities/entity.js';
 import { Player } from './entities/player.js';
@@ -3428,7 +3428,7 @@ startQTE(type, x, y, callback, opts) {
                         localStorage.setItem('mvm_fragments', this.techFragments);
                         localStorage.setItem('mvm_upgrades', JSON.stringify(this.metaUpgrades));
                     } catch(e) { console.warn("Save failed", e); }
-                    
+
                     document.getElementById('fragment-count').innerText = `Fragments: ${this.techFragments}`;
                     AudioMgr.playSound('upgrade');
                     this.renderMeta();
@@ -3439,6 +3439,48 @@ startQTE(type, x, y, callback, opts) {
             };
             list.appendChild(div);
         });
+
+        // ── Sparks tier — section header + cards. Sparks-cost meta nodes
+        // are content/option/QoL unlocks, not raw stat creep. Empty list
+        // would render an empty header; skip render if no entries.
+        if (typeof SPARKS_UPGRADES !== 'undefined' && SPARKS_UPGRADES.length > 0) {
+            const header = document.createElement('div');
+            header.className = 'meta-section-header';
+            header.style.cssText = 'grid-column: 1 / -1; padding: 14px 0 6px; color: #ffd76a; font-family: Orbitron; letter-spacing: 0.12em; border-top: 1px solid rgba(255,215,106,0.35); margin-top: 8px; text-align: center;';
+            header.textContent = '✦ SPARKS UNLOCKS';
+            list.appendChild(header);
+            SPARKS_UPGRADES.forEach(u => {
+                const unlocked = this.hasMetaUpgrade(u.id);
+                const div = document.createElement('div');
+                div.className = `upgrade-card ${unlocked ? 'unlocked' : ''} spark-card`;
+                if (!unlocked) div.style.borderColor = 'rgba(255,215,106,0.55)';
+                div.innerHTML = `
+                    <div class="upgrade-icon" style="color: #ffd76a;">✦</div>
+                    <div class="upgrade-info">
+                        <div class="upgrade-name">${u.name}</div>
+                        <div class="upgrade-desc">${u.desc}</div>
+                    </div>
+                    <div class="upgrade-cost" style="color: #ffd76a;">${unlocked ? 'INSTALLED' : u.cost + ' ✦'}</div>
+                `;
+                div.onclick = () => {
+                    if (unlocked) return;
+                    if ((this.sparks || 0) >= u.cost) {
+                        if (this.spendSparks(u.cost, 'meta_' + u.id)) {
+                            this.metaUpgrades.push(u.id);
+                            try { localStorage.setItem('mvm_upgrades', JSON.stringify(this.metaUpgrades)); } catch (e) {}
+                            AudioMgr.playSound('upgrade');
+                            this.renderMeta();
+                        }
+                    } else {
+                        // First-time-on-Sanctuary nudge: hint that Sparks are needed.
+                        try { Hints && Hints.trigger && Hints.trigger('first_sanctuary_spend'); } catch (_) {}
+                        div.style.borderColor = '#ff3355';
+                        setTimeout(() => div.style.borderColor = 'rgba(255,215,106,0.55)', 220);
+                    }
+                };
+                list.appendChild(div);
+            });
+        }
     },
 
     // Bake the static Sanctuary backdrop (sky gradient, moon, grid, ground,
