@@ -5671,11 +5671,28 @@ triggerPhaseGlitch() {
     // we don't break colour-tinted flashes that came from boss-phase
     // / pattern-specific code paths.
     triggerScreenFlash(color = 'rgba(255,255,255,0.4)', durationMs = 220) {
+        // Tier-gated flash budget: low-tier devices only get strong-alpha
+        // flashes (catastrophic moments), mid-tier softens by 30%. High
+        // honours the call as-is. Single chokepoint covers every flash
+        // call site — the audit flagged 40+ calls drowning out boss
+        // telegraph colours on mid hardware.
+        const _flashTier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+        const m = /rgba?\(([^)]+)\)/.exec(color || '');
+        let alpha = 0.4;
+        if (m) {
+            const parts = m[1].split(',').map(s => s.trim());
+            if (parts.length === 4) alpha = parseFloat(parts[3]);
+        }
+        if (_flashTier === 'low' && alpha < 0.35) return; // skip soft flashes on low
+        if (_flashTier === 'mid' && m) {
+            const parts = m[1].split(',').map(s => s.trim());
+            parts[3] = (alpha * 0.7).toString();
+            color = `rgba(${parts.join(', ')})`;
+        }
         if (this._isReducedMotion()) {
-            // Halve the alpha by replacing the last channel in rgba(...).
-            const m = /rgba?\(([^)]+)\)/.exec(color || '');
-            if (m) {
-                const parts = m[1].split(',').map(s => s.trim());
+            const m2 = /rgba?\(([^)]+)\)/.exec(color || '');
+            if (m2) {
+                const parts = m2[1].split(',').map(s => s.trim());
                 if (parts.length === 4) {
                     parts[3] = (parseFloat(parts[3]) * 0.5).toString();
                     color = `rgba(${parts.join(', ')})`;
@@ -5687,6 +5704,54 @@ triggerPhaseGlitch() {
         this.screenFlashUntil = performance.now() + durationMs;
         this.screenFlashStart = performance.now();
         this.screenFlashDuration = durationMs;
+    },
+
+    /* Compose-a-hit helper — single call replaces the 6-line cluster of
+     * createExplosion + createSparks + createShockwave + flash + shake +
+     * hitstop that fires at every impact site. Damage band drives layer
+     * weight so a 5-dmg chip and a 99-dmg crit feel different. Tier-
+     * gated: mid drops the chromatic pulse, low drops the shockwave +
+     * flash entirely. */
+    composeImpactFrame(x, y, dmg, color, opts) {
+        const tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+        const isPerfect = !!(opts && opts.isPerfect);
+        const baseColor = color || (isPerfect ? '#ffd700' : '#6fe8ff');
+        // Damage banding controls visual weight.
+        let band = 'chip';
+        if (dmg >= 100) band = 'cata';
+        else if (dmg >= 30) band = 'heavy';
+        else if (dmg >= 10) band = 'solid';
+        // chip — minimal sparks, no shockwave/flash/shake/hitstop
+        if (band === 'chip') {
+            ParticleSys.createSparks && ParticleSys.createSparks(x, y, baseColor, 4);
+            return;
+        }
+        // solid — sparks + soft shockwave
+        if (band === 'solid') {
+            ParticleSys.createExplosion && ParticleSys.createExplosion(x, y, 12, baseColor);
+            ParticleSys.createSparks && ParticleSys.createSparks(x, y, baseColor, 6);
+            if (tier !== 'low') ParticleSys.createShockwave && ParticleSys.createShockwave(x, y, baseColor, 16);
+            return;
+        }
+        // heavy — full hit stack + brief hitstop
+        if (band === 'heavy') {
+            ParticleSys.createExplosion && ParticleSys.createExplosion(x, y, 22, baseColor);
+            ParticleSys.createSparks && ParticleSys.createSparks(x, y, baseColor, 10);
+            ParticleSys.createShockwave && ParticleSys.createShockwave(x, y, baseColor, 28);
+            if (this.hitStop) this.hitStop(80);
+            if (this.shake) this.shake(6);
+            if (tier === 'high' && this._qteChromaticPulse) this._qteChromaticPulse(140);
+            return;
+        }
+        // cata — full + concentric ring + flash + slow-mo
+        ParticleSys.createExplosion && ParticleSys.createExplosion(x, y, 32, baseColor);
+        ParticleSys.createSparks && ParticleSys.createSparks(x, y, baseColor, 14);
+        ParticleSys.createShockwave && ParticleSys.createShockwave(x, y, baseColor, 36);
+        if (tier !== 'low') ParticleSys.createShockwave && ParticleSys.createShockwave(x, y, '#ffffff', 44);
+        if (this.hitStop) this.hitStop(120);
+        if (this.shake) this.shake(10);
+        if (tier !== 'low') this.triggerScreenFlash && this.triggerScreenFlash('rgba(255, 220, 80, 0.4)', 220);
+        if (tier === 'high' && this.triggerSlowMo) this.triggerSlowMo(0.55, 0.22);
     },
 
     async triggerBossPhaseTransition(enemy, phase = 2) {
@@ -18119,28 +18184,47 @@ drawEffects() {
         ctx.strokeRect(x, y, width, height);
 
         // --- 2. HP TEXT ---
-        ctx.font = 'bold 33px "Orbitron"'; 
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle'; 
-        
-        const textX = x + width/2;
-        const textY = y + height/2 + 2; 
-        
+        // Sprite-cached: bold 33px Orbitron stroke+fill is one of the most
+        // expensive single canvas ops on Android Chrome. The HP integer
+        // changes only on damage events, not 60 Hz, so we cache a 1-row
+        // offscreen sprite per `(hp, side)` and blit via drawImage. LRU-
+        // capped at 128 entries which is comfortably above the realistic
+        // unique-HP-value churn in a single combat (2 sides × ~60 HP
+        // values = ~120 max).
         const hpString = Math.floor(entity.currentHp).toString();
-
-        ctx.lineWidth = 4; 
-
-        if (isPlayerSide) {
-            ctx.strokeStyle = '#ffffff'; 
-            ctx.strokeText(hpString, textX, textY);
-            ctx.fillStyle = '#000000'; 
-            ctx.fillText(hpString, textX, textY);
-        } else {
-            ctx.strokeStyle = '#000000';
-            ctx.strokeText(hpString, textX, textY);
-            ctx.fillStyle = '#ffffff';
-            ctx.fillText(hpString, textX, textY);
+        const cacheKey = (isPlayerSide ? 'P|' : 'E|') + hpString;
+        if (!Game._hpTextCache) Game._hpTextCache = new Map();
+        let hpSprite = Game._hpTextCache.get(cacheKey);
+        if (!hpSprite) {
+            const spriteW = 200, spriteH = 60;
+            const useOffscreen = (typeof OffscreenCanvas !== 'undefined');
+            const off = useOffscreen ? new OffscreenCanvas(spriteW, spriteH) : document.createElement('canvas');
+            if (!useOffscreen) { off.width = spriteW; off.height = spriteH; }
+            const oc = off.getContext('2d');
+            oc.font = 'bold 33px "Orbitron"';
+            oc.textAlign = 'center';
+            oc.textBaseline = 'middle';
+            oc.lineWidth = 4;
+            const cx = spriteW / 2, cy = spriteH / 2;
+            if (isPlayerSide) {
+                oc.strokeStyle = '#ffffff'; oc.strokeText(hpString, cx, cy);
+                oc.fillStyle = '#000000';   oc.fillText(hpString, cx, cy);
+            } else {
+                oc.strokeStyle = '#000000'; oc.strokeText(hpString, cx, cy);
+                oc.fillStyle = '#ffffff';   oc.fillText(hpString, cx, cy);
+            }
+            hpSprite = off;
+            // LRU cap — drop the oldest entry when over the threshold.
+            if (Game._hpTextCache.size >= 128) {
+                const firstKey = Game._hpTextCache.keys().next().value;
+                Game._hpTextCache.delete(firstKey);
+            }
+            Game._hpTextCache.set(cacheKey, hpSprite);
         }
+        const textX = x + width/2;
+        const textY = y + height/2 + 2;
+
+        ctx.drawImage(hpSprite, textX - 100, textY - 30);
 
         // --- SHIELD DISPLAY ---
         if (entity.shield > 0) {
@@ -19287,21 +19371,28 @@ drawEffects() {
                 return g;
             });
             ctx.fillRect(0, horizon - 120, w, 120);
-            // Holographic billboards, flickering
-            atm.billboards.forEach(b => {
+            // Holographic billboards — indexed for-loop (was forEach with
+            // a per-frame closure allocation × N billboards × 60 fps).
+            // shadowBlur dropped on mid-tier in line with the perf audit.
+            const _bbAllowGlow = _atmTier === 'high';
+            const _bb = atm.billboards;
+            for (let bbi = 0, bbn = _bb.length; bbi < bbn; bbi++) {
+                const b = _bb[bbi];
                 const flick = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(time * 3 + b.flickerPhase));
                 ctx.save();
                 ctx.globalAlpha = flick * 0.55;
                 ctx.fillStyle = b.color;
-                ctx.shadowColor = b.color;
-                ctx.shadowBlur = 20;
+                if (_bbAllowGlow) {
+                    ctx.shadowColor = b.color;
+                    ctx.shadowBlur = 20;
+                }
                 ctx.fillRect(b.x, b.y, b.w, b.h);
                 ctx.globalAlpha = flick;
                 ctx.fillStyle = '#fff';
                 ctx.fillRect(b.x + b.w * 0.1, b.y + b.h * 0.3, b.w * 0.8, b.h * 0.1);
                 ctx.fillRect(b.x + b.w * 0.1, b.y + b.h * 0.5, b.w * 0.5, b.h * 0.1);
                 ctx.restore();
-            });
+            }
             // Slow traffic light streaks along horizon
             const streakY = horizon - 6;
             for (let k = 0; k < 3; k++) {
