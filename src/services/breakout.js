@@ -115,12 +115,12 @@ const ROOMS = [
         storyboard: {
             tag: 'PRISON BLOCK 7 · CELL 14',
             title: 'BREATHING DETECTED',
-            body: 'You wake up inside a holographic cell. A surveillance drone hovers at the bars and locks on. It will strike next turn — read its intent and decide: shield first, or burn it before it fires.',
+            body: 'You wake up inside a holographic cell. A surveillance drone hovers at the bars and locks on. It will strike next turn. Read its intent and decide: shield first, or burn it before it fires.',
             glyph: 'drone'
         },
         sequence: [
             {
-                story: 'The red icon above its head is its INTENT — what it will do next turn.',
+                story: 'The red icon above its head is its INTENT. What it will do next turn.',
                 action: 'STRIKE 5 means the drone will deal 5 damage to you next turn.',
                 sub: 'INTENT TELEMETRY ENABLED',
                 spot: 'enemy_intent',
@@ -138,7 +138,7 @@ const ROOMS = [
                 wait: 'tap'
             },
             {
-                story: 'Drag the ATTACK die now. A ring will shrink — tap GREEN to crit.',
+                story: 'Drag the ATTACK die now. A ring will shrink. Tap GREEN to crit.',
                 action: 'Drag the ATTACK die ONTO the drone.',
                 sub: 'OFFENSIVE PROTOCOL · STRIKE AUTHORIZED',
                 spot: 'die:attack',
@@ -146,7 +146,7 @@ const ROOMS = [
             },
             // ── DEFEND TEACHING ──
             {
-                story: 'SHIELD adds Shield Points — they absorb the next hit before HP.',
+                story: 'SHIELD adds Shield Points. They absorb the next hit before HP.',
                 action: 'Drag the SHIELD die ONTO YOURSELF (the player at the bottom).',
                 sub: 'DEFENSIVE PROTOCOL · ARMOUR ACTIVE',
                 spot: 'die:defend',
@@ -158,13 +158,13 @@ const ROOMS = [
             // QTE only fires during the enemy phase.
             {
                 story: 'When you END TURN, the drone will strike. A RING will appear ON YOU.',
-                action: 'Tap inside the GREEN ZONE to PARRY — halves the hit AND reflects 50% damage back.',
+                action: 'Tap inside the GREEN ZONE to PARRY. Halves the hit AND reflects 50% damage back.',
                 sub: 'PARRY PROTOCOL · COUNTER-WINDOW',
                 spot: 'player',
                 wait: 'tap'
             },
             {
-                story: 'Press END TURN now. Watch for the parry ring on yourself — tap green.',
+                story: 'Press END TURN now. Watch for the parry ring on yourself. Tap green.',
                 action: 'Press the END TURN button on the right.',
                 sub: 'YIELD TO ENEMY · STAY ALERT',
                 spot: 'end_turn',
@@ -200,8 +200,12 @@ const ROOMS = [
             radius: 90
         },
         intents: [
-            { type: 'attack', val: 4, label: 'STRIKE 4' },
+            // Order matters: SPAWN BROOD on turn 1 so the icon the player
+            // reads in beat 0 (intent telegraph) matches the narration
+            // ("the hive will summon a minion this turn"). After it
+            // spawns the brood, both the parent and the minion attack.
             { type: 'summon', val: 0, label: 'SPAWN BROOD' },
+            { type: 'attack', val: 4, label: 'STRIKE 4' },
             { type: 'attack', val: 4, label: 'STRIKE 4' }
         ],
         diceFn: (classId) => {
@@ -211,12 +215,12 @@ const ROOMS = [
         storyboard: {
             tag: 'CORRIDOR · NESTING SHAFT',
             title: 'HIVE FRAGMENT',
-            body: 'The drone\'s death rouses something deeper. A hive-fragment crawls from a service shaft — armoured legs, a swarmling already breaking out of its underbelly. Plant a Wisp; let it eat the brood while you strike the parent.',
+            body: 'The drone\'s death rouses something deeper. A hive-fragment crawls from a service shaft. Armoured legs, a swarmling already breaking out of its underbelly. Plant a minion of your own; let it eat the brood while you strike the parent.',
             glyph: 'hive'
         },
         sequence: [
             {
-                story: 'The hive\'s intent is SPAWN BROOD — it will summon a minion next turn.',
+                story: 'The hive\'s intent is SPAWN BROOD. When you end your turn it will summon a minion of its own.',
                 action: 'Read the intent. You will face two enemies soon.',
                 sub: 'INFESTATION INCOMING',
                 spot: 'enemy_intent',
@@ -230,28 +234,28 @@ const ROOMS = [
                 wait: 'die_used:mana'
             },
             {
-                story: 'MINION dice summon a Wisp on your side — it absorbs hits and attacks back.',
+                story: 'MINION dice summon a minion on your side. It absorbs hits and attacks back.',
                 action: 'Drag the MINION die ONTO empty space.',
-                sub: 'WISP DEPLOYMENT AUTHORIZED',
+                sub: 'MINION DEPLOYMENT AUTHORIZED',
                 spot: 'die:minion',
                 wait: 'die_used:minion'
             },
             {
-                story: 'The hive is the threat. Strike the parent, the brood will follow.',
+                story: 'The hive is the threat. Strike the parent before the brood arrives.',
                 action: 'Drag ATTACK ONTO the hive (top of screen).',
                 sub: 'TARGET PRIMARY: HIVE PARENT',
                 spot: 'die:attack',
                 wait: 'die_used:attack'
             },
             {
-                story: 'End the turn. Your wisp will fight while the hive spawns its brood.',
+                story: 'End the turn. Your minion will fight while the hive spawns its brood.',
                 action: 'Press END TURN.',
-                sub: 'TURN PHASE · WISP DEPLOYED',
+                sub: 'TURN PHASE · MINION DEPLOYED',
                 spot: 'end_turn',
                 wait: 'enemy_turn'
             },
             {
-                story: 'Multiple enemies on the field — ATTACK dice can target either one.',
+                story: 'Multiple enemies on the field. ATTACK dice can target either one.',
                 action: 'Finish the hive. Drop them both.',
                 sub: 'CLEANUP PROTOCOL ACTIVE',
                 spot: null,
@@ -289,12 +293,12 @@ const ROOMS = [
         storyboard: {
             tag: 'DATA-VAULT 9',
             title: 'GLITCH CIPHER',
-            body: 'A cipher unit phases out of the wall — half-corrupted, half-spider. Its first move applies WEAK (you deal 50% less damage). Its second is an EXECUTE-class strike. Time the parry on the heavy swing.',
+            body: 'A cipher unit phases out of the wall. Half-corrupted, half-spider. Its first move applies WEAK (you deal 50% less damage). Its second is an EXECUTE-class strike. Time the parry on the heavy swing.',
             glyph: 'glitch'
         },
         sequence: [
             {
-                story: 'CIPHER WAVE applies the WEAK status — your damage drops 50% for two turns.',
+                story: 'CIPHER WAVE applies the WEAK status. Your damage drops 50% for two turns.',
                 action: 'Status icons appear above your HP bar. Long-press one for details.',
                 sub: 'STATUS DECAY · WEAK INCOMING',
                 spot: 'enemy_intent',
@@ -308,14 +312,14 @@ const ROOMS = [
                 wait: 'die_used:defend'
             },
             {
-                story: 'End the turn — the cipher wave hits, then it loads EXECUTE 12.',
+                story: 'End the turn. The cipher wave hits, then it loads EXECUTE 12.',
                 action: 'Press END TURN.',
                 sub: 'TURN PHASE · CYCLE',
                 spot: 'end_turn',
                 wait: 'enemy_turn'
             },
             {
-                story: 'EXECUTE 12 incoming. Use what you learned — SHIELD up, then PARRY the ring on yourself.',
+                story: 'EXECUTE 12 incoming. Use what you learned. SHIELD up, then PARRY the ring on yourself.',
                 action: 'Defend the EXECUTE. Then ATTACK while WEAK fades.',
                 sub: 'EXECUTE INCOMING · PARRY THE RING',
                 spot: 'die:defend',
@@ -366,7 +370,7 @@ const ROOMS = [
         storyboard: {
             tag: 'OUTER GATE · WARDEN\'S DOMAIN',
             title: 'CAGE GUARDIAN',
-            body: 'The cell wall fractures. Light pours through the seams. The CAGE GUARDIAN steps through the breach — the Warden\'s lieutenant. Hulking, plated, slow but devastating. Use everything: shield through plating turns, strike through gaps, parry the executes.',
+            body: 'The cell wall fractures. Light pours through the seams. The CAGE GUARDIAN steps through the breach. The Warden\'s lieutenant. Hulking, plated, slow but devastating. Use everything: shield through plating turns, strike through gaps, parry the executes.',
             glyph: 'seal'
         },
         sequence: [
@@ -378,7 +382,7 @@ const ROOMS = [
                 wait: 'tap'
             },
             {
-                story: 'You now roll a NATURAL HAND — the dice are class-mixed, not forced.',
+                story: 'You now roll a NATURAL HAND. The dice are class-mixed, not forced.',
                 action: 'You can REROLL bad hands. Tap the dial on the left to cycle dice.',
                 sub: 'REROLL ENABLED · TWO PER TURN',
                 spot: 'reroll',
@@ -411,7 +415,7 @@ const CLASS_ROOM_3 = {
         storyboard: {
             tag: 'BLOCK 7 · SHADOWED WING',
             title: 'WOUNDED HUNTER',
-            body: 'A scout-unit limps through the corridor — already bleeding from someone else\'s pass. The BITE die heals you for 3 every time it lands. The Bloodstalker\'s fantasy: trade HP and come out richer for it.',
+            body: 'A scout-unit limps through the corridor. Already bleeding from someone else\'s pass. The BITE die heals you for 3 every time it lands. The Bloodstalker\'s fantasy: trade HP and come out richer for it.',
             glyph: 'crest'
         },
         diceFn: (cd) => ['SIGNATURE', cd.attack, cd.defend],
@@ -424,7 +428,7 @@ const CLASS_ROOM_3 = {
                 wait: 'tap'
             },
             {
-                story: 'Drag BITE onto the hunter. Trade HP — and come out richer.',
+                story: 'Drag BITE onto the hunter. Trade HP. And come out richer.',
                 action: 'Cast BITE on the wounded hunter.',
                 sub: 'TARGET: WOUNDED · LIFESIPHON ARMED',
                 spot: 'die:signature',
@@ -613,7 +617,7 @@ const CLASS_ROOM_3 = {
                 wait: 'die_used'
             },
             {
-                story: 'Two on the field now — your spirit fights with you.',
+                story: 'Two on the field now. Your spirit fights with you.',
                 action: 'MINION die plants another. ATTACK to finish.',
                 sub: 'GROVE EXPANDING · TERMINATE',
                 spot: null,
@@ -1228,7 +1232,7 @@ export const Breakout = {
         const story = document.getElementById('tutorial-narration-story');
         const action = document.getElementById('tutorial-narration-action');
         const sub = document.getElementById('breakout-warden-sub');
-        if (story) story.textContent = 'The cage holds. Try again — there is no penalty here.';
+        if (story) story.textContent = 'The cage holds. Try again. There is no penalty here.';
         if (action) action.textContent = 'Resetting room...';
         if (sub) sub.textContent = 'CONTAINMENT FAILSAFE · RESPAWN AUTHORIZED';
         if (pane) pane.classList.remove('hidden');
