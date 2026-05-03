@@ -1,0 +1,574 @@
+/* ──────────────────────────────────────────────────────────────────
+ * UI v4 — Glass-shard variety
+ *
+ * Replaces the "everything is the same chamfered hex / plate"
+ * grammar with a library of UNIQUE crystalline shard silhouettes,
+ * one per UI slot. Combined with a refined glass-style fill
+ * (translucent backdrop blur, 1px white sheen, subtle inner
+ * highlight), the menu reads as a row of distinct glass shards
+ * instead of repeating tiles.
+ *
+ * SHAPE LIBRARY
+ *   shape-banner            wide hero CTA — top-left + bottom-right cuts
+ *   shape-parallelogram-r   right-leaning slab (CHALLENGE-style)
+ *   shape-parallelogram-l   mirror left-lean
+ *   shape-pentagon          5-sided crystal (SANCTUARY)
+ *   shape-kite              4-sided diamond-leaning (INTEL)
+ *   shape-tab-r             trapezoid with right-side cut (SAVES)
+ *   shape-tab-l             mirror
+ *   shape-arrow-r           arrow-pointing-right banner
+ *   shape-arrow-l           mirror
+ *   shape-shard-1..6        irregular crystalline shapes (decorative)
+ *
+ * GLASS RECIPE
+ *   - Translucent surface (rgba 0.30-0.42 alpha over base) with
+ *     backdrop-filter: blur(14px) saturate(1.15)
+ *   - Top-edge sheen: inset 0 1px 0 rgba(255,255,255,0.45)
+ *   - Bottom-right shade: inset -1px -1px 0 rgba(0,0,0,0.42)
+ *   - Inner radial highlight at 30% top-left for "lit from above"
+ *   - Lift shadow: 0 6px 18px rgba(0,0,0,0.45)
+ *   - Edge stroke: 1px outer-ring drawn via ::before pseudo
+ *
+ * NAMESPACE
+ *   `.ui-shard` for the component, `.ui-shard--shape-*` for the
+ *   silhouette modifier, `.ui-shard--<color>` for the tint.
+ * ────────────────────────────────────────────────────────────────── */
+
+
+/* ──────────────────────────────────────────────────────────
+ * 1. CLIP-PATH SHAPE TOKENS
+ *
+ * Each is a polygon definition. Sized in mixed % + px so the cut
+ * stays a fixed visual size at any plate width. The values are
+ * tuned so adjacent shards in a row visually interlock rather
+ * than just sitting beside one another.
+ * ────────────────────────────────────────────────────────── */
+:root {
+    /* Wide banner — for the hero CTA.
+       Cut top-left + bottom-right (forward-leaning shard). */
+    --ui-shape-banner: polygon(
+        18px 0,
+        100% 0,
+        100% calc(100% - 18px),
+        calc(100% - 18px) 100%,
+        0 100%,
+        0 18px
+    );
+
+    /* Right-leaning slab — like a forward-pointing parallelogram.
+       Cuts top-right + bottom-left. The cut is steeper than 'banner'
+       so it reads as "leaning". */
+    --ui-shape-parallelogram-r: polygon(
+        0 0,
+        calc(100% - 26px) 0,
+        100% 100%,
+        26px 100%
+    );
+    /* Left-leaning mirror */
+    --ui-shape-parallelogram-l: polygon(
+        26px 0,
+        100% 0,
+        calc(100% - 26px) 100%,
+        0 100%
+    );
+
+    /* Pentagon — five sides. Top is a flat ridge with a small
+       ridge in the middle (peak slightly off-centre). Bottom
+       follows a clean rectangle. */
+    --ui-shape-pentagon: polygon(
+        0 16px,
+        24px 0,
+        100% 0,
+        100% calc(100% - 16px),
+        calc(100% - 24px) 100%,
+        0 100%
+    );
+
+    /* Kite — diamond-leaning rhombus. Cut top-right + bottom-left
+       deeply so it reads as a slanted gem. */
+    --ui-shape-kite: polygon(
+        20px 0,
+        calc(100% - 6px) 0,
+        100% 22px,
+        100% 100%,
+        calc(100% - 20px) 100%,
+        6px 100%,
+        0 calc(100% - 22px),
+        0 0
+    );
+
+    /* Trapezoid with one side cut — right edge slants outward at
+       the bottom (the "tab" silhouette). Used for SAVES so the
+       row ends with a distinct shape. */
+    --ui-shape-tab-r: polygon(
+        0 0,
+        calc(100% - 22px) 0,
+        100% 22px,
+        100% 100%,
+        0 100%
+    );
+    --ui-shape-tab-l: polygon(
+        22px 0,
+        100% 0,
+        100% 100%,
+        0 100%,
+        0 22px
+    );
+
+    /* Arrow-pointing banner — strong directional shard. Used for
+       a CTA when we want the visual to literally point at the
+       action. */
+    --ui-shape-arrow-r: polygon(
+        0 0,
+        calc(100% - 28px) 0,
+        100% 50%,
+        calc(100% - 28px) 100%,
+        0 100%
+    );
+    --ui-shape-arrow-l: polygon(
+        28px 0,
+        100% 0,
+        100% 100%,
+        28px 100%,
+        0 50%
+    );
+
+    /* Six irregular crystalline shards — for decorative tiles
+       and stat readouts where we want shape variety without
+       semantic meaning. */
+    --ui-shape-shard-1: polygon(
+        0 12px, 18px 0, 100% 0, 100% calc(100% - 22px),
+        calc(100% - 26px) 100%, 0 100%
+    );
+    --ui-shape-shard-2: polygon(
+        12px 0, calc(100% - 8px) 0, 100% 18px, 100% 100%,
+        20px 100%, 0 calc(100% - 14px)
+    );
+    --ui-shape-shard-3: polygon(
+        0 8px, 22px 0, 100% 0, calc(100% - 12px) 100%, 0 100%
+    );
+    --ui-shape-shard-4: polygon(
+        12px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 16px) 100%,
+        0 100%, 0 14px
+    );
+    --ui-shape-shard-5: polygon(
+        20px 0, calc(100% - 4px) 0, 100% 14px, 100% 100%,
+        calc(100% - 24px) 100%, 0 calc(100% - 16px), 0 0
+    );
+    --ui-shape-shard-6: polygon(
+        0 14px, 24px 0, calc(100% - 8px) 0, 100% 18px, 100% 100%,
+        0 100%
+    );
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 2. SHARD COMPONENT
+ *
+ * The main interactive element. Glass-style fill with a
+ * shape-modifier driving the silhouette, optional colour tint,
+ * and a stack layout (eyebrow + label + status) that fits
+ * cleanly inside any of the shapes.
+ * ────────────────────────────────────────────────────────── */
+.ui-shard {
+    --_shard-shape: var(--ui-shape-banner);
+    --_shard-fill: linear-gradient(180deg,
+        rgba(40, 56, 92, 0.42) 0%,
+        rgba(20, 30, 56, 0.36) 50%,
+        rgba(10, 18, 38, 0.42) 100%);
+    --_shard-fg: var(--ui-text-100);
+    --_shard-h: 96px;
+    --_shard-pad-x: var(--ui-space-5);
+    --_shard-pad-y: var(--ui-space-4);
+    --_shard-border-color: rgba(255, 255, 255, 0.22);
+    --_shard-glow: rgba(74, 216, 255, 0.0);
+
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    min-height: var(--_shard-h);
+    padding: var(--_shard-pad-y) var(--_shard-pad-x);
+    background: var(--_shard-fill);
+    backdrop-filter: blur(14px) saturate(1.15);
+    -webkit-backdrop-filter: blur(14px) saturate(1.15);
+    color: var(--_shard-fg);
+    font-family: var(--ui-font-display);
+    border: none;
+    /* Clip the visible silhouette */
+    clip-path: var(--_shard-shape);
+    -webkit-clip-path: var(--_shard-shape);
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    text-align: left;
+    isolation: isolate;
+    /* Soft elevation so the shard sits above the menu backdrop */
+    filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.45)) drop-shadow(0 0 0 var(--_shard-glow));
+    transition:
+        filter var(--ui-duration-base) var(--ui-ease-standard),
+        transform var(--ui-duration-base) var(--ui-ease-spring);
+}
+.ui-shard:hover  { transform: translateY(-2px); filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.55)) brightness(1.08); }
+.ui-shard:active { transform: translateY(0) scale(0.985); filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45)) brightness(0.94); }
+.ui-shard:focus-visible {
+    outline: none;
+    filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 0 3px var(--ui-brand));
+}
+.ui-shard[disabled],
+.ui-shard.is-disabled {
+    opacity: 0.42;
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
+/* INNER LIGHT LAYERS ─────────────────────────────────────────
+ * The glass look is built from three stacked layers inside the
+ * clipped silhouette:
+ *   ::before  — top-left radial highlight ("lit from above")
+ *   ::after   — top-edge 1px sheen line (the polish line)
+ * The shard itself carries the gradient fill + the lift shadow
+ * via filter: drop-shadow (which respects clip-path; box-shadow
+ * does not). */
+.ui-shard::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        /* Top-left radial — main highlight */
+        radial-gradient(ellipse at 25% -10%, rgba(255, 255, 255, 0.30) 0%, rgba(255, 255, 255, 0.06) 35%, transparent 60%),
+        /* Bottom-right counter-shade so the shard reads as having depth */
+        radial-gradient(ellipse at 90% 110%, rgba(0, 0, 0, 0.32) 0%, transparent 50%);
+    pointer-events: none;
+    clip-path: inherit;
+    -webkit-clip-path: inherit;
+    z-index: 0;
+}
+.ui-shard::after {
+    /* 1px-thick "rim" along the top + a subtle inner edge stroke
+       drawn as an inset shadow — clip-path respects inset shadows
+       so the rim follows the silhouette. */
+    content: '';
+    position: absolute;
+    inset: 0;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.45),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.42),
+        inset 1px 0 0 rgba(255, 255, 255, 0.10),
+        inset -1px 0 0 rgba(0, 0, 0, 0.30);
+    pointer-events: none;
+    z-index: 1;
+}
+/* Outer thin edge stroke — this is the trickier piece because
+   borders don't follow clip-paths. We layer a thin pseudo
+   element with the same clip-path shifted 1px outward via
+   `padding: 1px` on a wrapper — but to keep the markup minimal
+   we approximate the edge via the inset shadow above. The
+   visual reads as "thin metallic edge" without needing a
+   second wrapper. */
+
+.ui-shard > * {
+    position: relative;
+    z-index: 2;
+}
+
+
+/* SHAPE VARIANTS ─────────────────────────────────────────── */
+.ui-shard--shape-banner            { --_shard-shape: var(--ui-shape-banner); }
+.ui-shard--shape-parallelogram-r   { --_shard-shape: var(--ui-shape-parallelogram-r); }
+.ui-shard--shape-parallelogram-l   { --_shard-shape: var(--ui-shape-parallelogram-l); }
+.ui-shard--shape-pentagon          { --_shard-shape: var(--ui-shape-pentagon); }
+.ui-shard--shape-kite              { --_shard-shape: var(--ui-shape-kite); }
+.ui-shard--shape-tab-r             { --_shard-shape: var(--ui-shape-tab-r); }
+.ui-shard--shape-tab-l             { --_shard-shape: var(--ui-shape-tab-l); }
+.ui-shard--shape-arrow-r           { --_shard-shape: var(--ui-shape-arrow-r); }
+.ui-shard--shape-arrow-l           { --_shard-shape: var(--ui-shape-arrow-l); }
+.ui-shard--shape-shard-1           { --_shard-shape: var(--ui-shape-shard-1); }
+.ui-shard--shape-shard-2           { --_shard-shape: var(--ui-shape-shard-2); }
+.ui-shard--shape-shard-3           { --_shard-shape: var(--ui-shape-shard-3); }
+.ui-shard--shape-shard-4           { --_shard-shape: var(--ui-shape-shard-4); }
+.ui-shard--shape-shard-5           { --_shard-shape: var(--ui-shape-shard-5); }
+.ui-shard--shape-shard-6           { --_shard-shape: var(--ui-shape-shard-6); }
+
+
+/* COLOR VARIANTS ─────────────────────────────────────────── */
+.ui-shard--brand {
+    --_shard-fill: linear-gradient(180deg,
+        rgba(40, 130, 175, 0.62) 0%,
+        rgba(18, 80, 120, 0.55) 50%,
+        rgba(8, 40, 64, 0.58) 100%);
+    --_shard-glow: rgba(74, 216, 255, 0.30);
+}
+.ui-shard--brand .ui-shard-eyebrow,
+.ui-shard--brand .mv2-cta-eyebrow,
+.ui-shard--brand .mv2-tile-eyebrow {
+    color: rgba(220, 240, 255, 0.85);
+}
+.ui-shard--brand .ui-shard-label,
+.ui-shard--brand .mv2-cta-label,
+.ui-shard--brand .mv2-tile-label {
+    color: #fff;
+    text-shadow: 0 0 12px rgba(74, 216, 255, 0.55);
+}
+
+.ui-shard--gold {
+    --_shard-fill: linear-gradient(180deg,
+        rgba(140, 110, 32, 0.55) 0%,
+        rgba(90, 64, 8, 0.52) 50%,
+        rgba(40, 28, 4, 0.58) 100%);
+    --_shard-glow: rgba(255, 215, 106, 0.32);
+}
+.ui-shard--gold .ui-shard-eyebrow,
+.ui-shard--gold .mv2-cta-eyebrow,
+.ui-shard--gold .mv2-tile-eyebrow {
+    color: rgba(255, 230, 180, 0.85);
+}
+.ui-shard--gold .ui-shard-label,
+.ui-shard--gold .mv2-cta-label,
+.ui-shard--gold .mv2-tile-label {
+    color: #fff5d6;
+    text-shadow: 0 0 12px rgba(255, 215, 106, 0.55);
+}
+
+.ui-shard--alert {
+    --_shard-fill: linear-gradient(180deg,
+        rgba(140, 30, 50, 0.55) 0%,
+        rgba(78, 12, 28, 0.52) 50%,
+        rgba(38, 6, 14, 0.58) 100%);
+    --_shard-glow: rgba(255, 93, 122, 0.30);
+}
+.ui-shard--alert .ui-shard-label,
+.ui-shard--alert .mv2-cta-label,
+.ui-shard--alert .mv2-tile-label {
+    color: #ffd9df;
+    text-shadow: 0 0 12px rgba(255, 93, 122, 0.55);
+}
+
+.ui-shard--success {
+    --_shard-fill: linear-gradient(180deg,
+        rgba(20, 100, 80, 0.55) 0%,
+        rgba(8, 60, 50, 0.52) 50%,
+        rgba(4, 32, 24, 0.58) 100%);
+    --_shard-glow: rgba(94, 234, 212, 0.28);
+}
+
+.ui-shard--purple {
+    --_shard-fill: linear-gradient(180deg,
+        rgba(78, 42, 140, 0.55) 0%,
+        rgba(46, 22, 100, 0.52) 50%,
+        rgba(20, 10, 50, 0.58) 100%);
+    --_shard-glow: rgba(167, 139, 250, 0.28);
+}
+
+/* Default neutral keeps the muted glass tone — no glow. */
+
+
+/* SIZE VARIANTS ──────────────────────────────────────────── */
+.ui-shard--sm  { --_shard-h: 64px;  --_shard-pad-x: var(--ui-space-3); --_shard-pad-y: var(--ui-space-3); }
+.ui-shard--md  { --_shard-h: 96px; }
+.ui-shard--lg  { --_shard-h: 112px; --_shard-pad-x: var(--ui-space-6); --_shard-pad-y: var(--ui-space-5); }
+.ui-shard--xl  { --_shard-h: 140px; --_shard-pad-x: var(--ui-space-8); --_shard-pad-y: var(--ui-space-6); }
+
+
+/* CONTENT TYPOGRAPHY ─────────────────────────────────────── */
+.ui-shard-eyebrow,
+.ui-shard .mv2-cta-eyebrow,
+.ui-shard .mv2-tile-eyebrow {
+    font-family: var(--ui-font-display);
+    font-size: 0.62rem;
+    font-weight: var(--ui-weight-semibold);
+    letter-spacing: var(--ui-tracking-cyber);
+    color: rgba(255, 255, 255, 0.55);
+    text-transform: uppercase;
+    line-height: 1;
+}
+.ui-shard-label,
+.ui-shard .mv2-cta-label,
+.ui-shard .mv2-tile-label {
+    font-family: var(--ui-font-display);
+    font-size: var(--ui-text-subhead);
+    font-weight: var(--ui-weight-bold);
+    letter-spacing: 0.06em;
+    color: var(--ui-text-100);
+    text-transform: uppercase;
+    line-height: 1.05;
+    margin-top: 4px;
+    text-shadow: 0 0 12px rgba(255, 255, 255, 0.18);
+}
+.ui-shard-status,
+.ui-shard .mv2-tile-status {
+    font-family: var(--ui-font-body);
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-medium);
+    color: rgba(255, 255, 255, 0.65);
+    margin-top: 4px;
+    line-height: 1.2;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 3. MENU — APPLY SHARDS, REMOVE TILE OVERRIDES
+ *
+ * Inside `.menu-v2`, the .ui-shard wins over the legacy/snap
+ * promotion of .ui-btn / .ui-card we wrote earlier. Disable the
+ * old plate clip-paths so they don't fight the shard silhouette.
+ *
+ * Also REMOVE the daily-twist card layout entirely so its CSS
+ * doesn't leave a ghost slot.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .ui-shard.mv2-cta {
+    /* Hero CTAs — full width, large, centred content */
+    align-items: center;
+    text-align: center;
+}
+.menu-v2 .ui-shard.mv2-cta .mv2-cta-eyebrow,
+.menu-v2 .ui-shard.mv2-cta .mv2-cta-label {
+    text-align: center;
+}
+
+/* Tile shards — default text alignment is left; arrow + extra
+   chrome from the previous tile design is no longer rendered
+   (we removed the `.mv2-tile-arrow` from markup). */
+.menu-v2 .ui-shard.mv2-tile {
+    --_shard-h: 96px;
+}
+
+/* PER-TILE COLOUR ACCENTS (hover only, kept restrained) */
+.menu-v2 .ui-shard.mv2-tile--challenge:hover  { --_shard-glow: rgba(255, 215, 106, 0.28); }
+.menu-v2 .ui-shard.mv2-tile--archive:hover    { --_shard-glow: rgba(255, 93, 122, 0.28); }
+.menu-v2 .ui-shard.mv2-tile--sanctuary:hover  { --_shard-glow: rgba(94, 234, 212, 0.28); }
+.menu-v2 .ui-shard.mv2-tile--intel:hover      { --_shard-glow: rgba(74, 216, 255, 0.28); }
+.menu-v2 .ui-shard.mv2-tile--saves:hover      { --_shard-glow: rgba(255, 255, 255, 0.18); }
+
+
+/* DAILY TWIST CARD — REMOVED. Defensive rule that hides any
+   surviving DOM node so a stale render doesn't paint. */
+.mv2-twist-card,
+#challenge-daily-twist {
+    display: none !important;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 4. RESET LEGACY BUTTON PROMOTIONS
+ *
+ * snap.css promoted .ui-btn inside .menu-v2 to chamfered plates.
+ * Now that the menu uses .ui-shard directly, that promotion
+ * doesn't apply (the shards are not .ui-btn). But we leave the
+ * snap promotion in place for elements OUTSIDE the menu (e.g.
+ * settings modal) that still use .ui-btn.
+ * ────────────────────────────────────────────────────────── */
+
+
+/* ──────────────────────────────────────────────────────────
+ * 5. ROW LAYOUT — DENSE GRID OF SHARDS
+ *
+ * Tighten the bento row spacing so the shards visually pack
+ * together like neighbouring crystals. Hero row stacks vertically
+ * (resume above initiate when a save exists).
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .mv2-bento-row--hero {
+    grid-template-columns: 1fr;
+    gap: var(--ui-space-3);
+}
+.menu-v2 .mv2-bento-row--tiles {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--ui-space-3);
+}
+@media (min-width: 600px) {
+    .menu-v2 .mv2-bento-row--tiles {
+        grid-template-columns: 1fr 1fr 1fr;
+    }
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 6. PORTRAIT HEX REFINEMENT
+ *
+ * The Snap-pivot hex uses a metallic gradient. Switch the menu
+ * portrait to the same glass language so it matches the shards
+ * around it.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .ui-hex.mv2-portrait {
+    background: linear-gradient(180deg,
+        rgba(50, 70, 110, 0.50) 0%,
+        rgba(20, 32, 60, 0.55) 100%);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.32),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.42);
+}
+.menu-v2 .ui-hex.mv2-portrait::before {
+    background:
+        radial-gradient(ellipse at 30% 0%,
+            rgba(255, 255, 255, 0.20) 0%,
+            rgba(255, 255, 255, 0.04) 45%,
+            transparent 65%);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 7. OPERATOR CHIP CLIP FIX
+ *
+ * The earlier pill-cap clip on the operator chip was clipping
+ * text because the chip width hugs its content. Use a softer
+ * tab silhouette so the text never clips at the leading "/".
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .mv2-operator-chip.subtitle {
+    clip-path: var(--ui-shape-tab-l);
+    -webkit-clip-path: var(--ui-shape-tab-l);
+    padding-left: var(--ui-space-5);   /* extra room for the slant */
+    padding-right: var(--ui-space-3);
+    background: linear-gradient(180deg,
+        rgba(40, 60, 96, 0.55) 0%,
+        rgba(15, 24, 48, 0.62) 100%);
+}
+.menu-v2 .mv2-operator-chip.subtitle::before {
+    background: radial-gradient(ellipse at 30% 0%,
+        rgba(74, 216, 255, 0.30) 0%, transparent 65%);
+    clip-path: var(--ui-shape-tab-l);
+    -webkit-clip-path: var(--ui-shape-tab-l);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 8. SPARKS / STREAK — SHARD-CAPPED PILLS
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .mv2-sparks-chip {
+    clip-path: var(--ui-shape-tab-r);
+    -webkit-clip-path: var(--ui-shape-tab-r);
+    padding-left: var(--ui-space-3);
+    padding-right: var(--ui-space-5);
+    background: linear-gradient(180deg,
+        rgba(80, 60, 18, 0.55) 0%,
+        rgba(36, 24, 6, 0.62) 100%);
+}
+.menu-v2 .mv2-sparks-chip::before {
+    background: radial-gradient(ellipse at 70% 0%,
+        rgba(255, 215, 106, 0.32) 0%, transparent 65%);
+    clip-path: var(--ui-shape-tab-r);
+    -webkit-clip-path: var(--ui-shape-tab-r);
+}
+.menu-v2 .mv2-streak.login-streak {
+    clip-path: var(--ui-shape-tab-l);
+    -webkit-clip-path: var(--ui-shape-tab-l);
+    padding-left: var(--ui-space-5);
+    padding-right: var(--ui-space-3);
+    background: linear-gradient(180deg,
+        rgba(80, 60, 18, 0.55) 0%,
+        rgba(36, 24, 6, 0.62) 100%);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 9. REDUCED MOTION
+ * ────────────────────────────────────────────────────────── */
+body.reduced-motion .ui-shard {
+    transition: filter var(--ui-duration-fast) linear;
+}
+body.reduced-motion .ui-shard:hover  { transform: none; }
+body.reduced-motion .ui-shard:active { transform: none; }

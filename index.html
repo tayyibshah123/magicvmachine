@@ -54,6 +54,13 @@
          and `.menu-v2` overrides win over the earlier glass-blur
          grammar wherever the snap context applies. -->
     <link rel="stylesheet" href="src/styles/snap.css">
+    <!-- Glass-shard variety — unique crystalline silhouettes per
+         UI slot (parallelogram / pentagon / kite / tab / arrow)
+         instead of a single repeated chamfered plate. Translucent
+         backdrop-blur fill with refined sheen + edge highlights.
+         Loads after snap.css so its `.ui-shard` rules + menu
+         overrides win where applied. -->
+    <link rel="stylesheet" href="src/styles/glass.css">
 </head>
 <body>
 
@@ -292,68 +299,57 @@
                     </div>
                 </div>
 
-                <!-- BENTO GRID — the visual hierarchy that replaces the
-                     stacked single-column buttons. Two-row layout:
-                       Row 1 (hero): INITIATE RUN (or RESUME) + DAILY TWIST
-                       Row 2 (tiles): 2x2 grid of secondary destinations
-                     On narrow phones the bento collapses to a single
-                     column with the same priority order. -->
+                <!-- SHARD GRID — Daily Twist card removed entirely.
+                     Hero row: full-width INITIATE RUN (or RESUME). Below
+                     it a row of unique-shape glass shards for secondary
+                     destinations, each clipped to its own crystalline
+                     silhouette (parallelogram / pentagon / kite / wedge)
+                     so no two tiles read as "the same shape duplicated".
+                     feature-locked-hidden continues to drive visibility. -->
                 <div class="mv2-bento" aria-label="Run launcher">
-                    <!-- Hero row -->
+                    <!-- Hero row — single full-width CTA. Resume layers
+                         on top when a save exists. -->
                     <div class="mv2-bento-row mv2-bento-row--hero">
-                        <button id="btn-load-save" class="ui-btn ui-btn--gold ui-btn--lg ui-btn--block mv2-cta mv2-cta-resume hidden">
+                        <button id="btn-load-save" class="ui-shard ui-shard--gold ui-shard--lg ui-shard--shape-banner mv2-cta mv2-cta-resume hidden">
                             <span class="mv2-cta-eyebrow">CONTINUE</span>
                             <span class="mv2-cta-label">RESUME RUN</span>
                         </button>
-                        <button id="btn-start" class="ui-btn ui-btn--primary ui-btn--lg ui-btn--block mv2-cta mv2-cta-primary">
+                        <button id="btn-start" class="ui-shard ui-shard--brand ui-shard--lg ui-shard--shape-banner mv2-cta mv2-cta-primary">
                             <span class="mv2-cta-eyebrow">DEPLOY</span>
                             <span id="btn-start-label" class="mv2-cta-label">INITIATE RUN</span>
                             <span id="btn-start-warn" class="btn-start-warn hidden">DISCARDS CURRENT RUN</span>
                         </button>
-                        <!-- Daily Twist hero card. Empty by default; the
-                             JS-injected `#challenge-daily-twist` lives
-                             inside on render. We pre-stamp the card so
-                             the layout doesn't shift when content lands. -->
-                        <div class="mv2-twist-card ui-card ui-card--brand" data-empty="true">
-                            <div class="mv2-twist-eyebrow">// DAILY TWIST</div>
-                            <div class="mv2-twist-empty ui-caption">No twist active.</div>
-                        </div>
                     </div>
 
-                    <!-- Tile row — 2x2 grid of secondary destinations.
-                         Each tile is a mini-card with an icon + label.
-                         feature-locked-hidden continues to drive
-                         visibility based on the Unlocks gate. -->
+                    <!-- Shard row — varied silhouettes per slot. Each
+                         tile uses a distinct clip-path so the row
+                         reads as a row of crystalline glass shards
+                         rather than a grid of identical buttons. -->
                     <div class="mv2-bento-row mv2-bento-row--tiles">
-                        <button id="btn-challenge" class="ui-card mv2-tile mv2-tile--challenge">
+                        <button id="btn-challenge" class="ui-shard ui-shard--shape-parallelogram-r mv2-tile mv2-tile--challenge">
                             <div class="mv2-tile-eyebrow">// MODE</div>
                             <div class="mv2-tile-label">CHALLENGE</div>
                             <div id="challenge-status-line" class="mv2-tile-status">READY</div>
-                            <span class="mv2-tile-arrow" aria-hidden="true">→</span>
                         </button>
-                        <button id="btn-archive" class="ui-card mv2-tile mv2-tile--archive hidden">
+                        <button id="btn-archive" class="ui-shard ui-shard--shape-parallelogram-l mv2-tile mv2-tile--archive hidden">
                             <div class="mv2-tile-eyebrow">// SECTOR X</div>
                             <div class="mv2-tile-label">ARCHIVE</div>
                             <div id="archive-status-line" class="mv2-tile-status"></div>
-                            <span class="mv2-tile-arrow" aria-hidden="true">→</span>
                         </button>
-                        <button id="btn-upgrades" class="ui-card mv2-tile mv2-tile--sanctuary feature-locked-hidden">
+                        <button id="btn-upgrades" class="ui-shard ui-shard--shape-pentagon mv2-tile mv2-tile--sanctuary feature-locked-hidden">
                             <div class="mv2-tile-eyebrow">// HUB</div>
                             <div class="mv2-tile-label">SANCTUARY</div>
                             <div class="mv2-tile-status">UPGRADES</div>
-                            <span class="mv2-tile-arrow" aria-hidden="true">→</span>
                         </button>
-                        <button id="btn-intel" class="ui-card mv2-tile mv2-tile--intel feature-locked-hidden">
+                        <button id="btn-intel" class="ui-shard ui-shard--shape-kite mv2-tile mv2-tile--intel feature-locked-hidden">
                             <div class="mv2-tile-eyebrow">// FILES</div>
                             <div class="mv2-tile-label">INTEL</div>
                             <div class="mv2-tile-status">DECRYPT</div>
-                            <span class="mv2-tile-arrow" aria-hidden="true">→</span>
                         </button>
-                        <button id="btn-save-slots" class="ui-card mv2-tile mv2-tile--saves feature-locked-hidden">
+                        <button id="btn-save-slots" class="ui-shard ui-shard--shape-tab-r mv2-tile mv2-tile--saves feature-locked-hidden">
                             <div class="mv2-tile-eyebrow">// SLOTS</div>
                             <div class="mv2-tile-label">SAVES</div>
                             <div class="mv2-tile-status">A · B · C</div>
-                            <span class="mv2-tile-arrow" aria-hidden="true">→</span>
                         </button>
                     </div>
                 </div>

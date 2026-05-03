@@ -8185,40 +8185,12 @@ triggerSystemCrash() {
             }
             challengeBtn.style.opacity = '1';
         }
-        // Daily Twist — render the rotating modifier in the dedicated
-        // `.mv2-twist-card` slot (Phase 3 menu) when present; fall back
-        // to the legacy "before challenge button" placement on any
-        // pre-v2 screen. The card pre-stamps an empty placeholder so
-        // the layout doesn't shift when content lands.
-        const twist = Challenge.todayTwist && Challenge.todayTwist();
-        const twistCard = document.querySelector('.mv2-twist-card');
-        let twistEl = document.getElementById('challenge-daily-twist');
-        if (twist && (twistCard || challengeBtn)) {
-            if (!twistEl) {
-                twistEl = document.createElement('div');
-                twistEl.id = 'challenge-daily-twist';
-                twistEl.className = 'challenge-twist-pill';
-            }
-            // Preferred home: the v2 card. Move the element in and
-            // hide the empty-state placeholder. Fall back to the
-            // sibling-before-button placement on legacy screens.
-            if (twistCard && twistEl.parentNode !== twistCard) {
-                twistCard.appendChild(twistEl);
-                twistCard.dataset.empty = 'false';
-                const empty = twistCard.querySelector('.mv2-twist-empty');
-                if (empty) empty.style.display = 'none';
-            } else if (!twistCard && challengeBtn && twistEl.parentNode !== challengeBtn.parentNode) {
-                challengeBtn.parentNode.insertBefore(twistEl, challengeBtn);
-            }
-            twistEl.innerHTML = `<span class="twist-tag">DAILY TWIST</span> <span class="twist-name">${twist.name}</span> · <span class="twist-desc">${twist.desc}</span>`;
-        } else if (twistEl) {
-            twistEl.remove();
-            if (twistCard) {
-                twistCard.dataset.empty = 'true';
-                const empty = twistCard.querySelector('.mv2-twist-empty');
-                if (empty) empty.style.display = '';
-            }
-        }
+        // Daily Twist removed from menu. The Challenge button still
+        // exists; the rotating modifier is no longer surfaced as a
+        // card. If a stale `#challenge-daily-twist` survived from a
+        // pre-removal session, drop it.
+        const _staleTwist = document.getElementById('challenge-daily-twist');
+        if (_staleTwist) _staleTwist.remove();
         // Personal-best line. On the v2 menu this lives inside the
         // challenge tile's status row so it doesn't break the grid;
         // on legacy screens it falls back to a sibling-after-button
