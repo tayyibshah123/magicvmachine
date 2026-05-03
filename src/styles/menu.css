@@ -267,9 +267,35 @@ body.perf-low      .menu-v2 .mv2-bg-particles span {
     flex-direction: column;
     align-items: center;
     justify-content: flex-end;
-    gap: var(--ui-space-2);
-    padding: var(--ui-space-6) var(--ui-space-2) var(--ui-space-4);
+    gap: var(--ui-space-3);
+    padding: var(--ui-space-4) var(--ui-space-2) var(--ui-space-3);
 }
+/* Operator portrait hex — sits at top of hero, the Snap-style
+   avatar slot. Subtle brand-cyan halo behind the hex sells the
+   "highlighted operator" look without a heavy glow on the metal. */
+.menu-v2 .mv2-portrait {
+    position: relative;
+    margin-bottom: var(--ui-space-1);
+    /* Halo ring drawn behind via a sibling pseudo. Layered to
+       avoid clipping by the hex's own clip-path. */
+}
+.menu-v2 .mv2-portrait::after {
+    content: '';
+    position: absolute;
+    inset: -10px;
+    background: radial-gradient(circle at 50% 50%,
+        rgba(74, 216, 255, 0.32) 0%,
+        rgba(74, 216, 255, 0.08) 40%,
+        transparent 70%);
+    z-index: -1;
+    pointer-events: none;
+    animation: mv2-portrait-pulse 4s ease-in-out infinite;
+}
+@keyframes mv2-portrait-pulse {
+    0%, 100% { opacity: 0.7; transform: scale(1); }
+    50%      { opacity: 1;   transform: scale(1.08); }
+}
+body.reduced-motion .menu-v2 .mv2-portrait::after { animation: none; }
 /* Override the legacy .title rule — kill the chromatic glitch and
    the multi-stop linear-gradient that was making the wordmark feel
    chaotic. Use a soft cyan glow instead. */

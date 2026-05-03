@@ -1,0 +1,981 @@
+/* ──────────────────────────────────────────────────────────────────
+ * UI v3 — Snap-anchored visual language
+ *
+ * Pivot from the glass-blur grammar of Phase 1+2 to Marvel Snap's
+ * signature look: hexagonal avatars, angular chamfered plates,
+ * metallic top-down gradients with white sheen highlights, wedge
+ * banners for player-vs-opponent layouts, and halftone celebration
+ * banners for victory/defeat moments.
+ *
+ * KEY MOTIFS
+ *   1. HEX — six-sided shape used for avatars, icon buttons,
+ *      stat-counters. Implemented via clip-path so the shape stays
+ *      a single DOM node.
+ *   2. ANGULAR PLATE — rectangle with chamfered corners. Two
+ *      sub-variants:
+ *        - centered chamfer (all four corners cut equally) for CTAs
+ *        - opposing chamfer (top-right + bottom-left cut) for
+ *          rectangular banners (SEASON PASS, MISSIONS)
+ *   3. WEDGE — strongly slanted plate (single corner cut very
+ *      deeply) for player vs opponent banners. Mirror variants
+ *      slant left or right.
+ *   4. METALLIC FILL — three-stop gradient: top highlight (light) →
+ *      mid (mid-tone) → bottom (dark). 1px white sheen line at the
+ *      very top edge sells "polished metal".
+ *   5. HALFTONE BANNER — radiating-rays + halftone-dot background
+ *      + chamfered text plate, for VICTORY / DEFEAT moments.
+ *
+ * NAMESPACE
+ *   New `.ui-snap-*` classes for shapes; existing `.ui-*` button +
+ *   panel classes are PROMOTED to the new look in this file. The
+ *   existing legacy `.ui-btn` rules in components.css still apply
+ *   on screens that haven't yet adopted snap; the Snap visuals win
+ *   when a button has both `.ui-btn` and `.ui-btn--snap` classes,
+ *   or when the button lives inside a `.snap` parent context.
+ * ────────────────────────────────────────────────────────────────── */
+
+
+/* ──────────────────────────────────────────────────────────
+ * 1. SHAPE / METALLIC TOKENS
+ *
+ * clip-path values + gradient definitions that compose the
+ * Snap look. Centralised so a future palette tweak (e.g. swap
+ * the brand cyan to a different hue) only touches the tokens
+ * instead of every plate.
+ *
+ * The clip-path values use mixed % + px values so the chamfer
+ * stays a fixed visual size regardless of plate width.
+ * ────────────────────────────────────────────────────────── */
+:root {
+    /* HEX — pointy-top hex */
+    --ui-clip-hex:
+        polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    /* HEX — flat-top hex (used for nav buttons) */
+    --ui-clip-hex-flat:
+        polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+
+    /* PLATE — chamfered corners, all four cut equally.
+       Used for centred CTAs (PLAY, GET PREMIUM, NEXT). */
+    --ui-clip-plate:
+        polygon(
+            14px 0%,                    100% 0%,
+            calc(100% - 14px) 0%,       100% 14px,
+            100% calc(100% - 14px),     calc(100% - 14px) 100%,
+            14px 100%,                  0% calc(100% - 14px),
+            0% 14px
+        );
+    /* Simplified (8-point cut both top + both bottom corners). */
+    --ui-clip-plate-soft:
+        polygon(
+            10px 0,
+            calc(100% - 10px) 0,
+            100% 10px,
+            100% calc(100% - 10px),
+            calc(100% - 10px) 100%,
+            10px 100%,
+            0 calc(100% - 10px),
+            0 10px
+        );
+
+    /* PLATE-SLANT-RIGHT — chamfer top-right + bottom-left.
+       Reads as a forward-leaning plate. Used for "MISSIONS"-style
+       buttons that point toward the action. */
+    --ui-clip-plate-slant-right:
+        polygon(
+            0 0,
+            calc(100% - 22px) 0,
+            100% 50%,
+            calc(100% - 22px) 100%,
+            0 100%
+        );
+    /* PLATE-SLANT-LEFT — mirror */
+    --ui-clip-plate-slant-left:
+        polygon(
+            22px 0,
+            100% 0,
+            100% 100%,
+            22px 100%,
+            0 50%
+        );
+
+    /* WEDGE — dramatic slant. Used for player/opponent banners.
+       Only the right side cuts (player banner leans right). */
+    --ui-clip-wedge-right:
+        polygon(
+            0 0,
+            calc(100% - 60px) 0,
+            100% 100%,
+            0 100%
+        );
+    --ui-clip-wedge-left:
+        polygon(
+            60px 0,
+            100% 0,
+            100% 100%,
+            0 100%
+        );
+
+    /* PILL — chamfered both ends. The currency-bar shape. */
+    --ui-clip-pill-cap:
+        polygon(
+            16px 0,
+            calc(100% - 16px) 0,
+            100% 50%,
+            calc(100% - 16px) 100%,
+            16px 100%,
+            0 50%
+        );
+
+    /* METALLIC GRADIENTS — three stops. Light at top (sheen),
+       mid in the middle, dark at the bottom. The 1px highlight
+       line on top is added by the .ui-snap-plate::before so the
+       gradient itself stays clean. */
+    --ui-metal-neutral: linear-gradient(180deg,
+        #2a3552 0%,
+        #1c2640 35%,
+        #0f1730 100%);
+    --ui-metal-brand: linear-gradient(180deg,
+        #4dd6ff 0%,
+        #1ea5d4 50%,
+        #0a637e 100%);
+    --ui-metal-brand-soft: linear-gradient(180deg,
+        rgba(74, 216, 255, 0.85) 0%,
+        rgba(30, 165, 212, 0.55) 50%,
+        rgba(10, 99, 126, 0.35) 100%);
+    --ui-metal-gold: linear-gradient(180deg,
+        #ffe388 0%,
+        #d49b1e 50%,
+        #6e4f0b 100%);
+    --ui-metal-alert: linear-gradient(180deg,
+        #ff7a8e 0%,
+        #c4263e 50%,
+        #5e0e1a 100%);
+    --ui-metal-purple: linear-gradient(180deg,
+        #b78bff 0%,
+        #6c42d4 50%,
+        #2a1a5e 100%);
+    --ui-metal-dark: linear-gradient(180deg,
+        #1a2440 0%,
+        #0c1428 50%,
+        #02060f 100%);
+    --ui-metal-glass: linear-gradient(180deg,
+        rgba(50, 64, 102, 0.85) 0%,
+        rgba(20, 30, 60, 0.85) 50%,
+        rgba(8, 14, 30, 0.95) 100%);
+
+    /* SHEEN — the 1px highlight line drawn at the top of every
+       metallic plate. Adds the "polished" feel. */
+    --ui-sheen-top:
+        inset 0 1px 0 rgba(255, 255, 255, 0.45),
+        inset 0 2px 0 rgba(255, 255, 255, 0.10);
+    --ui-sheen-bottom:
+        inset 0 -1px 0 rgba(0, 0, 0, 0.55);
+
+    /* PLATE BORDER — a thin outer frame that defines the edge
+       cleanly. Combined with sheen it creates the "milled metal"
+       look. */
+    --ui-plate-border-neutral: 1px solid rgba(255, 255, 255, 0.28);
+    --ui-plate-border-brand:   1px solid rgba(150, 230, 255, 0.65);
+    --ui-plate-border-gold:    1px solid rgba(255, 220, 130, 0.65);
+    --ui-plate-border-alert:   1px solid rgba(255, 130, 150, 0.65);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 2. PLATE PRIMITIVE
+ *
+ * The angular chamfered plate. Used as the workhorse for
+ * buttons, banners, navbars, currency chips. Compose with
+ * variant + size modifiers.
+ *
+ * Plate shape is a clip-path on a wrapper. The metallic
+ * gradient fills the wrapper. Sheen + sub-border draw via
+ * box-shadow inset / a child highlight pseudo-element.
+ *
+ * USAGE
+ *   <div class="ui-plate ui-plate--brand ui-plate--lg">…</div>
+ *   <button class="ui-plate ui-plate--alert">CANCEL</button>
+ * ────────────────────────────────────────────────────────── */
+.ui-plate {
+    --_plate-bg:    var(--ui-metal-neutral);
+    --_plate-clip:  var(--ui-clip-plate);
+    --_plate-fg:    var(--ui-text-100);
+    --_plate-border: var(--ui-plate-border-neutral);
+    --_plate-h:     48px;
+    --_plate-fs:    var(--ui-text-body);
+
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ui-space-2);
+    height: var(--_plate-h);
+    min-height: var(--_plate-h);
+    padding: 0 var(--ui-space-5);
+    background: var(--_plate-bg);
+    color: var(--_plate-fg);
+    font-family: var(--ui-font-display);
+    font-size: var(--_plate-fs);
+    font-weight: var(--ui-weight-bold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1;
+    border: none;
+    clip-path: var(--_plate-clip);
+    -webkit-clip-path: var(--_plate-clip);
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    /* Metallic sheen + bottom shadow drawn as inset shadows. */
+    box-shadow:
+        var(--ui-sheen-top),
+        var(--ui-sheen-bottom);
+    transition:
+        filter var(--ui-duration-fast) var(--ui-ease-standard),
+        transform var(--ui-duration-base) var(--ui-ease-spring);
+    isolation: isolate;
+}
+.ui-plate:hover  { filter: brightness(1.12); transform: translateY(-1px); }
+.ui-plate:active { filter: brightness(0.92); transform: translateY(0) scale(0.985); }
+.ui-plate:focus-visible {
+    outline: none;
+    box-shadow:
+        var(--ui-sheen-top),
+        var(--ui-sheen-bottom),
+        0 0 0 3px var(--ui-bg-base),
+        0 0 0 5px var(--ui-brand);
+}
+.ui-plate[disabled],
+.ui-plate.is-disabled {
+    opacity: 0.42;
+    pointer-events: none;
+    cursor: not-allowed;
+    filter: grayscale(0.5);
+}
+
+/* PLATE BORDER — drawn as a thin overlay so it follows the
+   chamfered clip-path. We layer two pseudo-elements: one for the
+   border itself (drawn 1px inside the clip), one for a subtle
+   inner radial highlight that sells the curvature. */
+.ui-plate::before,
+.ui-plate::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    clip-path: var(--_plate-clip);
+    -webkit-clip-path: var(--_plate-clip);
+}
+.ui-plate::before {
+    /* Inner radial highlight — soft glow at the top centre that
+       sells "metal catching light from above". */
+    background: radial-gradient(ellipse at 50% 0%,
+        rgba(255, 255, 255, 0.22) 0%,
+        rgba(255, 255, 255, 0.05) 35%,
+        transparent 60%);
+    z-index: 0;
+}
+.ui-plate > * {
+    position: relative;
+    z-index: 2;
+}
+
+/* The text + icon content live inside the plate. Wrap with a
+   padded inner span if needed; otherwise the children sit on
+   the metal directly. */
+
+
+/* SHAPE VARIANTS ─────────────────────────────────────────── */
+.ui-plate--center        { --_plate-clip: var(--ui-clip-plate); }
+.ui-plate--soft          { --_plate-clip: var(--ui-clip-plate-soft); }
+.ui-plate--slant-right   { --_plate-clip: var(--ui-clip-plate-slant-right); }
+.ui-plate--slant-left    { --_plate-clip: var(--ui-clip-plate-slant-left); }
+.ui-plate--pill          { --_plate-clip: var(--ui-clip-pill-cap); }
+.ui-plate--wedge-right   { --_plate-clip: var(--ui-clip-wedge-right); padding-right: 80px; }
+.ui-plate--wedge-left    { --_plate-clip: var(--ui-clip-wedge-left);  padding-left: 80px; }
+
+
+/* COLOR VARIANTS ─────────────────────────────────────────── */
+.ui-plate--brand {
+    --_plate-bg: var(--ui-metal-brand);
+    --_plate-fg: #02101a;
+}
+.ui-plate--gold {
+    --_plate-bg: var(--ui-metal-gold);
+    --_plate-fg: #1a0f00;
+}
+.ui-plate--alert {
+    --_plate-bg: var(--ui-metal-alert);
+    --_plate-fg: #1a0008;
+}
+.ui-plate--purple {
+    --_plate-bg: var(--ui-metal-purple);
+    --_plate-fg: #fff;
+}
+.ui-plate--dark {
+    --_plate-bg: var(--ui-metal-dark);
+    --_plate-fg: var(--ui-text-100);
+}
+.ui-plate--glass {
+    --_plate-bg: var(--ui-metal-glass);
+    --_plate-fg: var(--ui-text-100);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+
+/* SIZE VARIANTS ──────────────────────────────────────────── */
+.ui-plate--sm {
+    --_plate-h: 36px;
+    --_plate-fs: var(--ui-text-caption);
+    padding: 0 var(--ui-space-3);
+}
+.ui-plate--md { --_plate-h: 48px; }   /* default */
+.ui-plate--lg {
+    --_plate-h: 60px;
+    --_plate-fs: var(--ui-text-subhead);
+    padding: 0 var(--ui-space-6);
+    letter-spacing: 0.08em;
+}
+.ui-plate--xl {
+    --_plate-h: 72px;
+    --_plate-fs: var(--ui-text-heading);
+    padding: 0 var(--ui-space-8);
+    letter-spacing: 0.10em;
+}
+
+
+/* PLATE WIDTH HELPERS ───────────────────────────────────── */
+.ui-plate--block { width: 100%; }
+
+
+/* PLATE WITH EYEBROW — small caption above the main label.
+   Two-line content stack; padding bumps slightly. */
+.ui-plate--stack {
+    flex-direction: column;
+    gap: 2px;
+    padding-top: var(--ui-space-2);
+    padding-bottom: var(--ui-space-2);
+}
+.ui-plate-eyebrow {
+    font-family: var(--ui-font-display);
+    font-size: 0.6rem;
+    font-weight: var(--ui-weight-semibold);
+    letter-spacing: var(--ui-tracking-cyber);
+    opacity: 0.75;
+    line-height: 1;
+}
+.ui-plate-label {
+    font-family: var(--ui-font-display);
+    font-weight: var(--ui-weight-bold);
+    font-size: var(--ui-text-subhead);
+    letter-spacing: 0.08em;
+    line-height: 1.1;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 3. HEX PRIMITIVE
+ *
+ * Avatar / icon / counter container. Hex with a metallic fill,
+ * a thin border, and a centred child slot.
+ * ────────────────────────────────────────────────────────── */
+.ui-hex {
+    --_hex-d: 56px;
+    --_hex-bg: var(--ui-metal-neutral);
+    --_hex-fg: var(--ui-text-100);
+    --_hex-clip: var(--ui-clip-hex);
+
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--_hex-d);
+    height: var(--_hex-d);
+    background: var(--_hex-bg);
+    color: var(--_hex-fg);
+    font-family: var(--ui-font-display);
+    font-weight: var(--ui-weight-bold);
+    line-height: 1;
+    clip-path: var(--_hex-clip);
+    -webkit-clip-path: var(--_hex-clip);
+    box-shadow: var(--ui-sheen-top), var(--ui-sheen-bottom);
+    cursor: default;
+    user-select: none;
+}
+.ui-hex::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 0%,
+        rgba(255, 255, 255, 0.28) 0%,
+        rgba(255, 255, 255, 0.04) 50%,
+        transparent 75%);
+    clip-path: var(--_hex-clip);
+    -webkit-clip-path: var(--_hex-clip);
+    pointer-events: none;
+}
+.ui-hex > * { position: relative; z-index: 1; }
+.ui-hex--flat   { --_hex-clip: var(--ui-clip-hex-flat); }
+.ui-hex--brand  { --_hex-bg: var(--ui-metal-brand);  --_hex-fg: #02101a; }
+.ui-hex--gold   { --_hex-bg: var(--ui-metal-gold);   --_hex-fg: #1a0f00; }
+.ui-hex--alert  { --_hex-bg: var(--ui-metal-alert);  --_hex-fg: #fff; }
+.ui-hex--purple { --_hex-bg: var(--ui-metal-purple); --_hex-fg: #fff; }
+.ui-hex--dark   { --_hex-bg: var(--ui-metal-dark); }
+.ui-hex--glass  { --_hex-bg: var(--ui-metal-glass); }
+.ui-hex--sm     { --_hex-d: 40px; }
+.ui-hex--md     { --_hex-d: 56px; }
+.ui-hex--lg     { --_hex-d: 80px; }
+.ui-hex--xl     { --_hex-d: 110px; }
+
+/* Hex used as a clickable button — re-enables hover/press. */
+button.ui-hex,
+.ui-hex.ui-hex--btn {
+    cursor: pointer;
+    transition:
+        filter var(--ui-duration-fast) var(--ui-ease-standard),
+        transform var(--ui-duration-base) var(--ui-ease-spring);
+    border: none;
+}
+button.ui-hex:hover,
+.ui-hex.ui-hex--btn:hover  { filter: brightness(1.12); transform: translateY(-1px); }
+button.ui-hex:active,
+.ui-hex.ui-hex--btn:active { filter: brightness(0.92); transform: translateY(0) scale(0.96); }
+
+
+/* ──────────────────────────────────────────────────────────
+ * 4. CURRENCY PILL (chamfered both ends + icon left + number right)
+ *
+ * Used for SPARKS / FRAGMENTS / STREAK chips at the top of menus.
+ * Same metallic plate look but with sharp pill ends.
+ * ────────────────────────────────────────────────────────── */
+.ui-currency {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+    height: 32px;
+    padding: 0 var(--ui-space-3);
+    background: var(--ui-metal-dark);
+    color: var(--ui-text-100);
+    font-family: var(--ui-font-mono);
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-semibold);
+    line-height: 1;
+    clip-path: var(--ui-clip-pill-cap);
+    -webkit-clip-path: var(--ui-clip-pill-cap);
+    box-shadow: var(--ui-sheen-top), var(--ui-sheen-bottom);
+    font-variant-numeric: tabular-nums;
+}
+.ui-currency--gold .ui-currency-icon  { color: var(--ui-gold); }
+.ui-currency--brand .ui-currency-icon { color: var(--ui-brand); }
+.ui-currency--alert .ui-currency-icon { color: var(--ui-alert); }
+.ui-currency-icon {
+    font-size: 0.95rem;
+    line-height: 1;
+    text-shadow: 0 0 6px currentColor;
+}
+.ui-currency-label {
+    font-family: var(--ui-font-display);
+    font-size: var(--ui-text-micro);
+    letter-spacing: var(--ui-tracking-cyber);
+    text-transform: uppercase;
+    color: var(--ui-text-50);
+    font-weight: var(--ui-weight-semibold);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 5. WEDGE BANNERS (player vs opponent)
+ *
+ * Slanted angular bars with the avatar embedded at one end
+ * and the player name + sub-line at the other. Player gets a
+ * cyan/blue lean-right wedge; opponent gets a red lean-left
+ * wedge. They form opposing arrows pointing at each other.
+ *
+ * MARKUP
+ *   <div class="ui-wedge ui-wedge--player">
+ *     <div class="ui-hex ui-hex--md">…</div>
+ *     <div class="ui-wedge-text">
+ *       <div class="ui-wedge-name">EDD</div>
+ *       <div class="ui-wedge-sub">Operator · Tier 2</div>
+ *     </div>
+ *   </div>
+ * ────────────────────────────────────────────────────────── */
+.ui-wedge {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-3);
+    width: 100%;
+    height: 80px;
+    padding: 0 var(--ui-space-4);
+    background: var(--ui-metal-neutral);
+    color: var(--ui-text-100);
+    font-family: var(--ui-font-display);
+    box-shadow: var(--ui-sheen-top), var(--ui-sheen-bottom);
+    isolation: isolate;
+}
+.ui-wedge::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 30% 0%,
+        rgba(255, 255, 255, 0.18) 0%, transparent 60%);
+    clip-path: inherit;
+    -webkit-clip-path: inherit;
+    pointer-events: none;
+    z-index: 0;
+}
+.ui-wedge > * { position: relative; z-index: 1; }
+.ui-wedge--player {
+    background: linear-gradient(90deg, #1a4060 0%, #0a2840 60%, #051828 100%);
+    clip-path: var(--ui-clip-wedge-right);
+    -webkit-clip-path: var(--ui-clip-wedge-right);
+    padding-right: 70px;
+}
+.ui-wedge--opponent {
+    background: linear-gradient(90deg, #5e0a1a 0%, #2c0510 60%, #14020a 100%);
+    clip-path: var(--ui-clip-wedge-left);
+    -webkit-clip-path: var(--ui-clip-wedge-left);
+    padding-left: 70px;
+    flex-direction: row-reverse;
+    text-align: right;
+}
+.ui-wedge-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.ui-wedge-name {
+    font-family: var(--ui-font-display);
+    font-weight: var(--ui-weight-heavy);
+    font-size: var(--ui-text-title);
+    letter-spacing: var(--ui-tracking-tight);
+    color: #fff;
+    text-shadow: 0 0 12px rgba(255, 255, 255, 0.3);
+    line-height: 1;
+}
+.ui-wedge--player .ui-wedge-name  { color: #c4e8ff; text-shadow: 0 0 14px rgba(74, 216, 255, 0.55); }
+.ui-wedge--opponent .ui-wedge-name { color: #ffc4cf; text-shadow: 0 0 14px rgba(255, 93, 122, 0.55); }
+.ui-wedge-sub {
+    font-family: var(--ui-font-body);
+    font-weight: var(--ui-weight-medium);
+    font-size: var(--ui-text-caption);
+    letter-spacing: var(--ui-tracking-normal);
+    color: rgba(255, 255, 255, 0.62);
+    line-height: 1.2;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 6. CELEBRATION BANNER (Victory / Defeat / Boss-clear)
+ *
+ * Big chamfered text plate centred on a halftone-dot background
+ * with radiating ray-lines. Variants: victory (cyan), defeat (red).
+ *
+ * MARKUP
+ *   <div class="ui-celebrate ui-celebrate--victory">
+ *     <div class="ui-celebrate-rays" aria-hidden="true"></div>
+ *     <div class="ui-celebrate-halftone" aria-hidden="true"></div>
+ *     <div class="ui-celebrate-plate">
+ *       <span class="ui-celebrate-label">VICTORY!</span>
+ *     </div>
+ *   </div>
+ * ────────────────────────────────────────────────────────── */
+.ui-celebrate {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 200px;
+    overflow: hidden;
+    isolation: isolate;
+}
+.ui-celebrate-rays {
+    position: absolute;
+    inset: -10%;
+    background:
+        repeating-conic-gradient(from 0deg at 50% 50%,
+            transparent 0deg,
+            currentColor 1deg,
+            transparent 3deg,
+            transparent 12deg);
+    color: rgba(255, 80, 110, 0.35);
+    opacity: 0.6;
+    animation: ui-rays-rotate 24s linear infinite;
+    pointer-events: none;
+    z-index: 0;
+}
+.ui-celebrate--victory .ui-celebrate-rays { color: rgba(255, 90, 100, 0.32); }
+.ui-celebrate--defeat  .ui-celebrate-rays { color: rgba(255, 60, 80, 0.42); }
+.ui-celebrate-halftone {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(currentColor 1.4px, transparent 1.6px);
+    background-size: 10px 10px;
+    color: var(--_celebrate-dot, rgba(255, 255, 255, 0.18));
+    opacity: 0.55;
+    pointer-events: none;
+    z-index: 1;
+    mask-image: radial-gradient(ellipse at 50% 50%, black 30%, transparent 78%);
+    -webkit-mask-image: radial-gradient(ellipse at 50% 50%, black 30%, transparent 78%);
+}
+.ui-celebrate--victory { --_celebrate-dot: rgba(74, 216, 255, 0.55); background: rgba(8, 30, 56, 0.85); }
+.ui-celebrate--defeat  { --_celebrate-dot: rgba(255, 60, 80, 0.55);  background: rgba(40, 6, 12, 0.88); }
+.ui-celebrate-plate {
+    position: relative;
+    z-index: 2;
+    padding: var(--ui-space-5) var(--ui-space-10);
+    background: var(--ui-metal-dark);
+    color: #fff;
+    font-family: var(--ui-font-display);
+    font-weight: var(--ui-weight-heavy);
+    font-size: clamp(2.4rem, 9vw, 4rem);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1;
+    clip-path: var(--ui-clip-plate);
+    -webkit-clip-path: var(--ui-clip-plate);
+    box-shadow:
+        var(--ui-sheen-top),
+        var(--ui-sheen-bottom),
+        0 8px 24px rgba(0, 0, 0, 0.55);
+    text-shadow:
+        0 0 24px rgba(255, 255, 255, 0.5),
+        0 0 4px rgba(255, 255, 255, 0.6);
+}
+.ui-celebrate--victory .ui-celebrate-plate {
+    background: linear-gradient(180deg, #2a4a78 0%, #102849 50%, #04101e 100%);
+    color: #ddf6ff;
+    box-shadow:
+        var(--ui-sheen-top),
+        var(--ui-sheen-bottom),
+        0 0 28px rgba(74, 216, 255, 0.55),
+        0 8px 24px rgba(0, 0, 0, 0.55);
+    text-shadow: 0 0 22px rgba(74, 216, 255, 0.7);
+}
+.ui-celebrate--defeat .ui-celebrate-plate {
+    background: linear-gradient(180deg, #6e1828 0%, #3a0a14 50%, #16040a 100%);
+    color: #ffd9df;
+    box-shadow:
+        var(--ui-sheen-top),
+        var(--ui-sheen-bottom),
+        0 0 28px rgba(255, 60, 80, 0.55),
+        0 8px 24px rgba(0, 0, 0, 0.55);
+    text-shadow: 0 0 22px rgba(255, 80, 110, 0.7);
+}
+@keyframes ui-rays-rotate {
+    from { transform: rotate(0); }
+    to   { transform: rotate(360deg); }
+}
+body.reduced-motion .ui-celebrate-rays { animation: none; opacity: 0.32; }
+
+
+/* ──────────────────────────────────────────────────────────
+ * 7. BOTTOM NAVIGATION BAR
+ *
+ * Reserved for future phases (collection / decks / modes /
+ * news). The shape is a horizontal bar with hex/angular
+ * buttons; the active one rises slightly with a brand glow.
+ * ────────────────────────────────────────────────────────── */
+.ui-nav {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    height: 64px;
+    background: var(--ui-metal-dark);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: var(--ui-sheen-top), 0 -4px 12px rgba(0, 0, 0, 0.4);
+}
+.ui-nav-item {
+    flex: 1 1 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 4px;
+    background: transparent;
+    border: none;
+    color: var(--ui-text-50);
+    font-family: var(--ui-font-display);
+    font-size: 0.62rem;
+    font-weight: var(--ui-weight-semibold);
+    letter-spacing: var(--ui-tracking-cyber);
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color var(--ui-duration-fast) var(--ui-ease-standard);
+}
+.ui-nav-item .ui-nav-icon {
+    width: 28px;
+    height: 28px;
+    line-height: 1;
+}
+.ui-nav-item:hover    { color: var(--ui-text-90); }
+.ui-nav-item.is-active {
+    color: var(--ui-brand);
+    text-shadow: 0 0 6px rgba(74, 216, 255, 0.55);
+}
+.ui-nav-item.is-active::before {
+    /* Active indicator — short top-edge bar */
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 20%;
+    right: 20%;
+    height: 2px;
+    background: var(--ui-brand);
+    border-radius: var(--ui-radius-pill);
+    box-shadow: 0 0 8px rgba(74, 216, 255, 0.7);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 8. PROMOTE EXISTING `.ui-btn` → SNAP STYLE WHEN INSIDE A
+ * `.menu-v2` OR `.snap` CONTEXT
+ *
+ * The previous Phase 1+2 buttons were rounded-rectangle glass
+ * panels. Inside the snap context, they get the angular plate
+ * treatment automatically — no markup change required for the
+ * already-migrated screens.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .ui-btn,
+.snap .ui-btn {
+    /* Reset rounded radius + glass background; let the plate
+       clip-path drive the silhouette. */
+    border-radius: 0;
+    border: none;
+    background-image: none;
+    background: var(--ui-metal-neutral);
+    color: var(--ui-text-100);
+    clip-path: var(--ui-clip-plate);
+    -webkit-clip-path: var(--ui-clip-plate);
+    box-shadow: var(--ui-sheen-top), var(--ui-sheen-bottom);
+    font-family: var(--ui-font-display);
+    font-weight: var(--ui-weight-bold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.menu-v2 .ui-btn::after { display: none; }   /* kill the glass ripple */
+.menu-v2 .ui-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 0%,
+        rgba(255, 255, 255, 0.22) 0%,
+        rgba(255, 255, 255, 0.04) 50%,
+        transparent 80%);
+    clip-path: var(--ui-clip-plate);
+    -webkit-clip-path: var(--ui-clip-plate);
+    pointer-events: none;
+    z-index: 0;
+    opacity: 1;
+    transition: none;
+}
+.menu-v2 .ui-btn:hover  { transform: translateY(-1px); filter: brightness(1.12); }
+.menu-v2 .ui-btn:active { transform: translateY(0) scale(0.985); filter: brightness(0.92); }
+
+/* Brand variant — primary CTA on the menu */
+.menu-v2 .ui-btn--primary {
+    background: var(--ui-metal-brand);
+    color: #02101a;
+}
+.menu-v2 .ui-btn--gold {
+    background: var(--ui-metal-gold);
+    color: #1a0f00;
+}
+.menu-v2 .ui-btn--ghost {
+    background: var(--ui-metal-glass);
+    color: var(--ui-text-90);
+}
+.menu-v2 .ui-btn--destructive {
+    background: var(--ui-metal-alert);
+    color: #fff;
+}
+
+/* Icon buttons (settings gear) — switch to a flat-top hex */
+.menu-v2 .ui-btn--icon.ui-btn--round {
+    width: 44px;
+    height: 44px;
+    aspect-ratio: 1;
+    background: var(--ui-metal-dark);
+    color: var(--ui-text-90);
+    clip-path: var(--ui-clip-hex-flat);
+    -webkit-clip-path: var(--ui-clip-hex-flat);
+    border-radius: 0;
+}
+.menu-v2 .ui-btn--icon.ui-btn--round::before {
+    background: radial-gradient(circle at 50% 0%,
+        rgba(255, 255, 255, 0.25) 0%,
+        rgba(255, 255, 255, 0.04) 50%,
+        transparent 80%);
+    clip-path: var(--ui-clip-hex-flat);
+    -webkit-clip-path: var(--ui-clip-hex-flat);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 9. PROMOTE THE MENU CARDS → ANGULAR TILES
+ *
+ * Inside `.menu-v2`, the `.mv2-tile` cards get the angular
+ * plate treatment. The tilt-on-hover is preserved.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .mv2-tile.ui-card {
+    border: none;
+    border-radius: 0;
+    background: var(--ui-metal-glass);
+    background-image: none;
+    box-shadow: var(--ui-sheen-top), var(--ui-sheen-bottom);
+    clip-path: var(--ui-clip-plate-soft);
+    -webkit-clip-path: var(--ui-clip-plate-soft);
+    overflow: hidden;
+    isolation: isolate;
+}
+.menu-v2 .mv2-tile.ui-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 0%,
+        rgba(255, 255, 255, 0.16) 0%,
+        rgba(255, 255, 255, 0.04) 40%,
+        transparent 70%);
+    clip-path: var(--ui-clip-plate-soft);
+    -webkit-clip-path: var(--ui-clip-plate-soft);
+    pointer-events: none;
+    z-index: 0;
+}
+.menu-v2 .mv2-tile.ui-card > * { position: relative; z-index: 1; }
+
+/* Per-tile accent — tinted overlay on hover */
+.menu-v2 .mv2-tile--challenge:hover  { background: linear-gradient(180deg, rgba(60, 50, 18, 0.92) 0%, rgba(30, 20, 6, 0.95) 100%); }
+.menu-v2 .mv2-tile--archive:hover    { background: linear-gradient(180deg, rgba(60, 18, 30, 0.92) 0%, rgba(30, 6, 14, 0.95) 100%); }
+.menu-v2 .mv2-tile--sanctuary:hover  { background: linear-gradient(180deg, rgba(18, 60, 50, 0.92) 0%, rgba(6, 30, 24, 0.95) 100%); }
+.menu-v2 .mv2-tile--intel:hover      { background: linear-gradient(180deg, rgba(18, 50, 70, 0.92) 0%, rgba(6, 24, 36, 0.95) 100%); }
+
+
+/* ──────────────────────────────────────────────────────────
+ * 10. PROMOTE HEADER CHIPS → CURRENCY PILLS
+ *
+ * Inside `.menu-v2`, the `.ui-chip` chips become angular
+ * currency pills with hex caps.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .mv2-operator-chip.subtitle {
+    border: none;
+    border-radius: 0;
+    background: var(--ui-metal-dark);
+    background-image: none;
+    color: var(--ui-text-100);
+    padding: 0 var(--ui-space-3);
+    height: 32px;
+    line-height: 32px;
+    clip-path: var(--ui-clip-pill-cap);
+    -webkit-clip-path: var(--ui-clip-pill-cap);
+    box-shadow: var(--ui-sheen-top), var(--ui-sheen-bottom);
+    font-family: var(--ui-font-display);
+    font-weight: var(--ui-weight-semibold);
+    text-shadow: none;
+    /* Brand accent via a left-edge bar */
+    position: relative;
+}
+.menu-v2 .mv2-operator-chip.subtitle::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 30% 0%,
+        rgba(255, 255, 255, 0.18) 0%, transparent 65%);
+    clip-path: var(--ui-clip-pill-cap);
+    -webkit-clip-path: var(--ui-clip-pill-cap);
+    pointer-events: none;
+}
+.menu-v2 .mv2-sparks-chip {
+    border: none;
+    border-radius: 0;
+    background: var(--ui-metal-dark);
+    background-image: none;
+    color: var(--ui-text-100);
+    padding: 0 var(--ui-space-3);
+    height: 32px;
+    line-height: 32px;
+    clip-path: var(--ui-clip-pill-cap);
+    -webkit-clip-path: var(--ui-clip-pill-cap);
+    box-shadow: var(--ui-sheen-top), var(--ui-sheen-bottom);
+    position: relative;
+}
+.menu-v2 .mv2-sparks-chip::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 70% 0%,
+        rgba(255, 215, 106, 0.20) 0%, transparent 65%);
+    clip-path: var(--ui-clip-pill-cap);
+    -webkit-clip-path: var(--ui-clip-pill-cap);
+    pointer-events: none;
+}
+.menu-v2 .mv2-streak.login-streak {
+    border: none;
+    border-radius: 0;
+    background: var(--ui-metal-dark);
+    color: var(--ui-gold);
+    padding: 0 var(--ui-space-3);
+    height: 32px;
+    line-height: 32px;
+    clip-path: var(--ui-clip-pill-cap);
+    -webkit-clip-path: var(--ui-clip-pill-cap);
+    box-shadow: var(--ui-sheen-top), var(--ui-sheen-bottom);
+    text-shadow: 0 0 6px rgba(255, 215, 106, 0.4);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 11. PROMOTE THE WORDMARK BLOCK → CENTRED HEX OPERATOR PORTRAIT
+ *
+ * The Snap menu has a hex operator avatar slot above the wordmark.
+ * We can't paint a player portrait without art assets, so we use
+ * a chamfered placeholder hex with a subtle silhouette gradient.
+ * Players who haven't picked a class yet see a generic operator
+ * silhouette; once a class is selected, the JS can swap the icon.
+ *
+ * For NOW (Phase 5 will wire dynamic icons), we just render the
+ * hex placeholder behind the wordmark so the layout reads.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .mv2-hero {
+    /* Tighten the spacing to make room for a portrait hex above. */
+    padding-top: var(--ui-space-3);
+    padding-bottom: var(--ui-space-3);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 12. PROMOTE THE SETTINGS MODAL ACTION BUTTONS → ANGULAR PLATES
+ *
+ * Replace the rounded-rectangle look of #btn-resume / #btn-quit /
+ * #btn-glossary with chamfered metallic plates so the modal reads
+ * as Snap-style.
+ * ────────────────────────────────────────────────────────── */
+#modal-settings > .modal-content > #btn-glossary,
+#modal-settings > .modal-content > #btn-resume,
+#modal-settings > .modal-content > #btn-quit {
+    border-radius: 0;
+    border: none;
+    background-image: none;
+    clip-path: var(--ui-clip-plate);
+    -webkit-clip-path: var(--ui-clip-plate);
+    box-shadow: var(--ui-sheen-top), var(--ui-sheen-bottom);
+    font-family: var(--ui-font-display);
+    font-weight: var(--ui-weight-bold);
+    letter-spacing: 0.06em;
+}
+#modal-settings > .modal-content > #btn-glossary {
+    background: var(--ui-metal-glass);
+    color: var(--ui-text-90);
+}
+#modal-settings > .modal-content > #btn-resume {
+    background: var(--ui-metal-brand);
+    color: #02101a;
+}
+#modal-settings > .modal-content > #btn-quit {
+    background: var(--ui-metal-alert);
+    color: #fff;
+}

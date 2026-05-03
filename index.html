@@ -47,6 +47,13 @@
          untouched. Targets #modal-settings, #modal-glossary, the
          save-slot modal, and the sanctuary NPC modal. -->
     <link rel="stylesheet" href="src/styles/settings.css">
+    <!-- Snap-pivot — Marvel Snap visual language. Hexagonal motifs,
+         chamfered angular plates, metallic gradients with white
+         sheen highlights, wedge banners for player-vs-opponent
+         layouts. Loads LAST so its plate / hex / wedge primitives
+         and `.menu-v2` overrides win over the earlier glass-blur
+         grammar wherever the snap context applies. -->
+    <link rel="stylesheet" href="src/styles/snap.css">
 </head>
 <body>
 
@@ -245,13 +252,22 @@
                     </div>
                 </div>
 
-                <!-- HERO — wordmark + tagline + Archivist frame badge.
-                     The wordmark stays as `.title h1` so the existing
-                     glitch CSS still renders for backwards compatibility,
-                     but is wrapped in a `.mv2-hero` block that overrides
-                     the chromatic-glitch with a subtle breathing pulse.
-                     Frame badge (Archivist Slain cosmetic) sits under it. -->
+                <!-- HERO — operator hex portrait + wordmark + tagline.
+                     The hex sits above the wordmark like Snap's main-
+                     menu avatar slot. JS can swap the inner icon for
+                     the player's chosen class crest (Phase 5+). The
+                     Archivist cosmetic frame still wraps the wordmark
+                     for the kill-cosmetic reveal. -->
                 <div class="mv2-hero">
+                    <div class="ui-hex ui-hex--xl ui-hex--dark mv2-portrait" aria-hidden="true">
+                        <svg viewBox="0 0 60 60" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ui-text-70); filter: drop-shadow(0 0 8px rgba(74, 216, 255, 0.35));">
+                            <!-- Operator silhouette: hooded head + shoulders -->
+                            <path d="M30 14 C36 14 40 18 40 24 L40 30 C40 34 36 38 30 38 C24 38 20 34 20 30 L20 24 C20 18 24 14 30 14 Z" fill="currentColor" fill-opacity="0.18"/>
+                            <path d="M14 56 L14 50 C14 44 20 40 30 40 C40 40 46 44 46 50 L46 56" fill="currentColor" fill-opacity="0.12"/>
+                            <!-- Visor slit — single horizontal line for cyber-helmet feel -->
+                            <line x1="22" y1="26" x2="38" y2="26" stroke-width="2" stroke="rgba(74, 216, 255, 0.85)" filter="drop-shadow(0 0 4px rgba(74, 216, 255, 0.7))"/>
+                        </svg>
+                    </div>
                     <div class="title-frame mv2-title-frame" id="title-frame" data-archivist-tier="0" aria-hidden="true">
                         <span class="title-frame-corner tl"></span>
                         <span class="title-frame-corner tr"></span>
