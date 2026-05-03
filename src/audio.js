@@ -681,6 +681,26 @@ const AudioMgr = {
         die_pickup: [
             { id: 'click',      delay: 0,   opts: { volume: 0.7 } },
             { id: 'mana',       delay: 0,   opts: { playbackRate: 1.6, volume: 0.4 } }
+        ],
+        // ── Combat-feel stings (Roadmap #5) ─────────────────────────────
+        // Played by Game when an enemy crosses key thresholds. Each is a
+        // short layered cue so the moment registers without a wall of text.
+        low_hp_warning: [
+            // Soft alarm — fires once when an enemy drops below 25% HP.
+            { id: 'siren',      delay: 0,   opts: { playbackRate: 1.6, volume: 0.55, duration: 0.35, fadeOut: 0.2 } },
+            { id: 'mana',       delay: 80,  opts: { playbackRate: 0.7, volume: 0.5 } }
+        ],
+        boss_kill: [
+            // Heavier than a regular kill — deep grid_fracture + decay siren.
+            { id: 'explosion',     delay: 0,   opts: { playbackRate: 0.65, volume: 1.2 } },
+            { id: 'grid_fracture', delay: 60,  opts: { playbackRate: 0.6,  volume: 0.95 } },
+            { id: 'siren',         delay: 220, opts: { playbackRate: 0.4,  volume: 0.7, duration: 0.7, fadeOut: 0.4 } },
+            { id: 'beam',          delay: 380, opts: { volume: 0.55 } }
+        ],
+        execute_telegraph: [
+            // Mini wind-up cue when an enemy loads a heavy strike.
+            { id: 'siren',      delay: 0,   opts: { playbackRate: 0.85, volume: 0.5, duration: 0.45, fadeOut: 0.2 } },
+            { id: 'click',      delay: 220, opts: { playbackRate: 0.6, volume: 0.55 } }
         ]
     },
 

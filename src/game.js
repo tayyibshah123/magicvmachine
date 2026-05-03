@@ -6665,6 +6665,68 @@ triggerPhaseGlitch() {
             return;
         }
 
+        if (name === 'CAGE GUARDIAN') {
+            // Containment seal cracks open, cell-bar arms shatter,
+            // cage chains snap and fall away. Three-stage cinematic:
+            //   1. Seal punches red light outward (3 staggered bursts)
+            //   2. Bars/chains explode in red shrapnel
+            //   3. White overflash as the wall breaks open
+            for (let i = 0; i < 3; i++) {
+                ParticleSys.createShockwave(boss.x, boss.y, '#ff3355', 40 + i * 14);
+                ParticleSys.createExplosion(boss.x, boss.y - 10, 28 + i * 6, '#ff5577');
+                AudioMgr.playSound('explosion', { playbackRate: 0.85 + i * 0.1, volume: 0.95 });
+                this.shake && this.shake(12 + i * 4);
+                await sleep(180);
+            }
+            // Cell-bar shrapnel — fan outward from both arms.
+            for (const side of [-1, 1]) {
+                for (let i = 0; i < 4; i++) {
+                    const ax = boss.x + side * (130 + i * 18);
+                    const ay = boss.y + 10 + i * 14;
+                    ParticleSys.createSparks(ax, ay, '#aa1a36', 8);
+                }
+            }
+            await sleep(120);
+            this._saveDissolveSnapshot(this.sector);
+            this.triggerScreenFlash && this.triggerScreenFlash('rgba(255, 240, 240, 0.85)', 360);
+            ParticleSys.createExplosion(boss.x, boss.y, 110, '#ffffff');
+            this.shake && this.shake(26);
+            AudioMgr.playSound('grid_fracture', { volume: 1.0 });
+            await sleep(420);
+            return;
+        }
+
+        if (name === 'THE ARCHIVIST') {
+            // Brass reels unspool, rune ring fragments outward, central
+            // sigil collapses into a brass shower. Audio is grid_fracture
+            // pitched low to read as "the archive is spilling".
+            for (let i = 0; i < 3; i++) {
+                ParticleSys.createShockwave(boss.x, boss.y, '#ffd76a', 50 + i * 16);
+                AudioMgr.playSound('grid_fracture', { playbackRate: 0.9 - i * 0.1, volume: 0.85 });
+                this.shake && this.shake(10 + i * 3);
+                await sleep(200);
+            }
+            // Brass tape-spool spray — rings of small particles fanning
+            // outward as if the archive's reels are uncoiling.
+            for (let r = 0; r < 16; r++) {
+                const a = (Math.PI * 2 / 16) * r;
+                const dist = 220;
+                ParticleSys.createTrail(
+                    boss.x + Math.cos(a) * dist,
+                    boss.y + Math.sin(a) * dist * 0.6,
+                    '#ffd76a', 0.7
+                );
+            }
+            await sleep(280);
+            this._saveDissolveSnapshot(this.sector);
+            this.triggerScreenFlash && this.triggerScreenFlash('rgba(255, 215, 106, 0.65)', 340);
+            ParticleSys.createExplosion(boss.x, boss.y, 90, '#ffd76a');
+            ParticleSys.createSparks(boss.x, boss.y, '#fff3c4', 30);
+            AudioMgr.playSound('explosion', { playbackRate: 0.85, volume: 1.0 });
+            await sleep(440);
+            return;
+        }
+
         if (name === 'TESSERACT PRIME') {
             // Reality folds to a point — staggered prismatic flashes
             // followed by a single white collapse.
@@ -11310,10 +11372,14 @@ updateHexBreach(dt) {
         }
         // Patch bossData so decideTurn's `actionsPerTurn` lookup
         // doesn't read undefined when the room marks the enemy as
-        // boss. The Cage Guardian fights with one scripted intent per
-        // turn, cycling on the script's queue.
+        // boss. The Cage Guardian gets 2 actions per turn (every
+        // other breakout enemy stays at 1) so the prologue's boss
+        // fight feels meaningfully heavier than the teaching combats
+        // before it. Earlier rooms cycle one scripted intent at a
+        // time so the player has space to read each beat.
+        const isGuardian = (room.enemy.name === 'CAGE GUARDIAN');
         this.enemy.bossData = Object.assign({}, this.enemy.bossData || {}, {
-            actionsPerTurn: 1,
+            actionsPerTurn: isGuardian ? 2 : 1,
             moves: ['attack'],
             shieldVal: 8
         });
@@ -17855,7 +17921,10 @@ drawEffects() {
         if (this.currentState === STATE.BREAKOUT) {
             // Allow the kill VFX to run, then defer the room advance so
             // the player sees the floating "VICTORY" stings before the
-            // next enemy spawns.
+            // next enemy spawns. The Cage Guardian (boss room) plays
+            // its full per-boss death dissolve before handing back —
+            // sells the breakout's climax. Other rooms get the lighter
+            // shockwave + explosion only.
             const enemyRef = this.enemy;
             if (enemyRef) {
                 ParticleSys.createShockwave(enemyRef.x, enemyRef.y, COLORS.GOLD, 48);
@@ -17864,6 +17933,12 @@ drawEffects() {
                 this.shake(enemyRef.isBoss ? 18 : 8);
             }
             this._winCombatRunning = false;
+            // Boss-only dissolve cinematic. Awaited so the storyboard
+            // outro doesn't pop on top of the in-progress shatter.
+            if (enemyRef && enemyRef.isBoss && enemyRef.name === 'CAGE GUARDIAN') {
+                try { await this._runBossDeathDissolve(enemyRef); } catch (e) { /* swallow */ }
+                AudioMgr.playSting && AudioMgr.playSting('boss_kill');
+            }
             try { Breakout.onCombatWin(); } catch (e) { console.warn('breakout advance failed', e); }
             return;
         }

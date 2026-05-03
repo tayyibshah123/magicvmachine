@@ -415,6 +415,28 @@ class Entity {
             this.checkPhase();
         }
 
+        // Low-HP threshold fanfare (Roadmap #5). When an enemy crosses
+        // below 25% HP for the first time this fight, fire a one-shot
+        // alarm sting + a brief screen pulse so the player feels the
+        // tide turn. One-shot per fight via _lowHpFired flag — cleared
+        // in startCombat / _buildBreakoutCombat.
+        if (Enemy && this instanceof Enemy && this.currentHp > 0 && !this._lowHpFired) {
+            const pct = this.currentHp / Math.max(1, this.maxHp);
+            if (pct < 0.25) {
+                this._lowHpFired = true;
+                if (typeof AudioMgr !== 'undefined' && AudioMgr.playSting) {
+                    try { AudioMgr.playSting('low_hp_warning'); } catch (_) {}
+                }
+                if (Game && Game.triggerScreenFlash) {
+                    Game.triggerScreenFlash('rgba(255, 51, 85, 0.18)', 220);
+                }
+                if (Game && Game.shake) Game.shake(6);
+                if (typeof ParticleSys !== 'undefined' && ParticleSys.createFloatingText) {
+                    ParticleSys.createFloatingText(this.x, this.y - 110, 'CRITICAL', '#ff3355');
+                }
+            }
+        }
+
         // Track the player's highest damage dealt so Mirror enemies can
         // reflect it on their next intent.
         if (Game && Game.player && source instanceof Player && actualDmg > 0) {
