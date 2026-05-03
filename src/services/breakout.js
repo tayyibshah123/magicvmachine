@@ -653,13 +653,64 @@ const ROOM_3_FALLBACK = {
 };
 
 // Per-class flavour line played on completion of the Cage Guardian.
+// Lines must avoid implying mid-run state (HP, shield, mana, modules,
+// etc.) carries forward — the run starts fresh in Sector 1.
 const CLASS_OUTRO = {
-    bloodstalker: 'The hunter remembers what the cage couldn\'t.',
-    arcanist:    'Glyphs older than the Warden whisper through your veins.',
-    sentinel:    'The shield you raised inside the cell stays raised outside.',
+    bloodstalker: 'The hunter has the cage\'s scent now. Go finish what it started.',
+    arcanist:    'The glyphs are older than the Warden. Sector 1 will feel them too.',
+    sentinel:    'The Panopticon watches. Let it watch a wall it cannot break.',
     annihilator: 'You did not break the cage. You denied it ever existed.',
-    tactician:   'Now you have data. Use it. The Panopticon hates patterns it didn\'t write.',
+    tactician:   'Now you have data. The Panopticon hates patterns it didn\'t write.',
     summoner:    'The seedling escaped its plot. The grove is older than steel.'
+};
+
+// Per-class teaching beat for the player's class ability widget. Played
+// in the Cage Guardian sequence so the player learns their class loop
+// before leaving the prologue. Each entry is one beat; the controller
+// inserts it at a fixed position in the boss sequence.
+const CLASS_GLYPH_BEAT = {
+    tactician: {
+        story: 'TACTICS — your widget tracks 3 pips. Spend dice to fill.',
+        action: 'When all 3 pips light, tap the widget to pick a bonus: REROLL, SHIELD, or DAMAGE.',
+        sub: 'TACTICIAN PROTOCOL · TEMPO READY',
+        spot: 'class_widget',
+        wait: 'tap'
+    },
+    annihilator: {
+        story: 'OVERHEAT — every die heats your reactor. Watch the meter.',
+        action: 'Tap the widget in the YELLOW zone for x1.4 next attack, RED zone for an AoE blast.',
+        sub: 'ANNIHILATOR PROTOCOL · CORE REACTIVE',
+        spot: 'class_widget',
+        wait: 'tap'
+    },
+    bloodstalker: {
+        story: 'BLOOD POOL — damage you take fills it. The cost is the price.',
+        action: 'Tap a tribute on the widget to spend HP for: REROLL, ATTACK + BLEED, or GRAND STRIKE.',
+        sub: 'BLOODSTALKER PROTOCOL · TRIBUTE READY',
+        spot: 'class_widget',
+        wait: 'tap'
+    },
+    sentinel: {
+        story: 'AEGIS PLATES — every shield you gain stacks one plate.',
+        action: 'At 3 plates, tap the widget to PRIME. Next enemy attack is fully nullified.',
+        sub: 'SENTINEL PROTOCOL · PLATING ACTIVE',
+        spot: 'class_widget',
+        wait: 'tap'
+    },
+    arcanist: {
+        story: 'GLYPH CYCLE — Fire, Ice, Lightning rotate on your widget.',
+        action: 'Play a die when its glyph is lit for a bonus effect. One per turn.',
+        sub: 'ARCANIST PROTOCOL · GLYPH ATTUNED',
+        spot: 'class_widget',
+        wait: 'tap'
+    },
+    summoner: {
+        story: 'SACRED GROVE — 4 plots below your dice. Each summon blooms a plot.',
+        action: 'Tap a bloomed plot for a free Spirit. Fill the canopy for APEX (x2 minions).',
+        sub: 'SUMMONER PROTOCOL · GROVE ATTUNED',
+        spot: 'class_widget',
+        wait: 'tap'
+    }
 };
 
 // ────────────────────────────────────────────────────────────────────
@@ -705,6 +756,20 @@ function roomFor(roomIdx, classId) {
                 wait: 'enemy_dies'
             }]
         };
+    }
+    // Cage Guardian — splice in the per-class GLYPH/WIDGET teaching beat
+    // before the free-combat outro. Player has already used their
+    // signature die in Room 4; the Cage Guardian fight is the right
+    // moment to teach their persistent class widget (Tactic Pips,
+    // Overheat reactor, Sacred Grove, etc.) since they'll need it
+    // for the rest of the run.
+    if (r.id === 'guardian') {
+        const glyphBeat = CLASS_GLYPH_BEAT[classId];
+        if (!glyphBeat) return r;
+        const seq = r.sequence.slice();
+        // Insert just before the final free-combat beat (last beat).
+        seq.splice(seq.length - 1, 0, glyphBeat);
+        return Object.assign({}, r, { sequence: seq });
     }
     return r;
 }
@@ -1139,6 +1204,10 @@ export const Breakout = {
             const el = document.getElementById('btn-end-turn');
             return el ? this._padRect(el.getBoundingClientRect(), 12) : null;
         }
+        if (target === 'class_widget') {
+            const el = document.getElementById('class-ability-widget');
+            return el ? this._padRect(el.getBoundingClientRect(), 14) : null;
+        }
         if (target && target.indexOf('die:') === 0) {
             // Find a die element in the tray matching the requested
             // slot. The dice are CSS-rotated (crescent arc) so the
@@ -1333,31 +1402,36 @@ export const Breakout = {
         game._breakoutForcedDice = null;
         game._breakoutScript = null;
         game._inBreakout = false;
-
-        // Closing warden line keyed to class.
-        const cid = game.player && game.player.classId;
-        const out = CLASS_OUTRO[cid] || 'You are out. The Panopticon will be watching.';
+        // Cancel any in-flight QTE so a stale qte.active doesn't keep
+        // the document-level QTE pointerdown handler intercepting taps
+        // on the closing screen / Sector 1 map.
+        if (game.qte) game.qte.active = false;
+        // Hide the in-combat narration pane immediately. The closing
+        // beat lives in a full-screen storyboard slate instead, so
+        // the pane lingering on top of the kill cinematic just
+        // crowds the moment.
         const pane = document.getElementById('tutorial-narration');
-        const story = document.getElementById('tutorial-narration-story');
-        const action = document.getElementById('tutorial-narration-action');
-        if (pane) pane.classList.remove('hidden');
-        if (story) story.textContent = out;
-        if (action) action.textContent = 'Tap to continue into Sector 1.';
-        if (pane) {
-            pane.style.cursor = 'pointer';
-            const advance = () => {
-                pane.removeEventListener('click', advance);
-                pane.classList.add('hidden');
-                pane.style.cursor = '';
-                game.sector = 1;
-                game.changeState(STATE.MAP);
-            };
-            pane.addEventListener('click', advance, { once: true });
-        } else {
-            // Pane missing — just transition.
+        if (pane) pane.classList.add('hidden');
+
+        // Closing storyboard slate. Replaces the previous "tap the
+        // narration pane" handoff which softlocked when the pane's
+        // pointer-events state was racy. A full-screen slate with its
+        // own dedicated click handler is foolproof and gives the
+        // outro line the cinematic moment it deserves before the
+        // sector map opens.
+        const cid = game.player && game.player.classId;
+        const out = CLASS_OUTRO[cid] || 'You are out. The Panopticon is awake. Sector 1 begins.';
+        this._showStoryboard({
+            tag: 'CONTAINMENT BREACH · ESCAPE',
+            title: 'YOU ARE OUT',
+            // textContent flattens \n to spaces, so pack the lore
+            // into a single readable paragraph.
+            body: out + ' The surveillance net has logged your name. Sector 1 begins now.',
+            glyph: 'crest'
+        }, () => {
             game.sector = 1;
             game.changeState(STATE.MAP);
-        }
+        });
     },
 
     _grantCellkey(game) {
