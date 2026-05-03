@@ -1,0 +1,483 @@
+/* ──────────────────────────────────────────────────────────────────
+ * UI VFX — non-combat ambient particle / beam / spark layer
+ *
+ * Mounted by `src/services/vfx.js` to every non-combat screen
+ * (menu, char-select, sanctuary, shop, intel, codex, map, meta,
+ * story, ending, gameover, victory, hex, pact, event, achievements,
+ * combat-win, reward). Combat screens (#screen-game, breakout) are
+ * intentionally excluded — combat has its own canvas-driven VFX.
+ *
+ * Architecture
+ * ────────────
+ *   <div class="vfx-host" data-preset="...">
+ *     <div class="vfx-aurora"></div>
+ *     <div class="vfx-grid"></div>
+ *     <div class="vfx-particles">
+ *       <span class="vfx-particle"></span>  × N
+ *     </div>
+ *     <div class="vfx-beams">
+ *       <span class="vfx-beam"></span>      × M
+ *     </div>
+ *     <div class="vfx-embers">
+ *       <span class="vfx-ember"></span>     × K
+ *     </div>
+ *     <div class="vfx-scanline"></div>
+ *     <div class="vfx-corners">
+ *       <span class="vfx-corner vfx-corner--tl"></span>
+ *       <span class="vfx-corner vfx-corner--tr"></span>
+ *       <span class="vfx-corner vfx-corner--bl"></span>
+ *       <span class="vfx-corner vfx-corner--br"></span>
+ *     </div>
+ *   </div>
+ *
+ * Every layer is transform/opacity-only on a dedicated compositor
+ * layer (will-change: transform). Pointer-events: none so the layer
+ * never intercepts taps. Z-index sits BEHIND the screen content but
+ * ABOVE the screen's own background.
+ *
+ * Presets (data-preset on the host)
+ * ─────────────────────────────────
+ *   purple — start menu / meta / intel  (mystic violet accents)
+ *   blue   — char-select / map / codex / story / event
+ *   gold   — shop / reward / victory / combat-win
+ *   green  — sanctuary (rest)
+ *   pink   — gameover / hex / pact (danger)
+ *
+ * ────────────────────────────────────────────────────────────────── */
+
+
+/* ──────────────────────────────────────────────────────────
+ * 1. HOST — full-viewport overlay layer
+ *
+ * Positioned fixed (covers the whole viewport regardless of
+ * the parent screen's scroll/transform). pointer-events: none
+ * so taps fall through. z-index just above the screen's own
+ * background gradient but below screen content.
+ * ────────────────────────────────────────────────────────── */
+.vfx-host {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    /* Sits ABOVE the screen's solid background (CSS background-color
+       on .screen) but BEHIND the screen content (which paints later
+       in document order). z-index 0 anchors the stacking — every
+       sibling further down the screen renders on top. */
+    z-index: 0;
+    /* Fade in when mounted; the JS adds .vfx-host--enter on the
+       next frame after insertion. */
+    opacity: 0;
+    transition: opacity 480ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    /* Per-preset accent. Defaults to purple — overridden by
+       data-preset on the host. */
+    --vfx-accent:        rgba(151, 71, 255, 1);
+    --vfx-accent-soft:   rgba(151, 71, 255, 0.55);
+    --vfx-accent-faint:  rgba(151, 71, 255, 0.18);
+    --vfx-accent-2:      rgba(0, 243, 255, 1);
+    --vfx-accent-2-soft: rgba(0, 243, 255, 0.55);
+    --vfx-bg-tint:       rgba(40, 0, 80, 0.12);
+}
+.vfx-host.vfx-host--enter { opacity: 1; }
+
+/* Per-preset accent overrides */
+.vfx-host[data-preset="purple"] {
+    --vfx-accent:        rgba(151, 71, 255, 1);
+    --vfx-accent-soft:   rgba(151, 71, 255, 0.55);
+    --vfx-accent-faint:  rgba(151, 71, 255, 0.18);
+    --vfx-accent-2:      rgba(0, 243, 255, 1);
+    --vfx-accent-2-soft: rgba(0, 243, 255, 0.55);
+    --vfx-bg-tint:       rgba(40, 0, 80, 0.10);
+}
+.vfx-host[data-preset="blue"] {
+    --vfx-accent:        rgba(0, 243, 255, 1);
+    --vfx-accent-soft:   rgba(0, 243, 255, 0.55);
+    --vfx-accent-faint:  rgba(0, 243, 255, 0.18);
+    --vfx-accent-2:      rgba(120, 200, 255, 1);
+    --vfx-accent-2-soft: rgba(120, 200, 255, 0.55);
+    --vfx-bg-tint:       rgba(0, 60, 120, 0.10);
+}
+.vfx-host[data-preset="gold"] {
+    --vfx-accent:        rgba(255, 215, 0, 1);
+    --vfx-accent-soft:   rgba(255, 215, 0, 0.55);
+    --vfx-accent-faint:  rgba(255, 215, 0, 0.18);
+    --vfx-accent-2:      rgba(255, 165, 70, 1);
+    --vfx-accent-2-soft: rgba(255, 165, 70, 0.55);
+    --vfx-bg-tint:       rgba(80, 50, 0, 0.10);
+}
+.vfx-host[data-preset="green"] {
+    --vfx-accent:        rgba(0, 255, 153, 1);
+    --vfx-accent-soft:   rgba(0, 255, 153, 0.55);
+    --vfx-accent-faint:  rgba(0, 255, 153, 0.18);
+    --vfx-accent-2:      rgba(120, 255, 200, 1);
+    --vfx-accent-2-soft: rgba(120, 255, 200, 0.55);
+    --vfx-bg-tint:       rgba(0, 60, 30, 0.10);
+}
+.vfx-host[data-preset="pink"] {
+    --vfx-accent:        rgba(255, 0, 100, 1);
+    --vfx-accent-soft:   rgba(255, 0, 100, 0.55);
+    --vfx-accent-faint:  rgba(255, 0, 100, 0.18);
+    --vfx-accent-2:      rgba(255, 80, 140, 1);
+    --vfx-accent-2-soft: rgba(255, 80, 140, 0.55);
+    --vfx-bg-tint:       rgba(80, 0, 30, 0.10);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 2. AURORA — slow drifting radial wash
+ *
+ * Two stacked radial gradients counter-rotated. Sets the
+ * ambient mood without dominating the screen content.
+ * ────────────────────────────────────────────────────────── */
+.vfx-aurora {
+    position: absolute;
+    inset: -10%;
+    background:
+        radial-gradient(ellipse 60% 40% at 30% 30%,
+            var(--vfx-accent-faint) 0%,
+            transparent 55%),
+        radial-gradient(ellipse 50% 35% at 70% 70%,
+            var(--vfx-accent-2-soft) 0%,
+            transparent 55%),
+        radial-gradient(ellipse 80% 60% at 50% 50%,
+            var(--vfx-bg-tint) 0%,
+            transparent 70%);
+    background-size: 100% 100%, 100% 100%, 100% 100%;
+    background-position: 0% 0%, 100% 100%, 50% 50%;
+    mix-blend-mode: screen;
+    opacity: 0.9;
+    will-change: transform, background-position;
+    animation: vfx-aurora-drift 24s ease-in-out infinite alternate;
+}
+@keyframes vfx-aurora-drift {
+    0%   { background-position: 0% 0%, 100% 100%, 50% 50%; transform: scale(1) rotate(0deg); }
+    50%  { background-position: 30% 20%, 70% 80%, 60% 40%; transform: scale(1.04) rotate(0.5deg); }
+    100% { background-position: 60% 40%, 40% 60%, 50% 60%; transform: scale(1.02) rotate(-0.4deg); }
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 3. PERSPECTIVE GRID FLOOR
+ *
+ * A faint grid that recedes toward the horizon. Drives the
+ * "cyber arena" feel without dominating. Animates in via
+ * background-position so the grid scrolls slowly toward camera.
+ * ────────────────────────────────────────────────────────── */
+.vfx-grid {
+    position: absolute;
+    left: -10%;
+    right: -10%;
+    bottom: -20%;
+    height: 70%;
+    background:
+        linear-gradient(180deg,
+            transparent 0%,
+            transparent 30%,
+            var(--vfx-accent-faint) 100%),
+        repeating-linear-gradient(
+            90deg,
+            var(--vfx-accent-soft) 0px,
+            var(--vfx-accent-soft) 1px,
+            transparent 1px, transparent 64px),
+        repeating-linear-gradient(
+            0deg,
+            var(--vfx-accent-soft) 0px,
+            var(--vfx-accent-soft) 1px,
+            transparent 1px, transparent 48px);
+    transform: perspective(420px) rotateX(64deg);
+    transform-origin: 50% 100%;
+    opacity: 0.32;
+    mask-image: linear-gradient(180deg, transparent 0%, black 30%, black 70%, transparent 100%);
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, black 30%, black 70%, transparent 100%);
+    will-change: background-position;
+    animation: vfx-grid-scroll 6s linear infinite;
+}
+@keyframes vfx-grid-scroll {
+    0%   { background-position: 0 0, 0 0, 0 0; }
+    100% { background-position: 0 0, 0 0, 0 48px; }
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 4. PARTICLES — drifting motes
+ *
+ * 28 motes per mount. Each gets randomized x/y/delay/size via
+ * inline CSS vars set by the JS. They drift up + slightly
+ * sideways, fade in/out, repeat.
+ * ────────────────────────────────────────────────────────── */
+.vfx-particles {
+    position: absolute;
+    inset: 0;
+}
+.vfx-particle {
+    position: absolute;
+    left: var(--vfx-x, 50%);
+    top: 100%;
+    width: var(--vfx-size, 4px);
+    height: var(--vfx-size, 4px);
+    border-radius: 50%;
+    background: var(--vfx-tone, var(--vfx-accent));
+    box-shadow:
+        0 0 6px var(--vfx-tone, var(--vfx-accent)),
+        0 0 18px var(--vfx-tone, var(--vfx-accent-soft));
+    opacity: 0;
+    will-change: transform, opacity;
+    animation: vfx-particle-rise var(--vfx-dur, 14s) linear var(--vfx-delay, 0s) infinite;
+}
+@keyframes vfx-particle-rise {
+    0%   { transform: translate3d(0, 0, 0)    scale(0.6); opacity: 0; }
+    8%   { opacity: var(--vfx-alpha, 0.8); }
+    50%  { transform: translate3d(var(--vfx-drift, 30px), -55vh, 0) scale(1); }
+    92%  { opacity: var(--vfx-alpha, 0.8); }
+    100% { transform: translate3d(calc(var(--vfx-drift, 30px) * 1.6), -110vh, 0) scale(0.4); opacity: 0; }
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 5. BEAMS — diagonal sweeping light streaks
+ *
+ * Wide, low-alpha vertical bands skewed and translated across
+ * the screen. Reads as scanning searchlights catching ambient
+ * dust.
+ * ────────────────────────────────────────────────────────── */
+.vfx-beams {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    mix-blend-mode: screen;
+}
+.vfx-beam {
+    position: absolute;
+    top: -20%;
+    left: var(--vfx-bx, 40%);
+    width: var(--vfx-bw, 180px);
+    height: 140%;
+    background: linear-gradient(180deg,
+        transparent 0%,
+        var(--vfx-accent-soft) 30%,
+        var(--vfx-accent) 50%,
+        var(--vfx-accent-soft) 70%,
+        transparent 100%);
+    filter: blur(28px);
+    transform: skewX(-18deg) translateX(-100vw);
+    opacity: 0;
+    will-change: transform, opacity;
+    animation: vfx-beam-sweep var(--vfx-bdur, 9s) cubic-bezier(0.5, 0, 0.5, 1) var(--vfx-bdelay, 0s) infinite;
+}
+@keyframes vfx-beam-sweep {
+    0%   { transform: skewX(-18deg) translateX(-60vw); opacity: 0; }
+    20%  { opacity: 0.45; }
+    50%  { transform: skewX(-18deg) translateX(0);     opacity: 0.55; }
+    80%  { opacity: 0.40; }
+    100% { transform: skewX(-18deg) translateX(60vw);  opacity: 0; }
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 6. EMBERS — warm rising sparks
+ *
+ * A second particle field tuned hotter (gold/orange/white) and
+ * smaller. Stacks with the cool-toned vfx-particles for layered
+ * depth. Mostly aesthetic — they read as embers floating up from
+ * just below the bottom edge.
+ * ────────────────────────────────────────────────────────── */
+.vfx-embers {
+    position: absolute;
+    inset: 0;
+}
+.vfx-ember {
+    position: absolute;
+    left: var(--vfx-ex, 50%);
+    bottom: -16px;
+    width: 2px;
+    height: 2px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow:
+        0 0 4px rgba(255, 255, 255, 0.85),
+        0 0 12px var(--vfx-accent-soft),
+        0 0 22px var(--vfx-accent-faint);
+    opacity: 0;
+    will-change: transform, opacity;
+    animation: vfx-ember-rise var(--vfx-edur, 11s) linear var(--vfx-edelay, 0s) infinite;
+}
+@keyframes vfx-ember-rise {
+    0%   { transform: translate3d(0, 0, 0); opacity: 0; }
+    10%  { opacity: 0.95; }
+    40%  { transform: translate3d(calc(var(--vfx-edrift, 20px) * 0.6), -45vh, 0); opacity: 0.85; }
+    80%  { transform: translate3d(var(--vfx-edrift, 20px), -85vh, 0); opacity: 0.45; }
+    100% { transform: translate3d(calc(var(--vfx-edrift, 20px) * 1.2), -110vh, 0); opacity: 0; }
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 7. SCANLINE — slow horizontal sweep
+ *
+ * A faint horizontal bar that scans top-to-bottom. Adds a
+ * "we are inside the system" cyber feel.
+ * ────────────────────────────────────────────────────────── */
+.vfx-scanline {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 64px;
+    background: linear-gradient(180deg,
+        transparent 0%,
+        var(--vfx-accent-faint) 40%,
+        var(--vfx-accent-soft) 50%,
+        var(--vfx-accent-faint) 60%,
+        transparent 100%);
+    opacity: 0.45;
+    mix-blend-mode: screen;
+    pointer-events: none;
+    will-change: transform;
+    animation: vfx-scanline-sweep 9s ease-in-out infinite;
+}
+@keyframes vfx-scanline-sweep {
+    0%   { transform: translateY(-10vh); opacity: 0; }
+    10%  { opacity: 0.45; }
+    90%  { opacity: 0.45; }
+    100% { transform: translateY(110vh);  opacity: 0; }
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 8. CORNERS — angular tech brackets at all four corners
+ *
+ * Pulsing accent brackets that frame the viewport. Subtle but
+ * gives every screen a "this is the system" border.
+ * ────────────────────────────────────────────────────────── */
+.vfx-corners { position: absolute; inset: 0; }
+.vfx-corner {
+    position: absolute;
+    width: 56px;
+    height: 56px;
+    pointer-events: none;
+    opacity: 0.55;
+    will-change: opacity, transform;
+    animation: vfx-corner-pulse 3.6s ease-in-out infinite;
+}
+.vfx-corner::before,
+.vfx-corner::after {
+    content: '';
+    position: absolute;
+    background: var(--vfx-accent);
+    box-shadow: 0 0 6px var(--vfx-accent-soft), 0 0 14px var(--vfx-accent-faint);
+}
+.vfx-corner::before { width: 100%; height: 2px; }
+.vfx-corner::after  { width: 2px;  height: 100%; }
+
+.vfx-corner--tl { top: 12px;    left: 12px;    }
+.vfx-corner--tl::before { top: 0;    left: 0; }
+.vfx-corner--tl::after  { top: 0;    left: 0; }
+
+.vfx-corner--tr { top: 12px;    right: 12px;   }
+.vfx-corner--tr::before { top: 0;    right: 0; }
+.vfx-corner--tr::after  { top: 0;    right: 0; }
+
+.vfx-corner--bl { bottom: 12px; left: 12px;    }
+.vfx-corner--bl::before { bottom: 0; left: 0;  }
+.vfx-corner--bl::after  { bottom: 0; left: 0;  }
+
+.vfx-corner--br { bottom: 12px; right: 12px;   }
+.vfx-corner--br::before { bottom: 0; right: 0; }
+.vfx-corner--br::after  { bottom: 0; right: 0; }
+
+@keyframes vfx-corner-pulse {
+    0%, 100% { opacity: 0.45; transform: scale(1); }
+    50%      { opacity: 0.85; transform: scale(1.06); }
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 9. DIGITAL RAIN — vertical hex glyphs falling at the edges
+ *
+ * Cosmetic edge column of falling characters. Hidden on small
+ * viewports so it doesn't fight UI.
+ * ────────────────────────────────────────────────────────── */
+.vfx-rain {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+}
+.vfx-rain span {
+    position: absolute;
+    top: -10%;
+    left: var(--vfx-rx, 4%);
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    color: var(--vfx-accent-soft);
+    text-shadow: 0 0 6px var(--vfx-accent), 0 0 14px var(--vfx-accent-faint);
+    line-height: 1.4;
+    letter-spacing: 0.06em;
+    white-space: pre;
+    opacity: 0;
+    will-change: transform, opacity;
+    animation: vfx-rain-fall var(--vfx-rdur, 14s) linear var(--vfx-rdelay, 0s) infinite;
+}
+@keyframes vfx-rain-fall {
+    0%   { transform: translateY(0);    opacity: 0; }
+    10%  { opacity: 0.75; }
+    90%  { opacity: 0.65; }
+    100% { transform: translateY(110vh); opacity: 0; }
+}
+@media (max-width: 540px) {
+    .vfx-rain { display: none; }
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 10. RUNE GLYPHS — drifting symbol field
+ *
+ * Sparse, large, low-alpha glyphs that drift across the screen.
+ * Adds a "world has its own runes" mystic layer for the menu.
+ * ────────────────────────────────────────────────────────── */
+.vfx-runes {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    mix-blend-mode: screen;
+}
+.vfx-runes span {
+    position: absolute;
+    left: var(--vfx-gx, 50%);
+    top: var(--vfx-gy, 50%);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 64px;
+    font-weight: 900;
+    color: var(--vfx-accent-faint);
+    text-shadow:
+        0 0 12px var(--vfx-accent-soft),
+        0 0 32px var(--vfx-accent-faint);
+    transform: translate(-50%, -50%) rotate(var(--vfx-gr, 0deg));
+    will-change: opacity, transform;
+    opacity: 0;
+    animation: vfx-rune-breath var(--vfx-gdur, 18s) ease-in-out var(--vfx-gdelay, 0s) infinite;
+}
+@keyframes vfx-rune-breath {
+    0%, 100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--vfx-gr, 0deg)) scale(0.85); }
+    50%      { opacity: 0.55; transform: translate(-50%, -50%) rotate(calc(var(--vfx-gr, 0deg) + 8deg)) scale(1); }
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 11. PERFORMANCE GATES
+ *
+ * Strip the heaviest layers on perf-low. (Reduced motion is
+ * combat-scoped only; never affects vfx.)
+ * ────────────────────────────────────────────────────────── */
+body.perf-low .vfx-aurora,
+body.perf-low .vfx-grid,
+body.perf-low .vfx-beams,
+body.perf-low .vfx-rain,
+body.perf-low .vfx-runes { display: none; }
+body.perf-low .vfx-particles .vfx-particle:nth-child(n+12) { display: none; }
+body.perf-low .vfx-embers .vfx-ember:nth-child(n+8)        { display: none; }
+
+body.perf-mid .vfx-rain { display: none; }
+body.perf-mid .vfx-particles .vfx-particle:nth-child(n+18) { display: none; }
+
+
+/* (Combat exemption: handled in JS — Game.changeState explicitly
+   calls Vfx.setPresetForScreen for STATE.COMBAT / TUTORIAL_COMBAT /
+   BREAKOUT, which sets display: none on the host.) */

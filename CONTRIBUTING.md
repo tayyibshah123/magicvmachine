@@ -8,33 +8,47 @@ session re-discover them.
 
 ## Reduced motion (accessibility)
 
-The game respects both the OS-level `prefers-reduced-motion` media query AND an
-in-game settings toggle (`body.reduced-motion`). Either being on triggers a
-blanket CSS rule that collapses every CSS *animation* to ~0ms / single iteration.
-CSS *transitions* (state-change motion like screen swaps, modal fades, hover
-lift, button press, turn banner slide) are intentionally NOT touched — the W3C
-guidance is that transitions don't cause vestibular issues and removing them
-makes the UI feel broken rather than respectful.
+Reduced motion is **combat-scoped only**. Outside combat (menus, intro, story,
+sanctuary, glossary, reward, end-of-run, etc.) every screen always plays at full
+motion regardless of OS preference or settings toggle.
+
+Inside combat (`STATE.COMBAT`, `STATE.TUTORIAL_COMBAT`, `STATE.COMBAT_WIN`,
+`STATE.BREAKOUT`), the body gains the `reduced-motion` class **only** when the
+player has Settings → Display → Accessibility → "Reduced motion in combat"
+turned on. This is wired in `Game._syncReducedMotion()`.
+
+When the class is set, a blanket CSS rule collapses every animation to ~0ms /
+single iteration. CSS *transitions* (state-change motion like screen swaps,
+modal fades, hover lift, button press, turn banner slide) are intentionally
+NOT touched — the W3C guidance is that transitions don't cause vestibular
+issues and removing them makes the UI feel broken rather than respectful.
 
 ### How to write a new animation
 
-By default, your animation **already works** under reduced motion: the blanket
-rule shortcuts to its end state, which is what most ambient pulses, entry
+If your animation runs OUTSIDE combat, it always plays. Nothing to do.
+
+If your animation runs INSIDE combat, it will collapse to its end state when
+the player has the toggle on. That's what most ambient combat pulses, entry
 fades, and infinite spins should do.
 
 You only need to do something extra if:
 
-- Your animation MUST keep its smooth tween for correctness (rare). Add the
-  `.rm-keep` class to the element. The opt-out is intentionally one-off — most
-  animations should respect the user's preference.
-- Your animation is a vestibular trigger (slam-zoom, screen flash, big shake).
-  Add the `.rm-vestibular` class so it's removed entirely instead of just
-  finishing instantly.
+- Your combat animation MUST keep its smooth tween for correctness (rare).
+  Add the `.rm-keep` class to the element.
+- Your combat animation is a vestibular trigger (slam-zoom, screen flash,
+  big shake). Add the `.rm-vestibular` class so it's removed entirely
+  instead of just finishing instantly.
 
 ### How to write a new JS-driven motion path
 
-Check `Game._isReducedMotion()` first. Examples in the codebase: `triggerSlowMo`,
-`triggerBossZoom`, `hitStop`, `triggerScreenFlash`, `shake`, `_qteChromaticPulse`.
+If your motion fires INSIDE combat, check `Game._isReducedMotion()` first —
+that returns `true` only when the player is in combat AND has the toggle on.
+Examples in the codebase: `triggerSlowMo`, `triggerBossZoom`, `hitStop`,
+`triggerScreenFlash`, `shake`, `_qteChromaticPulse`.
+
+If your motion fires OUTSIDE combat (menu animations, story transitions,
+sanctuary VFX), do NOT gate on `_isReducedMotion()` — non-combat screens
+always run at full motion.
 
 ```js
 triggerMyMotion() {

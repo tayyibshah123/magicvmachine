@@ -29,6 +29,7 @@ import { Perf } from './services/perf.js';
 import { Diag } from './services/diag.js';
 import { Breakout } from './services/breakout.js';
 import { UI } from './services/ui.js';
+import { Vfx } from './services/vfx.js';
 import { getMatchupHint } from './data/matchup-hints.js';
 
 registerEntityClasses(Player, Minion, Enemy);
@@ -201,6 +202,13 @@ const Game = {
 
         // --- Performance tier detection (must run before renderScale) ---
         Perf.detect();
+
+        // --- Ambient VFX layer (non-combat screens only) ---
+        // Initialise the host once at boot. setPresetForScreen() in
+        // changeState() retints / hides the host as the player moves
+        // between screens. perf-low / perf-mid gates in vfx.css trim
+        // heavier layers automatically.
+        try { Vfx.init(); } catch (_) {}
         // Expose Perf to DevTools so the per-section profiler can be flipped
         // on without rebuilding. From the console:
         //   __perf.startTrace()                       // 25ms slow threshold
@@ -2137,23 +2145,23 @@ startDrag(e, die, el) {
 
     // Single source of truth for reduced-motion checks across all
     // JS-driven motion paths (shake, screen flash, chromatic pulse,
-    // QTE label scaling, etc.). `body.reduced-motion` is the effective
-    // class CSS targets. It is composed from two inputs by
-    // `_syncReducedMotion()`:
-    //   1) user toggle in DISPLAY → Accessibility → Reduced motion
-    //   2) automatic combat scope (mobile perf) — combat screens are
-    //      heavy enough that animations cause sustained slowdown on
-    //      low-end Android, so reduced motion is forced ON in combat
-    //      regardless of the user toggle. Menus and other screens get
-    //      full motion unless the user explicitly opted in.
+    // QTE label scaling, etc.). Reduced motion is **combat-scoped
+    // only** — non-combat screens (menus, sanctuary, glossary, intro,
+    // story, reward, end-of-run) always run at full motion regardless
+    // of the user toggle or OS preference. The toggle in DISPLAY →
+    // Accessibility → Reduced motion only takes effect during
+    // COMBAT / TUTORIAL_COMBAT / COMBAT_WIN / BREAKOUT.
     _isReducedMotion() {
         return document.body.classList.contains('reduced-motion');
     },
 
-    // Recompute the effective reduced-motion class. Call after either
-    // input changes (settings toggle, screen transition, loadSettings).
+    // Recompute the effective reduced-motion class. Combat-scoped:
+    // the class is set only when we are in a combat screen AND the
+    // user has explicitly opted in via the settings toggle. Outside
+    // combat the class is never set, so menus / story / sanctuary /
+    // glossary always render full motion.
     _syncReducedMotion() {
-        const eff = !!this._userReducedMotion || !!this._inCombatScreen;
+        const eff = !!this._userReducedMotion && !!this._inCombatScreen;
         document.body.classList.toggle('reduced-motion', eff);
     },
 
@@ -3320,10 +3328,26 @@ startQTE(type, x, y, callback, opts) {
             this._inCombatScreen = isCombatScreen;
             this._syncReducedMotion();
         }
+        // STATE.COMBAT / TUTORIAL_COMBAT / BREAKOUT don't call activate()
+        // (they just unhide the HUD over the canvas), so the Vfx host
+        // won't be retinted by the activate() hook. Explicitly hide it
+        // for those states. STATE.COMBAT_WIN does call activate(), so
+        // we let activate() handle it (gold preset stays visible during
+        // the celebratory overlay). The next non-combat screen's
+        // activate() will unhide for normal screens.
+        if (newState === STATE.COMBAT ||
+            newState === STATE.TUTORIAL_COMBAT ||
+            newState === STATE.BREAKOUT) {
+            try { Vfx.setPresetForScreen('screen-game'); } catch (_) {}
+        }
         const activate = (id) => {
             const el = document.getElementById(id);
             if(!el) return;
             el.classList.remove('hidden');
+            // Retint or hide the ambient VFX layer for this screen.
+            // Combat screens map to null in Vfx.PRESET_BY_SCREEN and the
+            // host is hidden; non-combat screens get a coloured preset.
+            try { Vfx.setPresetForScreen(id); } catch (_) {}
             // Exclude elements that run their own internal animation sequences (storyboard, ending).
             const STAGGER_EXCLUDE = new Set(['tutorial-overlay', 'tutorial-spotlight', 'story-content', 'ending-content']);
             // Hidden buttons (like RESUME RUN when no save) shouldn't claim a stagger slot

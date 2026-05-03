@@ -227,8 +227,7 @@
 @media (orientation: landscape) and (pointer: coarse) and (min-aspect-ratio: 16/10) and (max-width: 900px) {
     #landscape-hint { display: flex; }
 }
-/* Reduced motion: keep the icon static instead of swinging. */
-body.reduced-motion .landscape-hint-icon { animation: none; }
+/* Landscape hint always animates — non-combat. */
 
 /* Keyboard accessibility — always-visible focus ring */
 :focus { outline: none; } /* clear default */
@@ -238,35 +237,23 @@ body.reduced-motion .landscape-hint-icon { animation: none; }
     border-radius: 4px;
 }
 
-/* Reduced motion — honours user setting AND OS preference.
-   Three layers, each scoped to a SPECIFIC kind of motion:
+/* Reduced motion is **combat-scoped only**. Outside combat (menus,
+   intro, story, sanctuary, glossary, reward, end-of-run) every screen
+   always plays at full motion regardless of OS preference. The
+   body.reduced-motion class is set by JS in `_syncReducedMotion()`
+   only when (a) we are in COMBAT / TUTORIAL_COMBAT / COMBAT_WIN /
+   BREAKOUT AND (b) the player has the Settings → Display →
+   Accessibility → "Reduced motion in combat" toggle on.
+
+   When the class IS set during combat, the rules below collapse:
      1. CSS animations (continuous decoration: pulses, spins, sweeps,
-        flickers) → collapse to ~0ms / single iteration. Most of the
-        game's @keyframes are this category; under reduced-motion they
-        effectively freeze.
-     2. Vestibular triggers (screen flashes, slam-zooms, big shakes) →
-        removed entirely so they don't even ghost a single frame.
-     3. CSS transitions — KEPT. These are how the UI feels alive in
-        response to clicks and state changes (screen swap, turn banner,
-        modal fade, hover lift, button press, dice deal). The W3C
-        guidance is explicit: transitions don't cause vestibular issues,
-        they make UI legible. Killing transition-duration here was the
-        wrong call — it took the smooth menu / banner / swap motion
-        with it. Restored.
-
-   Anything that legitimately needs its animation kept under reduced
-   motion can opt out via the `.rm-keep` class.
-
-   Why both `@media (prefers-reduced-motion: reduce)` AND
-   `body.reduced-motion`: the media query catches OS-level preference;
-   the body class is the in-game settings toggle. Either applies the
-   same suppression. */
-/* Universal reduced-motion kills. Gated on the body.reduced-motion
-   class (set by the in-game Settings toggle and auto-applied at boot
-   when the OS pref matches AND the player hasn't explicitly opted in
-   to motion). Switching this away from the raw @media query is what
-   lets a player on a reduced-motion-preferred OS turn animations BACK
-   ON via the in-game checkbox — toggling the class wins immediately. */
+        flickers) → ~0ms / single iteration.
+     2. Vestibular triggers (screen flashes, slam-zooms, big shakes)
+        → removed entirely.
+     3. CSS transitions — KEPT. Per W3C guidance, transitions don't
+        cause vestibular issues; they keep the UI legible.
+   Anything that legitimately needs its animation kept can opt out
+   via `.rm-keep`. */
 body.reduced-motion { --motion-scale: 0.001; }
 body.reduced-motion html { scroll-behavior: auto !important; }
 body.reduced-motion *:not(.rm-keep),
@@ -812,9 +799,9 @@ canvas {
     35%  { opacity: 0.18; }
     100% { opacity: 0; }
 }
-@media (prefers-reduced-motion: reduce) {
-    .screen.active::before { animation: none; opacity: 0; }
-}
+/* Reduced motion is combat-scoped — non-combat screens always play
+   the entry flash. The body.reduced-motion class is set by JS only
+   when in a combat screen AND the user has the toggle on. */
 /* Per-screen accent assignments — dropped in one place so screens stay
    self-contained and just read from a CSS var. The accent drives the
    entry flash overlay AND the new .section-h2 underline glow, so
@@ -1792,9 +1779,7 @@ h2 {
     60%  { opacity: 0.55; transform: translate(-50%, -50%) scale(1.35); }
     100% { opacity: 0;    transform: translate(-50%, -50%) scale(1.6); }
 }
-@media (prefers-reduced-motion: reduce) {
-    .die-use-burst { animation-duration: 180ms; }
-}
+body.reduced-motion .die-use-burst { animation-duration: 180ms; }
 
 /* Class-tinted outer halo — currentColor is set inline by JS (the die
    type's theme color). Layered with the base shadow above so the die
@@ -1886,9 +1871,7 @@ h2 {
 }
 /* Accessibility: players with reduced-motion preference get the static glow
    without the breathing so it stays visible but doesn't animate. */
-@media (prefers-reduced-motion: reduce) {
-    .die.die-sealed { animation: none; }
-}
+body.reduced-motion .die.die-sealed { animation: none; }
 .die.die-sealed::before {
     content: '';
     position: absolute;
@@ -2406,7 +2389,7 @@ body.reduced-motion .victory-tally * {
 @keyframes sw-update-spin {
     to { transform: rotate(360deg); }
 }
-body.reduced-motion .sw-update-icon { animation: none; }
+/* SW update banner always spins — non-combat UI. */
 
 /* =========================================
    PWA INSTALL — menu pill (visible only when installable) + iOS
@@ -3556,11 +3539,9 @@ body.dyslexic-font .tooltip {
         transform: scale(1.06);
     }
 }
-@media (prefers-reduced-motion: reduce) {
-    .control-bar #btn-end-turn.no-moves-pulse {
-        animation: none;
-        box-shadow: 0 0 22px 4px rgba(255, 215, 0, 0.5);
-    }
+body.reduced-motion .control-bar #btn-end-turn.no-moves-pulse {
+    animation: none;
+    box-shadow: 0 0 22px 4px rgba(255, 215, 0, 0.5);
 }
 
 /* Left-handed mirror: swap reroll (primary hand) and end-turn positions so
@@ -5458,9 +5439,7 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     55%  { background-position: 140% 0, 0 0, 0 0; }
     100% { background-position: 140% 0, 0 0, 0 0; }
 }
-@media (prefers-reduced-motion: reduce) {
-    .glass-panel--premium::before { animation: none; }
-}
+/* Glass-panel premium shimmer always animates outside combat. */
 
 /* Tutorial */
 .tutorial-container {
@@ -6954,11 +6933,7 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     60%  { opacity: 1; transform: perspective(900px) rotateY(10deg) translateY(0) scale(1.02); }
     100% { opacity: 1; transform: perspective(900px) rotateY(0deg) translateY(0) scale(1); }
 }
-@media (prefers-reduced-motion: reduce) {
-    .reward-card {
-        animation: fadeInUp 320ms var(--ease-out-smart) both;
-    }
-}
+/* Reward cards always run their full entry animation. */
 .reward-card:hover { border-color: var(--neon-green); box-shadow: 0 0 24px rgba(0, 255, 153, 0.28); transform: translateY(-3px) scale(1.01); }
 .reward-icon { font-size: 2.5rem; margin-bottom: 10px; }
 .reward-name { font-family: var(--font-cyber); color: var(--neon-green); font-size: var(--text-lg); margin-bottom: 5px; }
@@ -10425,23 +10400,8 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
     97%           { opacity: 0; }
 }
 
-/* Reduced motion — strip heavy animations */
-@media (prefers-reduced-motion: reduce) {
-    #intro-overlay .intro-nebula,
-    #intro-overlay .intro-starfield span,
-    #intro-overlay .intro-scanbeam,
-    #intro-overlay .intro-pulse,
-    #intro-overlay .intro-rings span,
-    #intro-overlay .intro-rays,
-    #intro-overlay .intro-circuit,
-    #intro-overlay .intro-streaks span,
-    #intro-overlay .intro-readout-line,
-    #intro-overlay .intro-corner,
-    #intro-overlay .intro-title [data-char]::before,
-    #intro-overlay .intro-title [data-char]::after {
-        animation: none !important;
-    }
-}
+/* Intro overlay always plays its full sequence — reduced motion is
+   combat-scoped only. */
 
 /* (Removed the old @container-scoped intro-v1 trim rules — the new
    intro-v2 layout uses cqw/cqh units and is size-independent, so no
@@ -10812,21 +10772,8 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
     100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
 }
 
-/* Reduced-motion: kill the cursor blink, the type-in, and the word
-   stagger. Lines and title appear instantly, fade in only via opacity
-   so the screen still settles cleanly. */
-body.reduced-motion .intro-v2 .introv2-boot-line,
-body.reduced-motion .intro-v2 .introv2-boot,
-body.reduced-motion .intro-v2 .introv2-word-1,
-body.reduced-motion .intro-v2 .introv2-word-2,
-body.reduced-motion .intro-v2 .introv2-vs {
-    animation: none;
-    opacity: 1;
-    width: auto;
-    border-right: none;
-    transform: none;
-    filter: none;
-}
+/* Intro v2 always plays its full type-in / cursor-blink / word stagger
+   sequence — reduced motion is combat-scoped only. */
 
 /* Corner tech brackets — absolute in the overlay, sized in cqmin so
    they stay visually proportional to the smaller container dimension. */
@@ -10867,26 +10814,8 @@ body.reduced-motion .intro-v2 .introv2-vs {
    pair gets fully overridden (revert/unset don't help here because
    they fall back to UA initial of 0s).
    Same overrides mirrored to the in-game body.reduced-motion toggle. */
-@media (prefers-reduced-motion: reduce) {
-    .intro-v2 .introv2-bg          { animation: introv2-wash 18s ease-in-out infinite alternate !important; }
-    .intro-v2 .introv2-gridfloor   { animation: introv2-grid-slide 3.6s linear infinite !important; }
-    .intro-v2 .introv2-pulse       { animation: introv2-pulse-breath 5.5s ease-in-out infinite !important; }
-    .intro-v2 .introv2-title       {
-        animation:
-            introv2-title-in 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) 0.45s forwards,
-            introv2-title-pulse 3.2s ease-in-out 1.9s infinite !important;
-    }
-    .intro-v2 .introv2-tap         { animation: introv2-tap-blink 1.6s ease-in-out 2.8s infinite !important; }
-}
-body.reduced-motion .intro-v2 .introv2-bg          { animation: introv2-wash 18s ease-in-out infinite alternate !important; }
-body.reduced-motion .intro-v2 .introv2-gridfloor   { animation: introv2-grid-slide 3.6s linear infinite !important; }
-body.reduced-motion .intro-v2 .introv2-pulse       { animation: introv2-pulse-breath 5.5s ease-in-out infinite !important; }
-body.reduced-motion .intro-v2 .introv2-title       {
-    animation:
-        introv2-title-in 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) 0.45s forwards,
-        introv2-title-pulse 3.2s ease-in-out 1.9s infinite !important;
-}
-body.reduced-motion .intro-v2 .introv2-tap         { animation: introv2-tap-blink 1.6s ease-in-out 2.8s infinite !important; }
+/* Intro v2 always plays its full animation suite. Reduced motion is
+   combat-scoped only and never affects the intro. */
 
 .combat-win-sub .highlight-file { color: var(--neon-pink); }
 
@@ -11183,13 +11112,7 @@ body.reduced-motion .intro-v2 .introv2-tap         { animation: introv2-tap-blin
     content: attr(data-name);
     padding-left: 2em;                              /* gap between cycles */
 }
-@media (prefers-reduced-motion: reduce) {
-    .char-card .char-name-inner--scroll {
-        animation: none;
-        transform: translateX(0);
-    }
-    .char-card .char-name-inner--scroll::after { content: none; }
-}
+/* Char-card name marquee always scrolls — non-combat. */
 
 /* ============================================================
    GAME ICONS — unified SVG icon system (replaces all emojis)
@@ -11496,28 +11419,8 @@ canvas + .game-icon { filter: none; }
         filter: none;
     }
 }
-body.reduced-motion #screen-start .btn,
-body.reduced-motion #screen-start #login-streak,
-body.reduced-motion #screen-start #btn-load-save {
-    animation: none !important;
-    opacity: 1 !important;
-    visibility: visible !important;
-    transform: none !important;
-    clip-path: inset(0) !important;
-    filter: none !important;
-}
-@media (prefers-reduced-motion: reduce) {
-    #screen-start .btn,
-    #screen-start #login-streak,
-    #screen-start #btn-load-save {
-        animation: btn-fade-in 300ms ease-out both !important;
-        opacity: 1;
-        visibility: visible;
-        transform: none !important;
-        clip-path: inset(0) !important;
-        filter: none !important;
-    }
-}
+/* Start menu buttons always run their full reveal animation — reduced
+   motion is combat-scoped and never affects the start screen. */
 @keyframes btn-fade-in {
     from { opacity: 0; }
     to   { opacity: 1; }
@@ -11739,28 +11642,8 @@ body.reduced-motion #screen-start #btn-load-save {
     50%      { transform: translateY(-50%) translateX(0%); }
 }
 
-body.reduced-motion #screen-start h1.title,
-body.reduced-motion #screen-start .glow-container::before,
-body.reduced-motion #screen-start .glow-container::after,
-body.reduced-motion #screen-start h1.title::before,
-body.reduced-motion #screen-start h1.title .vs,
-body.reduced-motion #screen-start .title-energy-bars::before,
-body.reduced-motion #screen-start .title-energy-bars::after {
-    animation: none !important;
-    transform: none !important;
-}
-@media (prefers-reduced-motion: reduce) {
-    #screen-start h1.title,
-    #screen-start .glow-container::before,
-    #screen-start .glow-container::after,
-    #screen-start h1.title::before,
-    #screen-start h1.title .vs,
-    #screen-start .title-energy-bars::before,
-    #screen-start .title-energy-bars::after {
-        animation: none !important;
-        transform: none !important;
-    }
-}
+/* Start screen title + glow chrome always animates — reduced motion is
+   combat-scoped only. */
 
 /* Main menu subtitle (OPERATOR TAZ / ASCENSION LEVEL N) — prefix with the
    intro's "// " terminal marker and match its spaced blue styling so it reads
@@ -12580,24 +12463,8 @@ body.reduced-motion #screen-start .title-energy-bars::after {
     z-index: 2;
 }
 
-/* Reduced motion — kill the animations */
-@media (prefers-reduced-motion: reduce) {
-    #screen-start::before, #screen-start::after,
-    #screen-start .glow-container::before,
-    #screen-start .version,
-    .btn::after,
-    #screen-map::before, .map-container::after, .map-container::before,
-    .map-svg-layer, .map-svg-layer::before,
-    .map-node-abs.current::before, .map-node-abs.current::after,
-    .map-node-abs.available::before,
-    #screen-map > h2.map-title::after,
-    .map-legend-top,
-    #screen-meta h2::after, #screen-intel h2::after, #screen-shop h2::after,
-    #screen-rest h2::after, #screen-event h2::after, #screen-char-select h2::after,
-    #screen-intel::before, #screen-shop::before, #screen-rest::before, #screen-event::before {
-        animation: none !important;
-    }
-}
+/* Map / shop / sanctuary / event / start menu chrome always animates —
+   reduced motion is combat-scoped only. */
 
 /* =========================================
    HINT OVERLAY (contextual first-time tooltips)
@@ -14768,19 +14635,8 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     opacity: 0.45;
 }
 
-/* Reduced-motion gating uses the body.reduced-motion class as the
-   single source of truth (set by the in-game Settings toggle and
-   auto-applied at boot if the OS pref matches AND the player has
-   not explicitly overridden it). The in-game toggle wins over the
-   OS pref, so a player on a laptop with system-wide reduced motion
-   can still get the full menu animation by unchecking the box. */
-body.reduced-motion .menu-cta-primary { animation: none; }
-body.reduced-motion .menu-cta::after,
-body.reduced-motion .menu-cta-alt::after { animation: none; opacity: 0; }
-body.reduced-motion .menu-scan { animation: none; opacity: 0; }
-body.reduced-motion .screen.active .menu-cta-alt,
-body.reduced-motion .screen.active .menu-cta-meta { animation: none; opacity: 1; transform: none; }
-body.reduced-motion .just-unlocked { animation: none; }
+/* Menu CTA / scan / unlock pulses always animate — reduced motion is
+   combat-scoped only. Low-perf still shaves these off. */
 body.perf-low .menu-cta-primary { animation: none; }
 body.perf-low .menu-scan { display: none; }
 body.perf-low .menu-cta::after,
@@ -14972,14 +14828,8 @@ body.perf-low .menu-cta-alt::after { animation: none; opacity: 0; }
     50%      { opacity: 1;    filter: drop-shadow(0 0 14px rgba(0,243,255,0.85)); }
 }
 
-/* Reduced-motion + low-tier strips for the new ambient layer. */
-body.reduced-motion .menu-lattice,
-body.reduced-motion .menu-radar,
-body.reduced-motion .menu-glyphs,
-body.reduced-motion .menu-hud-dot { animation: none; opacity: 0.25; }
-body.reduced-motion .menu-radar { display: none; }
-body.reduced-motion #screen-start .glow-container .title { animation: none; opacity: 1; }
-
+/* Low-tier strips for the ambient layer. (Reduced motion is combat-
+   scoped only — the menu always runs at full motion.) */
 body.perf-low .menu-lattice,
 body.perf-low .menu-radar,
 body.perf-low .menu-glyphs { display: none; }

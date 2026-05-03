@@ -945,4 +945,3 @@
 @keyframes ui-shimmer {
     100% { transform: translateX(100%); }
 }
-body.reduced-motion .ui-skeleton::after { animation: none; }

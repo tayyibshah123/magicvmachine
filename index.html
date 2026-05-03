@@ -74,6 +74,10 @@
          eyebrows, diagonal glint sheen. Loads last so its
          higher-specificity rules anchor the final visual. -->
     <link rel="stylesheet" href="src/styles/polish.css">
+    <!-- VFX layer — non-combat ambient particle / beam / spark /
+         aurora field. Mounted to body via src/services/vfx.js and
+         retinted per screen (purple, blue, gold, green, pink). -->
+    <link rel="stylesheet" href="src/styles/vfx.css">
 </head>
 <body>
 
@@ -1066,7 +1070,7 @@
                                 <span class="setting-value" data-for="sld-text-scale">100%</span>
                             </div>
                             <div class="setting-row">
-                                <label for="chk-reduced-motion">Reduced motion <span class="setting-hint">(combat is always reduced for perf — toggle on to apply on every screen)</span></label>
+                                <label for="chk-reduced-motion">Reduced motion in combat <span class="setting-hint">(combat-only — menus and other screens always run at full motion)</span></label>
                                 <input type="checkbox" id="chk-reduced-motion">
                             </div>
                             <div class="setting-row">

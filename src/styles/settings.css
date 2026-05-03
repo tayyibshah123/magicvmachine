@@ -961,16 +961,5 @@
 }
 
 
-/* ──────────────────────────────────────────────────────────
- * 16. REDUCED MOTION GUARDS
- * ────────────────────────────────────────────────────────── */
-body.reduced-motion #modal-settings .modal-content.settings-modal,
-body.reduced-motion #modal-settings .settings-pane,
-body.reduced-motion #modal-glossary .modal-content.modal-glossary {
-    animation: none;
-    transition: opacity var(--ui-duration-fast) linear;
-}
-body.reduced-motion #modal-settings .settings-tabs::after,
-body.reduced-motion #modal-glossary .glossary-tabs::after {
-    transition: transform 90ms linear, width 90ms linear;
-}
+/* (No reduced-motion guards: settings + glossary modals run at full
+   motion — reduced motion is combat-scoped only.) */

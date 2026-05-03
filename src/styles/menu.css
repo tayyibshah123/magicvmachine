@@ -159,19 +159,15 @@
     100% { transform: translate3d(-6px, -110vh, 0) scale(0.5); opacity: 0; }
 }
 
-/* Reduced motion / low perf: kill the gradient drifts + grid slide.
-   Static layers still render so the screen isn't flat black, but
-   nothing animates per frame. */
-body.reduced-motion .menu-v2 .mv2-bg-grad,
-body.perf-low      .menu-v2 .mv2-bg-grad,
-body.reduced-motion .menu-v2 .mv2-bg-grid,
-body.perf-low      .menu-v2 .mv2-bg-grid,
-body.reduced-motion .menu-v2 .mv2-bg-particles span,
-body.perf-low      .menu-v2 .mv2-bg-particles span {
+/* Low-perf: kill the gradient drifts + grid slide. Static layers still
+   render so the screen isn't flat black, but nothing animates per frame.
+   (Reduced motion is combat-scoped only and never applies to menus.) */
+body.perf-low .menu-v2 .mv2-bg-grad,
+body.perf-low .menu-v2 .mv2-bg-grid,
+body.perf-low .menu-v2 .mv2-bg-particles span {
     animation: none;
 }
-body.reduced-motion .menu-v2 .mv2-bg-particles span,
-body.perf-low      .menu-v2 .mv2-bg-particles span {
+body.perf-low .menu-v2 .mv2-bg-particles span {
     display: none;
 }
 
@@ -295,7 +291,6 @@ body.perf-low      .menu-v2 .mv2-bg-particles span {
     0%, 100% { opacity: 0.7; transform: scale(1); }
     50%      { opacity: 1;   transform: scale(1.08); }
 }
-body.reduced-motion .menu-v2 .mv2-portrait::after { animation: none; }
 /* Override the legacy .title rule — kill the chromatic glitch and
    the multi-stop linear-gradient that was making the wordmark feel
    chaotic. Use a soft cyan glow instead. */
@@ -345,7 +340,6 @@ body.reduced-motion .menu-v2 .mv2-portrait::after { animation: none; }
         filter: brightness(1.06);
     }
 }
-body.reduced-motion .menu-v2 .mv2-wordmark.title { animation: none; }
 
 .menu-v2 .mv2-tagline {
     font-family: var(--ui-font-display);
@@ -764,10 +758,4 @@ body.reduced-motion .menu-v2 .mv2-wordmark.title { animation: none; }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-body.reduced-motion .menu-v2.screen.active .mv2-header,
-body.reduced-motion .menu-v2.screen.active .mv2-hero,
-body.reduced-motion .menu-v2.screen.active .mv2-bento,
-body.reduced-motion .menu-v2.screen.active .mv2-footer,
-body.reduced-motion .menu-v2.screen.active .mv2-bento-row--tiles > * {
-    animation: none;
-}
+/* Menu enter animations always play — reduced motion is combat-scoped. */

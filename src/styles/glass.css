@@ -564,11 +564,5 @@
 }
 
 
-/* ──────────────────────────────────────────────────────────
- * 9. REDUCED MOTION
- * ────────────────────────────────────────────────────────── */
-body.reduced-motion .ui-shard {
-    transition: filter var(--ui-duration-fast) linear;
-}
-body.reduced-motion .ui-shard:hover  { transform: none; }
-body.reduced-motion .ui-shard:active { transform: none; }
+/* (No reduced-motion gating: shards live on the menu, which always
+   runs at full motion — reduced motion is combat-scoped only.) */

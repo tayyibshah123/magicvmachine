@@ -669,7 +669,6 @@ button.ui-hex:active,
     from { transform: rotate(0); }
     to   { transform: rotate(360deg); }
 }
-body.reduced-motion .ui-celebrate-rays { animation: none; opacity: 0.32; }
 
 
 /* ──────────────────────────────────────────────────────────
