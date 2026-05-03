@@ -294,6 +294,32 @@
             <!-- Character Select -->
             <div id="screen-char-select" class="screen hidden">
                 <h2 class="neon-text-blue">SELECT OPERATOR</h2>
+                <!-- Difficulty frame selector. Three lore-framed tiers
+                     so new players have a visible easy-mode option
+                     without the "EASY / NORMAL / HARD" stigma:
+                       INITIATE  = newcomer assist forced on
+                       OPERATOR  = standard run
+                       ASCENDANT = opens Ascension picker for harder runs
+                     Persisted to mvm_difficulty (initiate|operator|ascendant).
+                     The Ascension picker (rendered separately) appears
+                     when ASCENDANT is selected. -->
+                <div id="difficulty-frames" class="difficulty-frames" role="radiogroup" aria-label="Difficulty">
+                    <button class="diff-frame" data-tier="initiate" role="radio" aria-checked="false">
+                        <div class="diff-frame-tier">// TIER 1</div>
+                        <div class="diff-frame-name">INITIATE</div>
+                        <div class="diff-frame-desc">Assist on. Damage taken reduced. Recommended.</div>
+                    </button>
+                    <button class="diff-frame is-active" data-tier="operator" role="radio" aria-checked="true">
+                        <div class="diff-frame-tier">// TIER 2</div>
+                        <div class="diff-frame-name">OPERATOR</div>
+                        <div class="diff-frame-desc">Standard run. Calibrated baseline.</div>
+                    </button>
+                    <button class="diff-frame" data-tier="ascendant" role="radio" aria-checked="false">
+                        <div class="diff-frame-tier">// TIER 3</div>
+                        <div class="diff-frame-name">ASCENDANT</div>
+                        <div class="diff-frame-desc">Layered modifiers. Expert run.</div>
+                    </button>
+                </div>
                 <!-- Custom Run panel (Roadmap Part 29). Hidden until the
                      player unlocks Ascension 1+. JS toggles display. -->
                 <div id="custom-run-bar" class="custom-run-bar hidden">

@@ -6037,6 +6037,110 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 }
 
 /* ================================================================
+   DIFFICULTY FRAMES (Roadmap #4) — three lore-framed tiers shown
+   above the class grid on char-select. Lets newcomers opt into a
+   softer assist tier without the "EASY MODE" stigma. The active
+   frame is marked with .is-active; an Ascension picker appears
+   below when the ASCENDANT tier is chosen.
+   ================================================================ */
+.difficulty-frames {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    max-width: 580px;
+    margin: 4px auto 12px;
+    padding: 0 6px;
+}
+.diff-frame {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 10px 8px 11px;
+    background: linear-gradient(180deg, rgba(8, 14, 28, 0.7), rgba(2, 6, 18, 0.85));
+    border: 1px solid rgba(0, 243, 255, 0.28);
+    border-radius: 8px;
+    cursor: pointer;
+    color: #b9c8d8;
+    font-family: var(--font-cyber);
+    transition: border-color 160ms, background 160ms, transform 120ms, box-shadow 200ms;
+    text-align: center;
+}
+.diff-frame:hover {
+    border-color: rgba(0, 243, 255, 0.55);
+    background: linear-gradient(180deg, rgba(8, 16, 32, 0.85), rgba(2, 6, 18, 0.95));
+    transform: translateY(-1px);
+}
+.diff-frame.is-active {
+    border-color: var(--neon-blue);
+    background: linear-gradient(180deg, rgba(0, 32, 56, 0.95), rgba(2, 8, 22, 0.98));
+    box-shadow: 0 0 12px rgba(0, 243, 255, 0.32), inset 0 0 16px rgba(0, 243, 255, 0.08);
+    color: #fff;
+}
+.diff-frame-tier {
+    font-size: 0.62rem;
+    letter-spacing: var(--ls-cyber);
+    color: var(--neon-blue);
+    text-shadow: 0 0 5px rgba(0, 243, 255, 0.5);
+    opacity: 0.85;
+}
+.diff-frame-name {
+    font-family: var(--font-cyber);
+    font-weight: 900;
+    font-size: 0.95rem;
+    letter-spacing: 0.14em;
+    color: #fff;
+    text-shadow: 0 0 8px rgba(0, 243, 255, 0.45);
+    margin: 1px 0 3px;
+}
+.diff-frame-desc {
+    font-family: var(--font-main);
+    font-weight: 500;
+    font-size: 0.7rem;
+    line-height: 1.25;
+    color: #94a8bc;
+    letter-spacing: 0.01em;
+}
+.diff-frame.is-active .diff-frame-desc {
+    color: #c8dde8;
+}
+/* INITIATE-tier accent (warmer green to read as "safe") */
+.diff-frame[data-tier="initiate"].is-active {
+    border-color: rgba(102, 255, 153, 0.85);
+    background: linear-gradient(180deg, rgba(0, 40, 24, 0.95), rgba(2, 12, 8, 0.98));
+    box-shadow: 0 0 12px rgba(102, 255, 153, 0.32), inset 0 0 16px rgba(102, 255, 153, 0.08);
+}
+.diff-frame[data-tier="initiate"].is-active .diff-frame-tier,
+.diff-frame[data-tier="initiate"].is-active .diff-frame-name {
+    color: #c4ffd2;
+    text-shadow: 0 0 6px rgba(102, 255, 153, 0.6);
+}
+/* ASCENDANT-tier accent (red to read as "risk") */
+.diff-frame[data-tier="ascendant"].is-active {
+    border-color: rgba(255, 64, 96, 0.85);
+    background: linear-gradient(180deg, rgba(56, 0, 16, 0.95), rgba(18, 0, 6, 0.98));
+    box-shadow: 0 0 12px rgba(255, 64, 96, 0.32), inset 0 0 16px rgba(255, 64, 96, 0.08);
+}
+.diff-frame[data-tier="ascendant"].is-active .diff-frame-tier,
+.diff-frame[data-tier="ascendant"].is-active .diff-frame-name {
+    color: #ffc4cf;
+    text-shadow: 0 0 6px rgba(255, 64, 96, 0.6);
+}
+@media (max-width: 480px) {
+    .diff-frame {
+        padding: 8px 6px 9px;
+    }
+    .diff-frame-name {
+        font-size: 0.82rem;
+    }
+    .diff-frame-desc {
+        font-size: 0.62rem;
+    }
+}
+
+/* ================================================================
    CUSTOM RUN (Roadmap Part 29) — bar on char-select + modal
    ================================================================ */
 .custom-run-bar {

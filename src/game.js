@@ -1267,20 +1267,78 @@ const Game = {
         return this.metaUpgrades.includes(id);
     },
 
-    /* Newcomer assist gate. Returns true for the first three runs of
-     * a profile. Read by Entity.takeDamage to apply a 15% incoming-
-     * damage cushion. Counter is incremented in selectClass on every
-     * run start; tracked separately from `mvm_first_run_done` and
-     * `mvm_breakout_done` so completing the prologue doesn't end
-     * assist immediately. */
+    /* Newcomer assist gate. Returns true when:
+     *   - The player is on runs 1-3 of a fresh profile (auto window), OR
+     *   - The player has explicitly picked the INITIATE difficulty tier
+     *     (manual opt-in, persists until they switch to OPERATOR/ASCENDANT).
+     * Read by Entity.takeDamage to apply a 15% incoming-damage cushion. */
     _isNewcomer() {
         try {
+            const tier = localStorage.getItem('mvm_difficulty') || 'operator';
+            if (tier === 'initiate') return true;
+            // Auto-window only applies on the default OPERATOR tier; if
+            // the player explicitly went ASCENDANT, they want the full
+            // difficulty regardless of run count.
+            if (tier !== 'operator') return false;
             const n = parseInt(localStorage.getItem('mvm_runs_started') || '0', 10) || 0;
-            // Counter is incremented BEFORE this check on run start, so
-            // n=1 means we're on run 1, n=3 means run 3. Cushion lasts
-            // through run 3 inclusive.
             return n > 0 && n <= 3;
         } catch (_) { return false; }
+    },
+
+    /* Read the player's chosen difficulty tier. Defaults to 'operator'. */
+    _getDifficultyTier() {
+        try { return localStorage.getItem('mvm_difficulty') || 'operator'; }
+        catch (_) { return 'operator'; }
+    },
+
+    /* Wire click handlers on the difficulty frame buttons. Persists
+     * selection + re-renders the screen so the Ascension picker
+     * shows/hides correctly. */
+    _wireDifficultyFrames() {
+        const frames = document.querySelectorAll('#difficulty-frames .diff-frame');
+        if (!frames || frames.length === 0) return;
+        const cur = this._getDifficultyTier();
+        frames.forEach(btn => {
+            const tier = btn.dataset.tier;
+            const active = tier === cur;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-checked', active ? 'true' : 'false');
+            // Idempotent: replace the click handler each render so a
+            // re-entry to char-select doesn't accumulate listeners.
+            btn.onclick = () => {
+                AudioMgr.playSound('click');
+                try { localStorage.setItem('mvm_difficulty', tier); } catch (_) {}
+                // ASCENDANT auto-bumps Ascension to at least 1 if the
+                // player has unlocked it but the picker is sitting at
+                // 0 (otherwise selecting the tier visibly does nothing).
+                if (tier === 'ascendant') {
+                    try {
+                        const Asc = (typeof Ascension !== 'undefined') ? Ascension : null;
+                        if (Asc && Asc.getUnlocked() >= 1 && Asc.getSelected() === 0) {
+                            Asc.setSelected(1);
+                        }
+                    } catch (_) {}
+                } else {
+                    // INITIATE / OPERATOR pin Ascension to 0 — those
+                    // tiers are explicitly the non-modifier path.
+                    try {
+                        if (typeof Ascension !== 'undefined') Ascension.setSelected(0);
+                    } catch (_) {}
+                }
+                this._wireDifficultyFrames();
+                this._renderAscensionPicker();
+                this._applyDifficultyVisibility();
+            };
+        });
+    },
+
+    /* Show the Ascension picker only when the ASCENDANT tier is chosen.
+     * Initiate and Operator are explicitly the no-modifier paths so the
+     * picker just adds noise there. */
+    _applyDifficultyVisibility() {
+        const tier = this._getDifficultyTier();
+        const picker = document.getElementById('ascension-picker');
+        if (picker) picker.style.display = (tier === 'ascendant') ? '' : 'none';
     },
 
     // Friendly display name for a die type id. Looks up DICE_TYPES first
@@ -4291,11 +4349,21 @@ startQTE(type, x, y, callback, opts) {
         const grid = document.getElementById('char-grid');
         grid.innerHTML = '';
 
+        // Difficulty frames — sync the active button to localStorage,
+        // wire click handlers. Visible above the grid; INITIATE forces
+        // newcomer assist on, OPERATOR is standard, ASCENDANT exposes
+        // the existing Ascension picker.
+        this._wireDifficultyFrames();
         // Inject (or update) the Ascension picker above the grid.
+        // Picker is only meaningful on the ASCENDANT tier so we hide it
+        // for INITIATE / OPERATOR.
         this._renderAscensionPicker();
         // Custom Run bar (Roadmap Part 29) — only visible at Asc 1+.
         this._renderCustomRunBar();
         this._wireCustomRunEvents();
+        // After the picker + bar render, apply the diff-tier visibility
+        // rule (Ascension picker hidden on Initiate/Operator).
+        this._applyDifficultyVisibility();
 
         // Build a persistent mock Player for each class — reused by the animation loop
         // both for the grid-card canvases and the detail-overlay canvas.
