@@ -3244,6 +3244,13 @@ startQTE(type, x, y, callback, opts) {
                 if (metaScreen) metaScreen.dataset.restoration = metaProgress >= 0.7 ? 'restored' : metaProgress >= 0.35 ? 'healing' : 'corrupted';
                 this.showSkeleton('upgrade-list', 4);
                 setTimeout(() => this.renderMeta && this.renderMeta(), 280);
+                // First-visit explainer. One-shot — the dialog covers
+                // the screen with a focused breakdown of what
+                // Fragments and Sparks are, what nodes do, and that
+                // installs are permanent. Persisted via
+                // `mvm_sanctuary_seen` so a player who has already
+                // read it never sees it again.
+                this._maybeShowSanctuaryIntro && this._maybeShowSanctuaryIntro();
             }
                 break;
             case STATE.ACHIEVEMENTS:
@@ -3528,7 +3535,46 @@ startQTE(type, x, y, callback, opts) {
             this.renderTutorial();
         }
     },
-    
+
+    /* First-visit explainer for the Sanctuary screen. One-shot per
+     * profile (mvm_sanctuary_seen flag). Pulls the markup that lives
+     * in #sanctuary-intro, fades it in, dismisses on GOT IT or any
+     * tap on the dimmed backdrop. Idempotent — reentry while the
+     * overlay is already showing is a no-op. */
+    _maybeShowSanctuaryIntro() {
+        let seen = false;
+        try { seen = localStorage.getItem('mvm_sanctuary_seen') === '1'; } catch (_) {}
+        if (seen) return;
+        const overlay = document.getElementById('sanctuary-intro');
+        if (!overlay) return;
+        if (overlay.classList.contains('show')) return;
+        overlay.classList.remove('hidden');
+        overlay.setAttribute('aria-hidden', 'false');
+        // Force reflow so the .show transition fires.
+        // eslint-disable-next-line no-unused-expressions
+        overlay.offsetHeight;
+        overlay.classList.add('show');
+        const dismiss = () => {
+            overlay.classList.remove('show');
+            overlay.setAttribute('aria-hidden', 'true');
+            setTimeout(() => overlay.classList.add('hidden'), 240);
+            try { localStorage.setItem('mvm_sanctuary_seen', '1'); } catch (_) {}
+            // Detach handlers so a re-show would attach fresh.
+            overlay.removeEventListener('click', backdropDismiss);
+            const btn = document.getElementById('btn-sanctuary-intro-dismiss');
+            if (btn) btn.removeEventListener('click', dismiss);
+        };
+        const backdropDismiss = (e) => {
+            // Only dismiss when the backdrop itself was clicked, not
+            // a button on the card (the GOT IT button has its own
+            // listener).
+            if (e.target === overlay) dismiss();
+        };
+        overlay.addEventListener('click', backdropDismiss);
+        const btn = document.getElementById('btn-sanctuary-intro-dismiss');
+        if (btn) btn.addEventListener('click', dismiss);
+    },
+
     renderMeta() {
         // Refresh the Sparks counter every time the Sanctuary repaints —
         // covers both menu-pill and sanctuary-pill ids in one call.

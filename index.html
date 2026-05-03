@@ -832,6 +832,25 @@
                 <div class="sb-cta">TAP TO CONTINUE</div>
             </div>
 
+            <!-- Sanctuary first-visit explainer. One-shot per profile —
+                 controlled by mvm_sanctuary_seen flag in localStorage.
+                 Activated by Game.changeState(STATE.META) when the
+                 flag is missing; closes via the GOT IT button. -->
+            <div id="sanctuary-intro" class="info-overlay hidden" aria-hidden="true">
+                <div class="info-card">
+                    <div class="info-tag">// PERMANENT UPGRADE HUB</div>
+                    <h2 class="info-title">SANCTUARY</h2>
+                    <p class="info-lede">Everything you install here survives death. The Sanctuary is the one place the Panopticon cannot reach.</p>
+                    <div class="info-bullets">
+                        <div class="info-bullet"><span class="info-icon">◆</span><span><strong>Fragments</strong> drop from every combat. Spend them on permanent stat and dice upgrades.</span></div>
+                        <div class="info-bullet"><span class="info-icon" style="color:#ffd76a">✦</span><span><strong>Sparks</strong> drop from boss kills. Spend them on new options, modes, and quality-of-life unlocks.</span></div>
+                        <div class="info-bullet"><span class="info-icon">▣</span><span>Tap a node to install. <strong>Locked</strong> nodes are dim. <strong>Installed</strong> nodes glow green.</span></div>
+                        <div class="info-bullet"><span class="info-icon">↻</span><span>Every install carries into <strong>every future run</strong>, every class.</span></div>
+                    </div>
+                    <button id="btn-sanctuary-intro-dismiss" class="btn primary">GOT IT</button>
+                </div>
+            </div>
+
             <!-- Story / Outro Screen -->
             <div id="screen-story" class="screen hidden">
                 <div id="story-content" class="story-crawl">
