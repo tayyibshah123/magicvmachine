@@ -823,3 +823,552 @@
     color: #fff;
     filter: brightness(1.18);
 }
+
+
+/* ──────────────────────────────────────────────────────────
+ * 15. MENU VFX BOOST — additional animated layers
+ *
+ * The vfx-host (vfx.css) provides the ambient base. This block
+ * adds menu-only motion that doesn't make sense on every
+ * non-combat screen:
+ *
+ *   a. Wordmark holographic energy aura (huge radial halo
+ *      breathing behind MAGIC v MACHINE)
+ *   b. Wordmark glitch flicker (occasional 80ms chromatic split)
+ *   c. Diagonal cross-screen scan beams (one slow, one fast)
+ *   d. Vertical data stream sidebar (terminal text scrolling
+ *      down a column at the right edge)
+ *   e. Concentric ring that emanates from CTAs on hover
+ *   f. Pulsing telemetry dots in the four screen corners
+ * ────────────────────────────────────────────────────────── */
+
+/* (a) Wordmark holographic aura — sits behind the wordmark and
+   breathes via opacity + scale. Two stacked radials offset so
+   the highlight sweeps across the wordmark plane. */
+.menu-v2 .mv2-hero {
+    position: relative;
+}
+.menu-v2 .mv2-hero::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 140%;
+    height: 220%;
+    transform: translate(-50%, -50%);
+    background:
+        radial-gradient(ellipse 50% 30% at 50% 50%,
+            rgba(74, 216, 255, 0.28) 0%,
+            rgba(74, 216, 255, 0.10) 35%,
+            transparent 70%),
+        radial-gradient(ellipse 30% 18% at 30% 50%,
+            rgba(255, 90, 130, 0.22) 0%,
+            transparent 55%),
+        radial-gradient(ellipse 30% 18% at 70% 50%,
+            rgba(74, 216, 255, 0.20) 0%,
+            transparent 55%);
+    filter: blur(28px);
+    opacity: 0.8;
+    pointer-events: none;
+    z-index: -1;
+    will-change: transform, opacity;
+    animation: mv2-aura-breath 5.4s ease-in-out infinite alternate;
+}
+@keyframes mv2-aura-breath {
+    0%   { transform: translate(-50%, -50%) scale(0.95); opacity: 0.55; }
+    50%  { transform: translate(-50%, -50%) scale(1.05); opacity: 1.0;  }
+    100% { transform: translate(-50%, -50%) scale(1.0);  opacity: 0.75; }
+}
+
+/* (b) Wordmark glitch flicker — runs the chromatic split tween
+   sporadically. The keyframes hold flat 90% of the cycle and only
+   "burst" briefly so the glitch reads as occasional, not constant.
+   Stacks ON TOP of the existing chromatic neon shadows. */
+.menu-v2 .mv2-wordmark.title {
+    /* Layer the existing 6s shimmer + a new 4.8s glitch that
+       only fires near the end of its cycle. */
+    animation:
+        ui-wordmark-shine 6s ease-in-out infinite,
+        mv2-wordmark-glitch 4.8s steps(60) infinite;
+}
+@keyframes mv2-wordmark-glitch {
+    0%, 92%, 100% { transform: translate(0, 0) skewX(0); }
+    93%           { transform: translate(-2px, 1px) skewX(-2deg); }
+    94%           { transform: translate( 2px, -1px) skewX(1deg);  }
+    95%           { transform: translate(-1px, 0) skewX(-1deg);    }
+    96%           { transform: translate( 1px, 0) skewX(0);         }
+    97%           { transform: translate(0, 1px) skewX(0);          }
+}
+
+/* (c) Cross-screen scan beams — wide, low-alpha diagonal stripes
+   that sweep across the menu. Two of them, different speeds and
+   tints, so the field never lines up the same way twice. Sits
+   over the existing vfx-host's beams (which are vertical) for
+   layered crossover. */
+#screen-start.menu-v2 .mv2-bg::after {
+    content: '';
+    position: absolute;
+    inset: -20% -20%;
+    background:
+        linear-gradient(110deg,
+            transparent 30%,
+            rgba(74, 216, 255, 0.18) 48%,
+            rgba(255, 255, 255, 0.30) 50%,
+            rgba(74, 216, 255, 0.18) 52%,
+            transparent 70%);
+    filter: blur(24px);
+    opacity: 0;
+    will-change: transform, opacity;
+    pointer-events: none;
+    animation: mv2-cross-scan 7s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+    mix-blend-mode: screen;
+}
+@keyframes mv2-cross-scan {
+    0%   { transform: translateX(-80vw); opacity: 0; }
+    25%  { opacity: 0.45; }
+    100% { transform: translateX(80vw);  opacity: 0; }
+}
+
+/* Second beam — flipped direction, magenta tint. Layered on the
+   bento so it crosses through the buttons. */
+#screen-start.menu-v2 .mv2-bento::after {
+    content: '';
+    position: absolute;
+    left: -20%;
+    right: -20%;
+    top: -40%;
+    height: 180%;
+    background: linear-gradient(70deg,
+        transparent 35%,
+        rgba(255, 90, 130, 0.16) 49%,
+        rgba(255, 255, 255, 0.22) 50%,
+        rgba(255, 90, 130, 0.16) 51%,
+        transparent 65%);
+    filter: blur(22px);
+    opacity: 0;
+    will-change: transform, opacity;
+    pointer-events: none;
+    animation: mv2-cross-scan-2 11s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    mix-blend-mode: screen;
+    z-index: -1;
+}
+@keyframes mv2-cross-scan-2 {
+    0%   { transform: translateX(70vw); opacity: 0; }
+    50%  { opacity: 0.35; }
+    100% { transform: translateX(-70vw); opacity: 0; }
+}
+.menu-v2 .mv2-bento { position: relative; overflow: visible; }
+
+/* (d) Telemetry corner dots — pulsing dots at the four corners
+   that read like an OS heartbeat indicator. Built off ::before /
+   ::after on .mv2-header (top corners) + .mv2-footer (bottom). */
+.menu-v2 .mv2-header,
+.menu-v2 .mv2-footer { position: relative; }
+.menu-v2 .mv2-header::before,
+.menu-v2 .mv2-header::after,
+.menu-v2 .mv2-footer::before,
+.menu-v2 .mv2-footer::after {
+    content: '';
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: rgba(74, 216, 255, 0.85);
+    box-shadow:
+        0 0 4px rgba(74, 216, 255, 0.85),
+        0 0 12px rgba(74, 216, 255, 0.45);
+    pointer-events: none;
+    animation: mv2-telemetry-pulse 2.4s ease-in-out infinite;
+}
+.menu-v2 .mv2-header::before { top: -8px;    left: 0;   }
+.menu-v2 .mv2-header::after  { top: -8px;    right: 0;  animation-delay: 0.6s; }
+.menu-v2 .mv2-footer::before { bottom: -8px; left: 0;   animation-delay: 1.2s;
+    background: rgba(255, 90, 130, 0.85);
+    box-shadow:
+        0 0 4px rgba(255, 90, 130, 0.85),
+        0 0 12px rgba(255, 90, 130, 0.45);
+}
+.menu-v2 .mv2-footer::after  { bottom: -8px; right: 0;  animation-delay: 1.8s;
+    background: rgba(255, 90, 130, 0.85);
+    box-shadow:
+        0 0 4px rgba(255, 90, 130, 0.85),
+        0 0 12px rgba(255, 90, 130, 0.45);
+}
+@keyframes mv2-telemetry-pulse {
+    0%, 100% { transform: scale(1);   opacity: 0.55; }
+    50%      { transform: scale(1.6); opacity: 1; }
+}
+
+/* (e) Energy ring on shard hover — faint cyan ring expands from
+   the button center on hover. Cosmetic affordance: the user knows
+   the press registered before the page changes. */
+.menu-v2 .ui-shard {
+    position: relative;
+}
+.menu-v2 .ui-shard::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border: 1px solid var(--bracket-color, rgba(74, 216, 255, 0.65));
+    opacity: 0;
+    transform: scale(0.85);
+    transition: transform 0.4s var(--ui-ease-out),
+                opacity 0.4s var(--ui-ease-out);
+}
+.menu-v2 .ui-shard:hover::before {
+    opacity: 0.55;
+    transform: scale(1.04);
+}
+.menu-v2 .ui-shard:active::before {
+    opacity: 1;
+    transform: scale(1.08);
+    transition-duration: 0.12s;
+}
+
+/* (f) Wordmark slow horizontal scan — a thin bright line crosses
+   the wordmark from left to right every 9s. Reads as a holographic
+   refresh. */
+.menu-v2 .mv2-wordmark.title {
+    background-image: linear-gradient(180deg,
+        #ffffff 0%,
+        #aae6ff 50%,
+        #4ad8ff 100%);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 16. SETTINGS MODAL — bracket aesthetic rebuild
+ *
+ * Strip the legacy metallic glass-panel look. Replace with:
+ *   - Modal content: transparent black bg + cyan TL+BR brackets
+ *   - Settings title: tech-display font in cyan
+ *   - Tabs: each a small bracket-framed chip; active tab solid cyan
+ *   - Section labels: cyan small caps
+ *   - Setting rows: hairline bottom border, no fills
+ *   - Inputs: cyan-tinted, no metallic chrome
+ *   - Action buttons (DONE / QUICK RULES / RESUME / ABORT): same
+ *     diagonal bracket frame as the menu CTAs
+ * ────────────────────────────────────────────────────────── */
+
+/* The dark scrim over the menu when settings opens — slightly
+   darker so the modal pops. */
+#modal-settings.modal {
+    background: rgba(0, 0, 0, 0.78);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+/* Modal panel — transparent black + diagonal brackets. The 4-strip
+   trick (TL horizontal, TL vertical, BR horizontal, BR vertical)
+   matches the menu CTA framing. */
+#modal-settings .modal-content.settings-modal {
+    --bracket-color: rgba(74, 216, 255, 0.85);
+    --bracket-glow:  rgba(74, 216, 255, 0.45);
+    --bracket-len: 28px;
+    --bracket-thickness: 2px;
+    --bracket-pad: 6px;
+    background:
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        radial-gradient(ellipse at 50% 0%,
+            rgba(74, 216, 255, 0.06) 0%,
+            transparent 60%),
+        rgba(4, 8, 16, 0.92) !important;
+    border: none !important;
+    box-shadow: 0 0 32px rgba(74, 216, 255, 0.10) !important;
+    border-radius: 0 !important;
+    filter: drop-shadow(0 0 12px var(--bracket-glow));
+    padding: var(--ui-space-5) var(--ui-space-4) var(--ui-space-4) !important;
+}
+
+/* Title — clean cyan tech caps, no white-text-fill. */
+#modal-settings .settings-title.neon-text-white,
+#modal-settings .settings-title {
+    font-family: var(--ui-font-tech);
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: 0.32em;
+    color: var(--ui-brand);
+    text-shadow: 0 0 8px rgba(74, 216, 255, 0.55);
+    background: none;
+    -webkit-text-fill-color: var(--ui-brand);
+    text-align: center;
+    margin: 0 0 var(--ui-space-3) !important;
+    text-transform: uppercase;
+}
+
+/* Tabs row — flex equal-share; no underline indicator (active
+   state is rendered by the bracket frame itself). */
+#modal-settings .settings-tabs {
+    display: flex;
+    gap: var(--ui-space-1);
+    overflow: visible;
+    border-bottom: 1px solid rgba(74, 216, 255, 0.22);
+    padding-bottom: var(--ui-space-2);
+    margin-bottom: var(--ui-space-3);
+}
+#modal-settings .settings-tabs::after,
+#modal-settings .settings-tabs::before {
+    content: none !important;
+    display: none !important;
+}
+
+/* Each tab — bracket frame, transparent fill. Active tab cranks
+   the bracket alpha + adds an underline indicator beneath. */
+#modal-settings .settings-tab {
+    --bracket-color: rgba(74, 216, 255, 0.40);
+    --bracket-glow:  rgba(74, 216, 255, 0.35);
+    --bracket-len: 8px;
+    --bracket-thickness: 1.5px;
+    --bracket-pad: 2px;
+    flex: 1 1 0;
+    min-width: 0;
+    padding: var(--ui-space-2) var(--ui-space-1) !important;
+    font-family: var(--ui-font-tech);
+    font-size: 0.66rem;
+    letter-spacing: 0.14em;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.55);
+    background:
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    text-transform: uppercase;
+    transition: color 0.2s, background 0.2s, filter 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#modal-settings .settings-tab:hover {
+    --bracket-color: rgba(74, 216, 255, 0.75);
+    color: rgba(255, 255, 255, 0.85);
+}
+#modal-settings .settings-tab.active {
+    --bracket-color: rgba(74, 216, 255, 1);
+    --bracket-glow:  rgba(74, 216, 255, 0.6);
+    color: #ffffff;
+    text-shadow: 0 0 6px rgba(74, 216, 255, 0.65);
+    filter: drop-shadow(0 0 6px var(--bracket-glow));
+}
+
+/* Section labels (Accessibility, etc.) — cyan small caps. */
+#modal-settings .settings-section-label {
+    font-family: var(--ui-font-tech);
+    font-size: 0.66rem;
+    letter-spacing: 0.20em;
+    color: rgba(74, 216, 255, 0.85) !important;
+    text-shadow: 0 0 6px rgba(74, 216, 255, 0.35);
+    border-bottom: 1px solid rgba(74, 216, 255, 0.22) !important;
+    padding-bottom: var(--ui-space-1) !important;
+    margin: var(--ui-space-2) 0 var(--ui-space-1) !important;
+    text-transform: uppercase;
+}
+
+/* Setting rows — hairline bottom border, no metallic backgrounds. */
+#modal-settings .setting-row {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+    padding: var(--ui-space-2) 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}
+#modal-settings .setting-row label {
+    color: rgba(255, 255, 255, 0.85);
+    font-family: var(--ui-font-body);
+    font-size: 0.85rem;
+    letter-spacing: 0.04em;
+}
+#modal-settings .setting-row .setting-hint {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+}
+
+/* Range sliders — cyan track + cyan thumb. Replace the metallic
+   gradient fill with a flat cyan-tinted bar. */
+#modal-settings input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(74, 216, 255, 0.12);
+    border-radius: 0;
+    height: 4px;
+    outline: none;
+}
+#modal-settings input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--ui-brand);
+    border-radius: 50%;
+    border: none;
+    box-shadow: 0 0 6px var(--ui-brand), 0 0 14px rgba(74, 216, 255, 0.55);
+    cursor: pointer;
+}
+#modal-settings input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: var(--ui-brand);
+    border-radius: 50%;
+    border: none;
+    box-shadow: 0 0 6px var(--ui-brand), 0 0 14px rgba(74, 216, 255, 0.55);
+    cursor: pointer;
+}
+
+/* Selects — flat dark with cyan border-bottom. */
+#modal-settings select {
+    background: rgba(0, 0, 0, 0.45) !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-bottom: 1px solid rgba(74, 216, 255, 0.45) !important;
+    padding: var(--ui-space-1) var(--ui-space-2) !important;
+    font-family: var(--ui-font-body);
+    border-radius: 0 !important;
+    font-size: 0.85rem;
+}
+
+/* Checkboxes — replace with a tiny bracket-framed square; checked
+   state fills with cyan. */
+#modal-settings input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: transparent;
+    border: 1px solid rgba(74, 216, 255, 0.55);
+    border-radius: 0;
+    cursor: pointer;
+    position: relative;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    flex-shrink: 0;
+}
+#modal-settings input[type="checkbox"]:hover {
+    border-color: rgba(74, 216, 255, 0.85);
+}
+#modal-settings input[type="checkbox"]:checked {
+    background: var(--ui-brand);
+    border-color: var(--ui-brand);
+    box-shadow: 0 0 6px rgba(74, 216, 255, 0.7);
+}
+#modal-settings input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 5px;
+    width: 5px;
+    height: 9px;
+    border: solid #04080f;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+/* Settings action buttons — match the menu CTA bracket style.
+   Cover both menu-time (QUICK RULES / DONE) and combat-time
+   (RESUME / ABORT) IDs. */
+#modal-settings #btn-glossary,
+#modal-settings #btn-resume,
+#modal-settings #btn-quit,
+#modal-settings #btn-settings-close,
+#modal-settings #btn-settings-done {
+    --bracket-color: rgba(74, 216, 255, 0.85);
+    --bracket-glow:  rgba(74, 216, 255, 0.55);
+    --bracket-len: 18px;
+    --bracket-thickness: 2px;
+    --bracket-pad: 3px;
+    background:
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    clip-path: none !important;
+    -webkit-clip-path: none !important;
+    color: #ffffff;
+    font-family: var(--ui-font-impact);
+    font-weight: 900;
+    font-style: italic;
+    font-size: 0.95rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-shadow: 0 0 8px rgba(74, 216, 255, 0.55), 0 2px 0 rgba(0, 0, 0, 0.55);
+    padding: var(--ui-space-3) var(--ui-space-4) !important;
+    filter: drop-shadow(0 0 6px var(--bracket-glow));
+    transition: filter 0.2s, transform 0.2s;
+}
+#modal-settings #btn-glossary:hover,
+#modal-settings #btn-resume:hover,
+#modal-settings #btn-quit:hover,
+#modal-settings #btn-settings-close:hover,
+#modal-settings #btn-settings-done:hover {
+    filter: drop-shadow(0 0 12px var(--bracket-glow))
+            drop-shadow(0 0 24px var(--bracket-glow));
+    transform: translateY(-1px);
+}
+#modal-settings #btn-quit {
+    --bracket-color: rgba(255, 90, 130, 0.85);
+    --bracket-glow:  rgba(255, 90, 130, 0.55);
+    text-shadow: 0 0 8px rgba(255, 90, 130, 0.55), 0 2px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* Glossary modal — same bracket treatment so it doesn't fall
+   back to the legacy metallic look. */
+#modal-glossary .modal-content.modal-glossary {
+    --bracket-color: rgba(74, 216, 255, 0.85);
+    --bracket-glow:  rgba(74, 216, 255, 0.45);
+    --bracket-len: 28px;
+    --bracket-thickness: 2px;
+    --bracket-pad: 6px;
+    background:
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        rgba(4, 8, 16, 0.92) !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: 0 0 32px rgba(74, 216, 255, 0.10) !important;
+}
