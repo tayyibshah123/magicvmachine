@@ -9427,8 +9427,19 @@ triggerSystemCrash() {
                 || PLAYER_CLASSES[0];
             this.player = new Player(classConfig);
 
-            this.player.currentHp = typeof data.player.hp === 'number' ? data.player.hp : this.player.maxHp;
             this.player.maxHp = typeof data.player.maxHp === 'number' ? data.player.maxHp : this.player.maxHp;
+            // Saved HP floor. If a prior session softlocked or otherwise
+            // persisted with currentHp <= 0, naively restoring the value
+            // puts the player into combat already dead — at which point
+            // the enemy-intent loop's `currentHp <= 0` guard at the
+            // bottom of endTurn silently returns (no gameOver fires) and
+            // the run hangs with no path forward. Treat any saved value
+            // <= 0 (or non-finite) as a corrupted state and restore to
+            // maxHp; legitimate low-HP saves (e.g. 1 HP between rooms)
+            // round-trip unchanged.
+            const savedHp = (data.player && typeof data.player.hp === 'number' && Number.isFinite(data.player.hp))
+                ? data.player.hp : this.player.maxHp;
+            this.player.currentHp = (savedHp > 0) ? savedHp : this.player.maxHp;
             this.player.baseMana = typeof data.player.mana === 'number' ? data.player.mana : this.player.baseMana;
             this.player.relics = (data.player.relics || []).map(r => {
                 const canonical = UPGRADES_POOL.find(u => u.id === r.id) || META_UPGRADES.find(u => u.id === r.id);
@@ -17328,7 +17339,19 @@ drawEffects() {
             // deferred VFX callback). Prevents extra intents chewing on a
             // corpse and overwriting the death screen.
             if (this.currentState === STATE.GAMEOVER) return;
-            if (this.player && this.player.currentHp <= 0) return;
+            // Player is dead — fire gameOver and bail. A bare `return`
+            // here just drops the rest of the enemy phase silently:
+            // endTurn's finally clears _endTurnRunning, the loop ends,
+            // and the run softlocks with no path forward. Reproduced
+            // 2026-05-03 when a saved run loaded with currentHp <= 0.
+            // The defensive GAMEOVER guard above already catches the
+            // case where another path (reflect / detonator / thorns)
+            // already fired gameOver, so this branch only triggers
+            // when the player is dead AND gameOver hasn't fired yet.
+            if (this.player && this.player.currentHp <= 0) {
+                if (this.gameOver) this.gameOver();
+                return;
+            }
             // STUN consumer — boss/enemy is locked out for this turn. Show
             // the effect, fire a brief audio cue, then skip the rest of
             // the intent loop. The stun-effect duration ticks down on
@@ -17911,7 +17934,19 @@ drawEffects() {
             // via thorns/reflect). Prevents cascading gameOver calls and the
             // minion queue chewing on a corpse.
             if (this.currentState === STATE.GAMEOVER) return;
-            if (this.player && this.player.currentHp <= 0) return;
+            // Player is dead — fire gameOver and bail. A bare `return`
+            // here just drops the rest of the enemy phase silently:
+            // endTurn's finally clears _endTurnRunning, the loop ends,
+            // and the run softlocks with no path forward. Reproduced
+            // 2026-05-03 when a saved run loaded with currentHp <= 0.
+            // The defensive GAMEOVER guard above already catches the
+            // case where another path (reflect / detonator / thorns)
+            // already fired gameOver, so this branch only triggers
+            // when the player is dead AND gameOver hasn't fired yet.
+            if (this.player && this.player.currentHp <= 0) {
+                if (this.gameOver) this.gameOver();
+                return;
+            }
             // Snapshot was taken before the loop, but a previous minion in
             // this same loop (chained kills, splash) may have just zeroed
             // this one's HP. Skip the corpse rather than fire its intent.
