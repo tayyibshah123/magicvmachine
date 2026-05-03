@@ -449,21 +449,58 @@
 
 
 /* ──────────────────────────────────────────────────────────
- * 12. HIDE THE LEGACY TITLE-FRAME IN MENU-V2
+ * 12. KILL LEGACY MENU CHROME — title-frame, ::before scanline,
+ *     ::after corner brackets, .mv2-bg-grid perspective floor
  *
- * The legacy `.title-frame` was sized to wrap the wordmark via
- * `inset: -28px -36px` against a positioned parent. The menu-v2
- * override changed it to `height: 100%` of `.mv2-hero`, which
- * means the four cosmetic corner brackets land at the top + bottom
- * of the entire 1fr middle row — leaving a tall empty rectangle
- * between the brackets at the top and the wordmark at the bottom.
- * That empty rectangle is the "long black area" the user flagged.
+ * The legacy menu chrome stacked four overlapping decorative
+ * layers that competed with the new VFX layer + the new bracket
+ * buttons:
+ *   - `.title-frame` cosmetic bracket ring (Archivist Slain badge)
+ *   - `#screen-start::before` sweeping scan bar + scanline texture
+ *   - `#screen-start::after` blue/pink L-bracket corners at the
+ *     screen edges (THESE are the cyan top + pink bottom corners
+ *     in the user's screenshot — not from the new VFX layer)
+ *   - `.mv2-bg-grid` perspective floor mesh (which renders a wide
+ *     dark trapezoid in the upper portion of the screen due to
+ *     its `bottom: -8%; height: 60%; transform-origin: 50% 0%;
+ *     rotateX(60deg)` — that trapezoid IS the long dark band the
+ *     user circled)
  *
- * The frame is purely cosmetic (Archivist Slain badge), so hide it
- * in menu-v2 entirely. The wordmark stands alone with its own
- * chromatic glow + tagline.
+ * Strip all four. The new vfx-host (vfx.css) provides corner
+ * brackets + ambient layers; the new ui-shard rules (this file)
+ * provide the bracket frame around clickable areas. The old
+ * chrome is now visual noise.
  * ────────────────────────────────────────────────────────── */
-.menu-v2 .mv2-title-frame.title-frame { display: none !important; }
+.menu-v2 .mv2-title-frame.title-frame,
+#screen-start.menu-v2 .title-frame,
+#title-frame { display: none !important; }
+#screen-start.menu-v2::before,
+#screen-start.menu-v2::after { display: none !important; content: none !important; }
+.menu-v2 .mv2-bg-grid { display: none !important; }
+
+
+/* ──────────────────────────────────────────────────────────
+ * 12b. RECLAIM THE TOP — pull the menu content closer to the
+ *      top edge so there's no empty band above the operator chip
+ *
+ * Switch the menu grid from `auto 1fr auto` to all-auto rows,
+ * `align-content: start`, so header/hero/bento/footer stack at
+ * the top with even gaps. Without the 1fr stretch, the wordmark
+ * doesn't get pushed to the bottom of a huge empty middle row.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2.screen,
+.screen.menu-v2 {
+    grid-template-rows: auto auto auto auto;
+    align-content: start;
+}
+/* Hero block sits right under the header — no extra padding-top
+   pushing it down. The wordmark + tagline stack tight. */
+.menu-v2 .mv2-hero {
+    justify-content: center !important;
+    padding-top: var(--ui-space-3) !important;
+    padding-bottom: var(--ui-space-3) !important;
+    min-height: 160px;
+}
 
 
 /* ──────────────────────────────────────────────────────────
@@ -609,11 +646,12 @@
     --bracket-pad: 3px;
 }
 
-/* The login-streak chip + sparks chip + operator chip — also
-   strip their silhouettes and apply the same bracket treatment.
-   The chips are MUCH smaller, so use a tighter bracket. */
-.menu-v2 .login-streak,
-.menu-v2 .mv2-streak.login-streak,
+/* The sparks chip + operator chip — strip their silhouettes and
+   apply the same bracket treatment. The chips are MUCH smaller,
+   so use a tighter bracket.
+   NOTE: streak chip (`.login-streak` / `.mv2-streak`) is excluded
+   — it's a passive status indicator, not a button, so it should
+   render as plain text without the bracket frame. */
 .menu-v2 .mv2-sparks-chip,
 .menu-v2 .mv2-operator-chip.subtitle {
     --bracket-color: rgba(74, 216, 255, 0.85);
@@ -657,9 +695,109 @@
     --bracket-color: rgba(255, 215, 106, 0.85);
     --bracket-glow:  rgba(255, 215, 106, 0.55);
 }
+
+/* Streak chip — strip its frame and any background. Plain text
+   only, gold-tinted, with a small leading dot already in the
+   markup. NOT clickable, so no brackets to suggest a target. */
+.menu-v2 .login-streak,
+.menu-v2 .mv2-streak,
 .menu-v2 .mv2-streak.login-streak {
-    --bracket-color: rgba(255, 215, 106, 0.85);
-    --bracket-glow:  rgba(255, 215, 106, 0.55);
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+    clip-path: none !important;
+    -webkit-clip-path: none !important;
+    color: rgba(255, 215, 106, 0.85);
+    font-family: var(--ui-font-tech);
+    font-size: 0.74rem;
+    letter-spacing: 0.18em;
+    padding: var(--ui-space-2) 0;
+    text-shadow: 0 0 8px rgba(255, 215, 106, 0.45);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 14. SETTINGS HEX BUTTON — match the new bracket aesthetic
+ *
+ * The legacy `.mv2-settings.ui-btn--icon` was a metallic hex
+ * plate with a rounded fill. Strip the fill / hex clip / border
+ * and replace with the same four-corner bracket treatment as
+ * the rest of the menu, scaled to the icon-button footprint.
+ * The gear icon stays, retinted to match the bracket colour.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .mv2-settings.ui-btn--icon,
+.menu-v2 #btn-settings-main.mv2-settings,
+#screen-start.menu-v2 #btn-settings-main {
+    --bracket-color: rgba(74, 216, 255, 0.85);
+    --bracket-glow:  rgba(74, 216, 255, 0.55);
+    --bracket-len: 12px;
+    --bracket-thickness: 1.5px;
+    --bracket-pad: 2px;
+    /* Strip hex / metallic chrome */
+    clip-path: none !important;
+    -webkit-clip-path: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    background:
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) top    calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) top    calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            left  calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            left  calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        transparent !important;
+    color: rgba(255, 255, 255, 0.85);
+    filter: drop-shadow(0 0 6px var(--bracket-glow));
+    transition: filter var(--ui-duration-fast) var(--ui-ease-out),
+                transform var(--ui-duration-fast) var(--ui-ease-out);
+}
+.menu-v2 .mv2-settings.ui-btn--icon::before,
+.menu-v2 .mv2-settings.ui-btn--icon::after,
+.menu-v2 #btn-settings-main::before,
+.menu-v2 #btn-settings-main::after {
+    content: none !important;
+    display: none !important;
+}
+.menu-v2 .mv2-settings.ui-btn--icon:hover,
+.menu-v2 #btn-settings-main:hover {
+    filter: drop-shadow(0 0 12px var(--bracket-glow))
+            drop-shadow(0 0 22px var(--bracket-glow));
+    transform: translateY(-1px);
+    color: #ffffff;
+}
+.menu-v2 .mv2-settings.ui-btn--icon:active,
+.menu-v2 #btn-settings-main:active {
+    filter: drop-shadow(0 0 4px var(--bracket-glow));
+    transform: translateY(0);
+}
+.menu-v2 .mv2-settings.ui-btn--icon .game-icon,
+.menu-v2 #btn-settings-main .game-icon {
+    width: 20px;
+    height: 20px;
+    color: inherit;
 }
 
 
