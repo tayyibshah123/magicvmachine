@@ -28,6 +28,7 @@ import { ClassBriefing } from './services/class-briefing.js';
 import { Perf } from './services/perf.js';
 import { Diag } from './services/diag.js';
 import { Breakout } from './services/breakout.js';
+import { UI } from './services/ui.js';
 import { getMatchupHint } from './data/matchup-hints.js';
 
 registerEntityClasses(Player, Minion, Enemy);
@@ -218,6 +219,11 @@ const Game = {
             if (typeof window !== 'undefined') window.__diag = Diag;
             Diag.event('boot', { tier: Perf.tier });
         } catch (_) {}
+        // UI v2 — wire interaction helpers (slider fill mapper, button
+        // press-point ripple, tab indicator). Idempotent; safe to call
+        // before the DOM has any .ui-* nodes — event delegation picks
+        // them up as the screens migrate in Phase 3+.
+        try { UI.init(); } catch (_) {}
         ParticleSys.quality = Perf.particleQuality();
         if (Perf.tier === 'low') ParticleSys.maxParticles = 128;
         else if (Perf.tier === 'mid') ParticleSys.maxParticles = 220;

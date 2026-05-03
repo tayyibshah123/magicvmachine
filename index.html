@@ -30,6 +30,13 @@
          body font (Rajdhani) gets a light variant for the splash boot
          sequence + a semibold for tighter UI labels. -->
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;500;600;700&display=swap" rel="stylesheet">
+    <!-- UI v2 — Phase 1 tokens (must load BEFORE style.css so any
+         legacy rule that references the new vars cascades correctly).
+         Phase 2 components live in components.css and use the v2
+         `.ui-*` namespace, additive on top of the legacy classes
+         until each screen is migrated in Phase 3+. -->
+    <link rel="stylesheet" href="src/styles/tokens.css">
+    <link rel="stylesheet" href="src/styles/components.css">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>

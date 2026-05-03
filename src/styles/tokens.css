@@ -1,0 +1,313 @@
+/* ──────────────────────────────────────────────────────────────────
+ * UI v2 — Design tokens
+ *
+ * The foundation layer for the UI overhaul. Defines the entire visual
+ * language as CSS custom properties so every component reads from one
+ * source of truth. Inspired by Marvel Snap's restraint: deep dark
+ * surfaces, sparing accent colour, refined typography, soft elevation
+ * instead of aggressive neon glow.
+ *
+ * NAMESPACE
+ *   All tokens are `--ui-*`. Components consume them as `var(--ui-*)`.
+ *   Pre-existing variables in style.css (`--neon-blue` etc.) are
+ *   intentionally untouched so legacy screens keep rendering until
+ *   Phase 3+ migrations land.
+ *
+ * STRUCTURE
+ *   1. Color — semantic role tokens (brand / accent / alert / surface /
+ *      text / border) plus a numeric scale for grayscale.
+ *   2. Typography — size + weight scale with display/body separation.
+ *   3. Spacing — 4-step base × 10 stops.
+ *   4. Radius — 5 stops from sharp to pill.
+ *   5. Elevation — 5 shadow tiers + glass / inner-highlight tokens.
+ *   6. Motion — duration + easing curves + spring presets.
+ *   7. Glass — backdrop-blur tints + border gradients.
+ *   8. Particle — opacity / colour tokens for ambient layers.
+ *   9. Z-index scale.
+ * ──────────────────────────────────────────────────────────────── */
+
+:root {
+    /* ──────────────────────────────────────────────────────────
+     * 1. COLOR
+     * ──────────────────────────────────────────────────────────
+     * The palette is deliberately small. The previous codebase
+     * leaned on ~10 high-saturation neons competing equally; the
+     * new system has ONE primary (brand cyan), ONE highlight
+     * (gold), ONE alert (red). Everything else is grayscale or
+     * contextual (status icons, class identity colours kept
+     * outside this token set).
+     */
+
+    /* Base / surface scale — deep navy-blacks. Used as the canvas
+       and as background for layered panels. Darker = farther back.
+       Each step is roughly +5% lightness so they're distinguishable
+       without being chatty. */
+    --ui-bg-void:     #02040a;   /* below everything */
+    --ui-bg-base:     #060912;   /* page background */
+    --ui-surface-1:   #0a0f1c;   /* primary panels */
+    --ui-surface-2:   #10172a;   /* nested panels, popovers */
+    --ui-surface-3:   #181f36;   /* highest interactive surface */
+    --ui-surface-4:   #222a44;   /* hover tier on surface-3 */
+
+    /* Brand / accent — used PURPOSEFULLY. Brand for primary action
+       affordances; gold for premium / reward beats; red for alerts
+       and destructive paths. */
+    --ui-brand:           #4ad8ff;   /* refined cyan, softer than pure */
+    --ui-brand-strong:    #00b3e0;   /* mid-state for press / focus rings */
+    --ui-brand-dim:       #1f6e85;   /* low-contrast brand for dim states */
+    --ui-gold:            #ffd76a;   /* premium / reward */
+    --ui-gold-strong:     #ffb43c;   /* mid */
+    --ui-gold-dim:        #6e5a23;
+    --ui-alert:           #ff5d7a;   /* destructive / critical */
+    --ui-alert-strong:    #ff2c52;
+    --ui-alert-dim:       #6e2230;
+    --ui-success:         #5eead4;   /* mint — used sparingly for success states */
+
+    /* Text scale — driven by alpha over a single base white. Reads
+       cleaner than five hard-coded grays and adapts automatically
+       if the surface beneath shifts. */
+    --ui-text-100:    rgba(255, 255, 255, 0.95);  /* hero copy */
+    --ui-text-90:     rgba(255, 255, 255, 0.86);  /* default body */
+    --ui-text-70:     rgba(255, 255, 255, 0.66);  /* secondary */
+    --ui-text-50:     rgba(255, 255, 255, 0.46);  /* tertiary / hint */
+    --ui-text-30:     rgba(255, 255, 255, 0.28);  /* disabled */
+    --ui-text-on-brand: #021622;                  /* dark text on brand fill */
+    --ui-text-on-gold:  #1a1100;
+    --ui-text-on-alert: #1a0008;
+
+    /* Border / divider — hairlines. Use the alpha-on-white scale so
+       borders adapt to whatever surface they sit on. */
+    --ui-border-subtle:  rgba(255, 255, 255, 0.06);
+    --ui-border-base:    rgba(255, 255, 255, 0.10);
+    --ui-border-strong:  rgba(255, 255, 255, 0.18);
+    --ui-border-brand:   rgba(74, 216, 255, 0.45);
+    --ui-border-gold:    rgba(255, 215, 106, 0.45);
+    --ui-border-alert:   rgba(255, 93, 122, 0.45);
+
+    /* Glow tints — used in ::after layers + soft halos.
+       Significantly more restrained than the old 0.7-alpha neon
+       text-shadows that bled across the whole UI. */
+    --ui-glow-brand:  0 0 12px rgba(74, 216, 255, 0.35);
+    --ui-glow-gold:   0 0 12px rgba(255, 215, 106, 0.35);
+    --ui-glow-alert:  0 0 12px rgba(255, 93, 122, 0.35);
+
+
+    /* ──────────────────────────────────────────────────────────
+     * 2. TYPOGRAPHY
+     * ──────────────────────────────────────────────────────────
+     * Two-family system. Orbitron is reserved for chrome that
+     * must read as "system / cyber" (titles, chip labels, stat
+     * numbers). Rajdhani carries body copy + UI labels. The
+     * weight contrast does the heavy lifting — body stays
+     * readable, titles remain confident, glow is sparing.
+     */
+
+    --ui-font-display: 'Orbitron', 'Consolas', 'Menlo', 'Courier New', monospace;
+    --ui-font-body:    'Rajdhani', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --ui-font-mono:    'Consolas', 'Menlo', 'Courier New', monospace;
+
+    /* Size scale — fluid via calc(rem * scale-multiplier) so the
+       Accessibility text-size slider continues to apply. */
+    --ui-text-multiplier: 1;
+    --ui-text-display:    calc(2.4rem  * var(--ui-text-multiplier));
+    --ui-text-title:      calc(1.6rem  * var(--ui-text-multiplier));
+    --ui-text-heading:    calc(1.2rem  * var(--ui-text-multiplier));
+    --ui-text-subhead:    calc(1.0rem  * var(--ui-text-multiplier));
+    --ui-text-body-lg:    calc(0.95rem * var(--ui-text-multiplier));
+    --ui-text-body:       calc(0.875rem* var(--ui-text-multiplier));
+    --ui-text-caption:    calc(0.78rem * var(--ui-text-multiplier));
+    --ui-text-micro:      calc(0.68rem * var(--ui-text-multiplier));
+
+    /* Weights. Most labels live at 500-600 (semibold); Orbitron
+       displays go 700-900. The previous "every label is 900" pattern
+       flattened the hierarchy. */
+    --ui-weight-light:    300;
+    --ui-weight-base:     400;
+    --ui-weight-medium:   500;
+    --ui-weight-semibold: 600;
+    --ui-weight-bold:     700;
+    --ui-weight-heavy:    900;
+
+    /* Letter spacing — tokenised so the global tightening I added
+       in the splash polish (--ls-display etc.) gets a more
+       systematic home and migrates here cleanly. */
+    --ui-tracking-tight:    -0.01em;     /* large display titles */
+    --ui-tracking-normal:    0;          /* body */
+    --ui-tracking-wide:      0.02em;     /* heading body */
+    --ui-tracking-cyber:     0.16em;     /* chrome labels (// SYSTEM BOOT) */
+    --ui-tracking-loose:     0.28em;     /* CTAs, tap-prompts */
+
+    /* Line height. Tight for display, comfortable for body. */
+    --ui-leading-tight:   1.1;
+    --ui-leading-snug:    1.25;
+    --ui-leading-normal:  1.45;
+    --ui-leading-loose:   1.65;
+
+
+    /* ──────────────────────────────────────────────────────────
+     * 3. SPACING
+     * ──────────────────────────────────────────────────────────
+     * 4px base scale. Use these for padding, margin, gap. Avoid
+     * inline pixel values; inconsistent spacing is the second-
+     * biggest reason the existing UI reads as cluttered.
+     */
+    --ui-space-0:   0;
+    --ui-space-1:   4px;
+    --ui-space-2:   8px;
+    --ui-space-3:   12px;
+    --ui-space-4:   16px;
+    --ui-space-5:   20px;
+    --ui-space-6:   24px;
+    --ui-space-8:   32px;
+    --ui-space-10:  40px;
+    --ui-space-12:  48px;
+    --ui-space-16:  64px;
+    --ui-space-20:  80px;
+
+
+    /* ──────────────────────────────────────────────────────────
+     * 4. RADIUS
+     * ──────────────────────────────────────────────────────────
+     * Five stops. Most surfaces stay at md (8) or lg (12). Pill
+     * for chips, sm for inline chrome.
+     */
+    --ui-radius-xs:  4px;
+    --ui-radius-sm:  6px;
+    --ui-radius-md:  10px;
+    --ui-radius-lg:  16px;
+    --ui-radius-xl:  24px;
+    --ui-radius-pill: 9999px;
+
+
+    /* ──────────────────────────────────────────────────────────
+     * 5. ELEVATION
+     * ──────────────────────────────────────────────────────────
+     * 5 shadow tiers + an inner highlight for "lifted glass" feel.
+     * The Snap-style depth comes from soft, broad shadows — NOT
+     * sharp neon outlines. Each tier doubles the offset roughly.
+     */
+
+    /* Soft drop shadows. Composed of a tight contact shadow + a
+       broad ambient shadow at very low alpha, mirroring physical
+       light behaviour. */
+    --ui-elev-0:  none;
+    --ui-elev-1:  0 1px 2px rgba(0, 0, 0, 0.40);
+    --ui-elev-2:  0 4px 8px rgba(0, 0, 0, 0.32),  0 1px 2px rgba(0, 0, 0, 0.42);
+    --ui-elev-3:  0 8px 20px rgba(0, 0, 0, 0.40), 0 2px 6px rgba(0, 0, 0, 0.35);
+    --ui-elev-4:  0 16px 32px rgba(0, 0, 0, 0.50), 0 4px 12px rgba(0, 0, 0, 0.35);
+    --ui-elev-5:  0 28px 56px rgba(0, 0, 0, 0.60), 0 8px 24px rgba(0, 0, 0, 0.40);
+
+    /* Inner highlight — a 1px top-edge sheen + barely-perceptible
+       bottom-edge dark line. Sells "lifted glass" without painting
+       a visible 2px border. Use as inset box-shadow on glass panels. */
+    --ui-inset-highlight:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.30);
+
+    /* Focus ring — accessibility. Replaces the inconsistent border
+       colour changes scattered through the codebase. */
+    --ui-focus-ring: 0 0 0 2px var(--ui-bg-base), 0 0 0 4px var(--ui-brand);
+
+
+    /* ──────────────────────────────────────────────────────────
+     * 6. MOTION
+     * ──────────────────────────────────────────────────────────
+     * Durations at four steps; eases for standard interactions
+     * + spring overshoots for press/hover/card-lift. Reduced-
+     * motion overrides at the bottom of this file kill the
+     * springs and slow the durations to flat linear.
+     */
+
+    --ui-duration-instant:  90ms;
+    --ui-duration-fast:     180ms;
+    --ui-duration-base:     260ms;
+    --ui-duration-slow:     420ms;
+    --ui-duration-slower:   620ms;
+
+    /* Standard (Material-like) ease for most transitions. */
+    --ui-ease-standard:  cubic-bezier(0.4, 0, 0.2, 1);
+    /* Decelerate — entering elements */
+    --ui-ease-out:       cubic-bezier(0, 0, 0.2, 1);
+    /* Accelerate — exiting elements */
+    --ui-ease-in:        cubic-bezier(0.4, 0, 1, 1);
+    /* Spring with a slight overshoot — press releases, card lift,
+       toggle knob travel. The :11% overshoot is enough to feel
+       physical without the bounce being distracting. */
+    --ui-ease-spring:    cubic-bezier(0.34, 1.56, 0.64, 1);
+    /* Bigger spring for celebratory moments (modal entry, big buttons). */
+    --ui-ease-spring-soft: cubic-bezier(0.45, 1.45, 0.55, 1);
+
+
+    /* ──────────────────────────────────────────────────────────
+     * 7. GLASS
+     * ──────────────────────────────────────────────────────────
+     * Tokens for the glass-panel look. The actual `.ui-panel`
+     * component composes these. Adjust here, every panel updates.
+     */
+
+    /* Backdrop blur values. Higher blur = farther from the
+       background visually. Mobile clamps blur radius internally
+       so over-spec'ing doesn't help. */
+    --ui-blur-sm:  6px;
+    --ui-blur-md:  12px;
+    --ui-blur-lg:  18px;
+
+    /* Glass background gradients — top-to-bottom subtle lighten
+       at the top edge, darken at the bottom. Reads as "lit from
+       above". */
+    --ui-glass-1: linear-gradient(180deg, rgba(28, 36, 60, 0.72), rgba(10, 15, 28, 0.78));
+    --ui-glass-2: linear-gradient(180deg, rgba(38, 48, 76, 0.78), rgba(14, 20, 36, 0.84));
+    --ui-glass-3: linear-gradient(180deg, rgba(50, 62, 96, 0.82), rgba(20, 28, 48, 0.88));
+
+    /* Glass border — 1px gradient instead of a flat colour. Catches
+       light differently across the edge, sells the "milled metal"
+       feel Snap uses on its panels. Used as `border-image` source. */
+    --ui-glass-border: linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.04) 40%, rgba(255, 255, 255, 0.10) 100%);
+
+
+    /* ──────────────────────────────────────────────────────────
+     * 8. PARTICLE / AMBIENT
+     * ──────────────────────────────────────────────────────────
+     * Tokens for the ambient particle layer that runs across
+     * screens. Phase 7 wires the layer; tokens live here so the
+     * single source of truth is in this file.
+     */
+    --ui-particle-color-base: rgba(255, 255, 255, 0.22);
+    --ui-particle-color-brand: rgba(74, 216, 255, 0.32);
+    --ui-particle-color-gold:  rgba(255, 215, 106, 0.32);
+    --ui-particle-density-low:  18;   /* per 1000px² */
+    --ui-particle-density-mid:  32;
+    --ui-particle-density-hi:   48;
+
+
+    /* ──────────────────────────────────────────────────────────
+     * 9. Z-INDEX SCALE
+     * ──────────────────────────────────────────────────────────
+     * Avoids the existing inline `z-index: 4500/6500/20000` mess.
+     * Use these tokens so layering is predictable.
+     */
+    --ui-z-base:        1;
+    --ui-z-elevated:    10;
+    --ui-z-sticky:      100;
+    --ui-z-overlay:     1000;
+    --ui-z-modal:       2000;
+    --ui-z-toast:       3000;
+    --ui-z-tooltip:     4000;
+    --ui-z-spotlight:   5000;
+    --ui-z-cinematic:   7000;
+}
+
+/* ──────────────────────────────────────────────────────────
+ * REDUCED MOTION
+ * Strip the spring overshoots and shorten durations when the
+ * player has the in-game reduced-motion setting on. The body
+ * class is the source of truth (combat-scope auto-mode adds it
+ * during fights, manual toggle adds it always).
+ * ────────────────────────────────────────────────────────── */
+body.reduced-motion {
+    --ui-duration-fast:     90ms;
+    --ui-duration-base:     120ms;
+    --ui-duration-slow:     180ms;
+    --ui-ease-spring:       linear;
+    --ui-ease-spring-soft:  linear;
+}

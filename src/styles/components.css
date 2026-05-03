@@ -1,0 +1,948 @@
+/* ──────────────────────────────────────────────────────────────────
+ * UI v2 — Component library
+ *
+ * Snap-anchored polished components. Every class is `.ui-*` so
+ * existing `.btn` / `.glass-panel` / etc markup keeps rendering with
+ * the legacy style.css until each screen is migrated in Phase 3+.
+ *
+ * USAGE
+ *   <button class="ui-btn ui-btn--primary">INITIATE</button>
+ *   <div class="ui-panel ui-panel--floating">…</div>
+ *   <label class="ui-toggle">…</label>
+ *
+ * SECTIONS
+ *   1. Base reset for v2 components
+ *   2. Buttons (primary / secondary / ghost / icon / destructive / loading)
+ *   3. Panels (3 elevations, glass)
+ *   4. Cards (with tilt-on-press)
+ *   5. Toggle (iOS-style smooth)
+ *   6. Slider (continuous fill + value chip)
+ *   7. Dropdown (custom-styled <select>)
+ *   8. Tabs (sliding underline)
+ *   9. Chips / badges / pills
+ *  10. Modal (backdrop + entry/exit physics)
+ *  11. Tooltip
+ *  12. Divider / hairline
+ *  13. Inputs (text)
+ *  14. Hero label / display title
+ *  15. Stat row (currency strip)
+ *  16. Loading shimmer
+ * ────────────────────────────────────────────────────────────────── */
+
+/* ──────────────────────────────────────────────────────────
+ * 1. BASE RESET FOR V2 COMPONENTS
+ * Every .ui-* element opts into a sane baseline. No global
+ * resets — we don't want to fight the legacy stylesheet.
+ * ────────────────────────────────────────────────────────── */
+[class^="ui-"], [class*=" ui-"] {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 2. BUTTONS
+ * Variants:
+ *   .ui-btn--primary    brand-fill, the hero CTA
+ *   .ui-btn--secondary  outlined, default action
+ *   .ui-btn--ghost      borderless, low-emphasis
+ *   .ui-btn--destructive   red-tinted, paired with primary
+ *   .ui-btn--icon       square / round icon-only
+ *   .ui-btn--gold       reward-context CTA
+ * Sizes:
+ *   .ui-btn--sm / --md (default) / --lg
+ * States:
+ *   :hover     subtle lift + brighten
+ *   :active    spring press inward
+ *   [disabled] dimmed + no interactivity
+ *   .is-loading  spinner takes over content
+ * ────────────────────────────────────────────────────────── */
+.ui-btn {
+    --_btn-bg:        rgba(255, 255, 255, 0.04);
+    --_btn-bg-hover:  rgba(255, 255, 255, 0.08);
+    --_btn-bg-active: rgba(255, 255, 255, 0.12);
+    --_btn-fg:        var(--ui-text-90);
+    --_btn-border:    var(--ui-border-base);
+    --_btn-border-hover: var(--ui-border-strong);
+    --_btn-shadow:    var(--ui-elev-1);
+    --_btn-shadow-hover: var(--ui-elev-2);
+    --_btn-radius:    var(--ui-radius-md);
+    --_btn-pad-y:     var(--ui-space-3);
+    --_btn-pad-x:     var(--ui-space-5);
+    --_btn-fs:        var(--ui-text-body);
+    --_btn-fw:        var(--ui-weight-semibold);
+    --_btn-tracking:  var(--ui-tracking-cyber);
+
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ui-space-2);
+    min-height: 44px;
+    padding: var(--_btn-pad-y) var(--_btn-pad-x);
+    background: var(--_btn-bg);
+    color: var(--_btn-fg);
+    font-family: var(--ui-font-display);
+    font-size: var(--_btn-fs);
+    font-weight: var(--_btn-fw);
+    letter-spacing: var(--_btn-tracking);
+    text-transform: uppercase;
+    line-height: 1;
+    border: 1px solid var(--_btn-border);
+    border-radius: var(--_btn-radius);
+    box-shadow: var(--_btn-shadow), var(--ui-inset-highlight);
+    cursor: pointer;
+    user-select: none;
+    overflow: hidden;
+    isolation: isolate;
+    transition:
+        background-color var(--ui-duration-fast)  var(--ui-ease-standard),
+        border-color    var(--ui-duration-fast)  var(--ui-ease-standard),
+        box-shadow      var(--ui-duration-base)  var(--ui-ease-standard),
+        transform       var(--ui-duration-base)  var(--ui-ease-spring),
+        color           var(--ui-duration-fast)  var(--ui-ease-standard);
+}
+.ui-btn:hover {
+    background: var(--_btn-bg-hover);
+    border-color: var(--_btn-border-hover);
+    box-shadow: var(--_btn-shadow-hover), var(--ui-inset-highlight);
+    transform: translateY(-1px);
+}
+.ui-btn:active {
+    background: var(--_btn-bg-active);
+    transform: translateY(0) scale(0.985);
+    transition-duration: var(--ui-duration-instant);
+}
+.ui-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--_btn-shadow-hover), var(--ui-inset-highlight), var(--ui-focus-ring);
+}
+.ui-btn[disabled],
+.ui-btn.is-disabled {
+    opacity: 0.42;
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
+/* Press ripple — a brief light wash radiating from the press point.
+   Pure CSS via ::after, transformed and faded on :active. */
+.ui-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at var(--_press-x, 50%) var(--_press-y, 50%),
+        rgba(255, 255, 255, 0.18) 0%, transparent 55%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ui-duration-base) var(--ui-ease-out);
+    z-index: 0;
+}
+.ui-btn:active::after {
+    opacity: 1;
+    transition-duration: var(--ui-duration-instant);
+}
+.ui-btn > * { position: relative; z-index: 1; }
+
+/* ── PRIMARY (brand fill) ── Hero CTA. Used sparingly — one per
+   screen to anchor the eye. Marvel-Snap-style: dark text on a
+   cyan brand fill, with a subtle highlight up top. */
+.ui-btn--primary {
+    --_btn-bg:        var(--ui-brand);
+    --_btn-bg-hover:  #5fdfff;
+    --_btn-bg-active: var(--ui-brand-strong);
+    --_btn-fg:        var(--ui-text-on-brand);
+    --_btn-border:    transparent;
+    --_btn-border-hover: rgba(255, 255, 255, 0.28);
+    --_btn-shadow:    var(--ui-elev-2), var(--ui-glow-brand);
+    --_btn-shadow-hover: var(--ui-elev-3), 0 0 16px rgba(74, 216, 255, 0.55);
+    --_btn-fw:        var(--ui-weight-bold);
+}
+
+/* ── GOLD (reward-context primary) ── Same visual confidence as
+   primary but in the reward/premium tone. Used on "claim
+   reward", "install upgrade", etc. */
+.ui-btn--gold {
+    --_btn-bg:        var(--ui-gold);
+    --_btn-bg-hover:  #ffe085;
+    --_btn-bg-active: var(--ui-gold-strong);
+    --_btn-fg:        var(--ui-text-on-gold);
+    --_btn-border:    transparent;
+    --_btn-shadow:    var(--ui-elev-2), var(--ui-glow-gold);
+    --_btn-shadow-hover: var(--ui-elev-3), 0 0 16px rgba(255, 215, 106, 0.55);
+    --_btn-fw:        var(--ui-weight-bold);
+}
+
+/* ── SECONDARY (outlined) ── Default action. Currently the default
+   styling above already reads as "secondary"; the modifier just
+   makes the intent explicit. */
+.ui-btn--secondary {
+    --_btn-bg: rgba(20, 28, 46, 0.65);
+    --_btn-bg-hover: rgba(28, 38, 60, 0.75);
+}
+
+/* ── GHOST (borderless) ── Low-emphasis. Used for tertiary
+   actions like "skip", "back", "view details". */
+.ui-btn--ghost {
+    --_btn-bg:        transparent;
+    --_btn-bg-hover:  rgba(255, 255, 255, 0.06);
+    --_btn-bg-active: rgba(255, 255, 255, 0.10);
+    --_btn-border:    transparent;
+    --_btn-border-hover: var(--ui-border-base);
+    --_btn-shadow:    none;
+    --_btn-shadow-hover: none;
+}
+.ui-btn--ghost:hover { transform: none; }
+
+/* ── DESTRUCTIVE ── Red-tinted. Pairs with primary on confirm
+   dialogs (e.g. ABORT RUN). */
+.ui-btn--destructive {
+    --_btn-bg:        rgba(46, 12, 24, 0.72);
+    --_btn-bg-hover:  rgba(64, 16, 32, 0.85);
+    --_btn-bg-active: rgba(78, 18, 38, 0.95);
+    --_btn-fg:        #ffd0d8;
+    --_btn-border:    var(--ui-border-alert);
+    --_btn-border-hover: rgba(255, 93, 122, 0.7);
+    --_btn-shadow:    var(--ui-elev-1);
+    --_btn-shadow-hover: var(--ui-elev-2), var(--ui-glow-alert);
+}
+
+/* ── ICON (square/circle, content is just an icon) ── */
+.ui-btn--icon {
+    --_btn-pad-x: 0;
+    --_btn-pad-y: 0;
+    width: 44px;
+    min-height: 44px;
+    aspect-ratio: 1;
+    border-radius: var(--ui-radius-md);
+}
+.ui-btn--icon.ui-btn--round {
+    border-radius: var(--ui-radius-pill);
+}
+.ui-btn--icon svg {
+    width: 22px;
+    height: 22px;
+}
+
+/* ── SIZES ── */
+.ui-btn--sm {
+    --_btn-pad-y: var(--ui-space-2);
+    --_btn-pad-x: var(--ui-space-3);
+    --_btn-fs: var(--ui-text-caption);
+    min-height: 36px;
+}
+.ui-btn--lg {
+    --_btn-pad-y: var(--ui-space-4);
+    --_btn-pad-x: var(--ui-space-8);
+    --_btn-fs: var(--ui-text-subhead);
+    min-height: 56px;
+}
+
+/* ── BLOCK (full-width) ── */
+.ui-btn--block {
+    width: 100%;
+}
+
+/* ── LOADING ── content fades, centred spinner takes over */
+.ui-btn.is-loading {
+    pointer-events: none;
+    color: transparent;
+}
+.ui-btn.is-loading::before {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border: 2px solid currentColor;
+    border-radius: 50%;
+    border-top-color: transparent;
+    color: var(--ui-text-90);
+    top: 50%; left: 50%;
+    margin-top: -9px; margin-left: -9px;
+    animation: ui-spin 720ms linear infinite;
+    z-index: 2;
+}
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+
+
+/* ──────────────────────────────────────────────────────────
+ * 3. PANEL
+ * The Snap-style glass surface. Three elevations:
+ *   .ui-panel              base — sits on the background
+ *   .ui-panel--raised      raised — for nested groupings
+ *   .ui-panel--floating    floating — modals, popovers
+ *
+ * Modifier: .ui-panel--flat removes the gradient + inset highlight
+ * for cases where the panel needs to read as a flat container.
+ * ────────────────────────────────────────────────────────── */
+.ui-panel {
+    position: relative;
+    background: var(--ui-glass-1);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-lg);
+    padding: var(--ui-space-5);
+    box-shadow: var(--ui-elev-1), var(--ui-inset-highlight);
+    backdrop-filter: blur(var(--ui-blur-sm));
+    -webkit-backdrop-filter: blur(var(--ui-blur-sm));
+    color: var(--ui-text-90);
+}
+.ui-panel--raised {
+    background: var(--ui-glass-2);
+    box-shadow: var(--ui-elev-2), var(--ui-inset-highlight);
+    backdrop-filter: blur(var(--ui-blur-md));
+    -webkit-backdrop-filter: blur(var(--ui-blur-md));
+}
+.ui-panel--floating {
+    background: var(--ui-glass-3);
+    box-shadow: var(--ui-elev-4), var(--ui-inset-highlight);
+    backdrop-filter: blur(var(--ui-blur-lg));
+    -webkit-backdrop-filter: blur(var(--ui-blur-lg));
+}
+.ui-panel--flat {
+    background: var(--ui-surface-1);
+    box-shadow: var(--ui-elev-1);
+}
+.ui-panel--brand {
+    border-color: var(--ui-border-brand);
+    box-shadow: var(--ui-elev-2), var(--ui-inset-highlight), var(--ui-glow-brand);
+}
+.ui-panel--gold {
+    border-color: var(--ui-border-gold);
+    box-shadow: var(--ui-elev-2), var(--ui-inset-highlight), var(--ui-glow-gold);
+}
+
+/* Panel section header — a small all-caps label that sits at
+   the top of a panel section. */
+.ui-panel-eyebrow {
+    display: block;
+    font-family: var(--ui-font-display);
+    font-size: var(--ui-text-micro);
+    font-weight: var(--ui-weight-semibold);
+    letter-spacing: var(--ui-tracking-cyber);
+    text-transform: uppercase;
+    color: var(--ui-brand);
+    margin-bottom: var(--ui-space-2);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 4. CARD
+ * A stricter panel variant: fixed aspect ratio + padding
+ * presets + tilt-on-hover. Used for menu tiles, reward cards,
+ * class-select cards, etc.
+ * ────────────────────────────────────────────────────────── */
+.ui-card {
+    position: relative;
+    background: var(--ui-glass-2);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-lg);
+    padding: var(--ui-space-5);
+    box-shadow: var(--ui-elev-2), var(--ui-inset-highlight);
+    color: var(--ui-text-90);
+    cursor: pointer;
+    transform-style: preserve-3d;
+    transform: perspective(900px) rotateX(0deg) rotateY(0deg) translateZ(0);
+    transition:
+        transform var(--ui-duration-base) var(--ui-ease-spring),
+        box-shadow var(--ui-duration-base) var(--ui-ease-standard),
+        border-color var(--ui-duration-fast) var(--ui-ease-standard);
+    will-change: transform;
+}
+.ui-card:hover {
+    border-color: var(--ui-border-strong);
+    box-shadow: var(--ui-elev-3), var(--ui-inset-highlight);
+    transform: perspective(900px) rotateX(2deg) translateY(-2px);
+}
+.ui-card:active {
+    transform: perspective(900px) translateY(0) scale(0.985);
+    transition-duration: var(--ui-duration-instant);
+}
+.ui-card.is-selected {
+    border-color: var(--ui-brand);
+    box-shadow: var(--ui-elev-3), var(--ui-inset-highlight), var(--ui-glow-brand);
+}
+.ui-card.is-disabled {
+    opacity: 0.45;
+    pointer-events: none;
+    filter: saturate(0.5);
+}
+
+/* Card with a hero image / canvas at the top */
+.ui-card-media {
+    position: relative;
+    margin: calc(var(--ui-space-5) * -1) calc(var(--ui-space-5) * -1) var(--ui-space-3);
+    border-radius: var(--ui-radius-lg) var(--ui-radius-lg) 0 0;
+    overflow: hidden;
+    aspect-ratio: 16 / 9;
+    background: var(--ui-surface-1);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 5. TOGGLE
+ * iOS-style smooth toggle replacing the existing checkbox+CSS
+ * mash. The knob travels with a spring; off-state is a dim
+ * track, on-state is the brand colour with a faint glow.
+ * ────────────────────────────────────────────────────────── */
+.ui-toggle {
+    --_track-w: 44px;
+    --_track-h: 24px;
+    --_knob-d: 18px;
+    --_pad: 3px;
+
+    position: relative;
+    display: inline-block;
+    width: var(--_track-w);
+    height: var(--_track-h);
+    flex: 0 0 auto;
+    cursor: pointer;
+}
+.ui-toggle input {
+    position: absolute;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    cursor: pointer;
+    z-index: 2;
+}
+.ui-toggle-track {
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-pill);
+    transition:
+        background var(--ui-duration-fast) var(--ui-ease-standard),
+        border-color var(--ui-duration-fast) var(--ui-ease-standard),
+        box-shadow var(--ui-duration-base) var(--ui-ease-standard);
+}
+.ui-toggle-knob {
+    position: absolute;
+    top: var(--_pad);
+    left: var(--_pad);
+    width: var(--_knob-d);
+    height: var(--_knob-d);
+    background: var(--ui-text-90);
+    border-radius: 50%;
+    box-shadow: var(--ui-elev-2);
+    transition: transform var(--ui-duration-base) var(--ui-ease-spring), background var(--ui-duration-fast) var(--ui-ease-standard);
+}
+.ui-toggle input:checked ~ .ui-toggle-track {
+    background: var(--ui-brand);
+    border-color: var(--ui-brand-strong);
+    box-shadow: 0 0 0 4px rgba(74, 216, 255, 0.12), var(--ui-glow-brand);
+}
+.ui-toggle input:checked ~ .ui-toggle-knob {
+    transform: translateX(calc(var(--_track-w) - var(--_knob-d) - var(--_pad) * 2));
+    background: var(--ui-text-on-brand);
+}
+.ui-toggle input:focus-visible ~ .ui-toggle-track {
+    box-shadow: var(--ui-focus-ring);
+}
+.ui-toggle input:disabled ~ .ui-toggle-track,
+.ui-toggle input:disabled ~ .ui-toggle-knob {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 6. SLIDER
+ * Continuous-fill range slider with a value chip. The fill is
+ * a CSS gradient driven by the input's --val custom property
+ * (set via JS or via the `value` attribute mapper below).
+ *
+ * Mark up as:
+ *   <label class="ui-slider">
+ *     <span class="ui-slider-label">Music volume</span>
+ *     <input type="range" min="0" max="100" value="30">
+ *     <span class="ui-slider-value">30</span>
+ *   </label>
+ *
+ * The component listens to its inner <input> and updates --val.
+ * (Wire this in JS — minimal hookup in src/services/ui.js.)
+ * ────────────────────────────────────────────────────────── */
+.ui-slider {
+    --_thumb-d: 18px;
+    --_track-h: 6px;
+    --_val: 0;
+
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: var(--ui-space-3);
+}
+.ui-slider-label {
+    grid-column: 1 / -1;
+    font-family: var(--ui-font-body);
+    font-size: var(--ui-text-body);
+    font-weight: var(--ui-weight-medium);
+    color: var(--ui-text-90);
+    margin-bottom: var(--ui-space-1);
+}
+.ui-slider input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: var(--_thumb-d);
+    background: transparent;
+    margin: 0;
+    cursor: pointer;
+}
+.ui-slider input[type="range"]::-webkit-slider-runnable-track {
+    height: var(--_track-h);
+    border-radius: var(--ui-radius-pill);
+    background:
+        linear-gradient(90deg, var(--ui-brand) 0%, var(--ui-brand) calc(var(--_val) * 1%),
+            rgba(255, 255, 255, 0.12) calc(var(--_val) * 1%), rgba(255, 255, 255, 0.12) 100%);
+}
+.ui-slider input[type="range"]::-moz-range-track {
+    height: var(--_track-h);
+    border-radius: var(--ui-radius-pill);
+    background: rgba(255, 255, 255, 0.12);
+}
+.ui-slider input[type="range"]::-moz-range-progress {
+    height: var(--_track-h);
+    border-radius: var(--ui-radius-pill);
+    background: var(--ui-brand);
+}
+.ui-slider input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: var(--_thumb-d);
+    height: var(--_thumb-d);
+    border-radius: 50%;
+    background: var(--ui-text-90);
+    border: 2px solid var(--ui-brand);
+    box-shadow: var(--ui-elev-2), 0 0 0 4px rgba(74, 216, 255, 0);
+    margin-top: calc((var(--_track-h) - var(--_thumb-d)) / 2);
+    transition: box-shadow var(--ui-duration-fast) var(--ui-ease-standard), transform var(--ui-duration-base) var(--ui-ease-spring);
+}
+.ui-slider input[type="range"]:hover::-webkit-slider-thumb {
+    box-shadow: var(--ui-elev-2), 0 0 0 8px rgba(74, 216, 255, 0.16);
+}
+.ui-slider input[type="range"]:active::-webkit-slider-thumb {
+    transform: scale(1.12);
+}
+.ui-slider input[type="range"]::-moz-range-thumb {
+    width: var(--_thumb-d);
+    height: var(--_thumb-d);
+    border-radius: 50%;
+    background: var(--ui-text-90);
+    border: 2px solid var(--ui-brand);
+    box-shadow: var(--ui-elev-2);
+    cursor: pointer;
+}
+.ui-slider-value {
+    min-width: 36px;
+    padding: var(--ui-space-1) var(--ui-space-2);
+    background: var(--ui-surface-2);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-sm);
+    font-family: var(--ui-font-mono);
+    font-size: var(--ui-text-caption);
+    color: var(--ui-brand);
+    text-align: center;
+    text-shadow: 0 0 6px rgba(74, 216, 255, 0.55);
+    font-variant-numeric: tabular-nums;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 7. DROPDOWN
+ * Custom-styled native <select>. Native menu still opens for
+ * accessibility — we just refine the chrome.
+ * ────────────────────────────────────────────────────────── */
+.ui-dropdown {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 100%;
+    max-width: 240px;
+}
+.ui-dropdown select {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    padding: var(--ui-space-3) var(--ui-space-8) var(--ui-space-3) var(--ui-space-3);
+    background: var(--ui-surface-2);
+    color: var(--ui-text-90);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-md);
+    font-family: var(--ui-font-body);
+    font-weight: var(--ui-weight-medium);
+    font-size: var(--ui-text-body);
+    cursor: pointer;
+    transition: border-color var(--ui-duration-fast) var(--ui-ease-standard), background var(--ui-duration-fast) var(--ui-ease-standard);
+}
+.ui-dropdown select:hover {
+    border-color: var(--ui-border-strong);
+    background: var(--ui-surface-3);
+}
+.ui-dropdown select:focus-visible {
+    outline: none;
+    border-color: var(--ui-brand);
+    box-shadow: var(--ui-focus-ring);
+}
+.ui-dropdown::after {
+    content: '';
+    position: absolute;
+    right: var(--ui-space-3);
+    top: 50%;
+    transform: translateY(-25%) rotate(45deg);
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid var(--ui-text-70);
+    border-bottom: 2px solid var(--ui-text-70);
+    pointer-events: none;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 8. TABS
+ * Sliding underline indicator. JS sets `--_indicator-x` and
+ * `--_indicator-w` based on the active tab's offsetLeft/offsetWidth.
+ * ────────────────────────────────────────────────────────── */
+.ui-tabs {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+    border-bottom: 1px solid var(--ui-border-subtle);
+    --_indicator-x: 0;
+    --_indicator-w: 0;
+}
+.ui-tab {
+    position: relative;
+    padding: var(--ui-space-3) var(--ui-space-4);
+    background: transparent;
+    color: var(--ui-text-50);
+    font-family: var(--ui-font-display);
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-semibold);
+    letter-spacing: var(--ui-tracking-cyber);
+    text-transform: uppercase;
+    border: none;
+    cursor: pointer;
+    transition: color var(--ui-duration-fast) var(--ui-ease-standard);
+}
+.ui-tab:hover { color: var(--ui-text-90); }
+.ui-tab.is-active { color: var(--ui-brand); text-shadow: 0 0 8px rgba(74, 216, 255, 0.4); }
+.ui-tabs::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: var(--_indicator-w);
+    height: 2px;
+    background: var(--ui-brand);
+    border-radius: var(--ui-radius-pill);
+    box-shadow: var(--ui-glow-brand);
+    transform: translateX(var(--_indicator-x));
+    transition: transform var(--ui-duration-base) var(--ui-ease-spring),
+                width var(--ui-duration-base) var(--ui-ease-spring);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 9. CHIPS / BADGES / PILLS
+ * Single visual language for inline status tokens. Replaces
+ * the half-dozen ad-hoc chip styles in the codebase.
+ * ────────────────────────────────────────────────────────── */
+.ui-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-1);
+    padding: var(--ui-space-1) var(--ui-space-3);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-pill);
+    color: var(--ui-text-90);
+    font-family: var(--ui-font-display);
+    font-size: var(--ui-text-micro);
+    font-weight: var(--ui-weight-semibold);
+    letter-spacing: var(--ui-tracking-cyber);
+    text-transform: uppercase;
+    line-height: 1;
+}
+.ui-chip--brand   { color: var(--ui-brand); border-color: var(--ui-border-brand); background: rgba(74, 216, 255, 0.06); }
+.ui-chip--gold    { color: var(--ui-gold);  border-color: var(--ui-border-gold);  background: rgba(255, 215, 106, 0.06); }
+.ui-chip--alert   { color: var(--ui-alert); border-color: var(--ui-border-alert); background: rgba(255, 93, 122, 0.06); }
+.ui-chip--success { color: var(--ui-success); border-color: rgba(94, 234, 212, 0.45); background: rgba(94, 234, 212, 0.06); }
+.ui-chip--solid {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: transparent;
+}
+
+/* Numeric badge — count indicator on icons */
+.ui-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 6px;
+    background: var(--ui-alert);
+    color: var(--ui-text-on-alert);
+    border-radius: var(--ui-radius-pill);
+    font-family: var(--ui-font-mono);
+    font-size: 0.66rem;
+    font-weight: var(--ui-weight-bold);
+    line-height: 1;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 10. MODAL
+ * Backdrop + entry/exit physics. JS adds .is-open after the
+ * element is rendered to trigger the spring entry.
+ *
+ * Mark up:
+ *   <div class="ui-modal-backdrop">
+ *     <div class="ui-modal ui-panel ui-panel--floating">…</div>
+ *   </div>
+ * ────────────────────────────────────────────────────────── */
+.ui-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: var(--ui-z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--ui-space-4);
+    background: rgba(2, 4, 10, 0);
+    backdrop-filter: blur(0);
+    -webkit-backdrop-filter: blur(0);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        background var(--ui-duration-base) var(--ui-ease-out),
+        backdrop-filter var(--ui-duration-base) var(--ui-ease-out),
+        -webkit-backdrop-filter var(--ui-duration-base) var(--ui-ease-out),
+        opacity var(--ui-duration-base) var(--ui-ease-out);
+}
+.ui-modal-backdrop.is-open {
+    background: rgba(2, 4, 10, 0.62);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    opacity: 1;
+    pointer-events: auto;
+}
+.ui-modal {
+    width: 100%;
+    max-width: 460px;
+    transform: translateY(16px) scale(0.96);
+    opacity: 0;
+    transition:
+        transform var(--ui-duration-slow) var(--ui-ease-spring-soft),
+        opacity var(--ui-duration-base) var(--ui-ease-out);
+}
+.ui-modal-backdrop.is-open .ui-modal {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 11. TOOLTIP
+ * Small, square, dark-glass. Pointer triangle drawn via ::after.
+ * Position is set inline by the call site.
+ * ────────────────────────────────────────────────────────── */
+.ui-tooltip {
+    position: fixed;
+    z-index: var(--ui-z-tooltip);
+    max-width: 240px;
+    padding: var(--ui-space-2) var(--ui-space-3);
+    background: var(--ui-glass-3);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-md);
+    box-shadow: var(--ui-elev-3);
+    backdrop-filter: blur(var(--ui-blur-md));
+    -webkit-backdrop-filter: blur(var(--ui-blur-md));
+    color: var(--ui-text-90);
+    font-family: var(--ui-font-body);
+    font-size: var(--ui-text-caption);
+    line-height: var(--ui-leading-snug);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity var(--ui-duration-fast) var(--ui-ease-out), transform var(--ui-duration-fast) var(--ui-ease-out);
+}
+.ui-tooltip.is-open {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 12. DIVIDER / HAIRLINE
+ * A 1px line for separating sections inside panels.
+ * ────────────────────────────────────────────────────────── */
+.ui-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--ui-border-base) 20%, var(--ui-border-base) 80%, transparent);
+    border: 0;
+    margin: var(--ui-space-4) 0;
+}
+.ui-divider--vertical {
+    width: 1px;
+    height: auto;
+    align-self: stretch;
+    background: linear-gradient(180deg, transparent, var(--ui-border-base) 20%, var(--ui-border-base) 80%, transparent);
+    margin: 0 var(--ui-space-3);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 13. INPUTS (text)
+ * Text input field. Refined — focus uses brand ring instead of
+ * the legacy outline-on-focus.
+ * ────────────────────────────────────────────────────────── */
+.ui-input {
+    width: 100%;
+    padding: var(--ui-space-3) var(--ui-space-4);
+    background: var(--ui-surface-2);
+    color: var(--ui-text-90);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-md);
+    font-family: var(--ui-font-body);
+    font-size: var(--ui-text-body);
+    line-height: var(--ui-leading-snug);
+    transition:
+        border-color var(--ui-duration-fast) var(--ui-ease-standard),
+        background var(--ui-duration-fast) var(--ui-ease-standard),
+        box-shadow var(--ui-duration-fast) var(--ui-ease-standard);
+}
+.ui-input::placeholder {
+    color: var(--ui-text-50);
+}
+.ui-input:focus-visible {
+    outline: none;
+    border-color: var(--ui-brand);
+    background: var(--ui-surface-3);
+    box-shadow: 0 0 0 4px rgba(74, 216, 255, 0.10);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 14. HERO LABEL / DISPLAY TITLE
+ * Reusable big title block. Replaces the 8 different inline
+ * h1/h2 styles in the codebase.
+ * ────────────────────────────────────────────────────────── */
+.ui-display {
+    font-family: var(--ui-font-display);
+    font-weight: var(--ui-weight-heavy);
+    font-size: var(--ui-text-display);
+    line-height: var(--ui-leading-tight);
+    letter-spacing: var(--ui-tracking-tight);
+    color: var(--ui-text-100);
+    text-shadow: 0 0 22px rgba(74, 216, 255, 0.28);
+}
+.ui-display--gold {
+    color: var(--ui-gold);
+    text-shadow: 0 0 22px rgba(255, 215, 106, 0.32);
+}
+.ui-eyebrow {
+    font-family: var(--ui-font-display);
+    font-size: var(--ui-text-micro);
+    font-weight: var(--ui-weight-semibold);
+    letter-spacing: var(--ui-tracking-cyber);
+    text-transform: uppercase;
+    color: var(--ui-brand);
+    text-shadow: 0 0 8px rgba(74, 216, 255, 0.5);
+}
+.ui-heading {
+    font-family: var(--ui-font-display);
+    font-weight: var(--ui-weight-bold);
+    font-size: var(--ui-text-heading);
+    line-height: var(--ui-leading-snug);
+    letter-spacing: 0;
+    color: var(--ui-text-100);
+}
+.ui-body {
+    font-family: var(--ui-font-body);
+    font-weight: var(--ui-weight-base);
+    font-size: var(--ui-text-body);
+    line-height: var(--ui-leading-normal);
+    color: var(--ui-text-90);
+}
+.ui-caption {
+    font-family: var(--ui-font-body);
+    font-weight: var(--ui-weight-medium);
+    font-size: var(--ui-text-caption);
+    line-height: var(--ui-leading-snug);
+    color: var(--ui-text-70);
+    letter-spacing: var(--ui-tracking-wide);
+}
+.ui-label {
+    font-family: var(--ui-font-display);
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-semibold);
+    letter-spacing: var(--ui-tracking-cyber);
+    text-transform: uppercase;
+    color: var(--ui-text-50);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 15. STAT ROW
+ * Currency strip — single visual style for inline stat displays
+ * (Fragments / Sparks / Streak). Replaces several inline
+ * `.currency-display` variants.
+ * ────────────────────────────────────────────────────────── */
+.ui-stat-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ui-space-3);
+    flex-wrap: wrap;
+}
+.ui-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+    padding: var(--ui-space-2) var(--ui-space-3);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-pill);
+    font-family: var(--ui-font-mono);
+    font-size: var(--ui-text-caption);
+    color: var(--ui-text-90);
+    font-variant-numeric: tabular-nums;
+}
+.ui-stat-icon {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+}
+.ui-stat-label {
+    font-family: var(--ui-font-display);
+    font-size: var(--ui-text-micro);
+    letter-spacing: var(--ui-tracking-cyber);
+    text-transform: uppercase;
+    color: var(--ui-text-50);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 16. LOADING SHIMMER
+ * Skeleton block + shimmer keyframe. Used while async content
+ * is loading instead of jarring content pop-in.
+ * ────────────────────────────────────────────────────────── */
+.ui-skeleton {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(90deg, var(--ui-surface-1), var(--ui-surface-2), var(--ui-surface-1));
+    border-radius: var(--ui-radius-md);
+}
+.ui-skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+    transform: translateX(-100%);
+    animation: ui-shimmer 1400ms linear infinite;
+}
+@keyframes ui-shimmer {
+    100% { transform: translateX(100%); }
+}
+body.reduced-motion .ui-skeleton::after { animation: none; }
