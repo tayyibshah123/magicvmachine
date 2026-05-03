@@ -24,6 +24,17 @@
        Menlo; Rajdhani → clean sans stack. */
     --font-main: 'Rajdhani', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
     --font-cyber: 'Orbitron', 'Consolas', 'Menlo', 'Courier New', monospace;
+    /* Premium typography presets — letter-spacing tokens used across
+       cyber labels, body copy, and numeric chrome. Centralising them
+       makes a global tightening trivially audited; the previous
+       inline `letter-spacing: 0.18em` etc. sprinkled across rules
+       drifted independently. */
+    --ls-display: 0.04em;   /* big titles, hero headers */
+    --ls-cyber:   0.16em;   /* small cyber labels (// SYSTEM BOOT, tags) */
+    --ls-loose:   0.28em;   /* CTA buttons, tap-to-continue prompts */
+    --ls-body:    0.01em;   /* body copy */
+    --lh-tight:   1.1;
+    --lh-normal:  1.45;
     /* Typography scale (all interior text should eventually use these tokens).
        Multiplier set by the Accessibility menu text-size slider (Phase 6). */
     --text-scale-multiplier: 1;
@@ -10460,6 +10471,16 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
     flex-direction: column;
     align-items: center;
     gap: 2.5cqh;
+    /* Hold the brand block invisible while the boot sequence types
+       in. Reveals at 3.0s to land AFTER the third "CONNECTION
+       ESTABLISHED" line finishes. The per-word stagger inside the
+       title (introv2-word-1 / 2 / introv2-vs) takes over from there. */
+    opacity: 0;
+    animation: introv2-brand-reveal 0.55s ease-out 3.0s forwards;
+}
+@keyframes introv2-brand-reveal {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 .intro-v2 .introv2-sub-top {
     font-family: var(--font-cyber);
@@ -10565,12 +10586,14 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
     margin-top: 6cqh;
     font-family: var(--font-cyber);
     font-size: clamp(0.72rem, 2.8cqw, 1rem);
-    letter-spacing: 0.35em;
+    letter-spacing: var(--ls-loose);
     color: #fff;
     opacity: 0;
+    /* Delayed to land AFTER the brand reveal + word stagger so the
+       splash sequence ends with "TAP TO CONTINUE" as the final beat. */
     animation:
-        introv2-sub-in 1.0s ease-out 1.8s forwards,
-        introv2-tap-blink 1.6s ease-in-out 2.8s infinite;
+        introv2-sub-in 0.8s ease-out 4.0s forwards,
+        introv2-tap-blink 1.6s ease-in-out 5.0s infinite;
     display: inline-flex;
     gap: 0.7em;
     align-items: center;
@@ -10596,6 +10619,109 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
 @keyframes introv2-tap-blink {
     0%, 100% { opacity: 1; }
     50%      { opacity: 0.4; }
+}
+
+/* Boot-sequence lines — three short status prints that type in
+   sequentially before the brand block lands. Sells the "hacking
+   into the Panopticon" framing without any JS, all CSS keyframes.
+   Each line steps on after the previous one finishes typing. */
+.intro-v2 .introv2-boot {
+    position: absolute;
+    top: 14cqh;
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: 88cqw;
+    text-align: left;
+    z-index: 11;
+    font-family: var(--font-main);
+    font-weight: 300;
+    font-size: clamp(0.6rem, 2.2cqw, 0.82rem);
+    letter-spacing: var(--ls-body);
+    color: rgba(0, 243, 255, 0.85);
+    text-shadow: 0 0 4px rgba(0, 243, 255, 0.6);
+    pointer-events: none;
+    line-height: 1.7;
+}
+.intro-v2 .introv2-boot-line {
+    position: relative;
+    overflow: hidden;
+    white-space: nowrap;
+    width: 0;
+    border-right: 2px solid rgba(0, 243, 255, 0.85);
+    /* `boot-type` advances width 0 → full to type the line; `boot-cursor`
+       blinks the trailing caret while typing. */
+    animation:
+        introv2-boot-type 0.85s steps(28, end) forwards,
+        introv2-boot-cursor 0.55s steps(2, end) infinite;
+}
+/* Stagger each line after the previous one finishes. */
+.intro-v2 .introv2-boot-1 { animation-delay: 0.2s,  0.2s; }
+.intro-v2 .introv2-boot-2 { animation-delay: 1.1s,  1.1s; opacity: 0; animation-fill-mode: forwards; }
+.intro-v2 .introv2-boot-3 { animation-delay: 2.0s,  2.0s; opacity: 0; animation-fill-mode: forwards; }
+/* Lines 2 & 3 fade into existence at their delay, then start typing. */
+.intro-v2 .introv2-boot-2,
+.intro-v2 .introv2-boot-3 {
+    animation-name: introv2-boot-type-fade, introv2-boot-cursor;
+}
+@keyframes introv2-boot-type {
+    from { width: 0; }
+    to   { width: 100%; opacity: 1; }
+}
+@keyframes introv2-boot-type-fade {
+    0%   { width: 0; opacity: 0; }
+    10%  { opacity: 1; }
+    100% { width: 100%; opacity: 1; }
+}
+@keyframes introv2-boot-cursor {
+    50% { border-right-color: transparent; }
+}
+/* The whole boot block fades down once the title takes the stage. */
+.intro-v2 .introv2-boot {
+    animation: introv2-boot-fade 0.5s ease-out 3.5s forwards;
+}
+@keyframes introv2-boot-fade {
+    to { opacity: 0.35; }
+}
+
+/* Per-word title reveal — stagger MAGIC, then v, then MACHINE. The
+   container's existing introv2-title-in animation fades the whole
+   block in from below; this layer adds a per-word slide so the title
+   "assembles" instead of all hitting at once. */
+.intro-v2 .introv2-word-1,
+.intro-v2 .introv2-word-2 {
+    display: inline-block;
+    opacity: 0;
+    animation: introv2-word-in 0.65s cubic-bezier(0.2, 0.8, 0.2, 1.05) forwards;
+}
+.intro-v2 .introv2-word-1 { animation-delay: 3.2s; }
+.intro-v2 .introv2-word-2 { animation-delay: 3.55s; }
+.intro-v2 .introv2-vs {
+    opacity: 0;
+    animation:
+        introv2-word-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1.4) 3.4s forwards,
+        introv2-vs-pulse 2.4s ease-in-out 4s infinite;
+}
+@keyframes introv2-word-in {
+    0%   { opacity: 0; transform: translateY(12px) scale(0.94); filter: blur(6px); }
+    60%  { opacity: 1; }
+    100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+/* Reduced-motion: kill the cursor blink, the type-in, and the word
+   stagger. Lines and title appear instantly, fade in only via opacity
+   so the screen still settles cleanly. */
+body.reduced-motion .intro-v2 .introv2-boot-line,
+body.reduced-motion .intro-v2 .introv2-boot,
+body.reduced-motion .intro-v2 .introv2-word-1,
+body.reduced-motion .intro-v2 .introv2-word-2,
+body.reduced-motion .intro-v2 .introv2-vs {
+    animation: none;
+    opacity: 1;
+    width: auto;
+    border-right: none;
+    transform: none;
+    filter: none;
 }
 
 /* Corner tech brackets — absolute in the overlay, sized in cqmin so

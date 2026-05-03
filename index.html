@@ -24,7 +24,12 @@
          these two lines and ship self-hosted woff2 copies instead. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    <!-- Typography pass — extra weights (Orbitron 500 + Rajdhani 300/600)
+         for finer control over display vs body weight pairings. The
+         display font (Orbitron) carries the cyber-game-title feel; the
+         body font (Rajdhani) gets a light variant for the splash boot
+         sequence + a semibold for tighter UI labels. -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -95,19 +100,28 @@
                 <!-- Centered brand block -->
                 <div class="introv2-center">
                     <div class="introv2-pulse" aria-hidden="true"></div>
+                    <!-- Boot sequence — three short status lines that type in
+                         before the title appears. Sells the "system is
+                         coming online" framing in the half-second before
+                         the brand reveal. Pure CSS keyframes; no JS. -->
+                    <div class="introv2-boot" aria-hidden="true">
+                        <div class="introv2-boot-line introv2-boot-1">&gt; INITIATING SECURE CHANNEL...</div>
+                        <div class="introv2-boot-line introv2-boot-2">&gt; PANOPTICON WATCHDOG: BYPASSED</div>
+                        <div class="introv2-boot-line introv2-boot-3">&gt; CONNECTION ESTABLISHED</div>
+                    </div>
                     <div class="introv2-brand">
                         <span class="introv2-sub-top">// SYSTEM BOOT</span>
                         <h1 class="introv2-title">
-                            <span class="introv2-word">MAGIC</span>
+                            <span class="introv2-word introv2-word-1">MAGIC</span>
                             <span class="introv2-vs" aria-hidden="true">v</span>
-                            <span class="introv2-word">MACHINE</span>
+                            <span class="introv2-word introv2-word-2">MACHINE</span>
                         </h1>
                         <div class="introv2-divider" aria-hidden="true">
                             <span class="introv2-divider-line"></span>
                             <span class="introv2-divider-node"></span>
                             <span class="introv2-divider-line"></span>
                         </div>
-                        <div class="introv2-tagline">A CYBER&ndash;ROGUELITE</div>
+                        <div class="introv2-tagline">A CYBER ROGUELITE</div>
                     </div>
                     <div class="introv2-tap" aria-live="polite">
                         <span class="introv2-tap-bracket">[</span>
