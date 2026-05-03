@@ -7540,6 +7540,32 @@ body.reduced-motion .breakout-warden-sub {
     animation: none;
 }
 
+/* "TAP ANYWHERE TO CONTINUE" hint — only visible when the current
+   teaching beat waits on a tap. Pulses gently so the player notices
+   it without it overpowering the warden subtitle above. Controlled
+   by the .show class added/removed by the Breakout controller. */
+.breakout-tap-hint {
+    display: none;
+    margin-top: 6px;
+    font-family: var(--font-cyber);
+    font-size: calc(var(--text-sm) * 0.62);
+    letter-spacing: 0.18em;
+    color: #88eaff;
+    text-shadow: 0 0 6px rgba(136, 234, 255, 0.55);
+    text-align: center;
+    text-transform: uppercase;
+    animation: breakoutTapPulse 1300ms ease-in-out infinite;
+}
+.breakout-tap-hint.show { display: block; }
+@keyframes breakoutTapPulse {
+    0%, 100% { opacity: 0.45; }
+    50%      { opacity: 1; }
+}
+body.reduced-motion .breakout-tap-hint {
+    animation: none;
+    opacity: 0.85;
+}
+
 /* Storyboard interlude — full-screen fade between rooms. Carries
    the narrative beats ("the cell wall cracks…") between mechanical
    teaching combats so the prologue feels like a story, not a drill. */

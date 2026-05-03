@@ -794,6 +794,11 @@
                      it. The Breakout controller writes into this node and
                      the CSS jitter animation kicks in automatically. -->
                 <div class="breakout-warden-sub" id="breakout-warden-sub"></div>
+                <!-- Tap-to-continue hint — Breakout-only. Shown when the
+                     current beat waits on a tap (no other player action).
+                     Hidden by the JS controller when the wait condition
+                     is something else (e.g. die_used, enemy_turn). -->
+                <div class="breakout-tap-hint" id="breakout-tap-hint">TAP ANYWHERE TO CONTINUE</div>
             </div>
             <button id="btn-tutorial-skip" class="btn ghost tutorial-skip-btn hidden">SKIP TUTORIAL</button>
 

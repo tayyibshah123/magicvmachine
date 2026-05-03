@@ -128,14 +128,14 @@ const ROOMS = [
             },
             {
                 story: 'SHIELD blocks incoming damage.',
-                action: 'Drag the cyan SHIELD die ONTO YOURSELF (the player at the bottom).',
+                action: 'Drag the SHIELD die ONTO YOURSELF (the player at the bottom).',
                 sub: 'DEFENSIVE PROTOCOL · TAP TO CONTINUE',
                 spot: 'die:defend',
                 wait: 'die_used:defend'
             },
             {
                 story: 'Now the strike will land on shield, not HP.',
-                action: 'ATTACK — drag the red ATTACK die ONTO the drone.',
+                action: 'Drag the ATTACK die ONTO the drone.',
                 sub: 'OFFENSIVE PROTOCOL · STRIKE AUTHORIZED',
                 spot: 'die:attack',
                 wait: 'die_used:attack'
@@ -207,7 +207,7 @@ const ROOMS = [
             },
             {
                 story: 'MINION dice summon a Wisp on your side — it absorbs hits and attacks back.',
-                action: 'Drag the green MINION die ONTO empty space.',
+                action: 'Drag the MINION die ONTO empty space.',
                 sub: 'WISP DEPLOYMENT AUTHORIZED',
                 spot: 'die:minion',
                 wait: 'die_used:minion'
@@ -871,10 +871,15 @@ export const Breakout = {
         const story = document.getElementById('tutorial-narration-story');
         const action = document.getElementById('tutorial-narration-action');
         const sub = document.getElementById('breakout-warden-sub');
+        const tapHint = document.getElementById('breakout-tap-hint');
         if (pane) pane.classList.remove('hidden');
         if (story) story.textContent = beat.story || '';
         if (action) action.textContent = beat.action || '';
         if (sub) sub.textContent = beat.sub || '';
+        // Tap-to-continue hint — only when the beat waits on a tap.
+        // Other waits (die_used, enemy_turn, enemy_dies) advance from
+        // gameplay actions, so a tap prompt would be misleading.
+        if (tapHint) tapHint.classList.toggle('show', beat.wait === 'tap');
         // Spotlight placement.
         this._setSpotlight(beat.spot || null);
         // Tap-advance arming. The capture-phase listener was added once
@@ -891,6 +896,10 @@ export const Breakout = {
     _advanceBeat() {
         if (!this._active || !this._room) return;
         this._tapAdvanceArmed = false;
+        // Hide tap hint immediately so the prompt doesn't linger after
+        // an action-driven advance.
+        const tapHint = document.getElementById('breakout-tap-hint');
+        if (tapHint) tapHint.classList.remove('show');
         const next = this._beatIdx + 1;
         const seq = this._room.sequence;
         if (next >= seq.length) {
@@ -982,10 +991,22 @@ export const Breakout = {
             const ey = r.top  + entity.y * sy;
             const radius = (entity.radius || 75) * sx;
             if (target === 'enemy_intent') {
-                // Above the enemy where the intent icon sits.
-                const w = 90, h = 90;
-                return { top: ey - radius * sy / sx - h - 16, left: ex - w / 2, width: w, height: h };
+                // Centred precisely on the intent icon. The renderer
+                // draws the icon at canvas-space (entity.y - radius -
+                // 88), so the screen-space y is ey - radius - 88*sx.
+                // A 78x78 square frames the icon + its damage label
+                // without overshooting onto the HP bar below.
+                const iconCanvasOffsetY = 88; // matches drawIntentIcon offset
+                const iconY = ey - radius - iconCanvasOffsetY * sx;
+                const side = 78;
+                return {
+                    top: iconY - side / 2,
+                    left: ex - side / 2,
+                    width: side,
+                    height: side
+                };
             }
+            // enemy / player full-body — circular ring around the entity.
             return { top: ey - radius - 12, left: ex - radius - 12, width: radius * 2 + 24, height: radius * 2 + 24 };
         }
         // ── DOM targets ──
@@ -999,10 +1020,25 @@ export const Breakout = {
         }
         if (target && target.indexOf('die:') === 0) {
             // Find a die element in the tray matching the requested
-            // slot. Each die has data-slot or its type maps to one.
+            // slot. The dice are CSS-rotated (crescent arc) so the
+            // raw bounding rect is the AXIS-ALIGNED box of the rotated
+            // square, slightly larger and offset diagonally. We use
+            // the rect's centre + a tight square (slightly smaller
+            // than the die's diagonal) so the highlight reads as "on
+            // the die" rather than "around a tilted box".
             const slot = target.slice(4); // attack | defend | mana | minion | signature
             const matched = this._findDieElement(slot);
-            return matched ? this._padRect(matched.getBoundingClientRect(), 6) : null;
+            if (!matched) return null;
+            const r = matched.getBoundingClientRect();
+            const side = Math.min(r.width, r.height) + 12;
+            const cx = r.left + r.width / 2;
+            const cy = r.top  + r.height / 2;
+            return {
+                top:  cy - side / 2,
+                left: cx - side / 2,
+                width: side,
+                height: side
+            };
         }
         return null;
     },
