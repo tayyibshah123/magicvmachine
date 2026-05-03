@@ -102,6 +102,20 @@ export const Hints = {
             }
             return;
         }
+        // Suppress hints during the Sector 0 Breakout prologue. The
+        // breakout already drives a beat-by-beat teaching sequence —
+        // popping a hint modal on top adds redundant + competing
+        // information. Mark seen so it doesn't queue up for later;
+        // the player will encounter these mechanics naturally in real
+        // combat after the prologue completes. Detection via the
+        // `breakout-active` body class avoids a circular import.
+        if (typeof document !== 'undefined' && document.body && document.body.classList.contains('breakout-active')) {
+            if (!this._seen.has(id)) {
+                this._seen.add(id);
+                writeSeen(this._seen);
+            }
+            return;
+        }
         if (this._seen.has(id)) return;
         if (!HINTS[id]) return;
         // Mark seen immediately so re-triggers don't queue duplicates.
@@ -133,37 +147,44 @@ export const Hints = {
     },
 
     _render(hint) {
-        // Lazy-create the overlay root
+        // Lazy-create the overlay root. Compact toast-style: title +
+        // single-line body in a small chip, top-anchored, auto-dismissing
+        // after a few seconds. Tap to dismiss early. The previous design
+        // was a centred full-width modal with a GOT IT button which
+        // commandeered half the screen the moment a player ran into a
+        // new mechanic mid-combat — too disruptive.
         if (!this._root) {
             this._root = document.createElement('div');
-            this._root.className = 'hint-overlay hidden';
+            this._root.className = 'hint-toast hidden';
             this._root.innerHTML = `
-                <div class="hint-card">
-                    <div class="hint-title"></div>
-                    <div class="hint-body"></div>
-                    <button class="btn primary hint-dismiss">GOT IT</button>
+                <div class="hint-toast-icon">!</div>
+                <div class="hint-toast-text">
+                    <div class="hint-toast-title"></div>
+                    <div class="hint-toast-body"></div>
                 </div>
             `;
-            // Anchor to the game container so the hint card stays inside
-            // the 432px mobile-shaped canvas. document.body made the
-            // overlay fill the viewport, leaving the card drifting
-            // off-canvas on wide devices.
+            // Anchor to the game container so the toast stays inside
+            // the mobile-shaped canvas frame.
             const parent = document.getElementById('game-container') || document.body;
             parent.appendChild(this._root);
-            this._root.addEventListener('click', (e) => {
-                if (e.target === this._root || e.target.classList.contains('hint-dismiss')) {
-                    this._dismiss();
-                }
-            });
+            this._root.addEventListener('click', () => this._dismiss());
         }
-        this._root.querySelector('.hint-title').textContent = hint.title;
-        this._root.querySelector('.hint-body').textContent = hint.body;
+        this._root.querySelector('.hint-toast-title').textContent = hint.title;
+        this._root.querySelector('.hint-toast-body').textContent = hint.body;
         this._root.classList.remove('hidden');
         requestAnimationFrame(() => this._root.classList.add('open'));
+        // Auto-dismiss after a generous reading window. Body copy is
+        // ~8 words so 4 seconds is comfortable.
+        if (this._dismissTimer) clearTimeout(this._dismissTimer);
+        this._dismissTimer = setTimeout(() => this._dismiss(), 4000);
     },
 
     _dismiss() {
         if (!this._root) return;
+        if (this._dismissTimer) {
+            clearTimeout(this._dismissTimer);
+            this._dismissTimer = null;
+        }
         this._root.classList.remove('open');
         setTimeout(() => {
             this._root.classList.add('hidden');
