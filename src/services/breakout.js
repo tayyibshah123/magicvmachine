@@ -121,36 +121,60 @@ const ROOMS = [
         sequence: [
             {
                 story: 'The red icon above its head is its INTENT — what it will do next turn.',
-                action: 'Read the STRIKE 5 telegraph. The drone will hit for 5 damage.',
+                action: 'STRIKE 5 means the drone will deal 5 damage to you next turn.',
                 sub: 'INTENT TELEMETRY ENABLED',
                 spot: 'enemy_intent',
                 wait: 'tap'
             },
+            // ── ATTACK QTE TEACHING ──
+            // Two-beat split: a "tell" (tap-advance) explaining the
+            // timing ring, then a "do" (drag the die) so the player
+            // reads the rule before the action happens.
             {
-                story: 'SHIELD blocks incoming damage.',
-                action: 'Drag the SHIELD die ONTO YOURSELF (the player at the bottom).',
-                sub: 'DEFENSIVE PROTOCOL · TAP TO CONTINUE',
-                spot: 'die:defend',
-                wait: 'die_used:defend'
+                story: 'When you ATTACK, a TIMING RING appears on the target.',
+                action: 'Tap inside the GREEN INNER ZONE the moment the ring lands. PERFECT timing = CRITICAL HIT (+60% damage).',
+                sub: 'TIMING PROTOCOL · CRITICAL WINDOW',
+                spot: 'enemy',
+                wait: 'tap'
             },
             {
-                story: 'Now the strike will land on shield, not HP.',
+                story: 'Drag the ATTACK die now. A ring will shrink — tap GREEN to crit.',
                 action: 'Drag the ATTACK die ONTO the drone.',
                 sub: 'OFFENSIVE PROTOCOL · STRIKE AUTHORIZED',
                 spot: 'die:attack',
                 wait: 'die_used:attack'
             },
+            // ── DEFEND TEACHING ──
             {
-                story: 'When you run out of dice, end the turn so the drone moves.',
+                story: 'SHIELD adds Shield Points — they absorb the next hit before HP.',
+                action: 'Drag the SHIELD die ONTO YOURSELF (the player at the bottom).',
+                sub: 'DEFENSIVE PROTOCOL · ARMOUR ACTIVE',
+                spot: 'die:defend',
+                wait: 'die_used:defend'
+            },
+            // ── DEFEND QTE / PARRY TEACHING ──
+            // Read this BEFORE pressing END TURN so the player is
+            // primed to tap when the parry ring appears. The defend
+            // QTE only fires during the enemy phase.
+            {
+                story: 'When you END TURN, the drone will strike. A RING will appear ON YOU.',
+                action: 'Tap inside the GREEN ZONE to PARRY — halves the hit AND reflects 50% damage back.',
+                sub: 'PARRY PROTOCOL · COUNTER-WINDOW',
+                spot: 'player',
+                wait: 'tap'
+            },
+            {
+                story: 'Press END TURN now. Watch for the parry ring on yourself — tap green.',
                 action: 'Press the END TURN button on the right.',
-                sub: 'TURN PHASE · YIELD TO ENEMY',
+                sub: 'YIELD TO ENEMY · STAY ALERT',
                 spot: 'end_turn',
                 wait: 'enemy_turn'
             },
+            // ── FINISH ──
             {
-                story: 'Repeat the rhythm. Shield, strike, end turn, until it falls.',
-                action: 'Finish the drone.',
-                sub: 'TARGET DEGRADED · CONTINUE',
+                story: 'You parried. Now drop the drone.',
+                action: 'ATTACK to finish. Time the ring again for a critical kill.',
+                sub: 'TARGET DEGRADED · TERMINATE',
                 spot: null,
                 wait: 'enemy_dies'
             }
@@ -270,45 +294,31 @@ const ROOMS = [
         },
         sequence: [
             {
-                story: 'CIPHER WAVE applies WEAK to you — your damage gets cut in half.',
-                action: 'Read the intent. The wave hits everyone on your side.',
+                story: 'CIPHER WAVE applies the WEAK status — your damage drops 50% for two turns.',
+                action: 'Status icons appear above your HP bar. Long-press one for details.',
                 sub: 'STATUS DECAY · WEAK INCOMING',
                 spot: 'enemy_intent',
                 wait: 'tap'
             },
             {
-                story: 'SHIELD blunts the wave. Plant your defend first.',
-                action: 'Drag the SHIELD die ONTO YOURSELF.',
+                story: 'SHIELD blunts the wave damage. The WEAK debuff still applies.',
+                action: 'Drag the SHIELD die ONTO YOURSELF, then end turn.',
                 sub: 'STATUS RESIST · DEFENSIVE ACTIVE',
                 spot: 'die:defend',
                 wait: 'die_used:defend'
             },
             {
-                story: 'End the turn. Take the wave on shield, then plan your counter.',
+                story: 'End the turn — the cipher wave hits, then it loads EXECUTE 12.',
                 action: 'Press END TURN.',
-                sub: 'TURN PHASE · ABSORB INCOMING',
+                sub: 'TURN PHASE · CYCLE',
                 spot: 'end_turn',
                 wait: 'enemy_turn'
             },
             {
-                story: 'Now it loads EXECUTE 12 — twelve damage in one hit. PARRY it.',
-                action: 'A SHIELD die now triggers a timing-ring QTE. Tap inside the green inner ring.',
-                sub: 'EXECUTE INCOMING · PARRY WINDOW',
-                spot: 'enemy_intent',
-                wait: 'tap'
-            },
-            {
-                story: 'Drag SHIELD onto yourself. The QTE will fire automatically.',
-                action: 'When the ring shrinks to GREEN — tap. Earlier = miss, later = miss.',
-                sub: 'TIMING PROTOCOL · GREEN ZONE = PERFECT',
+                story: 'EXECUTE 12 incoming. Use what you learned — SHIELD up, then PARRY the ring on yourself.',
+                action: 'Defend the EXECUTE. Then ATTACK while WEAK fades.',
+                sub: 'EXECUTE INCOMING · PARRY THE RING',
                 spot: 'die:defend',
-                wait: 'die_used:defend'
-            },
-            {
-                story: 'Cipher cracked. Finish it.',
-                action: 'ATTACK to drop the cipher.',
-                sub: 'TARGET DEGRADED · TERMINATE',
-                spot: 'die:attack',
                 wait: 'enemy_dies'
             }
         ]
@@ -752,6 +762,13 @@ export const Breakout = {
                 // Don't steal taps from the storyboard slate (it has
                 // its own click handler).
                 if (e.target && e.target.closest && e.target.closest('#breakout-storyboard')) return;
+                // CRITICAL: when a QTE is in flight, the player's tap
+                // is for the QTE (crit/parry timing), NOT for advancing
+                // the tutorial. Without this guard the QTE tap would
+                // also pop the next teaching beat — players miss reading
+                // the next instruction because it switched mid-tap.
+                const g = this._game;
+                if (g && g.qte && g.qte.active) return;
                 this._tapAdvanceArmed = false;
                 this._advanceBeat();
             };
@@ -882,9 +899,18 @@ export const Breakout = {
         if (tapHint) tapHint.classList.toggle('show', beat.wait === 'tap');
         // Spotlight placement.
         this._setSpotlight(beat.spot || null);
-        // Tap-advance arming. The capture-phase listener was added once
-        // in start() and stays for the lifetime of the breakout.
-        this._tapAdvanceArmed = (beat.wait === 'tap');
+        // Tap-advance arming. Disarm immediately, then re-arm after a
+        // 600ms grace window. Without this, the trailing tap from the
+        // previous beat (a die-drop, a QTE tap, or even the storyboard
+        // dismiss) would land BEFORE the player has read the new beat
+        // and instantly advance again — the tutorial felt like it was
+        // racing past instructions.
+        this._tapAdvanceArmed = false;
+        if (beat.wait === 'tap') {
+            setTimeout(() => {
+                if (this._active && this._beatIdx === idx) this._tapAdvanceArmed = true;
+            }, 600);
+        }
         // Optional auto-advance (used for purely cinematic beats).
         if (typeof beat.autoMs === 'number' && beat.autoMs > 0) {
             setTimeout(() => {
@@ -914,7 +940,15 @@ export const Breakout = {
 
     /* Game-side hook. Called from useDie / rerollDice / endTurn /
      * winCombat with a labelled event. If the current beat's `wait`
-     * matches, advance. */
+     * matches, advance.
+     *
+     * For die_used events we delay the advance by ~1200ms so the
+     * attack/defend QTE has time to resolve before the next beat's
+     * narration appears. Without the delay, the player drops a die,
+     * sees the panel switch to the next instruction, then notices a
+     * QTE ring still shrinking on the previous target — confusing.
+     * For other events (reroll, enemy_turn) the action is already
+     * complete, so they advance immediately. */
     notify(event, data) {
         if (!this._active || !this._room) return;
         const beat = this._room.sequence && this._room.sequence[this._beatIdx];
@@ -927,7 +961,20 @@ export const Breakout = {
         if (w === event) matched = true;
         else if (event === 'die_used' && data && data.slot && w === ('die_used:' + data.slot)) matched = true;
         else if (event === 'die_used' && data && data.signature && w === 'die_used:signature') matched = true;
-        if (matched) this._advanceBeat();
+        if (!matched) return;
+        const delayMs = (event === 'die_used') ? 1200 : 0;
+        if (delayMs > 0) {
+            const expectedIdx = this._beatIdx;
+            setTimeout(() => {
+                // Defensive: if the player did something that already
+                // advanced the beat (or the breakout ended), don't
+                // double-advance.
+                if (!this._active || this._beatIdx !== expectedIdx) return;
+                this._advanceBeat();
+            }, delayMs);
+        } else {
+            this._advanceBeat();
+        }
     },
 
     /* Re-apply the current beat's spotlight. Game.renderDiceUI calls
