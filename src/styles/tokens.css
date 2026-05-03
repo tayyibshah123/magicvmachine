@@ -105,6 +105,14 @@
     --ui-font-display: 'Orbitron', 'Consolas', 'Menlo', 'Courier New', monospace;
     --ui-font-body:    'Rajdhani', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
     --ui-font-mono:    'Consolas', 'Menlo', 'Courier New', monospace;
+    /* IMPACT — heavy condensed display font for hero titles + shard
+       labels. Saira at 900 italic mimics the Marvel Snap custom
+       wordmark closely. Falls back through Orbitron / Impact /
+       system on offline / wrapped builds. */
+    --ui-font-impact:  'Saira', 'Orbitron', Impact, 'Arial Black', sans-serif;
+    /* TECH — cyber secondary display used on eyebrow labels (// HUB,
+       // SLOTS, etc.). Audiowide is a single-weight wide cyber face. */
+    --ui-font-tech:    'Audiowide', 'Orbitron', monospace;
 
     /* Size scale — fluid via calc(rem * scale-multiplier) so the
        Accessibility text-size slider continues to apply. */

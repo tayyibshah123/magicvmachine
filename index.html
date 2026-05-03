@@ -24,12 +24,19 @@
          these two lines and ship self-hosted woff2 copies instead. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Typography pass — extra weights (Orbitron 500 + Rajdhani 300/600)
-         for finer control over display vs body weight pairings. The
-         display font (Orbitron) carries the cyber-game-title feel; the
-         body font (Rajdhani) gets a light variant for the splash boot
-         sequence + a semibold for tighter UI labels. -->
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;500;600;700&display=swap" rel="stylesheet">
+    <!-- Typography pass — extra weights for impact + utility:
+           Orbitron 500/700/900    cyber chrome (eyebrows, captions)
+           Rajdhani 300/500/600/700 body + UI labels
+           Saira 800/900 + italic   IMPACT — main display font, used
+                                    for the wordmark and shard labels.
+                                    Heavy condensed sans with strong
+                                    rectangular geometry, the closest
+                                    free Google Font to the Marvel Snap
+                                    custom wordmark.
+           Audiowide 400            cyber-tech secondary display, used
+                                    on small status / module / hub
+                                    eyebrow labels. -->
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;500;600;700&family=Saira:ital,wght@0,800;0,900;1,800;1,900&display=swap" rel="stylesheet">
     <!-- UI v2 — Phase 1 tokens (must load BEFORE style.css so any
          legacy rule that references the new vars cascades correctly).
          Phase 2 components live in components.css and use the v2
@@ -61,6 +68,12 @@
          Loads after snap.css so its `.ui-shard` rules + menu
          overrides win where applied. -->
     <link rel="stylesheet" href="src/styles/glass.css">
+    <!-- Detail polish — impact typography (Saira 900 italic),
+         layered shard fills (scanlines + chromatic edge tints),
+         neon chromatic wordmark, LED indicator dots on shard
+         eyebrows, diagonal glint sheen. Loads last so its
+         higher-specificity rules anchor the final visual. -->
+    <link rel="stylesheet" href="src/styles/polish.css">
 </head>
 <body>
 
@@ -259,22 +272,11 @@
                     </div>
                 </div>
 
-                <!-- HERO — operator hex portrait + wordmark + tagline.
-                     The hex sits above the wordmark like Snap's main-
-                     menu avatar slot. JS can swap the inner icon for
-                     the player's chosen class crest (Phase 5+). The
-                     Archivist cosmetic frame still wraps the wordmark
-                     for the kill-cosmetic reveal. -->
+                <!-- HERO — wordmark + tagline. Operator portrait hex
+                     removed; the title block is the star here. Frame
+                     badge (Archivist Slain cosmetic) sits behind the
+                     wordmark for the post-archive-kill reveal. -->
                 <div class="mv2-hero">
-                    <div class="ui-hex ui-hex--xl ui-hex--dark mv2-portrait" aria-hidden="true">
-                        <svg viewBox="0 0 60 60" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ui-text-70); filter: drop-shadow(0 0 8px rgba(74, 216, 255, 0.35));">
-                            <!-- Operator silhouette: hooded head + shoulders -->
-                            <path d="M30 14 C36 14 40 18 40 24 L40 30 C40 34 36 38 30 38 C24 38 20 34 20 30 L20 24 C20 18 24 14 30 14 Z" fill="currentColor" fill-opacity="0.18"/>
-                            <path d="M14 56 L14 50 C14 44 20 40 30 40 C40 40 46 44 46 50 L46 56" fill="currentColor" fill-opacity="0.12"/>
-                            <!-- Visor slit — single horizontal line for cyber-helmet feel -->
-                            <line x1="22" y1="26" x2="38" y2="26" stroke-width="2" stroke="rgba(74, 216, 255, 0.85)" filter="drop-shadow(0 0 4px rgba(74, 216, 255, 0.7))"/>
-                        </svg>
-                    </div>
                     <div class="title-frame mv2-title-frame" id="title-frame" data-archivist-tier="0" aria-hidden="true">
                         <span class="title-frame-corner tl"></span>
                         <span class="title-frame-corner tr"></span>

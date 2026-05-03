@@ -1,0 +1,484 @@
+/* ──────────────────────────────────────────────────────────────────
+ * UI v5 — Detail polish
+ *
+ * Replaces the simple linear gradients with layered fills (texture +
+ * sheen + edge) and pushes the typography to impact-tier (Saira 900
+ * italic + chromatic neon shadows). The Snap wordmark / button feel
+ * comes from the FONT and the multi-layer FILL — not from clip-path
+ * alone.
+ *
+ * SECTIONS
+ *   1. Wordmark — chromatic-neon impact title
+ *   2. Tagline — refined caption
+ *   3. Shard fill — multi-layer with scanline texture
+ *   4. Shard labels — impact font + neon shadow
+ *   5. Corner accent ticks (small L-brackets in shard corners)
+ *   6. LED indicator dot (top-right of each shard)
+ *   7. Operator chip — neon polish
+ *   8. Sparks/streak chips — texture pass
+ *   9. Resume / Initiate hero CTAs — chromatic edge
+ *  10. Reduced-motion guards
+ *
+ * NAMESPACE
+ *   This file polishes existing `.menu-v2`-scoped elements via
+ *   higher-specificity selectors so the visual lands without any
+ *   markup or JS change.
+ * ────────────────────────────────────────────────────────────────── */
+
+
+/* ──────────────────────────────────────────────────────────
+ * 1. WORDMARK — chromatic neon impact title
+ *
+ * Replaces the soft cyan glow with a multi-layered chromatic
+ * shadow (cyan offset left + magenta offset right) for the
+ * Snap-style "neon poster" feel. Heavier impact font, italic
+ * lean, tighter tracking. Per-word colour split so MAGIC reads
+ * cyan-leaning and MACHINE reads pink-leaning, with the "v"
+ * pivoting hot magenta between them.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .mv2-wordmark.title {
+    font-family: var(--ui-font-impact);
+    font-weight: 900;
+    font-style: italic;
+    font-size: clamp(2.6rem, 11vw, 4.2rem);
+    letter-spacing: 0.02em;
+    line-height: 1;
+    margin: var(--ui-space-2) 0 var(--ui-space-1);
+    /* Chromatic neon — cyan offset left, pink offset right. The
+       white core stays crisp on top. */
+    color: #fff;
+    text-shadow:
+        -2px 0 0 rgba(74, 216, 255, 0.85),
+        2px 0 0 rgba(255, 90, 130, 0.85),
+        0 0 18px rgba(74, 216, 255, 0.45),
+        0 0 36px rgba(255, 90, 130, 0.30);
+    -webkit-text-fill-color: #fff;
+    background: none;
+    -webkit-background-clip: initial;
+    background-clip: initial;
+    animation: ui-wordmark-breathe 4.2s ease-in-out infinite;
+    text-transform: uppercase;
+    /* Killing the legacy chromatic-glitch pseudos that bled through. */
+}
+.menu-v2 .mv2-wordmark.title::before,
+.menu-v2 .mv2-wordmark.title::after {
+    content: none !important;
+    display: none !important;
+}
+/* The pivot "v" — slightly larger, magenta-leaning, italic, with
+   a faint diagonal shear so it reads as a slash. */
+.menu-v2 .mv2-wordmark .vs {
+    display: inline-block;
+    color: #fff;
+    font-style: italic;
+    font-weight: 900;
+    transform: skewX(-6deg);
+    margin: 0 0.18em;
+    text-shadow:
+        0 0 14px rgba(255, 90, 130, 0.85),
+        -2px 0 0 rgba(255, 90, 130, 0.55),
+        2px 0 0 rgba(255, 215, 106, 0.45);
+}
+@keyframes ui-wordmark-breathe {
+    0%, 100% {
+        text-shadow:
+            -2px 0 0 rgba(74, 216, 255, 0.78),
+            2px 0 0 rgba(255, 90, 130, 0.78),
+            0 0 16px rgba(74, 216, 255, 0.4),
+            0 0 32px rgba(255, 90, 130, 0.25);
+    }
+    50% {
+        text-shadow:
+            -2.5px 0 0 rgba(74, 216, 255, 1),
+            2.5px 0 0 rgba(255, 90, 130, 1),
+            0 0 26px rgba(74, 216, 255, 0.6),
+            0 0 52px rgba(255, 90, 130, 0.42);
+    }
+}
+body.reduced-motion .menu-v2 .mv2-wordmark.title { animation: none; }
+
+
+/* ──────────────────────────────────────────────────────────
+ * 2. TAGLINE — refined cyber caption
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .mv2-tagline {
+    font-family: var(--ui-font-tech);
+    font-size: 0.78rem;
+    letter-spacing: 0.42em;
+    color: rgba(255, 255, 255, 0.55);
+    text-transform: uppercase;
+    text-shadow:
+        0 0 6px rgba(74, 216, 255, 0.40),
+        0 0 12px rgba(74, 216, 255, 0.18);
+    margin-top: var(--ui-space-1);
+    padding-left: 0.5em;   /* balance the wide letter-spacing */
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 3. SHARD FILL — layered (gradient + scanline + sheen)
+ *
+ * The simple 3-stop gradient becomes a 4-layer composition:
+ *   1. Diagonal navy gradient (the base colour)
+ *   2. Inline SVG scanline pattern at 0.06 alpha (texture)
+ *   3. Top-left chromatic edge wash (subtle cyan/pink pickup)
+ *   4. Top-edge sheen + bottom shade (drawn via ::after)
+ *
+ * The pattern URL is a single 4×4 gradient repeated as a
+ * scanline texture. Inline so we don't ship an extra asset.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .ui-shard {
+    --_shard-fill:
+        /* Layer A — micro-gradient noise (4×4 repeating) for tactile feel */
+        repeating-linear-gradient(
+            -38deg,
+            rgba(255, 255, 255, 0.018) 0px,
+            rgba(255, 255, 255, 0.018) 1px,
+            transparent 1px,
+            transparent 4px),
+        /* Layer B — horizontal scanlines, very subtle */
+        repeating-linear-gradient(
+            0deg,
+            rgba(255, 255, 255, 0.024) 0px,
+            rgba(255, 255, 255, 0.024) 1px,
+            transparent 1px,
+            transparent 3px),
+        /* Layer C — top-left chromatic wash (cyan tint) */
+        radial-gradient(ellipse at 0% 0%,
+            rgba(74, 216, 255, 0.18) 0%,
+            transparent 55%),
+        /* Layer D — bottom-right counter-wash (pink tint) */
+        radial-gradient(ellipse at 100% 100%,
+            rgba(255, 90, 130, 0.12) 0%,
+            transparent 55%),
+        /* Layer E — base diagonal navy gradient */
+        linear-gradient(135deg,
+            rgba(46, 64, 110, 0.55) 0%,
+            rgba(22, 32, 60, 0.50) 50%,
+            rgba(8, 14, 32, 0.55) 100%);
+    background-blend-mode: normal;
+}
+
+/* Stronger neon edge for the brand variant — Snap's "important
+   button" treatment. Top-left cyan glow + bottom-right pink. */
+.menu-v2 .ui-shard.ui-shard--brand {
+    --_shard-fill:
+        repeating-linear-gradient(
+            -38deg,
+            rgba(255, 255, 255, 0.025) 0px,
+            rgba(255, 255, 255, 0.025) 1px,
+            transparent 1px, transparent 4px),
+        repeating-linear-gradient(
+            0deg,
+            rgba(255, 255, 255, 0.030) 0px,
+            rgba(255, 255, 255, 0.030) 1px,
+            transparent 1px, transparent 3px),
+        radial-gradient(ellipse at 0% 0%,
+            rgba(74, 216, 255, 0.55) 0%,
+            rgba(74, 216, 255, 0.18) 35%,
+            transparent 70%),
+        radial-gradient(ellipse at 100% 100%,
+            rgba(255, 90, 130, 0.30) 0%,
+            transparent 50%),
+        linear-gradient(135deg,
+            rgba(20, 80, 120, 0.85) 0%,
+            rgba(8, 40, 70, 0.78) 50%,
+            rgba(2, 18, 36, 0.85) 100%);
+}
+
+.menu-v2 .ui-shard.ui-shard--gold {
+    --_shard-fill:
+        repeating-linear-gradient(
+            -38deg,
+            rgba(255, 255, 255, 0.025) 0px,
+            rgba(255, 255, 255, 0.025) 1px,
+            transparent 1px, transparent 4px),
+        repeating-linear-gradient(
+            0deg,
+            rgba(255, 255, 255, 0.030) 0px,
+            rgba(255, 255, 255, 0.030) 1px,
+            transparent 1px, transparent 3px),
+        radial-gradient(ellipse at 0% 0%,
+            rgba(255, 215, 106, 0.55) 0%,
+            rgba(255, 215, 106, 0.18) 35%,
+            transparent 70%),
+        radial-gradient(ellipse at 100% 100%,
+            rgba(255, 130, 80, 0.25) 0%,
+            transparent 50%),
+        linear-gradient(135deg,
+            rgba(80, 56, 14, 0.85) 0%,
+            rgba(50, 32, 6, 0.78) 50%,
+            rgba(22, 14, 2, 0.85) 100%);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 4. SHARD LABELS — impact font + neon shadow
+ *
+ * The labels jump to the impact font (Saira 900 italic) and
+ * pick up a chromatic shadow that matches the shard's tint.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .ui-shard .mv2-cta-label,
+.menu-v2 .ui-shard .mv2-tile-label {
+    font-family: var(--ui-font-impact);
+    font-weight: 900;
+    font-style: italic;
+    font-size: 1.32rem;
+    letter-spacing: 0.05em;
+    line-height: 1.05;
+    text-transform: uppercase;
+    text-shadow:
+        0 0 14px rgba(255, 255, 255, 0.4),
+        0 2px 0 rgba(0, 0, 0, 0.55);
+    color: #fff;
+}
+.menu-v2 .ui-shard.ui-shard--brand .mv2-cta-label {
+    text-shadow:
+        -1px 0 0 rgba(74, 216, 255, 0.75),
+        1px 0 0 rgba(255, 90, 130, 0.45),
+        0 0 16px rgba(74, 216, 255, 0.6),
+        0 2px 0 rgba(0, 0, 0, 0.55);
+}
+.menu-v2 .ui-shard.ui-shard--gold .mv2-cta-label {
+    text-shadow:
+        -1px 0 0 rgba(255, 215, 106, 0.85),
+        1px 0 0 rgba(255, 130, 80, 0.65),
+        0 0 16px rgba(255, 215, 106, 0.6),
+        0 2px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* Tile label — slightly smaller than CTAs */
+.menu-v2 .ui-shard.mv2-tile .mv2-tile-label {
+    font-size: 1.15rem;
+    letter-spacing: 0.04em;
+}
+
+/* Eyebrow — keep small, switch to tech font */
+.menu-v2 .ui-shard .mv2-cta-eyebrow,
+.menu-v2 .ui-shard .mv2-tile-eyebrow {
+    font-family: var(--ui-font-tech);
+    font-size: 0.62rem;
+    letter-spacing: 0.20em;
+    color: rgba(74, 216, 255, 0.85);
+    text-shadow: 0 0 6px rgba(74, 216, 255, 0.50);
+    text-transform: uppercase;
+}
+.menu-v2 .ui-shard.ui-shard--gold .mv2-cta-eyebrow,
+.menu-v2 .ui-shard.ui-shard--gold .mv2-tile-eyebrow {
+    color: rgba(255, 215, 106, 0.95);
+    text-shadow: 0 0 6px rgba(255, 215, 106, 0.55);
+}
+
+/* Status sub-line stays Rajdhani; bump slightly */
+.menu-v2 .ui-shard .mv2-tile-status {
+    font-family: var(--ui-font-body);
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.62);
+    letter-spacing: 0.04em;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 5. CORNER ACCENT TICKS
+ *
+ * Tiny L-brackets in two opposing inner corners of every shard.
+ * Drawn as a third pseudo-element (we already use ::before for
+ * the highlight wash and ::after for the rim sheen — the corner
+ * marks live inside the eyebrow span via background-image since
+ * we can't add a fourth pseudo-element to the shard root cleanly
+ * without restructuring. Use the .mv2-tile-eyebrow's right-side
+ * decoration for the top-right corner tick).
+ *
+ * Implementation: Add a small absolutely-positioned span via
+ * box-shadow on a child. Cleaner approach: small SVG icons on
+ * the eyebrow line.
+ *
+ * Pragmatic version below: a top-right corner indicator dot
+ * (LED-light) + a bottom-left corner tick, both via pseudo-
+ * elements on inner spans.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .ui-shard .mv2-tile-eyebrow,
+.menu-v2 .ui-shard .mv2-cta-eyebrow {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding-left: 14px;
+}
+.menu-v2 .ui-shard .mv2-tile-eyebrow::before,
+.menu-v2 .ui-shard .mv2-cta-eyebrow::before {
+    /* LED indicator dot to the LEFT of the eyebrow text. Pulses
+       softly to add life. */
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ui-brand);
+    box-shadow:
+        0 0 6px var(--ui-brand),
+        0 0 12px rgba(74, 216, 255, 0.55);
+    animation: ui-led-pulse 2.4s ease-in-out infinite;
+}
+.menu-v2 .ui-shard.ui-shard--gold .mv2-cta-eyebrow::before,
+.menu-v2 .ui-shard.ui-shard--gold .mv2-tile-eyebrow::before {
+    background: var(--ui-gold);
+    box-shadow:
+        0 0 6px var(--ui-gold),
+        0 0 12px rgba(255, 215, 106, 0.55);
+}
+@keyframes ui-led-pulse {
+    0%, 100% { opacity: 0.85; transform: translateY(-50%) scale(1); }
+    50%      { opacity: 1;    transform: translateY(-50%) scale(1.15); }
+}
+body.reduced-motion .menu-v2 .ui-shard .mv2-tile-eyebrow::before,
+body.reduced-motion .menu-v2 .ui-shard .mv2-cta-eyebrow::before {
+    animation: none;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 6. SHARD ::after — REPLACE THE FLAT SHEEN WITH A DIAGONAL
+ *    GLINT BAR
+ *
+ * The previous ::after drew a uniform top-edge sheen. For the
+ * polished feel we want a diagonal "light catching the surface"
+ * glint that reads as moving glass. Two-stop gradient at 30°,
+ * very subtle, stays on hover so the surface feels reactive.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .ui-shard::after {
+    /* Override the snap.css default ::after content to add a
+       diagonal glint sheen + the inset edge box-shadow. */
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.45),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.42),
+        inset 1px 0 0 rgba(255, 255, 255, 0.10),
+        inset -1px 0 0 rgba(0, 0, 0, 0.30);
+    background:
+        linear-gradient(115deg,
+            transparent 35%,
+            rgba(255, 255, 255, 0.08) 48%,
+            rgba(255, 255, 255, 0.18) 50%,
+            rgba(255, 255, 255, 0.08) 52%,
+            transparent 65%);
+    /* Glint anchored to the top portion so it reads as a horizon
+       light, not a full-shard wash. */
+    mask-image: linear-gradient(180deg, black 0%, black 38%, transparent 65%);
+    -webkit-mask-image: linear-gradient(180deg, black 0%, black 38%, transparent 65%);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 7. OPERATOR CHIP — neon polish
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .mv2-operator-chip.subtitle {
+    font-family: var(--ui-font-tech);
+    font-size: 0.78rem;
+    letter-spacing: 0.18em;
+    color: #b3ecff;
+    text-shadow:
+        0 0 6px rgba(74, 216, 255, 0.7),
+        0 0 12px rgba(74, 216, 255, 0.35);
+    background:
+        linear-gradient(180deg,
+            rgba(35, 90, 130, 0.55) 0%,
+            rgba(8, 28, 50, 0.62) 100%);
+    height: 36px;
+    line-height: 36px;
+    padding-left: var(--ui-space-6);
+    padding-right: var(--ui-space-4);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 8. SPARKS / STREAK — texture pass
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .mv2-sparks-chip,
+.menu-v2 .mv2-streak.login-streak {
+    font-family: var(--ui-font-tech);
+    height: 36px;
+    line-height: 36px;
+    background:
+        repeating-linear-gradient(
+            -38deg,
+            rgba(255, 255, 255, 0.025) 0px,
+            rgba(255, 255, 255, 0.025) 1px,
+            transparent 1px, transparent 4px),
+        linear-gradient(180deg,
+            rgba(80, 60, 18, 0.68) 0%,
+            rgba(36, 24, 6, 0.75) 100%);
+}
+.menu-v2 .mv2-sparks-chip {
+    color: #ffe6a3;
+    text-shadow: 0 0 6px rgba(255, 215, 106, 0.55);
+}
+.menu-v2 .mv2-streak.login-streak {
+    color: #ffe6a3;
+    text-shadow: 0 0 6px rgba(255, 215, 106, 0.55);
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 9. RESUME / INITIATE — chromatic edge ON HOVER
+ *
+ * Hovering the hero CTAs intensifies the neon — Snap-style "I
+ * can feel it light up". Combines a brightness bump with a
+ * tighter chromatic shadow on the label.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .ui-shard.ui-shard--brand:hover {
+    --_shard-glow: rgba(74, 216, 255, 0.45);
+}
+.menu-v2 .ui-shard.ui-shard--gold:hover {
+    --_shard-glow: rgba(255, 215, 106, 0.45);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 10. HERO BLOCK SPACING (post-portrait removal)
+ *
+ * Without the portrait hex above, the hero block can sit higher
+ * and the wordmark dominates. Tighten the top padding so the
+ * wordmark gets the room it deserves.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .mv2-hero {
+    padding-top: var(--ui-space-8);
+    padding-bottom: var(--ui-space-5);
+    gap: var(--ui-space-2);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 11. FOOTER VERSION + STREAK
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .mv2-version {
+    font-family: var(--ui-font-tech);
+    font-size: 0.62rem;
+    letter-spacing: 0.32em;
+    color: rgba(255, 255, 255, 0.18);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 12. SETTINGS ICON — same polish layer
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .mv2-settings.ui-btn--icon {
+    background:
+        repeating-linear-gradient(
+            -38deg,
+            rgba(255, 255, 255, 0.025) 0px,
+            rgba(255, 255, 255, 0.025) 1px,
+            transparent 1px, transparent 4px),
+        linear-gradient(180deg,
+            rgba(40, 56, 92, 0.55) 0%,
+            rgba(16, 26, 48, 0.62) 100%);
+    color: #b3ecff;
+}
+.menu-v2 .mv2-settings.ui-btn--icon:hover {
+    color: #fff;
+    filter: brightness(1.18);
+}
