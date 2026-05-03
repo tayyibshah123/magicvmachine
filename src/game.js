@@ -2958,11 +2958,34 @@ startQTE(type, x, y, callback, opts) {
             quality = this._qteFinalQuality(this.qte.waveQualities);
         }
 
+        // Capture the callback BEFORE any post-resolution work runs, then
+        // null it out on the qte object so a double-fire (re-entrant
+        // resolveQTE, failsafe race) can't invoke the awaiter twice.
         const cb = this.qte.callback;
+        this.qte.callback = null;
         this.qte.active = false;
 
-        this.player.anim.type = 'idle';
-        if (this.enemy) this.enemy.anim.type = 'idle';
+        // Bug 2026-05-03: a softlock was reproduced where qte.active had
+        // been flipped to false but the awaiter's Promise was never
+        // resolved — phase still 'active', waveQualities still empty, no
+        // pending timers. Tracked to a throw between active=false and the
+        // cb(multiplier) call at the bottom of this function (any of the
+        // VFX / sound / takeDamage / effects.push / shake / hitStop calls
+        // can throw on edge-case enemy state, and the throw bubbled out
+        // of resolveQTE without firing the callback). The fix: wrap the
+        // entire post-flip body in try/finally so cb(multiplier) always
+        // fires, with a neutral 1.0 multiplier as the fallback when the
+        // resolution code crashes. The failsafe at startQTE can't catch
+        // this because it checks qte.active === true, which has already
+        // been flipped here. Defensive logging surfaces the underlying
+        // crash without leaving the player softlocked.
+        let multiplier = 1.0;
+        let msg = "TOO LATE";
+        let color = "#888";
+        try {
+
+        if (this.player && this.player.anim) this.player.anim.type = 'idle';
+        if (this.enemy && this.enemy.anim) this.enemy.anim.type = 'idle';
 
         // Diag — count QTE outcomes for the diagnostic dump.
         try {
@@ -2970,10 +2993,6 @@ startQTE(type, x, y, callback, opts) {
             else if (quality === 'good') Diag.event && Diag.event('qte_good', { qteType: this.qte.type });
             else Diag.event && Diag.event('qte_fail', { qteType: this.qte.type, reason: quality });
         } catch (_) {}
-
-        let multiplier = 1.0;
-        let msg = "TOO LATE";
-        let color = "#888";
 
         if (quality === 'early') {
             msg = "TOO EARLY";
@@ -3138,10 +3157,25 @@ startQTE(type, x, y, callback, opts) {
 
              ParticleSys.createExplosion(this.qte.targetX, this.qte.targetY, 20, color);
         }
-        
+
         ParticleSys.createFloatingText(this.qte.targetX, this.qte.targetY - 50, msg, color);
 
-        if (cb) cb(multiplier);
+        } catch (err) {
+            // Resolution-side crash. Log it so the underlying bug shows up
+            // in dev tools, but DO NOT bail before the callback fires —
+            // the awaiter (e.g. enemyAttack DEFEND, executeAction ATTACK)
+            // is hanging on the Promise this resolves and a thrown error
+            // here is exactly what produces the softlock the comment
+            // above describes. Multiplier falls back to its current value
+            // (whatever the per-quality block had set before throwing).
+            try { console.error('[QTE] resolveQTE crashed; firing callback with multiplier', multiplier, err); } catch (_) {}
+            try { Diag.event && Diag.event('qte_resolve_crash', { qteType: this.qte && this.qte.type, error: String(err && err.message || err) }); } catch (_) {}
+        } finally {
+            if (cb) {
+                try { cb(multiplier); }
+                catch (cbErr) { try { console.error('[QTE] resolveQTE callback threw', cbErr); } catch (_) {} }
+            }
+        }
     },
 
     // Menu music-pulse loop. Drives a CSS variable on the title that
