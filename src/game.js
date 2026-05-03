@@ -1267,6 +1267,22 @@ const Game = {
         return this.metaUpgrades.includes(id);
     },
 
+    /* Newcomer assist gate. Returns true for the first three runs of
+     * a profile. Read by Entity.takeDamage to apply a 15% incoming-
+     * damage cushion. Counter is incremented in selectClass on every
+     * run start; tracked separately from `mvm_first_run_done` and
+     * `mvm_breakout_done` so completing the prologue doesn't end
+     * assist immediately. */
+    _isNewcomer() {
+        try {
+            const n = parseInt(localStorage.getItem('mvm_runs_started') || '0', 10) || 0;
+            // Counter is incremented BEFORE this check on run start, so
+            // n=1 means we're on run 1, n=3 means run 3. Cushion lasts
+            // through run 3 inclusive.
+            return n > 0 && n <= 3;
+        } catch (_) { return false; }
+    },
+
     // Friendly display name for a die type id. Looks up DICE_TYPES first
     // (covers class dice like BLD_MANA → "Blood Price", and skill dice like
     // METEOR → "Meteor"). Falls back to a humanised version of the raw id
@@ -4746,6 +4762,16 @@ startQTE(type, x, y, callback, opts) {
         // Unlock the SAVES menu surface — once a run has been started,
         // the save-slot picker becomes meaningful.
         try { Unlocks.grant && Unlocks.grant('saves', 'first_run_started'); } catch (_) {}
+        // Newcomer counter — increment per run started. _isNewcomer()
+        // reads this and applies the soft assist (-15% incoming damage)
+        // for the first three runs only. Counter is monotonic across
+        // class swaps so a player who tries 6 different classes in
+        // their first 6 runs gets assist for runs 1-3, full damage
+        // from run 4 onward.
+        try {
+            const n = parseInt(localStorage.getItem('mvm_runs_started') || '0', 10) || 0;
+            localStorage.setItem('mvm_runs_started', String(n + 1));
+        } catch (_) {}
 
         // Wipe the active run save
         this._clearSave();
@@ -18764,41 +18790,80 @@ drawEffects() {
             </div>
         `).join('');
 
-        // Autopsy lesson (Roadmap Part 31.3) — reads the run stats and
-        // surfaces ONE actionable takeaway. Rotates through concrete
-        // observations so different runs get different advice.
+        // "What just happened" coach card — replaces the single-line
+        // LESSON. Generates a multi-bullet recap covering the run's
+        // shape, what killed you, one specific suggestion, and a
+        // build comment. The earlier one-line version felt like a
+        // fortune cookie; this version reads like a post-match
+        // analyst summarising the fight.
         try {
-            let lesson = null;
-            const manaSpent = (this.runStats && this.runStats.manaSpent) || 0;
+            const manaSpent     = (this.runStats && this.runStats.manaSpent) || 0;
             const turnsSurvived = this.turnCount || 0;
-            const rerollsUsed = (this.runStats && this.runStats.rerollsUsed) || 0;
-            const relicsHeld = (this.player && this.player.relics) ? this.player.relics.length : 0;
-            const bossBlow = biggest && biggest.amount >= 30;
-            const cameClose = this.player && this.player.maxHp && biggest
+            const rerollsUsed   = (this.runStats && this.runStats.rerollsUsed) || 0;
+            const relics        = (this.player && this.player.relics) || [];
+            const relicsHeld    = relics.length;
+            const sectorReached = this.sector || 1;
+            const classId       = (this.player && this.player.classId) || '';
+            const className     = classId ? classId.charAt(0).toUpperCase() + classId.slice(1) : 'Operator';
+            const enemyKind     = this.enemy && this.enemy.isBoss ? 'boss' : (this.enemy && this.enemy.isElite ? 'elite' : 'patrol');
+            const cameClose     = this.player && this.player.maxHp && biggest
                 ? (biggest.amount / this.player.maxHp) > 0.6 : false;
+            const newcomer      = this._isNewcomer && this._isNewcomer();
+
+            // 1. RUN SHAPE — class + how far + tempo (turn count).
+            const shapeLine = `${className} fell in Sector ${sectorReached} after ${turnsSurvived} turn${turnsSurvived === 1 ? '' : 's'}.`;
+            // 2. KILL CONTEXT — who, how hard.
+            const killLine = biggest
+                ? `${killer} (${enemyKind}) landed a ${biggest.amount}-damage blow that broke you.`
+                : `${killer} (${enemyKind}) closed the fight before you could counter.`;
+            // 3. SUGGESTION — pick the most concrete one applicable.
+            let suggestion;
             if (cameClose) {
-                lesson = 'One hit did 60%+ of your HP. Bank more shield or spread damage across turns.';
-            } else if (bossBlow && turnsSurvived < 4) {
-                lesson = 'Boss crushed you in under 4 turns. A Defend die turn-one buys you the setup window.';
+                suggestion = 'One hit took 60%+ of your HP. Open the next fight with a Defend die so the burst lands on shield, not HP.';
+            } else if (biggest && biggest.amount >= 30 && turnsSurvived < 4) {
+                suggestion = 'You went down in under 4 turns. Block the heavy intent first, then commit attacks once the threat clears.';
             } else if (manaSpent === 0 && turnsSurvived >= 3) {
-                lesson = 'You spent 0 Mana this run. Skill dice (Meteor, Earthquake) can finish fights you\'re losing.';
+                suggestion = 'You spent zero Mana. Skill dice (Meteor, Earthquake, Constrict) can finish fights you are losing.';
             } else if (rerollsUsed === 0 && turnsSurvived >= 3) {
-                lesson = 'You never rerolled. A bad hand isn\'t fate. Reroll to chase a combo.';
-            } else if (relicsHeld === 0) {
-                lesson = 'Zero relics at time of death. Events + shops pay out more than they cost most of the time.';
+                suggestion = 'You never rerolled. Two free per turn. Lock the dice you want, reroll the rest.';
+            } else if (relicsHeld === 0 && turnsSurvived >= 5) {
+                suggestion = 'Zero modules at time of death. Events and shops pay out more than they cost most of the time.';
             } else if (turnsSurvived >= 12) {
-                lesson = 'Long fight. Next run, try picking up damage-dealers earlier to finish faster.';
+                suggestion = 'Long fight. Pick up damage-dealers earlier so a single bad hand does not cost the run.';
             } else {
-                lesson = 'Every death is a read. Note which class + relics didn\'t click and try a different build.';
+                suggestion = 'Note which die patterns drew first this run. Combos that show up twice can be planned around.';
             }
-            let lessonEl = screen.querySelector('.death-lesson');
-            if (!lessonEl) {
-                lessonEl = document.createElement('div');
-                lessonEl.className = 'death-lesson';
-                cards.after(lessonEl);
+            // 4. BUILD COMMENT — a quick read on relics or runStats.
+            let buildLine;
+            if (relicsHeld === 0) {
+                buildLine = 'Build: bare. Lean into shop visits + event picks next run.';
+            } else if (relicsHeld <= 2) {
+                buildLine = `Build: thin (${relicsHeld} module${relicsHeld === 1 ? '' : 's'}). Consider taking lower-rarity over skipping.`;
+            } else if (relicsHeld <= 5) {
+                buildLine = `Build: ${relicsHeld} modules. Look for a synergy theme to anchor next run.`;
+            } else {
+                buildLine = `Build: ${relicsHeld} modules. Solid stack. The mistake was the play, not the loadout.`;
             }
-            lessonEl.innerHTML = `<span class="death-lesson-label">LESSON</span><span class="death-lesson-body">${lesson}</span>`;
-        } catch (_) { /* autopsy is cosmetic, never throw into the game-over path */ }
+            // 5. NEWCOMER NOTE — present only during the assist window.
+            const newcomerLine = newcomer
+                ? 'Assist on (first 3 runs). Damage taken is reduced 15% until you find your footing.'
+                : null;
+
+            let coachEl = screen.querySelector('.death-coach');
+            if (!coachEl) {
+                coachEl = document.createElement('div');
+                coachEl.className = 'death-coach';
+                cards.after(coachEl);
+            }
+            const lines = [shapeLine, killLine, suggestion, buildLine];
+            if (newcomerLine) lines.push(newcomerLine);
+            coachEl.innerHTML = `
+                <div class="death-coach-label">// WHAT HAPPENED</div>
+                <ul class="death-coach-list">
+                    ${lines.map((line, i) => `<li class="death-coach-line${i === 4 ? ' death-coach-line-assist' : ''}">${line}</li>`).join('')}
+                </ul>
+            `;
+        } catch (_) { /* coach is cosmetic, never throw into the game-over path */ }
 
         // Ensure buttons are in retry-first order.
         const retryBtn = document.getElementById('btn-retry-class');

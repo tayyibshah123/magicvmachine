@@ -1,4 +1,4 @@
-import { COLORS } from '../constants.js';
+import { COLORS, STATE } from '../constants.js';
 import { AudioMgr } from '../audio.js';
 import { ParticleSys } from '../effects/particles.js';
 import { TooltipMgr } from '../ui/tooltip.js';
@@ -55,6 +55,19 @@ class Entity {
         if (this instanceof Player && Game.godMode) {
             ParticleSys.createFloatingText(this.x, this.y - 60, "GOD MODE", "#ff0055");
             return false;
+        }
+
+        // --- NEWCOMER ASSIST ---
+        // First three runs of a new install reduce incoming player
+        // damage by ~15%. Cushions the early curve so players don't
+        // bounce after an unlucky boss hit on run 1. Doesn't apply to
+        // enemies, doesn't apply after run 3, doesn't apply during
+        // the Sector 0 prologue (already takedamage-clamped to 1 HP),
+        // doesn't apply if the player has manually disabled assist.
+        if (this instanceof Player && Game._isNewcomer && Game._isNewcomer()
+            && !Game.assistDisabled
+            && Game.currentState !== STATE.BREAKOUT) {
+            amount = Math.max(1, Math.floor(amount * 0.85));
         }
 
         // Bloodstalker — Blood Thrall siphon. Damage that lands on the
