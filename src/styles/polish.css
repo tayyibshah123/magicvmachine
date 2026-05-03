@@ -1175,6 +1175,34 @@
     filter: drop-shadow(0 0 6px var(--bracket-glow));
 }
 
+/* Tab icon sizing — the SVG glyph is now the only content inside
+   the tab. Center it inside the bracket frame at a comfortable
+   click-target size. The dim/glow comes from the parent tab's
+   `color` (currentColor in the SVG strokes) + drop-shadow. */
+#modal-settings .settings-tab .settings-tab-icon {
+    width: 22px;
+    height: 22px;
+    display: block;
+    margin: 0 auto;
+    color: inherit;
+    transition: transform 0.2s var(--ui-ease-out);
+}
+#modal-settings .settings-tab:hover .settings-tab-icon {
+    transform: scale(1.08);
+}
+#modal-settings .settings-tab.active .settings-tab-icon {
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 4px rgba(74, 216, 255, 0.65));
+}
+/* Ensure the tab is tall enough to host the icon comfortably even
+   when the bracket pad is small. */
+#modal-settings .settings-tab {
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 /* Section labels (Accessibility, etc.) — cyan small caps. */
 #modal-settings .settings-section-label {
     font-family: var(--ui-font-tech);
