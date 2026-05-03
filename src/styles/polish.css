@@ -537,10 +537,10 @@
     /* Strip the silhouette so the corners outline a clean rect. */
     clip-path: none !important;
     -webkit-clip-path: none !important;
-    /* Strip the metallic fill — the layered shard fills, the
-       chromatic edge tints, the diagonal noise / scanline
-       textures all clear out. The button reads as a void with
-       the brackets framing it. */
+    /* Strip the metallic fill. Only TL + BR brackets are drawn —
+       the diagonal pair (TL ↘ BR) reads as a clear "tap target"
+       cue without surrounding the entire button on all four sides
+       (which can read as a panel/frame rather than a button). */
     background:
         /* Top-left corner: horizontal strip + vertical strip */
         linear-gradient(var(--bracket-color), var(--bracket-color))
@@ -548,20 +548,6 @@
             / var(--bracket-len) var(--bracket-thickness) no-repeat,
         linear-gradient(var(--bracket-color), var(--bracket-color))
             calc(var(--bracket-pad)) calc(var(--bracket-pad))
-            / var(--bracket-thickness) var(--bracket-len) no-repeat,
-        /* Top-right corner */
-        linear-gradient(var(--bracket-color), var(--bracket-color))
-            right calc(var(--bracket-pad)) top    calc(var(--bracket-pad))
-            / var(--bracket-len) var(--bracket-thickness) no-repeat,
-        linear-gradient(var(--bracket-color), var(--bracket-color))
-            right calc(var(--bracket-pad)) top    calc(var(--bracket-pad))
-            / var(--bracket-thickness) var(--bracket-len) no-repeat,
-        /* Bottom-left corner */
-        linear-gradient(var(--bracket-color), var(--bracket-color))
-            left  calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
-            / var(--bracket-len) var(--bracket-thickness) no-repeat,
-        linear-gradient(var(--bracket-color), var(--bracket-color))
-            left  calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
             / var(--bracket-thickness) var(--bracket-len) no-repeat,
         /* Bottom-right corner */
         linear-gradient(var(--bracket-color), var(--bracket-color))
@@ -646,16 +632,15 @@
     --bracket-pad: 3px;
 }
 
-/* The sparks chip + operator chip — strip their silhouettes and
-   apply the same bracket treatment. The chips are MUCH smaller,
-   so use a tighter bracket.
-   NOTE: streak chip (`.login-streak` / `.mv2-streak`) is excluded
-   — it's a passive status indicator, not a button, so it should
-   render as plain text without the bracket frame. */
-.menu-v2 .mv2-sparks-chip,
-.menu-v2 .mv2-operator-chip.subtitle {
-    --bracket-color: rgba(74, 216, 255, 0.85);
-    --bracket-glow:  rgba(74, 216, 255, 0.55);
+/* The sparks chip — strip its silhouette and apply the same
+   diagonal bracket treatment (TL + BR only) at a tighter scale.
+   NOTE: streak chip excluded (passive status, not interactive).
+   NOTE: operator chip is now plain text (handled separately
+   below) since the brackets + background were making the
+   callsign harder to read. */
+.menu-v2 .mv2-sparks-chip {
+    --bracket-color: rgba(255, 215, 106, 0.85);
+    --bracket-glow:  rgba(255, 215, 106, 0.55);
     --bracket-len: 10px;
     --bracket-thickness: 1.5px;
     --bracket-pad: 2px;
@@ -669,31 +654,50 @@
             calc(var(--bracket-pad)) calc(var(--bracket-pad))
             / var(--bracket-thickness) var(--bracket-len) no-repeat,
         linear-gradient(var(--bracket-color), var(--bracket-color))
-            right calc(var(--bracket-pad)) top    calc(var(--bracket-pad))
-            / var(--bracket-len) var(--bracket-thickness) no-repeat,
-        linear-gradient(var(--bracket-color), var(--bracket-color))
-            right calc(var(--bracket-pad)) top    calc(var(--bracket-pad))
-            / var(--bracket-thickness) var(--bracket-len) no-repeat,
-        linear-gradient(var(--bracket-color), var(--bracket-color))
-            left  calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
-            / var(--bracket-len) var(--bracket-thickness) no-repeat,
-        linear-gradient(var(--bracket-color), var(--bracket-color))
-            left  calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
-            / var(--bracket-thickness) var(--bracket-len) no-repeat,
-        linear-gradient(var(--bracket-color), var(--bracket-color))
             right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
             / var(--bracket-len) var(--bracket-thickness) no-repeat,
         linear-gradient(var(--bracket-color), var(--bracket-color))
             right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
             / var(--bracket-thickness) var(--bracket-len) no-repeat,
         transparent !important;
-    border: none;
-    box-shadow: none;
+    border: none !important;
+    box-shadow: none !important;
     filter: drop-shadow(0 0 4px var(--bracket-glow));
 }
-.menu-v2 .mv2-sparks-chip {
-    --bracket-color: rgba(255, 215, 106, 0.85);
-    --bracket-glow:  rgba(255, 215, 106, 0.55);
+.menu-v2 .mv2-sparks-chip::before,
+.menu-v2 .mv2-sparks-chip::after {
+    content: none !important;
+    display: none !important;
+}
+
+/* OPERATOR TAZ chip — plain text, no chip frame.
+   Per user feedback: "operator taz doesn't need a translucent
+   background as it makes it harder to see clearly". Strip ALL
+   chip chrome — clip-path silhouette, metallic fill, the white
+   ::before sheen, the box-shadow rim — and render as plain
+   cyan text. The label carries itself. */
+.menu-v2 .mv2-operator-chip.subtitle {
+    background: transparent !important;
+    background-image: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+    clip-path: none !important;
+    -webkit-clip-path: none !important;
+    padding: var(--ui-space-2) 0 !important;
+    height: auto !important;
+    line-height: 1.2 !important;
+    color: var(--ui-brand);
+    font-family: var(--ui-font-tech);
+    font-size: 0.78rem;
+    font-weight: var(--ui-weight-semibold);
+    letter-spacing: 0.22em;
+    text-shadow: 0 0 8px rgba(74, 216, 255, 0.55);
+}
+.menu-v2 .mv2-operator-chip.subtitle::before,
+.menu-v2 .mv2-operator-chip.subtitle::after {
+    content: none !important;
+    display: none !important;
 }
 
 /* Streak chip — strip its frame and any background. Plain text
@@ -749,18 +753,6 @@
             / var(--bracket-len) var(--bracket-thickness) no-repeat,
         linear-gradient(var(--bracket-color), var(--bracket-color))
             calc(var(--bracket-pad)) calc(var(--bracket-pad))
-            / var(--bracket-thickness) var(--bracket-len) no-repeat,
-        linear-gradient(var(--bracket-color), var(--bracket-color))
-            right calc(var(--bracket-pad)) top    calc(var(--bracket-pad))
-            / var(--bracket-len) var(--bracket-thickness) no-repeat,
-        linear-gradient(var(--bracket-color), var(--bracket-color))
-            right calc(var(--bracket-pad)) top    calc(var(--bracket-pad))
-            / var(--bracket-thickness) var(--bracket-len) no-repeat,
-        linear-gradient(var(--bracket-color), var(--bracket-color))
-            left  calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
-            / var(--bracket-len) var(--bracket-thickness) no-repeat,
-        linear-gradient(var(--bracket-color), var(--bracket-color))
-            left  calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
             / var(--bracket-thickness) var(--bracket-len) no-repeat,
         linear-gradient(var(--bracket-color), var(--bracket-color))
             right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
