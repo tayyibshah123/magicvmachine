@@ -1168,6 +1168,36 @@ const Game = {
             handleInteraction(e);
         }, {passive: false});
 
+        // QTE PRIORITY POINTERDOWN — capture-phase, document-level. Locks
+        // the timing snapshot at the very first instant of contact so a
+        // press that the browser later interprets as a drag/scroll still
+        // resolves the QTE. The previous canvas-only mousedown/touchstart
+        // pair worked when the player tapped without moving, but if the
+        // touch slid even 1-2 pixels the browser could batch/delay the
+        // touchstart while it tested for a swipe gesture, and the user
+        // perceived the tap as "lost". pointerdown fires synchronously
+        // at first contact regardless of subsequent movement, and capture
+        // phase ensures we beat the dice-tray drag-start handler so
+        // tapping near a die during a QTE resolves the timing instead
+        // of starting a phantom drag.
+        //
+        // When a QTE is active, this listener also stops propagation so
+        // the Breakout's tap-advance handler (also capture-phase on
+        // document) doesn't pop the next tutorial beat off the same
+        // tap that resolved the QTE.
+        document.addEventListener('pointerdown', (e) => {
+            if (!this.qte || !this.qte.active) return;
+            // Skip if the press is on the storyboard slate (its own
+            // tap-to-continue handler) or on a settings overlay button.
+            const t = e.target;
+            if (t && t.closest && (t.closest('#breakout-storyboard') || t.closest('#modal-settings'))) return;
+            this.checkQTE();
+            // Prevent the same tap from being read by other capture-
+            // phase document handlers (Breakout tap-advance) or by
+            // child handlers (drag start on a die element).
+            if (typeof e.stopPropagation === 'function') e.stopPropagation();
+        }, true);
+
         let dragRaf = null;
         window.addEventListener('pointermove', (e) => {
             if (this.dragState.active && this.dragState.ghostElement) {

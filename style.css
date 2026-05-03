@@ -734,13 +734,22 @@ body {
     overflow: hidden;
 }
 
-canvas { 
-    width: 100%; 
-    height: 100%; 
+canvas {
+    width: 100%;
+    height: 100%;
     display: block;
-    position: absolute; 
+    position: absolute;
     top: 0;
     left: 0;
+    /* Tell the browser we own touch input on the canvas. The default
+       (`manipulation` from the universal selector) lets the browser
+       reserve a few hundred milliseconds at touchstart to disambiguate
+       between a tap and a scroll/swipe gesture. During a QTE that
+       hesitation can swallow the player's tap entirely if their finger
+       moves a couple of pixels. `touch-action: none` makes pointerdown
+       fire immediately regardless of subsequent movement, which is
+       exactly the timing the QTE needs to record. */
+    touch-action: none;
 }
 
 /* Neon Text Utilities */
