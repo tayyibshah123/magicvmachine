@@ -38,6 +38,10 @@
     <link rel="stylesheet" href="src/styles/tokens.css">
     <link rel="stylesheet" href="src/styles/components.css">
     <link rel="stylesheet" href="style.css">
+    <!-- Phase 3 — main menu redesign. Loaded AFTER style.css so its
+         scoped overrides (.menu-v2 *) win over the legacy menu rules
+         while only affecting the redesigned screen. -->
+    <link rel="stylesheet" href="src/styles/menu.css">
 </head>
 <body>
 
@@ -186,74 +190,76 @@
 </div>
 
             <!-- Main Menu -->
-            <div id="screen-start" class="screen active">
-                <div style="position: absolute; top: 20px; right: 20px; z-index: 20;">
-                    <button id="btn-settings-main" class="btn-icon" aria-label="Settings"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5 L20 7 L20 17 L12 21.5 L4 17 L4 7 Z" fill="currentColor" fill-opacity="0.14"/><circle cx="12" cy="12" r="4.5" fill="none"/><path d="M12 5.5 L12 7.5 M12 16.5 L12 18.5 M5.5 12 L7.5 12 M16.5 12 L18.5 12 M7.6 7.6 L9 9 M15 15 L16.4 16.4 M16.4 7.6 L15 9 M7.6 16.4 L9 15" stroke-width="1.4"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg></button>
-                </div>
-                <!-- Sparks (persistent meta-currency). Hidden via the
-                     `sanctuary` unlock until the player has earned at
-                     least one. Earned at significant events: boss kills,
-                     sector clears, run wins, hex breaches, first-of-class
-                     wins. Spent in Sanctuary. -->
-                <div id="menu-sparks-pill" class="meta-sparks-pill feature-locked-hidden" aria-label="Sparks">
-                    <span class="meta-sparks-glyph" aria-hidden="true">✦</span>
-                    <span id="menu-sparks">0</span>
-                    <span class="meta-sparks-label">SPARKS</span>
-                </div>
-                <!-- Ambient atmosphere layer behind the menu chrome.
-                     Each child is transform/opacity-only and sits on a
-                     dedicated compositor layer (will-change), so the GPU
-                     handles them and the CPU never paints them per frame.
-                     Strip the lot via body.reduced-motion or .perf-low. -->
-                <div class="menu-ambient" aria-hidden="true">
-                    <!-- HUD lattice — slow drift of fine perspective grid
-                         lines, sells the "operator interface" aesthetic. -->
-                    <div class="menu-lattice"></div>
-                    <!-- Two diagonal scan-lines drifting at different
-                         speeds + colours. -->
-                    <span class="menu-scan"></span>
-                    <span class="menu-scan menu-scan--alt"></span>
-                    <!-- Animated radar sweep — circular gradient slowly
-                         rotates around the viewport centre. -->
-                    <div class="menu-radar"></div>
-                    <!-- Floating glyph particles — small Unicode code-
-                         shaped specks drifting upward from the bottom. -->
-                    <div class="menu-glyphs">
-                        <span style="--gx: 8%;  --gd: 0s;   --gs: 18s;">◆</span>
-                        <span style="--gx: 22%; --gd: 4s;   --gs: 22s;">●</span>
-                        <span style="--gx: 38%; --gd: 9s;   --gs: 19s;">▲</span>
-                        <span style="--gx: 56%; --gd: 2s;   --gs: 24s;">◇</span>
-                        <span style="--gx: 71%; --gd: 12s;  --gs: 21s;">★</span>
-                        <span style="--gx: 86%; --gd: 6s;   --gs: 17s;">○</span>
-                    </div>
-                    <!-- Decorative HUD readouts — tiny corner labels that
-                         feel like a status panel. Static text but with
-                         flicker/blink animations on dot indicators. -->
-                    <div class="menu-hud-tag menu-hud-tl">
-                        <span class="menu-hud-dot"></span> SYS // ONLINE
-                    </div>
-                    <div class="menu-hud-tag menu-hud-bl">
-                        UPLINK <span class="menu-hud-dot menu-hud-dot--alt"></span>
+            <div id="screen-start" class="screen active menu-v2">
+                <!-- Ambient backdrop — single full-bleed canvas-grade
+                     parallax. Replaces the legacy 7-element chrome
+                     (lattice / scans / radar / glyphs / hud-tags) which
+                     stacked into a chatty CPU-paint mess. The new layer
+                     is one fixed-position full-viewport `.mv2-bg` with
+                     three very-low-opacity gradient sub-layers that
+                     drift on transform-only animations.
+                     Compositor handles every frame; CPU paint is zero. -->
+                <div class="mv2-bg" aria-hidden="true">
+                    <div class="mv2-bg-grad mv2-bg-grad--a"></div>
+                    <div class="mv2-bg-grad mv2-bg-grad--b"></div>
+                    <div class="mv2-bg-grid"></div>
+                    <div class="mv2-bg-particles">
+                        <!-- Six dust motes drifting upward. CSS-only,
+                             non-deterministic delays seeded inline. -->
+                        <span style="--mx: 8%;  --md: 0s;  --ms: 22s;"></span>
+                        <span style="--mx: 22%; --md: 5s;  --ms: 26s;"></span>
+                        <span style="--mx: 38%; --md: 11s; --ms: 24s;"></span>
+                        <span style="--mx: 56%; --md: 3s;  --ms: 28s;"></span>
+                        <span style="--mx: 71%; --md: 14s; --ms: 25s;"></span>
+                        <span style="--mx: 86%; --md: 7s;  --ms: 21s;"></span>
                     </div>
                 </div>
-                <div class="glow-container">
-                    <!-- Archivist Slain cosmetic frame (Roadmap Part 24.2).
-                         Rendered as a sibling under .title-frame; CSS picks
-                         the tier off `data-archivist-tier` written by JS. -->
-                    <div class="title-frame" id="title-frame" data-archivist-tier="0" aria-hidden="true">
+
+                <!-- HEADER — operator chip on the left, settings icon on
+                     the right. Slim, top-of-frame. -->
+                <div class="mv2-header">
+                    <div class="mv2-header-left">
+                        <!-- Operator chip — filled by JS via existing
+                             `.subtitle` querySelector at line ~3192 of
+                             game.js. Kept as `.subtitle` so the JS
+                             continues to write into it. The visual is
+                             the v2 chip class layered on top. -->
+                        <div class="subtitle ui-chip ui-chip--brand mv2-operator-chip" aria-label="Operator callsign"></div>
+                    </div>
+                    <div class="mv2-header-right">
+                        <!-- Sparks chip (kept) + INTEL chip (badged when files exist).
+                             Plus the settings icon. -->
+                        <div id="menu-sparks-pill" class="ui-chip ui-chip--gold mv2-sparks-chip feature-locked-hidden" aria-label="Sparks">
+                            <span class="meta-sparks-glyph" aria-hidden="true">✦</span>
+                            <span id="menu-sparks">0</span>
+                            <span class="meta-sparks-label">SPARKS</span>
+                        </div>
+                        <button id="btn-settings-main" class="ui-btn ui-btn--icon ui-btn--round ui-btn--ghost mv2-settings" aria-label="Settings">
+                            <svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2 L12 5 M12 19 L12 22 M2 12 L5 12 M19 12 L22 12 M4.6 4.6 L6.7 6.7 M17.3 17.3 L19.4 19.4 M19.4 4.6 L17.3 6.7 M4.6 19.4 L6.7 17.3"/></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- HERO — wordmark + tagline + Archivist frame badge.
+                     The wordmark stays as `.title h1` so the existing
+                     glitch CSS still renders for backwards compatibility,
+                     but is wrapped in a `.mv2-hero` block that overrides
+                     the chromatic-glitch with a subtle breathing pulse.
+                     Frame badge (Archivist Slain cosmetic) sits under it. -->
+                <div class="mv2-hero">
+                    <div class="title-frame mv2-title-frame" id="title-frame" data-archivist-tier="0" aria-hidden="true">
                         <span class="title-frame-corner tl"></span>
                         <span class="title-frame-corner tr"></span>
                         <span class="title-frame-corner bl"></span>
                         <span class="title-frame-corner br"></span>
                         <span class="title-frame-badge" id="title-frame-badge">ARCHIVIST SLAIN</span>
                     </div>
-                    <h1 class="title">MAGIC <span class="vs">v</span> MACHINE</h1>
-                    <div class="title-energy-bars" aria-hidden="true"></div>
-                    <div class="subtitle"></div>
+                    <h1 class="title mv2-wordmark">MAGIC <span class="vs">v</span> MACHINE</h1>
+                    <div class="mv2-tagline">CYBER ROGUELITE</div>
                 </div>
-                <div class="spacer"></div>
 
-                <!-- Save Slot picker — modal listing A/B/C with metadata. -->
+                <!-- Save Slot picker — modal (kept). Will be migrated to
+                     ui-modal in Phase 4; styling stays legacy for now. -->
                 <div id="save-slot-modal" class="save-slot-modal hidden" role="dialog" aria-modal="true" aria-labelledby="save-slot-title-h">
                     <div class="save-slot-panel glass-panel">
                         <h3 id="save-slot-title-h" class="save-slot-title neon-text-gold">SAVE SLOTS</h3>
@@ -265,37 +271,79 @@
                     </div>
                 </div>
 
-                <!-- Primary actions — RESUME above INITIATE so the in-progress run is the
-                     first thing a returning player sees. -->
-                <button id="btn-load-save" class="btn primary hidden menu-cta menu-cta-resume">RESUME RUN</button>
-                <button id="btn-start" class="btn primary menu-cta menu-cta-primary"><span id="btn-start-label">INITIATE RUN</span><span id="btn-start-warn" class="btn-start-warn hidden">DISCARDS CURRENT RUN</span></button>
-
-                <!-- Run modes — alt run types. Each button + its status
-                     sub-line live in their own column container so the
-                     status sits directly UNDER its button (was stacking
-                     both lines under the same column). -->
-                <div class="menu-row menu-row-modes menu-row-with-substatus">
-                    <div class="menu-col">
-                        <button id="btn-challenge" class="btn secondary neon-border-gold menu-cta-alt">CHALLENGE</button>
-                        <div id="challenge-status-line" class="menu-substatus" style="opacity:0.7;"></div>
+                <!-- BENTO GRID — the visual hierarchy that replaces the
+                     stacked single-column buttons. Two-row layout:
+                       Row 1 (hero): INITIATE RUN (or RESUME) + DAILY TWIST
+                       Row 2 (tiles): 2x2 grid of secondary destinations
+                     On narrow phones the bento collapses to a single
+                     column with the same priority order. -->
+                <div class="mv2-bento" aria-label="Run launcher">
+                    <!-- Hero row -->
+                    <div class="mv2-bento-row mv2-bento-row--hero">
+                        <button id="btn-load-save" class="ui-btn ui-btn--gold ui-btn--lg ui-btn--block mv2-cta mv2-cta-resume hidden">
+                            <span class="mv2-cta-eyebrow">CONTINUE</span>
+                            <span class="mv2-cta-label">RESUME RUN</span>
+                        </button>
+                        <button id="btn-start" class="ui-btn ui-btn--primary ui-btn--lg ui-btn--block mv2-cta mv2-cta-primary">
+                            <span class="mv2-cta-eyebrow">DEPLOY</span>
+                            <span id="btn-start-label" class="mv2-cta-label">INITIATE RUN</span>
+                            <span id="btn-start-warn" class="btn-start-warn hidden">DISCARDS CURRENT RUN</span>
+                        </button>
+                        <!-- Daily Twist hero card. Empty by default; the
+                             JS-injected `#challenge-daily-twist` lives
+                             inside on render. We pre-stamp the card so
+                             the layout doesn't shift when content lands. -->
+                        <div class="mv2-twist-card ui-card ui-card--brand" data-empty="true">
+                            <div class="mv2-twist-eyebrow">// DAILY TWIST</div>
+                            <div class="mv2-twist-empty ui-caption">No twist active.</div>
+                        </div>
                     </div>
-                    <div class="menu-col">
-                        <button id="btn-archive" class="btn secondary neon-border-gold menu-cta-alt hidden">ARCHIVE</button>
-                        <div id="archive-status-line" class="menu-substatus" style="opacity:0.7; display:none;"></div>
+
+                    <!-- Tile row — 2x2 grid of secondary destinations.
+                         Each tile is a mini-card with an icon + label.
+                         feature-locked-hidden continues to drive
+                         visibility based on the Unlocks gate. -->
+                    <div class="mv2-bento-row mv2-bento-row--tiles">
+                        <button id="btn-challenge" class="ui-card mv2-tile mv2-tile--challenge">
+                            <div class="mv2-tile-eyebrow">// MODE</div>
+                            <div class="mv2-tile-label">CHALLENGE</div>
+                            <div id="challenge-status-line" class="mv2-tile-status">READY</div>
+                            <span class="mv2-tile-arrow" aria-hidden="true">→</span>
+                        </button>
+                        <button id="btn-archive" class="ui-card mv2-tile mv2-tile--archive hidden">
+                            <div class="mv2-tile-eyebrow">// SECTOR X</div>
+                            <div class="mv2-tile-label">ARCHIVE</div>
+                            <div id="archive-status-line" class="mv2-tile-status"></div>
+                            <span class="mv2-tile-arrow" aria-hidden="true">→</span>
+                        </button>
+                        <button id="btn-upgrades" class="ui-card mv2-tile mv2-tile--sanctuary feature-locked-hidden">
+                            <div class="mv2-tile-eyebrow">// HUB</div>
+                            <div class="mv2-tile-label">SANCTUARY</div>
+                            <div class="mv2-tile-status">UPGRADES</div>
+                            <span class="mv2-tile-arrow" aria-hidden="true">→</span>
+                        </button>
+                        <button id="btn-intel" class="ui-card mv2-tile mv2-tile--intel feature-locked-hidden">
+                            <div class="mv2-tile-eyebrow">// FILES</div>
+                            <div class="mv2-tile-label">INTEL</div>
+                            <div class="mv2-tile-status">DECRYPT</div>
+                            <span class="mv2-tile-arrow" aria-hidden="true">→</span>
+                        </button>
+                        <button id="btn-save-slots" class="ui-card mv2-tile mv2-tile--saves feature-locked-hidden">
+                            <div class="mv2-tile-eyebrow">// SLOTS</div>
+                            <div class="mv2-tile-label">SAVES</div>
+                            <div class="mv2-tile-status">A · B · C</div>
+                            <span class="mv2-tile-arrow" aria-hidden="true">→</span>
+                        </button>
                     </div>
                 </div>
 
-                <!-- Meta nav — sanctuary / codex / save management. Each
-                     button is feature-gated via Unlocks; locked entries
-                     hide entirely until the player triggers the unlock. -->
-                <div class="menu-row menu-row-meta">
-                    <button id="btn-upgrades" class="btn secondary neon-border-gold menu-cta-meta feature-locked-hidden">SANCTUARY</button>
-                    <button id="btn-intel" class="btn secondary menu-cta-meta feature-locked-hidden">INTEL</button>
-                    <button id="btn-save-slots" class="btn secondary menu-cta-meta feature-locked-hidden">SAVES</button>
+                <!-- FOOTER — slim status bar with streak chip + version
+                     stamp. Streak chip is filled by JS into #login-streak
+                     (kept as the same id for compatibility). -->
+                <div class="mv2-footer">
+                    <div id="login-streak" class="login-streak ui-chip ui-chip--gold mv2-streak hidden"></div>
+                    <span class="mv2-version">ALPHA V1</span>
                 </div>
-
-                <div id="login-streak" class="login-streak hidden"></div>
-                <div class="version">ALPHA V1</div>
             </div>
 
             <!-- Character Select -->

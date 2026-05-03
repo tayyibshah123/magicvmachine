@@ -8099,28 +8099,61 @@ triggerSystemCrash() {
             }
             challengeBtn.style.opacity = '1';
         }
-        // Daily Twist — render the rotating modifier above the button so the
-        // player knows the day's flavour BEFORE committing to the run.
+        // Daily Twist — render the rotating modifier in the dedicated
+        // `.mv2-twist-card` slot (Phase 3 menu) when present; fall back
+        // to the legacy "before challenge button" placement on any
+        // pre-v2 screen. The card pre-stamps an empty placeholder so
+        // the layout doesn't shift when content lands.
         const twist = Challenge.todayTwist && Challenge.todayTwist();
+        const twistCard = document.querySelector('.mv2-twist-card');
         let twistEl = document.getElementById('challenge-daily-twist');
-        if (twist && challengeBtn) {
-            if (!twistEl && challengeBtn.parentNode) {
+        if (twist && (twistCard || challengeBtn)) {
+            if (!twistEl) {
                 twistEl = document.createElement('div');
                 twistEl.id = 'challenge-daily-twist';
                 twistEl.className = 'challenge-twist-pill';
+            }
+            // Preferred home: the v2 card. Move the element in and
+            // hide the empty-state placeholder. Fall back to the
+            // sibling-before-button placement on legacy screens.
+            if (twistCard && twistEl.parentNode !== twistCard) {
+                twistCard.appendChild(twistEl);
+                twistCard.dataset.empty = 'false';
+                const empty = twistCard.querySelector('.mv2-twist-empty');
+                if (empty) empty.style.display = 'none';
+            } else if (!twistCard && challengeBtn && twistEl.parentNode !== challengeBtn.parentNode) {
                 challengeBtn.parentNode.insertBefore(twistEl, challengeBtn);
             }
-            if (twistEl) {
-                twistEl.innerHTML = `<span class="twist-tag">DAILY TWIST</span> <span class="twist-name">${twist.name}</span> · <span class="twist-desc">${twist.desc}</span>`;
-            }
+            twistEl.innerHTML = `<span class="twist-tag">DAILY TWIST</span> <span class="twist-name">${twist.name}</span> · <span class="twist-desc">${twist.desc}</span>`;
         } else if (twistEl) {
             twistEl.remove();
+            if (twistCard) {
+                twistCard.dataset.empty = 'true';
+                const empty = twistCard.querySelector('.mv2-twist-empty');
+                if (empty) empty.style.display = '';
+            }
         }
-        // Personal-best line (local leaderboard) — kept below the button so
-        // returning players see their peak to beat.
+        // Personal-best line. On the v2 menu this lives inside the
+        // challenge tile's status row so it doesn't break the grid;
+        // on legacy screens it falls back to a sibling-after-button
+        // pill. The challenge tile's status text already shows
+        // "READY" / "LAST · X FRAG · Y T", so the PB layers as a
+        // second small line beneath it.
         const pb = Challenge.personalBest && Challenge.personalBest();
-        let pbEl = document.getElementById('challenge-personal-best');
-        if (pb) {
+        const pbStatus = document.getElementById('challenge-status-line');
+        const onV2Menu = !!document.querySelector('#screen-start.menu-v2');
+        if (pb && onV2Menu && pbStatus) {
+            // Re-write the status line to combine LAST + BEST.
+            const baseStatus = pbStatus.textContent || 'READY';
+            // Strip any prior "· BEST" suffix so re-renders don't pile up.
+            const cleaned = baseStatus.replace(/\s+·\s+BEST:.*$/, '');
+            pbStatus.textContent = `${cleaned} · BEST ${pb.fragments || 0}F`;
+            // Drop the legacy pb pill if it survived from a prior render.
+            const stalePb = document.getElementById('challenge-personal-best');
+            if (stalePb) stalePb.remove();
+        } else if (pb) {
+            // Legacy menu — keep the original sibling-pill behaviour.
+            let pbEl = document.getElementById('challenge-personal-best');
             if (!pbEl && challengeBtn && challengeBtn.parentNode) {
                 pbEl = document.createElement('div');
                 pbEl.id = 'challenge-personal-best';
