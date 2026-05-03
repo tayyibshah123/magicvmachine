@@ -393,7 +393,14 @@ const ROOMS = [
                 action: 'Drop the Guardian. Use everything you have learned.',
                 sub: 'CONTAINMENT BREACH · TERMINATE',
                 spot: null,
-                wait: 'enemy_dies'
+                wait: 'enemy_dies',
+                // Cage Guardian fight is the only room where the trailing
+                // narration auto-hides — the boss takes many turns and
+                // the panel was occluding the action through the whole
+                // fight. Earlier teaching rooms keep their final text up
+                // until the enemy actually dies (combats are short and
+                // the player benefits from re-reading the instruction).
+                hideAfterMs: 5000
             }
         ]
     }
@@ -921,14 +928,14 @@ export const Breakout = {
                 if (this._active && this._beatIdx === idx) this._advanceBeat();
             }, beat.autoMs);
         }
-        // Auto-hide for `wait: 'enemy_dies'` beats — the final beat in
-        // a room that just sits with its narration up while the player
-        // finishes the fight. The text has done its job after a few
-        // seconds of reading; keeping it on screen blocks the view of
-        // the enemy. Default 5s; rooms can override with hideAfterMs.
-        const hideMs = (typeof beat.hideAfterMs === 'number')
-            ? beat.hideAfterMs
-            : (beat.wait === 'enemy_dies' ? 5000 : 0);
+        // Optional per-beat auto-hide. Opt-in via `hideAfterMs: N` in
+        // the room data. Used only on the Cage Guardian's free-combat
+        // beat where the boss fight runs many turns and the trailing
+        // narration would otherwise obstruct the view through the
+        // entire encounter. Earlier teaching rooms leave their final
+        // text up — combats are short and the player benefits from
+        // re-reading the instruction.
+        const hideMs = (typeof beat.hideAfterMs === 'number') ? beat.hideAfterMs : 0;
         if (hideMs > 0) {
             setTimeout(() => {
                 if (!this._active || this._beatIdx !== idx) return;
