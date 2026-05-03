@@ -844,7 +844,16 @@ export const Breakout = {
         if (!game) return;
         // Forced dice override — read by Game.rollDice's BREAKOUT branch.
         if (typeof room.diceFn === 'function') {
-            const types = (room.diceFn() || []).map((t, i) => safeType(t, i === 0 ? 'TAC_ATTACK' : 'TAC_DEFEND'));
+            // Pass the player's classId so the room.diceFn(classId) →
+            // classDice(classId) lookup resolves to the right class
+            // dice. Without this, classId was undefined inside the
+            // generic room diceFns and `classDice` fell through to its
+            // TAC_* default, so non-Tactician players saw Tactician
+            // dice through the entire prologue. (Class-fantasy room is
+            // unaffected — its diceFn is wrapped in roomFor with the
+            // classId already closed over.)
+            const cid = game.player && game.player.classId;
+            const types = (room.diceFn(cid) || []).map((t, i) => safeType(t, i === 0 ? 'TAC_ATTACK' : 'TAC_DEFEND'));
             game._breakoutForcedDice = types;
         } else {
             game._breakoutForcedDice = null;
