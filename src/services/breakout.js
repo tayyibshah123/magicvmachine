@@ -921,6 +921,22 @@ export const Breakout = {
                 if (this._active && this._beatIdx === idx) this._advanceBeat();
             }, beat.autoMs);
         }
+        // Auto-hide for `wait: 'enemy_dies'` beats — the final beat in
+        // a room that just sits with its narration up while the player
+        // finishes the fight. The text has done its job after a few
+        // seconds of reading; keeping it on screen blocks the view of
+        // the enemy. Default 5s; rooms can override with hideAfterMs.
+        const hideMs = (typeof beat.hideAfterMs === 'number')
+            ? beat.hideAfterMs
+            : (beat.wait === 'enemy_dies' ? 5000 : 0);
+        if (hideMs > 0) {
+            setTimeout(() => {
+                if (!this._active || this._beatIdx !== idx) return;
+                const p = document.getElementById('tutorial-narration');
+                if (p) p.classList.add('hidden');
+                this._setSpotlight(null);
+            }, hideMs);
+        }
     },
 
     _advanceBeat() {

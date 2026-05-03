@@ -24757,6 +24757,266 @@ drawEntity(entity) {
 
                     ctx.restore();
                 }
+
+                // --- SECTOR 0: CAGE GUARDIAN (Breakout boss) ---
+                // The prologue's mini-boss. A hulking warden-class unit
+                // built from broken cell bars and welded plating. Reads as
+                // imposing: oversized chassis (radius 140 vs ~75 normal),
+                // cell-bar arms wielding fragments of a torn cage, a
+                // central red containment seal that pulses with the
+                // boss's HP, twin shoulder-vent stacks, a single scanning
+                // visor that tracks the player, and a heavy stomp-shadow
+                // beneath. Tier-aware density: low strips chains and
+                // smokestacks; mid keeps them with reduced glow.
+                else if (this.sector === 0 || entity.name === 'CAGE GUARDIAN') {
+                    ctx.save();
+                    const _ctier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+                    const _cLow = _ctier === 'low';
+                    const _cMid = _ctier === 'mid';
+                    const hpPct = entity.maxHp ? Math.max(0, entity.currentHp / entity.maxHp) : 1;
+                    const enraged = hpPct < 0.4;
+                    // Palette: blood-iron + brass for normal phase; bleeds
+                    // brighter red as HP drops.
+                    const iron     = '#1a0408';
+                    const ironLine = enraged ? '#ff2244' : '#7a1a28';
+                    const cellBar  = enraged ? '#ff5577' : '#aa1a36';
+                    const seal     = enraged ? '#ff3355' : '#ff5577';
+                    const sealHot  = '#ffd76a';
+
+                    // Heavy stomp shadow under the boss. Big elliptical
+                    // pulse so the chassis reads as massive + grounded.
+                    if (!_cLow) {
+                        ctx.save();
+                        const stompPulse = 0.85 + Math.sin(time * 1.6) * 0.15;
+                        ctx.fillStyle = `rgba(0, 0, 0, ${0.55 * stompPulse})`;
+                        ctx.beginPath();
+                        ctx.ellipse(0, 90, 130, 22, 0, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.restore();
+                    }
+
+                    // Body sway — slow rocking, more pronounced on enrage.
+                    const sway = Math.sin(time * (enraged ? 1.6 : 0.9)) * (enraged ? 5 : 3);
+                    ctx.translate(sway, 0);
+
+                    // 1. THREAT AURA — soft red radial pool behind the
+                    // chassis. Reads as the cage's containment field.
+                    if (!_cLow) {
+                        ctx.save();
+                        const auraR = 200;
+                        const auraGrad = ctx.createRadialGradient(0, 0, 60, 0, 0, auraR);
+                        auraGrad.addColorStop(0, 'rgba(255, 50, 80, 0.30)');
+                        auraGrad.addColorStop(0.5, 'rgba(255, 50, 80, 0.10)');
+                        auraGrad.addColorStop(1, 'transparent');
+                        ctx.fillStyle = auraGrad;
+                        ctx.beginPath(); ctx.arc(0, 0, auraR, 0, Math.PI * 2); ctx.fill();
+                        ctx.restore();
+                    }
+
+                    // 2. SHOULDER VENTS — twin smokestacks rising from the
+                    // shoulders, venting red plasma. Sells the warden-tower
+                    // industrial silhouette.
+                    if (!_cLow) {
+                        for (const sx of [-90, 90]) {
+                            ctx.save();
+                            // Stack
+                            ctx.fillStyle = iron;
+                            ctx.strokeStyle = ironLine;
+                            ctx.lineWidth = 2;
+                            ctx.fillRect(sx - 14, -120, 28, 50);
+                            ctx.strokeRect(sx - 14, -120, 28, 50);
+                            // Cap
+                            ctx.fillStyle = ironLine;
+                            ctx.fillRect(sx - 18, -124, 36, 6);
+                            // Vented plume — drifting smoke + ember sparks
+                            const ventCount = _cMid ? 3 : 5;
+                            for (let p = 0; p < ventCount; p++) {
+                                const t = ((time * 0.7) + p * 0.3) % 1;
+                                const py = -124 - t * 80;
+                                const px = sx + Math.sin((time + p) * 2 + sx) * 10;
+                                const pa = (1 - t) * 0.55;
+                                const pr = 4 + t * 6;
+                                ctx.globalAlpha = pa;
+                                ctx.fillStyle = `rgba(255, 80, 110, ${pa})`;
+                                ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.fill();
+                            }
+                            ctx.globalAlpha = 1;
+                            ctx.restore();
+                        }
+                    }
+
+                    // 3. MAIN CHASSIS — heavy hex-derived torso with
+                    // pronounced shoulder shelves. Outline + dark fill so
+                    // the silhouette reads against any backdrop.
+                    ctx.save();
+                    ctx.fillStyle = iron;
+                    ctx.strokeStyle = ironLine;
+                    ctx.lineWidth = 4;
+                    if (!_cLow) {
+                        ctx.shadowColor = ironLine;
+                        ctx.shadowBlur = enraged ? 18 : 10;
+                    }
+                    ctx.beginPath();
+                    ctx.moveTo(-100, -70);     // top-left shoulder
+                    ctx.lineTo(-130, -30);     // outer shoulder shelf
+                    ctx.lineTo(-115, 50);      // outer hip
+                    ctx.lineTo(-65, 95);       // bottom corner
+                    ctx.lineTo(65, 95);
+                    ctx.lineTo(115, 50);
+                    ctx.lineTo(130, -30);
+                    ctx.lineTo(100, -70);      // top-right shoulder
+                    ctx.lineTo(60, -90);       // helm shoulder
+                    ctx.lineTo(-60, -90);
+                    ctx.closePath();
+                    ctx.fill(); ctx.stroke();
+                    ctx.restore();
+
+                    // 4. CHEST PLATE SEAMS — bolt holes + heavy weld lines
+                    // that read as "industrial cage frame".
+                    ctx.save();
+                    ctx.strokeStyle = ironLine;
+                    ctx.lineWidth = 2;
+                    ctx.globalAlpha = 0.85;
+                    ctx.beginPath();
+                    ctx.moveTo(-90, -50); ctx.lineTo(-90, 80);
+                    ctx.moveTo(90, -50);  ctx.lineTo(90, 80);
+                    ctx.moveTo(-65, -90); ctx.lineTo(-65, 95);
+                    ctx.moveTo(65, -90);  ctx.lineTo(65, 95);
+                    ctx.stroke();
+                    // Bolt heads
+                    ctx.fillStyle = cellBar;
+                    if (!_cLow) { ctx.shadowColor = cellBar; ctx.shadowBlur = 6; }
+                    for (const [bx, by] of [[-90, -30], [-90, 20], [-90, 60], [90, -30], [90, 20], [90, 60], [-65, -60], [65, -60]]) {
+                        ctx.beginPath(); ctx.arc(bx, by, 3, 0, Math.PI * 2); ctx.fill();
+                    }
+                    ctx.restore();
+
+                    // 5. CONTAINMENT SEAL — large central red sigil that
+                    // PULSES with the boss's HP. The boss's "heart". Inner
+                    // rotating cross + outer ring.
+                    ctx.save();
+                    const sealR = 38 + Math.sin(time * (enraged ? 6 : 3)) * 4;
+                    const sealPulse = 0.7 + 0.3 * Math.sin(time * (enraged ? 6 : 3));
+                    if (!_cLow) {
+                        ctx.shadowColor = seal;
+                        ctx.shadowBlur = 26 * sealPulse;
+                    }
+                    // Outer ring
+                    ctx.strokeStyle = seal;
+                    ctx.lineWidth = 3.5;
+                    ctx.beginPath(); ctx.arc(0, -10, sealR, 0, Math.PI * 2); ctx.stroke();
+                    // Inner pulsing fill
+                    ctx.fillStyle = `rgba(255, 50, 80, ${0.3 + 0.3 * sealPulse})`;
+                    ctx.beginPath(); ctx.arc(0, -10, sealR * 0.7, 0, Math.PI * 2); ctx.fill();
+                    // Rotating containment cross
+                    ctx.save();
+                    ctx.translate(0, -10);
+                    ctx.rotate(time * 0.5);
+                    ctx.strokeStyle = sealHot;
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.moveTo(-sealR * 0.6, 0); ctx.lineTo(sealR * 0.6, 0);
+                    ctx.moveTo(0, -sealR * 0.6); ctx.lineTo(0, sealR * 0.6);
+                    ctx.stroke();
+                    // Centre dot
+                    ctx.fillStyle = sealHot;
+                    if (!_cLow) { ctx.shadowColor = sealHot; ctx.shadowBlur = 14; }
+                    ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+                    ctx.restore();
+                    ctx.restore();
+
+                    // 6. HELM + SCANNING VISOR — wide hex helm with a single
+                    // glowing red eye-slit that tracks the player. Top of
+                    // chassis.
+                    ctx.save();
+                    // Helm shape
+                    ctx.fillStyle = iron;
+                    ctx.strokeStyle = ironLine;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(-50, -90);
+                    ctx.lineTo(-66, -120);
+                    ctx.lineTo(-40, -150);
+                    ctx.lineTo(40, -150);
+                    ctx.lineTo(66, -120);
+                    ctx.lineTo(50, -90);
+                    ctx.closePath();
+                    ctx.fill(); ctx.stroke();
+                    // Visor slit - glowing red bar
+                    if (!_cLow) { ctx.shadowColor = '#ff3355'; ctx.shadowBlur = 16; }
+                    ctx.fillStyle = enraged ? '#ff5577' : '#ff3355';
+                    ctx.fillRect(-32, -130, 64, 6);
+                    // Pupil that tracks player
+                    if (!_cLow && this.player) {
+                        const tpx = this.player.x - entity.x;
+                        const tpy = this.player.y - entity.y;
+                        const tmag = Math.hypot(tpx, tpy) || 1;
+                        const eyeX = (tpx / tmag) * 22;
+                        ctx.fillStyle = '#ffeacc';
+                        ctx.shadowBlur = 24;
+                        ctx.fillRect(-3 + eyeX, -129, 6, 4);
+                    }
+                    ctx.restore();
+
+                    // 7. CELL-BAR ARMS — fragments of the broken cage
+                    // wielded as weapons. Two pairs of thick vertical bars
+                    // at chassis sides, with chain-links dangling down.
+                    if (!_cLow) {
+                        for (const side of [-1, 1]) {
+                            ctx.save();
+                            ctx.translate(side * 140, 20);
+                            ctx.rotate(side * Math.sin(time * 0.7) * 0.15);
+                            // Three bar fragments
+                            ctx.fillStyle = iron;
+                            ctx.strokeStyle = cellBar;
+                            ctx.lineWidth = 3;
+                            if (!_cMid) { ctx.shadowColor = cellBar; ctx.shadowBlur = 8; }
+                            for (let b = 0; b < 3; b++) {
+                                const bx = (b - 1) * 10;
+                                ctx.fillRect(bx - 3, -50, 6, 80);
+                                ctx.strokeRect(bx - 3, -50, 6, 80);
+                            }
+                            // Chain links hanging from the bottom
+                            ctx.strokeStyle = cellBar;
+                            ctx.lineWidth = 2;
+                            ctx.fillStyle = iron;
+                            for (let l = 0; l < 3; l++) {
+                                const ly = 32 + l * 12;
+                                ctx.beginPath();
+                                ctx.ellipse(side * 4, ly, 4, 6, 0, 0, Math.PI * 2);
+                                ctx.fill();
+                                ctx.stroke();
+                            }
+                            ctx.restore();
+                        }
+                    }
+
+                    // 8. ENRAGE BLEED — when below 40% HP, jagged red
+                    // cracks crawl across the chest plate. Adds menace at
+                    // the kill phase.
+                    if (enraged && !_cLow) {
+                        ctx.save();
+                        ctx.strokeStyle = '#ff2244';
+                        ctx.lineWidth = 2.5;
+                        ctx.shadowColor = '#ff2244';
+                        ctx.shadowBlur = 12;
+                        const wobble = Math.sin(time * 5) * 4;
+                        ctx.beginPath();
+                        ctx.moveTo(-80, -40 + wobble); ctx.lineTo(-50, 0); ctx.lineTo(-70, 30); ctx.lineTo(-30, 60);
+                        ctx.moveTo(60, -50 - wobble); ctx.lineTo(40, -10); ctx.lineTo(70, 20); ctx.lineTo(20, 50);
+                        ctx.stroke();
+                        // Ember pinpricks along the cracks
+                        ctx.fillStyle = '#ffaa66';
+                        ctx.shadowBlur = 6;
+                        for (const [ex, ey] of [[-50, 0], [-70, 30], [-30, 60], [40, -10], [70, 20], [20, 50]]) {
+                            const flick = 1 + Math.sin(time * 8 + ex) * 0.4;
+                            ctx.beginPath(); ctx.arc(ex, ey, 2.5 * flick, 0, Math.PI * 2); ctx.fill();
+                        }
+                        ctx.restore();
+                    }
+
+                    ctx.restore();
+                }
             }
 
             // =========================================================
