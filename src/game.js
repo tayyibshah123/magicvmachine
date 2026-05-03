@@ -17174,8 +17174,15 @@ drawEffects() {
                 try { AudioMgr.playSound('grid_fracture'); } catch (_) {}
             }
             // If the chip ticks killed the player, gameOver has already moved
-            // state — bail before kicking the enemy phase.
-            if (this.player.currentHp <= 0) return;
+            // state — bail before kicking the enemy phase. The takeDamage
+            // calls above each set the GAMEOVER state via their call sites
+            // in entity.js, so this guard normally just exits the rest of
+            // endTurn cleanly. Defensive fallback: if state somehow isn't
+            // GAMEOVER yet but HP is 0, fire it now so the run can't hang.
+            if (this.player.currentHp <= 0) {
+                if (this.currentState !== STATE.GAMEOVER && this.gameOver) this.gameOver();
+                return;
+            }
         }
         // Show end-of-turn summary if any meaningful stats this turn
         this.showTurnSummary();
@@ -18041,9 +18048,15 @@ drawEffects() {
         // so a duplicate fire from a callback is a no-op.
         if (!this.enemy || this.enemy.currentHp <= 0) { this.winCombat(); return; }
         // Or the player died on a reflect / thorns / minion-attack path — don't
-        // start another turn on a dead player.
+        // start another turn on a dead player. Fire gameOver if it
+        // hasn't already moved state — a bare return softlocks endTurn
+        // since the finally clears _endTurnRunning and there's no path
+        // to the death screen.
         if (this.currentState === STATE.GAMEOVER) return;
-        if (this.player && this.player.currentHp <= 0) return;
+        if (this.player && this.player.currentHp <= 0) {
+            if (this.gameOver) this.gameOver();
+            return;
+        }
 
         if (this.enemy) this.enemy.minions = this.enemy.minions.filter(m => m.currentHp > 0);
 
@@ -18085,10 +18098,17 @@ drawEffects() {
 
     async winCombat() {
         // Guard: a detonator / reflect / thorns interaction can kill the player
-        // in the same tick that kills the enemy. gameOver() has already moved
-        // the state — bail before we hand out rewards to a corpse.
+        // in the same tick that kills the enemy. gameOver() has usually
+        // already moved the state — bail before we hand out rewards to a
+        // corpse. If we're somehow here with a dead player and gameOver
+        // hasn't fired yet (race between simultaneous deaths), fire it
+        // now so the run isn't stranded on a "you won" screen the player
+        // can't actually see.
         if (this.currentState === STATE.GAMEOVER) return;
-        if (this.player && this.player.currentHp <= 0) return;
+        if (this.player && this.player.currentHp <= 0) {
+            if (this.gameOver) this.gameOver();
+            return;
+        }
         // Idempotency guard: if a deferred VFX callback (e.g. Bomb Bot missile
         // impact) already finished the combat and nulled `this.enemy`, the
         // outer turn loop's post-phase win check (endTurn ~line 9892) would

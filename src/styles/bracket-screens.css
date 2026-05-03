@@ -1,0 +1,528 @@
+/* ──────────────────────────────────────────────────────────────────
+ * UI v6 — Bracket aesthetic across non-combat screens
+ *
+ * The menu (menu.css + polish.css) and the settings modal (polish.css
+ * §16) already use the diagonal TL+BR cyan-bracket button style with
+ * transparent fills. This file rolls that same language out to every
+ * other non-combat screen so the UI reads consistently:
+ *
+ *   char-select / map / sanctuary (rest) / shop / codex / intel /
+ *   glossary / reward / victory / combat-win / gameover / hex / event /
+ *   pact / story / ending / achievements / meta
+ *
+ * Architecture
+ * ────────────
+ * Reusable mixin: `.ui-bracket-frame` draws the four-strip diagonal
+ * brackets via background-image. Apply by giving any element this
+ * class, OR by extending the rule to a known class like `.btn` on a
+ * screen scope.
+ *
+ * Token defaults (overridden per-element):
+ *   --bracket-color      cyan rgba(74, 216, 255, 0.85)
+ *   --bracket-glow       cyan rgba(74, 216, 255, 0.55)
+ *   --bracket-len        18px (button); 24-28px (panel)
+ *   --bracket-thickness  2px
+ *   --bracket-pad        4px
+ *
+ * Variants (mirrors menu-v2 conventions):
+ *   .ui-bracket-frame--gold   gold accent (RESUME / sanctuary heal)
+ *   .ui-bracket-frame--alert  pink accent (abort / death affordances)
+ *   .ui-bracket-frame--green  green accent (rest / heal flows)
+ *
+ * The selectors below SCOPE the override to non-combat screens so
+ * combat HUD buttons (END TURN, REROLL, hourglass, dice tray) keep
+ * their metallic chrome — they're tied to gameplay readability and
+ * the bracket look would erase important state cues (no-moves-pulse
+ * gold, mana-locked grey, etc.).
+ *
+ * SCREENS COVERED
+ *   #screen-char-select  #screen-meta         #screen-intel
+ *   #screen-codex        #screen-shop         #screen-rest
+ *   #screen-event        #screen-map          #screen-pact
+ *   #screen-hex          #screen-story        #screen-ending
+ *   #screen-reward       #screen-victory      #screen-combat-win
+ *   #screen-gameover     #screen-achievements
+ *   #modal-glossary
+ *
+ * NOT COVERED (intentional)
+ *   #screen-game (combat HUD)  #screen-tutorial-combat
+ *   .menu-v2 (already has its own bracket treatment in polish.css)
+ *
+ * ────────────────────────────────────────────────────────────────── */
+
+
+/* Convenience scope: every non-menu screen gets bracket overrides. */
+.screen:not(.menu-v2) {
+    --bracket-color: rgba(74, 216, 255, 0.85);
+    --bracket-glow:  rgba(74, 216, 255, 0.55);
+    --bracket-len: 18px;
+    --bracket-thickness: 2px;
+    --bracket-pad: 4px;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 1. BUTTON OVERRIDES
+ *
+ * Strip the legacy metallic gradient + border + box-shadow from
+ * `.btn` (all variants) on non-menu screens. Replace with the
+ * diagonal TL+BR bracket frame the menu uses.
+ *
+ * `.btn.primary`  → cyan brackets (default action)
+ * `.btn.danger`   → pink brackets
+ * `.btn.secondary`/`.btn.ghost` → muted cyan brackets
+ *
+ * Hover lifts the glow + scales 1px up; press dims back.
+ * ────────────────────────────────────────────────────────── */
+.screen:not(.menu-v2) .btn,
+.screen:not(.menu-v2) .btn-inline {
+    /* Strip legacy chrome */
+    background: transparent !important;
+    background-image: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    /* Apply diagonal TL+BR brackets via 4-strip background. */
+    background:
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        transparent !important;
+    /* Type — match the menu's impact-italic for primary actions. */
+    color: #ffffff;
+    font-family: var(--ui-font-impact);
+    font-weight: 900;
+    font-style: italic;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    text-shadow:
+        0 0 8px rgba(74, 216, 255, 0.45),
+        0 2px 0 rgba(0, 0, 0, 0.55);
+    padding: var(--ui-space-3) var(--ui-space-4);
+    /* Light glow follows the brackets via drop-shadow so the halo
+       isn't clipped by the now-transparent fill. */
+    filter: drop-shadow(0 0 6px var(--bracket-glow));
+    transition:
+        filter var(--ui-duration-fast) var(--ui-ease-out),
+        transform var(--ui-duration-fast) var(--ui-ease-out);
+}
+
+.screen:not(.menu-v2) .btn:hover,
+.screen:not(.menu-v2) .btn-inline:hover {
+    filter: drop-shadow(0 0 12px var(--bracket-glow))
+            drop-shadow(0 0 22px var(--bracket-glow));
+    transform: translateY(-1px);
+}
+.screen:not(.menu-v2) .btn:active,
+.screen:not(.menu-v2) .btn-inline:active {
+    filter: drop-shadow(0 0 4px var(--bracket-glow));
+    transform: translateY(0);
+}
+
+/* Variants */
+.screen:not(.menu-v2) .btn.primary,
+.screen:not(.menu-v2) .btn.neon-border-green,
+.screen:not(.menu-v2) .btn-inline {
+    --bracket-color: rgba(74, 216, 255, 0.95);
+    --bracket-glow:  rgba(74, 216, 255, 0.75);
+}
+.screen:not(.menu-v2) .btn.danger,
+.screen:not(.menu-v2) .btn-inline.btn-danger-solid,
+.screen:not(.menu-v2) .btn-inline.btn-reset,
+.screen:not(.menu-v2) .btn.neon-border-pink {
+    --bracket-color: rgba(255, 90, 130, 0.95);
+    --bracket-glow:  rgba(255, 90, 130, 0.7);
+    text-shadow:
+        0 0 8px rgba(255, 90, 130, 0.45),
+        0 2px 0 rgba(0, 0, 0, 0.55);
+}
+.screen:not(.menu-v2) .btn.secondary,
+.screen:not(.menu-v2) .btn.ghost,
+.screen:not(.menu-v2) .btn-inline.btn-ghost {
+    --bracket-color: rgba(180, 220, 255, 0.55);
+    --bracket-glow:  rgba(180, 220, 255, 0.32);
+    color: rgba(255, 255, 255, 0.78);
+    text-shadow:
+        0 0 6px rgba(74, 216, 255, 0.30),
+        0 2px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* Disabled state — reduce alpha; brackets stay legible. */
+.screen:not(.menu-v2) .btn:disabled,
+.screen:not(.menu-v2) .btn-inline:disabled,
+.screen:not(.menu-v2) .btn[disabled],
+.screen:not(.menu-v2) .btn-inline[disabled] {
+    opacity: 0.4;
+    filter: none;
+    transform: none;
+    cursor: not-allowed;
+}
+
+/* Strip the legacy ::after sheen gradient that several .btn rules
+   add in style.css. The bracket frame is the visual; an extra
+   sheen now reads as a stray light on top of empty space. */
+.screen:not(.menu-v2) .btn::after,
+.screen:not(.menu-v2) .btn::before,
+.screen:not(.menu-v2) .btn-inline::after,
+.screen:not(.menu-v2) .btn-inline::before {
+    display: none !important;
+    content: none !important;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 2. PANEL OVERRIDES (.glass-panel and variants)
+ *
+ * The legacy `.glass-panel` is a heavy frosted-glass card with a
+ * blur, gradient, border, and box-shadow. Replace with a flat
+ * deep-black background + cyan TL+BR brackets on the panel
+ * footprint. Premium variant gets a slightly larger bracket.
+ * ────────────────────────────────────────────────────────── */
+.screen:not(.menu-v2) .glass-panel,
+.screen:not(.menu-v2) .panel,
+.screen:not(.menu-v2) .info-card {
+    --bracket-color: rgba(74, 216, 255, 0.65);
+    --bracket-glow:  rgba(74, 216, 255, 0.30);
+    --bracket-len: 24px;
+    --bracket-pad: 6px;
+    background:
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        rgba(4, 8, 16, 0.78) !important;
+    border: none !important;
+    box-shadow: 0 0 24px rgba(74, 216, 255, 0.08) !important;
+    border-radius: 0 !important;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    filter: drop-shadow(0 0 8px var(--bracket-glow));
+}
+
+.screen:not(.menu-v2) .glass-panel--premium {
+    --bracket-color: rgba(255, 215, 106, 0.75);
+    --bracket-glow:  rgba(255, 215, 106, 0.35);
+    --bracket-len: 28px;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 3. CARD-LIKE SURFACES (char-card, reward-card, shop-item,
+ *    relic-tile, upgrade-card, etc.)
+ *
+ * These existed as small glass tiles. Strip the gradient fill
+ * and apply a tighter 14px bracket per-tile so they read as
+ * "selectable cards" without crowding.
+ * ────────────────────────────────────────────────────────── */
+.screen:not(.menu-v2) .char-card,
+.screen:not(.menu-v2) .reward-card,
+.screen:not(.menu-v2) .shop-item,
+.screen:not(.menu-v2) .upgrade-card,
+.screen:not(.menu-v2) .meta-upgrade,
+.screen:not(.menu-v2) .codex-entry,
+.screen:not(.menu-v2) .intel-tile,
+.screen:not(.menu-v2) .event-choice,
+.screen:not(.menu-v2) .pact-card,
+.screen:not(.menu-v2) .hex-result-card,
+.screen:not(.menu-v2) .diff-frame {
+    --bracket-color: rgba(74, 216, 255, 0.60);
+    --bracket-glow:  rgba(74, 216, 255, 0.32);
+    --bracket-len: 14px;
+    --bracket-thickness: 1.5px;
+    --bracket-pad: 4px;
+    background:
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        rgba(4, 8, 16, 0.72) !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    transition:
+        filter var(--ui-duration-fast) var(--ui-ease-out),
+        transform var(--ui-duration-fast) var(--ui-ease-out);
+}
+.screen:not(.menu-v2) .char-card:hover,
+.screen:not(.menu-v2) .reward-card:hover,
+.screen:not(.menu-v2) .shop-item:hover,
+.screen:not(.menu-v2) .upgrade-card:hover,
+.screen:not(.menu-v2) .meta-upgrade:hover,
+.screen:not(.menu-v2) .codex-entry:hover,
+.screen:not(.menu-v2) .intel-tile:hover,
+.screen:not(.menu-v2) .event-choice:hover,
+.screen:not(.menu-v2) .pact-card:hover,
+.screen:not(.menu-v2) .diff-frame:hover {
+    --bracket-color: rgba(74, 216, 255, 0.95);
+    --bracket-glow:  rgba(74, 216, 255, 0.65);
+    transform: translateY(-2px);
+    filter: drop-shadow(0 0 10px var(--bracket-glow));
+}
+
+/* Active / selected variants — solid cyan brackets + pop. */
+.screen:not(.menu-v2) .char-card.selected,
+.screen:not(.menu-v2) .diff-frame.is-active,
+.screen:not(.menu-v2) .event-choice.selected,
+.screen:not(.menu-v2) .pact-card.is-selected {
+    --bracket-color: rgba(74, 216, 255, 1);
+    --bracket-glow:  rgba(74, 216, 255, 0.7);
+    filter: drop-shadow(0 0 14px var(--bracket-glow));
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 4. SCREEN HEADERS — match the menu wordmark / settings title
+ *    aesthetic
+ *
+ * Most screens have an `<h2>` with `.neon-text-*` colours +
+ * `<h1>` for major titles (gameover, victory). Pull these into
+ * the same cyan tech-display look as the settings title so the
+ * vertical rhythm reads consistently across screens.
+ * ────────────────────────────────────────────────────────── */
+.screen:not(.menu-v2) h2 {
+    font-family: var(--ui-font-tech);
+    font-weight: 700;
+    font-size: clamp(0.9rem, 4.4vw, 1.2rem);
+    letter-spacing: 0.32em;
+    color: var(--ui-brand);
+    text-shadow: 0 0 10px rgba(74, 216, 255, 0.55);
+    background: none;
+    -webkit-text-fill-color: var(--ui-brand);
+    text-transform: uppercase;
+    text-align: center;
+    margin: var(--ui-space-3) 0 var(--ui-space-4);
+}
+.screen:not(.menu-v2) h2.neon-text-pink,
+.screen:not(.menu-v2) h2.neon-text-red,
+.screen:not(.menu-v2) #go-title {
+    color: rgba(255, 90, 130, 1);
+    -webkit-text-fill-color: rgba(255, 90, 130, 1);
+    text-shadow: 0 0 10px rgba(255, 90, 130, 0.55);
+}
+.screen:not(.menu-v2) h2.neon-text-gold,
+.screen:not(.menu-v2) h2.neon-text-green {
+    color: var(--ui-gold);
+    -webkit-text-fill-color: var(--ui-gold);
+    text-shadow: 0 0 10px rgba(255, 215, 106, 0.55);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 5. MAP NODES
+ *
+ * Map node tiles get their own bracket treatment so the player's
+ * available picks read as "interactive bracket-framed tiles" like
+ * everything else. Current-node + locked-node states keep their
+ * existing colour cues — only the surrounding fill changes.
+ * ────────────────────────────────────────────────────────── */
+#screen-map .map-node-abs {
+    --bracket-color: rgba(74, 216, 255, 0.55);
+    --bracket-glow:  rgba(74, 216, 255, 0.30);
+    --bracket-len: 12px;
+    --bracket-thickness: 1.5px;
+    --bracket-pad: 3px;
+    background:
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        rgba(4, 8, 16, 0.55) !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}
+#screen-map .map-node-abs.available {
+    --bracket-color: rgba(74, 216, 255, 0.95);
+    --bracket-glow:  rgba(74, 216, 255, 0.65);
+    filter: drop-shadow(0 0 8px var(--bracket-glow));
+}
+#screen-map .map-node-abs.current {
+    --bracket-color: rgba(255, 215, 106, 1);
+    --bracket-glow:  rgba(255, 215, 106, 0.7);
+    filter: drop-shadow(0 0 12px var(--bracket-glow));
+}
+#screen-map .map-node-abs.locked {
+    --bracket-color: rgba(120, 130, 150, 0.45);
+    opacity: 0.55;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 6. GLOSSARY MODAL
+ *
+ * polish.css already styles `#modal-glossary .modal-content` but
+ * the inner glossary list / entries need the bracket-card
+ * treatment too.
+ * ────────────────────────────────────────────────────────── */
+#modal-glossary .glossary-tabs {
+    border-bottom: 1px solid rgba(74, 216, 255, 0.22);
+    padding-bottom: var(--ui-space-2);
+    margin-bottom: var(--ui-space-3);
+}
+#modal-glossary .glossary-tab,
+#modal-glossary .glossary-tabs > button {
+    --bracket-color: rgba(74, 216, 255, 0.40);
+    --bracket-glow:  rgba(74, 216, 255, 0.30);
+    --bracket-len: 8px;
+    --bracket-thickness: 1.5px;
+    --bracket-pad: 2px;
+    flex: 1 1 0;
+    min-width: 0;
+    background:
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    color: rgba(255, 255, 255, 0.55);
+    font-family: var(--ui-font-tech);
+    font-size: 0.66rem;
+    letter-spacing: 0.14em;
+    padding: var(--ui-space-2) var(--ui-space-1);
+    text-transform: uppercase;
+    transition: color 0.2s, background 0.2s, filter 0.2s;
+}
+#modal-glossary .glossary-tab.active,
+#modal-glossary .glossary-tabs > button.active {
+    --bracket-color: rgba(74, 216, 255, 1);
+    --bracket-glow:  rgba(74, 216, 255, 0.6);
+    color: #ffffff;
+    text-shadow: 0 0 6px rgba(74, 216, 255, 0.65);
+    filter: drop-shadow(0 0 6px var(--bracket-glow));
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 7. GAMEOVER / VICTORY OUT-OF-RUN BANNERS
+ *
+ * The screen titles + summary panels on the run-end screens get
+ * scoped colour: pink for gameover, gold for victory.
+ * ────────────────────────────────────────────────────────── */
+#screen-gameover {
+    --bracket-color: rgba(255, 90, 130, 0.85);
+    --bracket-glow:  rgba(255, 90, 130, 0.55);
+}
+#screen-victory,
+#screen-combat-win {
+    --bracket-color: rgba(255, 215, 106, 0.85);
+    --bracket-glow:  rgba(255, 215, 106, 0.55);
+}
+#screen-rest {
+    --bracket-color: rgba(0, 255, 153, 0.75);
+    --bracket-glow:  rgba(0, 255, 153, 0.40);
+}
+#screen-shop {
+    --bracket-color: rgba(255, 215, 106, 0.85);
+    --bracket-glow:  rgba(255, 215, 106, 0.45);
+}
+#screen-hex,
+#screen-pact {
+    --bracket-color: rgba(255, 90, 130, 0.85);
+    --bracket-glow:  rgba(255, 90, 130, 0.50);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 8. SCREEN BACKGROUNDS — soften the heavy radial fills
+ *
+ * Several screens (#screen-meta, #screen-rest, etc.) have full-
+ * bleed radial gradient backgrounds that fight the new VFX
+ * layer. Reduce the bg gradient alpha so the vfx-host's auroras
+ * + particles + corner brackets show through cleanly.
+ * ────────────────────────────────────────────────────────── */
+.screen:not(.menu-v2) {
+    /* Don't override individual screen accents; only nudge the
+       backdrop blur so the underlying VFX layer is visible. */
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 9. UTILITY MIXIN — `.ui-bracket-frame`
+ *
+ * Apply this class to any element to give it the bracket frame
+ * outside of the screen-scoped overrides above. Useful for
+ * one-off chips / badges added later.
+ * ────────────────────────────────────────────────────────── */
+.ui-bracket-frame {
+    --bracket-color: rgba(74, 216, 255, 0.85);
+    --bracket-glow:  rgba(74, 216, 255, 0.55);
+    --bracket-len: 18px;
+    --bracket-thickness: 2px;
+    --bracket-pad: 4px;
+    background:
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    filter: drop-shadow(0 0 6px var(--bracket-glow));
+}
+.ui-bracket-frame--gold {
+    --bracket-color: rgba(255, 215, 106, 0.85);
+    --bracket-glow:  rgba(255, 215, 106, 0.55);
+}
+.ui-bracket-frame--alert {
+    --bracket-color: rgba(255, 90, 130, 0.85);
+    --bracket-glow:  rgba(255, 90, 130, 0.55);
+}
+.ui-bracket-frame--green {
+    --bracket-color: rgba(0, 255, 153, 0.75);
+    --bracket-glow:  rgba(0, 255, 153, 0.40);
+}
