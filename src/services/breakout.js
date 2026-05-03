@@ -100,7 +100,7 @@ const ROOMS = [
         teaches: 'attack + defend basics, intent reading',
         enemy: {
             name: 'SURVEILLANCE DRONE',
-            hp: 14,
+            hp: 21,
             dmg: 5,
             shape: 'drone',
             radius: 70
@@ -194,7 +194,7 @@ const ROOMS = [
         teaches: 'mana spend + minion summon + multi-target',
         enemy: {
             name: 'HIVE FRAGMENT',
-            hp: 22,
+            hp: 33,
             dmg: 4,
             shape: 'spider',
             radius: 90
@@ -277,7 +277,7 @@ const ROOMS = [
         teaches: 'status effects + parry timing',
         enemy: {
             name: 'GLITCH CIPHER',
-            hp: 26,
+            hp: 39,
             dmg: 12,
             shape: 'spider',
             radius: 95
@@ -354,7 +354,7 @@ const ROOMS = [
         teaches: 'synthesis — everything together',
         enemy: {
             name: 'CAGE GUARDIAN',
-            hp: 80,
+            hp: 120,
             dmg: 8,
             shape: 'tank',
             radius: 140,
@@ -424,7 +424,7 @@ const CLASS_ROOM_3 = {
         // Bite (SIG_BLOOD_1) — 8 dmg + 3 heal. Enemy chosen so the
         // heal matters: HP-swap encounter where a normal attack
         // sequence would leave the player low.
-        enemy:  { name: 'WOUNDED HUNTER', hp: 22, dmg: 7, shape: 'spider', radius: 80 },
+        enemy:  { name: 'WOUNDED HUNTER', hp: 33, dmg: 7, shape: 'spider', radius: 80 },
         intents: [{ type: 'attack', val: 7, label: 'STRIKE 7' }],
         storyboard: {
             tag: 'BLOCK 7 · SHADOWED WING',
@@ -460,7 +460,7 @@ const CLASS_ROOM_3 = {
     arcanist: {
         // Spark (SIG_ARC_1) — 6 dmg + 1 mana. Enemy with a small HP
         // pool but high damage so the mana-positive cycle matters.
-        enemy:  { name: 'CORRUPTED PROCESS', hp: 18, dmg: 9, shape: 'drone', radius: 80 },
+        enemy:  { name: 'CORRUPTED PROCESS', hp: 27, dmg: 9, shape: 'drone', radius: 80 },
         intents: [{ type: 'attack', val: 9, label: 'CORRUPT 9' }],
         storyboard: {
             tag: 'DATA-VAULT 4',
@@ -497,7 +497,7 @@ const CLASS_ROOM_3 = {
         // Bash (SIG_SENT_1) — 10 shield + 4 dmg. Enemy is a multi-hit
         // turret so the shield gain matters: the BASH die is the
         // wall, not just a hit.
-        enemy:  { name: 'BARRAGE TURRET', hp: 24, dmg: 4, shape: 'tank', radius: 95 },
+        enemy:  { name: 'BARRAGE TURRET', hp: 36, dmg: 4, shape: 'tank', radius: 95 },
         intents: [{ type: 'multi_attack', val: 4, hits: 3, label: 'BARRAGE x3' }],
         storyboard: {
             tag: 'CORRIDOR · BARRAGE LANE',
@@ -533,7 +533,7 @@ const CLASS_ROOM_3 = {
     annihilator: {
         // Blast (SIG_ANNI_1) — 12 dmg, ignore shield. Enemy carries
         // shield so the armor-pierce reads.
-        enemy:  { name: 'PLATED GUARD', hp: 18, dmg: 6, shield: 12, shape: 'tank', radius: 90 },
+        enemy:  { name: 'PLATED GUARD', hp: 27, dmg: 6, shield: 12, shape: 'tank', radius: 90 },
         intents: [{ type: 'attack', val: 6, label: 'STRIKE 6' }],
         storyboard: {
             tag: 'FOUNDRY ANNEX',
@@ -569,7 +569,7 @@ const CLASS_ROOM_3 = {
     tactician: {
         // Volley (SIG_TACT_1) — 7 dmg + 1 reroll next turn. Enemy
         // with two-turn structure so the next-turn reroll matters.
-        enemy:  { name: 'PROTOCOL OFFICER', hp: 22, dmg: 5, shape: 'drone', radius: 80 },
+        enemy:  { name: 'PROTOCOL OFFICER', hp: 33, dmg: 5, shape: 'drone', radius: 80 },
         intents: [{ type: 'attack', val: 5, label: 'STRIKE 5' }],
         storyboard: {
             tag: 'COMMAND VESTIBULE',
@@ -606,7 +606,7 @@ const CLASS_ROOM_3 = {
         // Call (SIG_SUM_1) — summon a spirit + 4 dmg. Enemy is a
         // swarm-spawner so two minion bodies on the field is the
         // play.
-        enemy:  { name: 'SWARM AGITATOR', hp: 22, dmg: 5, shape: 'spider', radius: 90 },
+        enemy:  { name: 'SWARM AGITATOR', hp: 33, dmg: 5, shape: 'spider', radius: 90 },
         intents: [{ type: 'attack', val: 5, label: 'STRIKE 5' }],
         storyboard: {
             tag: 'SACRED HOLLOW',
@@ -643,7 +643,7 @@ const CLASS_ROOM_3 = {
 
 // Generic Room 3 fallback (in case classId is unknown).
 const ROOM_3_FALLBACK = {
-    enemy: { name: 'CELL CAPTAIN', hp: 18, dmg: 4 },
+    enemy: { name: 'CELL CAPTAIN', hp: 27, dmg: 4 },
     intents: [{ type: 'attack', val: 4, label: 'STRIKE 4' }],
     diceFn: (cd) => [cd.attack, cd.attack],
     warden: [{

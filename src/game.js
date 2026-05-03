@@ -11089,6 +11089,36 @@ updateHexBreach(dt) {
         this.effects = [];
         ParticleSys.clear();
         if (CombatLog && CombatLog.clear) CombatLog.clear();
+        // END TURN button reset — when the previous room ended mid-
+        // enemy-phase (player kill via reflect/thorns/multi-hit) the
+        // button could be left in its disabled hourglass state. The
+        // next room would then have a button that looks pressable but
+        // isn't, blocking the tutorial. Restore the default state
+        // explicitly here.
+        const _btnEnd = document.getElementById('btn-end-turn');
+        if (_btnEnd) {
+            _btnEnd.disabled = false;
+            _btnEnd.style.opacity = 1;
+            if (typeof this.setButtonLabel === 'function' && typeof ICONS !== 'undefined' && ICONS.endTurn) {
+                this.setButtonLabel(_btnEnd, ICONS.endTurn);
+            }
+        }
+        // Same for the reroll button — same risk vector.
+        const _btnReroll = document.getElementById('btn-reroll');
+        if (_btnReroll) {
+            _btnReroll.disabled = false;
+            _btnReroll.style.opacity = 1;
+        }
+        // Clear input-locking flags so the new room starts with a live
+        // dice tray. inputCooldown decays on its own but a non-zero
+        // value at room-build is left over from the prior fight's QTE.
+        this.inputCooldown = 0;
+        this.inputLocked = false;
+        // Defensive: cancel any in-flight QTE so it can't feed taps
+        // from the new room into a dead callback.
+        if (this.qte) {
+            this.qte.active = false;
+        }
         if (this.player) {
             this.player.minions = [];
             this.player.shield = 0;
