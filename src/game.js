@@ -751,12 +751,98 @@ const Game = {
         };
 
         // --- Settings modal tabs ---
+        // The Phase 4 redesign drives a sliding-underline indicator
+        // via two CSS custom properties on `.settings-tabs`. We
+        // measure the active tab's offset/width and write them so the
+        // ::after pseudo-element animates to the new position.
+        const _refreshSettingsTabIndicator = () => {
+            const container = d.querySelector('#modal-settings .settings-tabs');
+            if (!container) return;
+            const active = container.querySelector('.settings-tab.active');
+            if (!active) return;
+            const cRect = container.getBoundingClientRect();
+            const aRect = active.getBoundingClientRect();
+            container.style.setProperty('--_indicator-x', `${aRect.left - cRect.left + container.scrollLeft}px`);
+            container.style.setProperty('--_indicator-w', `${aRect.width}px`);
+        };
         d.querySelectorAll('.settings-tab').forEach(tab => {
             tab.onclick = () => {
                 const target = tab.dataset.tab;
                 d.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t === tab));
                 d.querySelectorAll('.settings-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === target));
+                _refreshSettingsTabIndicator();
             };
+        });
+        // Refresh the indicator on initial bind + window resize.
+        _refreshSettingsTabIndicator();
+        window.addEventListener('resize', _refreshSettingsTabIndicator);
+        // Refresh sliders' visual fills the moment the modal opens
+        // (the legacy code uses `display: none → flex` toggles so
+        // input events haven't run yet — we seed --_val from current
+        // input values directly). Hooked at every settings open via a
+        // MutationObserver on the modal's class attribute so we don't
+        // need to sprinkle calls across the open paths.
+        const _seedAllSettingControls = () => {
+            d.querySelectorAll('#modal-settings .setting-row.setting-slider').forEach(row => {
+                const input = row.querySelector('input[type="range"]');
+                if (!input) return;
+                const min = parseFloat(input.min || '0');
+                const max = parseFloat(input.max || '100');
+                const val = parseFloat(input.value || '0');
+                const span = max - min;
+                const pct = span > 0 ? ((val - min) / span) * 100 : 0;
+                row.style.setProperty('--_val', pct.toFixed(2));
+            });
+            // Indicator measurement only resolves after the modal
+            // has been laid out, so defer one frame.
+            requestAnimationFrame(_refreshSettingsTabIndicator);
+        };
+        // Watch the settings modal for hidden-toggle removals so the
+        // tab indicator + slider fills snap into place on open.
+        const _settingsModal = d.getElementById('modal-settings');
+        if (_settingsModal) {
+            const _mo = new MutationObserver(() => {
+                if (!_settingsModal.classList.contains('hidden')) _seedAllSettingControls();
+            });
+            try { _mo.observe(_settingsModal, { attributes: true, attributeFilter: ['class'] }); } catch (_) {}
+        }
+        // Same for the glossary modal — sliding tab indicator.
+        const _refreshGlossaryTabIndicator = () => {
+            const container = d.querySelector('#modal-glossary .glossary-tabs');
+            if (!container) return;
+            const active = container.querySelector('.glossary-tab.active');
+            if (!active) return;
+            const cRect = container.getBoundingClientRect();
+            const aRect = active.getBoundingClientRect();
+            container.style.setProperty('--_indicator-x', `${aRect.left - cRect.left + container.scrollLeft}px`);
+            container.style.setProperty('--_indicator-w', `${aRect.width}px`);
+        };
+        d.querySelectorAll('#modal-glossary .glossary-tab').forEach(tab => {
+            tab.addEventListener('click', () => requestAnimationFrame(_refreshGlossaryTabIndicator));
+        });
+        const _glossaryModal = d.getElementById('modal-glossary');
+        if (_glossaryModal) {
+            const _gmo = new MutationObserver(() => {
+                if (!_glossaryModal.classList.contains('hidden')) {
+                    requestAnimationFrame(_refreshGlossaryTabIndicator);
+                }
+            });
+            try { _gmo.observe(_glossaryModal, { attributes: true, attributeFilter: ['class'] }); } catch (_) {}
+        }
+        // Sliders: keep --_val in sync as the player drags. We listen
+        // at the document level so dynamically-bound rows pick up the
+        // hook for free.
+        d.addEventListener('input', (e) => {
+            const inp = e.target;
+            if (!inp || !inp.matches || !inp.matches('#modal-settings .setting-row input[type="range"]')) return;
+            const row = inp.closest('.setting-row');
+            if (!row) return;
+            const min = parseFloat(inp.min || '0');
+            const max = parseFloat(inp.max || '100');
+            const val = parseFloat(inp.value || '0');
+            const span = max - min;
+            const pct = span > 0 ? ((val - min) / span) * 100 : 0;
+            row.style.setProperty('--_val', pct.toFixed(2));
         });
 
         // --- Settings hooks (persist on every change) ---

@@ -1,0 +1,976 @@
+/* ──────────────────────────────────────────────────────────────────
+ * UI v2 — Phase 4: Settings + secondary modals
+ *
+ * Overlay-style restyle of the existing settings markup so the JS
+ * stays untouched while the chrome adopts the v2 component language.
+ * Snap-anchored: dark glass panel, refined typography, sliding tab
+ * indicator, iOS-style toggles, gradient-fill sliders, soft modal
+ * entry physics.
+ *
+ * STRUCTURE
+ *   1. Modal backdrop + entry physics
+ *   2. Modal panel chrome
+ *   3. Title + tabs (sliding indicator)
+ *   4. Settings rows + section labels
+ *   5. Toggles (re-skin native checkboxes)
+ *   6. Sliders (re-skin native ranges)
+ *   7. Dropdowns (re-skin native selects)
+ *   8. Action buttons (export / import / reset)
+ *   9. Confirm-action banner
+ *  10. Footer button row (RESUME / ABORT / GLOSSARY)
+ *  11. Quick Rules glossary modal
+ *  12. Other secondary modals (save-slot, sanctuary-npc)
+ *  13. Reduced-motion guards
+ *
+ * NAMESPACE
+ *   This file targets EXISTING legacy class names (.modal /
+ *   .settings-modal / .setting-row / etc) so the markup keeps its
+ *   JS hooks. The visual is rebuilt with --ui-* tokens.
+ * ────────────────────────────────────────────────────────────────── */
+
+
+/* ──────────────────────────────────────────────────────────
+ * 1. MODAL BACKDROP
+ *
+ * The legacy `.modal` is shown by removing `.hidden`. We style
+ * it as a fixed-position centred backdrop with blur, then layer
+ * the spring entry on the inner `.modal-content`. The transition
+ * fires automatically on display:flex → opacity:1 because we
+ * compose the entry purely via opacity + transform.
+ * ────────────────────────────────────────────────────────── */
+#modal-settings.modal {
+    position: fixed;
+    inset: 0;
+    z-index: var(--ui-z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--ui-space-4);
+    padding-top: max(var(--ui-space-4), env(safe-area-inset-top));
+    padding-bottom: max(var(--ui-space-4), env(safe-area-inset-bottom));
+    background: rgba(2, 4, 10, 0.78);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    opacity: 1;
+    pointer-events: auto;
+    transition: opacity var(--ui-duration-base) var(--ui-ease-out);
+}
+/* Centred fall-through — when hidden, no painting at all. */
+#modal-settings.modal.hidden {
+    display: none;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 2. MODAL PANEL CHROME
+ *
+ * Replace the .modal-content + .glass-panel + .neon-border-white +
+ * .settings-modal stack with a single coherent v2 panel. Rounded,
+ * blurred, soft elevation. The legacy classes are still on the
+ * element so any JS that targets them continues to work.
+ * ────────────────────────────────────────────────────────── */
+#modal-settings .modal-content.settings-modal {
+    width: 100%;
+    max-width: 460px;
+    max-height: calc(100vh - var(--ui-space-12));
+    margin: 0;
+    padding: var(--ui-space-5) var(--ui-space-5) var(--ui-space-4);
+    background: var(--ui-glass-3);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-lg);
+    box-shadow: var(--ui-elev-4), var(--ui-inset-highlight);
+    backdrop-filter: blur(var(--ui-blur-lg));
+    -webkit-backdrop-filter: blur(var(--ui-blur-lg));
+    color: var(--ui-text-90);
+    /* Neutralise any legacy linear-gradient / heavy outline. */
+    background-image: none;
+    /* Spring entry: scale from 0.95 + lift from 12px. The transition
+       sits on the panel itself and runs every time the parent's
+       `.hidden` toggle re-renders. */
+    transform: translateY(0) scale(1);
+    opacity: 1;
+    transition:
+        transform var(--ui-duration-slow) var(--ui-ease-spring-soft),
+        opacity var(--ui-duration-base) var(--ui-ease-out);
+    /* Internal scrolling — the modal can outgrow viewport on small
+       phones. We hide the body's overflow when the modal opens (no
+       body scroll-lock JS needed). */
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-3);
+    /* Custom scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: var(--ui-border-strong) transparent;
+}
+#modal-settings .modal-content.settings-modal::-webkit-scrollbar {
+    width: 6px;
+}
+#modal-settings .modal-content.settings-modal::-webkit-scrollbar-thumb {
+    background: var(--ui-border-strong);
+    border-radius: var(--ui-radius-pill);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 3. TITLE + TABS
+ * ────────────────────────────────────────────────────────── */
+#modal-settings .settings-title.neon-text-white {
+    margin: 0 0 var(--ui-space-2);
+    padding: 0;
+    font-family: var(--ui-font-display);
+    font-weight: var(--ui-weight-heavy);
+    font-size: var(--ui-text-title);
+    letter-spacing: var(--ui-tracking-tight);
+    color: var(--ui-text-100);
+    text-shadow: 0 0 18px rgba(74, 216, 255, 0.32);
+    text-align: center;
+}
+
+#modal-settings .settings-tabs {
+    --_indicator-x: 0px;
+    --_indicator-w: 0px;
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin: 0 0 var(--ui-space-3);
+    padding: 0;
+    border-bottom: 1px solid var(--ui-border-subtle);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+}
+#modal-settings .settings-tabs::-webkit-scrollbar { display: none; }
+#modal-settings .settings-tabs::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: var(--_indicator-w);
+    height: 2px;
+    background: var(--ui-brand);
+    border-radius: var(--ui-radius-pill);
+    box-shadow: var(--ui-glow-brand);
+    transform: translateX(var(--_indicator-x));
+    transition:
+        transform var(--ui-duration-base) var(--ui-ease-spring),
+        width var(--ui-duration-base) var(--ui-ease-spring);
+    pointer-events: none;
+}
+#modal-settings .settings-tab {
+    flex: 0 0 auto;
+    padding: var(--ui-space-3) var(--ui-space-4);
+    background: transparent;
+    color: var(--ui-text-50);
+    font-family: var(--ui-font-display);
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-semibold);
+    letter-spacing: var(--ui-tracking-cyber);
+    text-transform: uppercase;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    cursor: pointer;
+    transition: color var(--ui-duration-fast) var(--ui-ease-standard);
+    /* Override legacy `.btn` background-image gradients if they
+       leaked here. */
+    background-image: none;
+}
+#modal-settings .settings-tab:hover { color: var(--ui-text-90); }
+#modal-settings .settings-tab.active {
+    color: var(--ui-brand);
+    text-shadow: 0 0 8px rgba(74, 216, 255, 0.45);
+}
+#modal-settings .settings-tab .settings-tab-full,
+#modal-settings .settings-tab .settings-tab-short {
+    line-height: 1;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 4. SETTINGS PANES
+ * ────────────────────────────────────────────────────────── */
+#modal-settings .settings-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    background: none;
+    border: none;
+    box-shadow: none;
+}
+#modal-settings .settings-pane {
+    display: none;
+    flex-direction: column;
+    gap: var(--ui-space-3);
+    animation: mv2-pane-in var(--ui-duration-base) var(--ui-ease-out);
+}
+#modal-settings .settings-pane.active {
+    display: flex;
+}
+@keyframes mv2-pane-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+#modal-settings .settings-section-label {
+    font-family: var(--ui-font-display);
+    font-size: var(--ui-text-micro);
+    font-weight: var(--ui-weight-semibold);
+    letter-spacing: var(--ui-tracking-cyber);
+    color: var(--ui-brand);
+    text-transform: uppercase;
+    text-shadow: 0 0 6px rgba(74, 216, 255, 0.4);
+    margin: var(--ui-space-2) 0 var(--ui-space-1);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 5. SETTING ROWS
+ *
+ * Uniform row: label on the left, control on the right. Hairline
+ * divider between rows replaces the legacy "centred dotted line"
+ * separator.
+ * ────────────────────────────────────────────────────────── */
+#modal-settings .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-3);
+    padding: var(--ui-space-3) 0;
+    margin: 0;
+    border: none;
+    border-bottom: 1px solid var(--ui-border-subtle);
+    background: none;
+}
+#modal-settings .setting-row:last-child {
+    border-bottom: none;
+}
+#modal-settings .setting-row > label {
+    flex: 1 1 auto;
+    font-family: var(--ui-font-body);
+    font-size: var(--ui-text-body);
+    font-weight: var(--ui-weight-medium);
+    color: var(--ui-text-90);
+    letter-spacing: var(--ui-tracking-normal);
+    margin: 0;
+    cursor: pointer;
+    line-height: var(--ui-leading-snug);
+}
+#modal-settings .setting-row .setting-hint {
+    display: block;
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-base);
+    color: var(--ui-text-50);
+    margin-top: 2px;
+    letter-spacing: var(--ui-tracking-normal);
+}
+/* Slider rows stack: label on top, slider below */
+#modal-settings .setting-row.setting-slider {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--ui-space-2);
+}
+#modal-settings .setting-row.setting-slider > label {
+    flex: 0 0 auto;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 6. TOGGLES (re-skin native checkboxes)
+ *
+ * The legacy markup is `<input type="checkbox">` with no wrapper.
+ * Pure-CSS re-skin: the checkbox itself disappears (opacity 0,
+ * absolute), and we draw the track + knob via ::before / ::after
+ * on the input. This gives us iOS-style toggles without any JS or
+ * markup change.
+ * ────────────────────────────────────────────────────────── */
+#modal-settings .setting-row > input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    position: relative;
+    width: 44px;
+    height: 24px;
+    margin: 0;
+    flex: 0 0 44px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-pill);
+    cursor: pointer;
+    transition:
+        background var(--ui-duration-fast) var(--ui-ease-standard),
+        border-color var(--ui-duration-fast) var(--ui-ease-standard),
+        box-shadow var(--ui-duration-base) var(--ui-ease-standard);
+}
+#modal-settings .setting-row > input[type="checkbox"]::before {
+    /* Knob */
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background: var(--ui-text-90);
+    border-radius: 50%;
+    box-shadow: var(--ui-elev-2);
+    transition:
+        transform var(--ui-duration-base) var(--ui-ease-spring),
+        background var(--ui-duration-fast) var(--ui-ease-standard);
+}
+#modal-settings .setting-row > input[type="checkbox"]:checked {
+    background: var(--ui-brand);
+    border-color: var(--ui-brand-strong);
+    box-shadow: 0 0 0 4px rgba(74, 216, 255, 0.12), var(--ui-glow-brand);
+}
+#modal-settings .setting-row > input[type="checkbox"]:checked::before {
+    transform: translateX(20px);
+    background: var(--ui-text-on-brand);
+}
+#modal-settings .setting-row > input[type="checkbox"]:focus-visible {
+    outline: none;
+    box-shadow: var(--ui-focus-ring);
+}
+#modal-settings .setting-row > input[type="checkbox"]:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 7. SLIDERS (re-skin native ranges)
+ *
+ * Continuous brand-cyan fill driven by a CSS variable `--_val`
+ * written by JS / CSS based on the input's current value. Without
+ * JS the gradient still draws at value=0; UI.init() listens to
+ * input events and keeps `--_val` in sync.
+ *
+ * The legacy markup wraps the input + value-chip in a flex row.
+ * We layer the re-skin onto the existing structure — no markup
+ * change required.
+ * ────────────────────────────────────────────────────────── */
+#modal-settings .setting-row.setting-slider {
+    --_val: 0;
+}
+#modal-settings .setting-row.setting-slider > input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 18px;
+    background: transparent;
+    margin: 0;
+    cursor: pointer;
+    flex: 1 1 auto;
+}
+#modal-settings .setting-row.setting-slider > input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: var(--ui-radius-pill);
+    background:
+        linear-gradient(90deg,
+            var(--ui-brand) 0%,
+            var(--ui-brand) calc(var(--_val) * 1%),
+            rgba(255, 255, 255, 0.10) calc(var(--_val) * 1%),
+            rgba(255, 255, 255, 0.10) 100%);
+}
+#modal-settings .setting-row.setting-slider > input[type="range"]::-moz-range-track {
+    height: 6px;
+    border-radius: var(--ui-radius-pill);
+    background: rgba(255, 255, 255, 0.10);
+}
+#modal-settings .setting-row.setting-slider > input[type="range"]::-moz-range-progress {
+    height: 6px;
+    border-radius: var(--ui-radius-pill);
+    background: var(--ui-brand);
+}
+#modal-settings .setting-row.setting-slider > input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--ui-text-90);
+    border: 2px solid var(--ui-brand);
+    box-shadow: var(--ui-elev-2), 0 0 0 4px rgba(74, 216, 255, 0);
+    margin-top: -6px;
+    transition:
+        box-shadow var(--ui-duration-fast) var(--ui-ease-standard),
+        transform var(--ui-duration-base) var(--ui-ease-spring);
+}
+#modal-settings .setting-row.setting-slider > input[type="range"]:hover::-webkit-slider-thumb {
+    box-shadow: var(--ui-elev-2), 0 0 0 8px rgba(74, 216, 255, 0.16);
+}
+#modal-settings .setting-row.setting-slider > input[type="range"]:active::-webkit-slider-thumb {
+    transform: scale(1.12);
+}
+#modal-settings .setting-row.setting-slider > input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--ui-text-90);
+    border: 2px solid var(--ui-brand);
+    box-shadow: var(--ui-elev-2);
+    cursor: pointer;
+}
+#modal-settings .setting-row.setting-slider > .setting-value {
+    flex: 0 0 auto;
+    min-width: 44px;
+    margin-left: var(--ui-space-3);
+    padding: var(--ui-space-1) var(--ui-space-2);
+    background: var(--ui-surface-2);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-sm);
+    font-family: var(--ui-font-mono);
+    font-size: var(--ui-text-caption);
+    color: var(--ui-brand);
+    text-align: center;
+    text-shadow: 0 0 6px rgba(74, 216, 255, 0.5);
+    font-variant-numeric: tabular-nums;
+    align-self: center;
+}
+/* Slider row layout — input + value chip on same line BELOW the
+   label (inherited from .setting-slider). */
+#modal-settings .setting-row.setting-slider {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    column-gap: var(--ui-space-3);
+    row-gap: var(--ui-space-2);
+}
+#modal-settings .setting-row.setting-slider > label {
+    grid-column: 1 / -1;
+    grid-row: 1;
+}
+#modal-settings .setting-row.setting-slider > input[type="range"] {
+    grid-column: 1;
+    grid-row: 2;
+}
+#modal-settings .setting-row.setting-slider > .setting-value {
+    grid-column: 2;
+    grid-row: 2;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 8. DROPDOWNS (re-skin native selects)
+ * ────────────────────────────────────────────────────────── */
+#modal-settings .setting-row.setting-select > select {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 0 0 auto;
+    min-width: 140px;
+    padding: var(--ui-space-2) var(--ui-space-7) var(--ui-space-2) var(--ui-space-3);
+    background: var(--ui-surface-2);
+    color: var(--ui-text-90);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-md);
+    font-family: var(--ui-font-body);
+    font-weight: var(--ui-weight-medium);
+    font-size: var(--ui-text-body);
+    cursor: pointer;
+    /* Native chevron */
+    background-image: linear-gradient(45deg, transparent 50%, var(--ui-text-70) 50%),
+                      linear-gradient(135deg, var(--ui-text-70) 50%, transparent 50%);
+    background-position:
+        calc(100% - 16px) 50%,
+        calc(100% - 12px) 50%;
+    background-size: 4px 4px, 4px 4px;
+    background-repeat: no-repeat;
+    transition:
+        border-color var(--ui-duration-fast) var(--ui-ease-standard),
+        background-color var(--ui-duration-fast) var(--ui-ease-standard);
+}
+#modal-settings .setting-row.setting-select > select:hover {
+    border-color: var(--ui-border-strong);
+    background-color: var(--ui-surface-3);
+}
+#modal-settings .setting-row.setting-select > select:focus-visible {
+    outline: none;
+    border-color: var(--ui-brand);
+    box-shadow: var(--ui-focus-ring);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 9. ACTION BUTTONS (export / import / reset)
+ * ────────────────────────────────────────────────────────── */
+#modal-settings .setting-row.setting-action {
+    align-items: center;
+}
+#modal-settings .setting-row .btn-inline {
+    flex: 0 0 auto;
+    padding: var(--ui-space-2) var(--ui-space-4);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--ui-text-90);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-md);
+    font-family: var(--ui-font-display);
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-semibold);
+    letter-spacing: var(--ui-tracking-cyber);
+    text-transform: uppercase;
+    cursor: pointer;
+    transition:
+        background var(--ui-duration-fast) var(--ui-ease-standard),
+        border-color var(--ui-duration-fast) var(--ui-ease-standard),
+        transform var(--ui-duration-base) var(--ui-ease-spring);
+}
+#modal-settings .setting-row .btn-inline:hover {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: var(--ui-border-strong);
+    transform: translateY(-1px);
+}
+#modal-settings .setting-row .btn-inline:active {
+    transform: translateY(0) scale(0.97);
+}
+/* Reset / danger variant */
+#modal-settings .setting-row .btn-inline.btn-reset {
+    color: var(--ui-alert);
+    border-color: var(--ui-border-alert);
+    background: rgba(255, 93, 122, 0.04);
+}
+#modal-settings .setting-row .btn-inline.btn-reset:hover {
+    background: rgba(255, 93, 122, 0.12);
+    border-color: rgba(255, 93, 122, 0.7);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 10. CONFIRM-ACTION BANNER
+ * ────────────────────────────────────────────────────────── */
+#modal-settings .setting-confirm {
+    margin: var(--ui-space-2) 0;
+    padding: var(--ui-space-3) var(--ui-space-4);
+    background: rgba(255, 93, 122, 0.06);
+    border: 1px solid var(--ui-border-alert);
+    border-radius: var(--ui-radius-md);
+    color: var(--ui-text-90);
+    font-family: var(--ui-font-body);
+    font-size: var(--ui-text-caption);
+    line-height: var(--ui-leading-snug);
+}
+#modal-settings .setting-confirm.hidden { display: none; }
+#modal-settings .setting-confirm p {
+    margin: 0 0 var(--ui-space-2);
+}
+#modal-settings .setting-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--ui-space-2);
+}
+#modal-settings .setting-confirm .btn-inline.btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--ui-text-70);
+}
+#modal-settings .setting-confirm .btn-inline.btn-danger-solid {
+    background: var(--ui-alert);
+    color: var(--ui-text-on-alert);
+    border-color: transparent;
+    font-weight: var(--ui-weight-bold);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 11. CREDITS PANE
+ * ────────────────────────────────────────────────────────── */
+#modal-settings .credits-section {
+    margin: 0 0 var(--ui-space-4);
+}
+#modal-settings .credits-heading {
+    font-family: var(--ui-font-display);
+    font-size: var(--ui-text-micro);
+    font-weight: var(--ui-weight-semibold);
+    letter-spacing: var(--ui-tracking-cyber);
+    color: var(--ui-brand);
+    text-transform: uppercase;
+    text-shadow: 0 0 6px rgba(74, 216, 255, 0.4);
+    margin-bottom: var(--ui-space-2);
+}
+#modal-settings .credits-entry {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--ui-space-3);
+    padding: var(--ui-space-2) 0;
+    border-bottom: 1px solid var(--ui-border-subtle);
+}
+#modal-settings .credits-entry:last-child { border-bottom: none; }
+#modal-settings .credits-name {
+    font-family: var(--ui-font-body);
+    font-weight: var(--ui-weight-semibold);
+    color: var(--ui-text-100);
+    font-size: var(--ui-text-body);
+}
+#modal-settings .credits-role {
+    font-family: var(--ui-font-body);
+    font-weight: var(--ui-weight-base);
+    color: var(--ui-text-50);
+    font-size: var(--ui-text-caption);
+    text-align: right;
+}
+#modal-settings .credits-legal {
+    font-family: var(--ui-font-body);
+    font-size: var(--ui-text-caption);
+    color: var(--ui-text-70);
+    line-height: var(--ui-leading-normal);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 12. FOOTER BUTTONS (RESUME / ABORT / GLOSSARY)
+ *
+ * Replace the legacy `.btn.primary` cyan-gradient + `.btn.danger`
+ * magenta-gradient with the v2 component palette: ghost glossary,
+ * primary cyan resume, destructive abort. The action row is
+ * sticky-bottom so the buttons stay reachable on long settings
+ * panes.
+ * ────────────────────────────────────────────────────────── */
+#modal-settings > .modal-content > #btn-glossary,
+#modal-settings > .modal-content > #btn-resume,
+#modal-settings > .modal-content > #btn-quit {
+    width: 100%;
+    margin: 0;
+    padding: var(--ui-space-3) var(--ui-space-4);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-md);
+    font-family: var(--ui-font-display);
+    font-size: var(--ui-text-body);
+    font-weight: var(--ui-weight-semibold);
+    letter-spacing: var(--ui-tracking-cyber);
+    text-transform: uppercase;
+    cursor: pointer;
+    transition:
+        background var(--ui-duration-fast) var(--ui-ease-standard),
+        border-color var(--ui-duration-fast) var(--ui-ease-standard),
+        transform var(--ui-duration-base) var(--ui-ease-spring),
+        box-shadow var(--ui-duration-base) var(--ui-ease-standard);
+    /* Strip legacy gradient backgrounds. */
+    background-image: none;
+    box-shadow: var(--ui-elev-1), var(--ui-inset-highlight);
+}
+/* QUICK RULES — ghost (low emphasis tertiary). */
+#modal-settings > .modal-content > #btn-glossary {
+    background: transparent;
+    border-color: var(--ui-border-base);
+    color: var(--ui-text-70);
+    box-shadow: none;
+}
+#modal-settings > .modal-content > #btn-glossary:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--ui-text-90);
+    border-color: var(--ui-border-strong);
+}
+/* RESUME — primary brand. The hero CTA of the modal. */
+#modal-settings > .modal-content > #btn-resume {
+    background: var(--ui-brand);
+    color: var(--ui-text-on-brand);
+    border-color: transparent;
+    box-shadow: var(--ui-elev-2), var(--ui-glow-brand);
+    font-weight: var(--ui-weight-bold);
+}
+#modal-settings > .modal-content > #btn-resume:hover {
+    background: #5fdfff;
+    box-shadow: var(--ui-elev-3), 0 0 16px rgba(74, 216, 255, 0.55);
+    transform: translateY(-1px);
+}
+#modal-settings > .modal-content > #btn-resume:active {
+    transform: translateY(0) scale(0.985);
+}
+/* ABORT RUN — destructive (paired with primary). */
+#modal-settings > .modal-content > #btn-quit {
+    background: rgba(46, 12, 24, 0.72);
+    color: #ffd0d8;
+    border-color: var(--ui-border-alert);
+}
+#modal-settings > .modal-content > #btn-quit:hover {
+    background: rgba(64, 16, 32, 0.85);
+    border-color: rgba(255, 93, 122, 0.7);
+    box-shadow: var(--ui-elev-2), var(--ui-glow-alert);
+}
+#modal-settings > .modal-content > #btn-quit:active {
+    transform: scale(0.985);
+}
+/* The legacy markup has a `.spacer` between the buttons and the
+   panes. Hide it inside our v2 modal — our flex gap handles spacing. */
+#modal-settings > .modal-content > .spacer {
+    display: none;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 13. QUICK RULES / GLOSSARY MODAL
+ *
+ * Same overlay strategy. The glossary opens via a different modal
+ * id but uses the same general structure — restyle the panel +
+ * tabs to match the settings modal language.
+ * ────────────────────────────────────────────────────────── */
+#modal-glossary.modal {
+    position: fixed;
+    inset: 0;
+    z-index: var(--ui-z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--ui-space-4);
+    padding-top: max(var(--ui-space-4), env(safe-area-inset-top));
+    padding-bottom: max(var(--ui-space-4), env(safe-area-inset-bottom));
+    background: rgba(2, 4, 10, 0.78);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+#modal-glossary.modal.hidden { display: none; }
+#modal-glossary .modal-content.modal-glossary {
+    width: 100%;
+    max-width: 520px;
+    max-height: calc(100vh - var(--ui-space-12));
+    margin: 0;
+    padding: var(--ui-space-5);
+    background: var(--ui-glass-3);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-lg);
+    box-shadow: var(--ui-elev-4), var(--ui-inset-highlight);
+    backdrop-filter: blur(var(--ui-blur-lg));
+    -webkit-backdrop-filter: blur(var(--ui-blur-lg));
+    color: var(--ui-text-90);
+    background-image: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-3);
+}
+#modal-glossary .modal-glossary-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-3);
+}
+#modal-glossary .modal-glossary-head h2 {
+    margin: 0;
+    font-family: var(--ui-font-display);
+    font-weight: var(--ui-weight-bold);
+    font-size: var(--ui-text-title);
+    letter-spacing: var(--ui-tracking-tight);
+    color: var(--ui-text-100);
+    text-shadow: 0 0 12px rgba(74, 216, 255, 0.32);
+    background: none;
+    -webkit-background-clip: initial;
+    background-clip: initial;
+    -webkit-text-fill-color: var(--ui-text-100);
+}
+#modal-glossary .btn-icon {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-pill);
+    color: var(--ui-text-70);
+    font-family: var(--ui-font-body);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+        background var(--ui-duration-fast) var(--ui-ease-standard),
+        border-color var(--ui-duration-fast) var(--ui-ease-standard);
+}
+#modal-glossary .btn-icon:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--ui-text-100);
+    border-color: var(--ui-border-strong);
+}
+
+/* Glossary tabs — same sliding indicator language as settings. */
+#modal-glossary .glossary-tabs {
+    --_indicator-x: 0px;
+    --_indicator-w: 0px;
+    position: relative;
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--ui-border-subtle);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+}
+#modal-glossary .glossary-tabs::-webkit-scrollbar { display: none; }
+#modal-glossary .glossary-tabs::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: var(--_indicator-w);
+    height: 2px;
+    background: var(--ui-brand);
+    border-radius: var(--ui-radius-pill);
+    box-shadow: var(--ui-glow-brand);
+    transform: translateX(var(--_indicator-x));
+    transition:
+        transform var(--ui-duration-base) var(--ui-ease-spring),
+        width var(--ui-duration-base) var(--ui-ease-spring);
+    pointer-events: none;
+}
+#modal-glossary .glossary-tab {
+    flex: 0 0 auto;
+    padding: var(--ui-space-3) var(--ui-space-4);
+    background: transparent;
+    color: var(--ui-text-50);
+    font-family: var(--ui-font-display);
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-semibold);
+    letter-spacing: var(--ui-tracking-cyber);
+    text-transform: uppercase;
+    border: none;
+    cursor: pointer;
+    transition: color var(--ui-duration-fast) var(--ui-ease-standard);
+}
+#modal-glossary .glossary-tab:hover { color: var(--ui-text-90); }
+#modal-glossary .glossary-tab.active {
+    color: var(--ui-brand);
+    text-shadow: 0 0 8px rgba(74, 216, 255, 0.45);
+}
+#modal-glossary .glossary-body {
+    overflow-y: auto;
+    padding: var(--ui-space-2) 0;
+    font-family: var(--ui-font-body);
+    color: var(--ui-text-90);
+    line-height: var(--ui-leading-normal);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 14. SAVE-SLOT MODAL
+ *
+ * Same panel language — overlay re-skin of the existing markup.
+ * Each .save-slot entry becomes a v2 panel with subtle hover lift.
+ * ────────────────────────────────────────────────────────── */
+.save-slot-modal {
+    position: fixed;
+    inset: 0;
+    z-index: var(--ui-z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--ui-space-4);
+    background: rgba(2, 4, 10, 0.78);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+.save-slot-modal.hidden { display: none; }
+.save-slot-modal .save-slot-panel {
+    width: 100%;
+    max-width: 460px;
+    padding: var(--ui-space-5);
+    background: var(--ui-glass-3);
+    border: 1px solid var(--ui-border-base);
+    border-radius: var(--ui-radius-lg);
+    box-shadow: var(--ui-elev-4), var(--ui-inset-highlight);
+    backdrop-filter: blur(var(--ui-blur-lg));
+    -webkit-backdrop-filter: blur(var(--ui-blur-lg));
+    color: var(--ui-text-90);
+    background-image: none;
+}
+.save-slot-modal .save-slot-title.neon-text-gold {
+    margin: 0 0 var(--ui-space-2);
+    font-family: var(--ui-font-display);
+    font-weight: var(--ui-weight-bold);
+    font-size: var(--ui-text-title);
+    letter-spacing: var(--ui-tracking-tight);
+    color: var(--ui-gold);
+    text-shadow: 0 0 14px rgba(255, 215, 106, 0.4);
+    text-align: left;
+}
+.save-slot-modal .save-slot-sub {
+    margin: 0 0 var(--ui-space-4);
+    font-family: var(--ui-font-body);
+    font-size: var(--ui-text-caption);
+    color: var(--ui-text-70);
+    line-height: var(--ui-leading-normal);
+}
+.save-slot-modal .save-slot-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2);
+    margin-bottom: var(--ui-space-4);
+}
+.save-slot-modal .save-slot-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--ui-space-2);
+}
+.save-slot-modal .save-slot-actions .btn.primary {
+    background: var(--ui-brand);
+    color: var(--ui-text-on-brand);
+    border: 1px solid transparent;
+    border-radius: var(--ui-radius-md);
+    box-shadow: var(--ui-elev-2), var(--ui-glow-brand);
+    background-image: none;
+    font-weight: var(--ui-weight-bold);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 15. SANCTUARY NPC MODAL
+ *
+ * Shorter rewrite — same v2 panel chrome, slim content.
+ * ────────────────────────────────────────────────────────── */
+.sanctuary-npc-modal {
+    position: fixed;
+    inset: 0;
+    z-index: var(--ui-z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--ui-space-4);
+    background: rgba(2, 4, 10, 0.78);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+.sanctuary-npc-modal.hidden { display: none; }
+.sanctuary-npc-modal .sanctuary-npc-content.glass-panel {
+    width: 100%;
+    max-width: 440px;
+    padding: var(--ui-space-5);
+    background: var(--ui-glass-3);
+    border: 1px solid var(--ui-border-gold);
+    border-radius: var(--ui-radius-lg);
+    box-shadow: var(--ui-elev-4), var(--ui-inset-highlight), var(--ui-glow-gold);
+    backdrop-filter: blur(var(--ui-blur-lg));
+    -webkit-backdrop-filter: blur(var(--ui-blur-lg));
+    color: var(--ui-text-90);
+    background-image: none;
+}
+.sanctuary-npc-modal .sanctuary-npc-title.neon-text-gold {
+    margin: 0 0 var(--ui-space-3);
+    font-family: var(--ui-font-display);
+    font-weight: var(--ui-weight-bold);
+    font-size: var(--ui-text-title);
+    letter-spacing: var(--ui-tracking-tight);
+    color: var(--ui-gold);
+    text-shadow: 0 0 14px rgba(255, 215, 106, 0.4);
+}
+.sanctuary-npc-modal .sanctuary-npc-body {
+    margin: 0 0 var(--ui-space-4);
+    font-family: var(--ui-font-body);
+    font-size: var(--ui-text-body);
+    color: var(--ui-text-90);
+    line-height: var(--ui-leading-normal);
+}
+.sanctuary-npc-modal .sanctuary-npc-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--ui-space-2);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 16. REDUCED MOTION GUARDS
+ * ────────────────────────────────────────────────────────── */
+body.reduced-motion #modal-settings .modal-content.settings-modal,
+body.reduced-motion #modal-settings .settings-pane,
+body.reduced-motion #modal-glossary .modal-content.modal-glossary {
+    animation: none;
+    transition: opacity var(--ui-duration-fast) linear;
+}
+body.reduced-motion #modal-settings .settings-tabs::after,
+body.reduced-motion #modal-glossary .glossary-tabs::after {
+    transition: transform 90ms linear, width 90ms linear;
+}
