@@ -1307,11 +1307,21 @@ export const Breakout = {
 
         const advance = () => {
             host.removeEventListener('click', advance);
-            host.classList.remove('show');
-            setTimeout(() => {
-                host.style.display = 'none';
-                if (typeof onContinue === 'function') onContinue();
-            }, 380);
+            // Build the next scene UNDER the still-opaque slate first.
+            // The previous order (fade out → then onContinue) revealed
+            // an empty combat canvas during the 380ms fade because the
+            // room hadn't been built yet. Running onContinue first and
+            // waiting two frames for the canvas render loop to draw the
+            // new scene means the fade now reveals a populated room.
+            if (typeof onContinue === 'function') onContinue();
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    host.classList.remove('show');
+                    setTimeout(() => {
+                        host.style.display = 'none';
+                    }, 380);
+                });
+            });
         };
         // Small delay so the same tap that closed the previous screen
         // can't immediately advance the slate.
