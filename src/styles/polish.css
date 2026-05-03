@@ -1,40 +1,37 @@
 /* ──────────────────────────────────────────────────────────────────
- * UI v5 — Detail polish
+ * UI v5 — TRUE Snap polish
  *
- * Replaces the simple linear gradients with layered fills (texture +
- * sheen + edge) and pushes the typography to impact-tier (Saira 900
- * italic + chromatic neon shadows). The Snap wordmark / button feel
- * comes from the FONT and the multi-layer FILL — not from clip-path
- * alone.
+ * Replaces the "neon poster" treatment of the previous polish layer.
+ * The actual Marvel Snap visual is:
+ *   - Deep blacks (#06090f-ish) as the dominant surface tone.
+ *   - Thin white-ish 1px edges + subtle metallic top sheen.
+ *   - Colour (cyan, red, gold) used as restrained ACCENTS — rim
+ *     glows, narrow stripe inlays, single-edge highlights — never
+ *     as a fill that floods the surface.
+ *   - White text with crisp small drop-shadows. No chromatic
+ *     aberration, no heavy multi-layer text-shadows.
+ *   - Metallic sheen on every plate via a top-down white→transparent
+ *     gradient drawn at low opacity inside the silhouette.
  *
  * SECTIONS
- *   1. Wordmark — chromatic-neon impact title
- *   2. Tagline — refined caption
- *   3. Shard fill — multi-layer with scanline texture
- *   4. Shard labels — impact font + neon shadow
- *   5. Corner accent ticks (small L-brackets in shard corners)
- *   6. LED indicator dot (top-right of each shard)
- *   7. Operator chip — neon polish
- *   8. Sparks/streak chips — texture pass
- *   9. Resume / Initiate hero CTAs — chromatic edge
- *  10. Reduced-motion guards
- *
- * NAMESPACE
- *   This file polishes existing `.menu-v2`-scoped elements via
- *   higher-specificity selectors so the visual lands without any
- *   markup or JS change.
+ *   1. Wordmark (clean white + metallic shimmer, no chromatic shift)
+ *   2. Tagline
+ *   3. Shard surfaces — deep black + metallic sheen + accent rim
+ *   4. Shard labels (white impact text, soft drop shadow)
+ *   5. LED indicator dots (subtle, single-color)
+ *   6. Operator chip clip fix (more padding, less aggressive slant)
+ *   7. Sparks / streak — same metallic monochrome
+ *   8. Settings modal — tab overflow fix + metallic refinement
+ *   9. Reduced-motion guards
  * ────────────────────────────────────────────────────────────────── */
 
 
 /* ──────────────────────────────────────────────────────────
- * 1. WORDMARK — chromatic neon impact title
+ * 1. WORDMARK — clean metallic white
  *
- * Replaces the soft cyan glow with a multi-layered chromatic
- * shadow (cyan offset left + magenta offset right) for the
- * Snap-style "neon poster" feel. Heavier impact font, italic
- * lean, tighter tracking. Per-word colour split so MAGIC reads
- * cyan-leaning and MACHINE reads pink-leaning, with the "v"
- * pivoting hot magenta between them.
+ * Drop the cyan + magenta chromatic shadow. Snap's titles read
+ * as white text with a tight low-offset drop shadow, occasional
+ * subtle gradient on key letters, never offset chromatic ghosts.
  * ────────────────────────────────────────────────────────── */
 .menu-v2 .mv2-wordmark.title {
     font-family: var(--ui-font-impact);
@@ -44,62 +41,60 @@
     letter-spacing: 0.02em;
     line-height: 1;
     margin: var(--ui-space-2) 0 var(--ui-space-1);
-    /* Chromatic neon — cyan offset left, pink offset right. The
-       white core stays crisp on top. */
-    color: #fff;
-    text-shadow:
-        -2px 0 0 rgba(74, 216, 255, 0.85),
-        2px 0 0 rgba(255, 90, 130, 0.85),
-        0 0 18px rgba(74, 216, 255, 0.45),
-        0 0 36px rgba(255, 90, 130, 0.30);
-    -webkit-text-fill-color: #fff;
-    background: none;
-    -webkit-background-clip: initial;
-    background-clip: initial;
-    animation: ui-wordmark-breathe 4.2s ease-in-out infinite;
+    /* White metallic — top edge slightly cooler, bottom slightly
+       darker. Reads as polished steel catching light from above. */
+    background: linear-gradient(180deg,
+        #ffffff 0%,
+        #d8e4f0 40%,
+        #8aa0bc 75%,
+        #5b6f8c 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    /* Single soft drop-shadow at low offset for depth, plus a
+       tiny subsurface glow that breathes. */
+    filter:
+        drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55))
+        drop-shadow(0 0 16px rgba(180, 220, 255, 0.18));
     text-transform: uppercase;
-    /* Killing the legacy chromatic-glitch pseudos that bled through. */
+    text-shadow: none;
+    animation: ui-wordmark-shine 6s ease-in-out infinite;
 }
 .menu-v2 .mv2-wordmark.title::before,
 .menu-v2 .mv2-wordmark.title::after {
     content: none !important;
     display: none !important;
 }
-/* The pivot "v" — slightly larger, magenta-leaning, italic, with
-   a faint diagonal shear so it reads as a slash. */
+/* "v" pivot — keep its identity as a hot accent. Snap-style
+   colour comes through here, not on the main words. */
 .menu-v2 .mv2-wordmark .vs {
     display: inline-block;
-    color: #fff;
+    -webkit-text-fill-color: #ff5d7a;
+    color: #ff5d7a;
+    background: none;
+    -webkit-background-clip: initial;
+    background-clip: initial;
     font-style: italic;
     font-weight: 900;
     transform: skewX(-6deg);
     margin: 0 0.18em;
-    text-shadow:
-        0 0 14px rgba(255, 90, 130, 0.85),
-        -2px 0 0 rgba(255, 90, 130, 0.55),
-        2px 0 0 rgba(255, 215, 106, 0.45);
+    filter: drop-shadow(0 0 12px rgba(255, 93, 122, 0.7));
+    text-shadow: none;
 }
-@keyframes ui-wordmark-breathe {
-    0%, 100% {
-        text-shadow:
-            -2px 0 0 rgba(74, 216, 255, 0.78),
-            2px 0 0 rgba(255, 90, 130, 0.78),
-            0 0 16px rgba(74, 216, 255, 0.4),
-            0 0 32px rgba(255, 90, 130, 0.25);
-    }
-    50% {
-        text-shadow:
-            -2.5px 0 0 rgba(74, 216, 255, 1),
-            2.5px 0 0 rgba(255, 90, 130, 1),
-            0 0 26px rgba(74, 216, 255, 0.6),
-            0 0 52px rgba(255, 90, 130, 0.42);
-    }
+@keyframes ui-wordmark-shine {
+    0%, 100% { filter:
+        drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55))
+        drop-shadow(0 0 14px rgba(180, 220, 255, 0.16)); }
+    50%      { filter:
+        drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55))
+        drop-shadow(0 0 22px rgba(220, 240, 255, 0.30)); }
 }
 body.reduced-motion .menu-v2 .mv2-wordmark.title { animation: none; }
 
 
 /* ──────────────────────────────────────────────────────────
- * 2. TAGLINE — refined cyber caption
+ * 2. TAGLINE — slim cyber caption
  * ────────────────────────────────────────────────────────── */
 .menu-v2 .mv2-tagline {
     font-family: var(--ui-font-tech);
@@ -107,116 +102,177 @@ body.reduced-motion .menu-v2 .mv2-wordmark.title { animation: none; }
     letter-spacing: 0.42em;
     color: rgba(255, 255, 255, 0.55);
     text-transform: uppercase;
-    text-shadow:
-        0 0 6px rgba(74, 216, 255, 0.40),
-        0 0 12px rgba(74, 216, 255, 0.18);
+    text-shadow: none;
     margin-top: var(--ui-space-1);
-    padding-left: 0.5em;   /* balance the wide letter-spacing */
+    padding-left: 0.5em;
 }
 
 
 /* ──────────────────────────────────────────────────────────
- * 3. SHARD FILL — layered (gradient + scanline + sheen)
+ * 3. SHARD SURFACES — deep-black metallic
  *
- * The simple 3-stop gradient becomes a 4-layer composition:
- *   1. Diagonal navy gradient (the base colour)
- *   2. Inline SVG scanline pattern at 0.06 alpha (texture)
- *   3. Top-left chromatic edge wash (subtle cyan/pink pickup)
- *   4. Top-edge sheen + bottom shade (drawn via ::after)
+ * Everything monochrome. The Snap surface recipe:
+ *   1. Base: deep dark gradient (#0c1018 → #04060c)
+ *   2. Top sheen: 1px white-ish line at the very top edge
+ *      (drawn via inset box-shadow on ::after)
+ *   3. Diagonal metallic glint band (light catching the surface)
+ *   4. Soft inner highlight at 30%/0% (top-left)
+ *   5. Bottom-right counter-shade for depth
+ *   6. 1px outer edge stroke (sub-pixel highlight)
  *
- * The pattern URL is a single 4×4 gradient repeated as a
- * scanline texture. Inline so we don't ship an extra asset.
+ * Brand / gold / alert / success variants use the SAME deep-black
+ * base; the colour accent is a thin rim glow + a single-edge
+ * stripe accent + a coloured top-sheen tint. The surface itself
+ * stays dark — just like Snap.
  * ────────────────────────────────────────────────────────── */
 .menu-v2 .ui-shard {
     --_shard-fill:
-        /* Layer A — micro-gradient noise (4×4 repeating) for tactile feel */
+        /* Diagonal noise — kept extremely subtle for tactile feel */
         repeating-linear-gradient(
             -38deg,
-            rgba(255, 255, 255, 0.018) 0px,
-            rgba(255, 255, 255, 0.018) 1px,
-            transparent 1px,
-            transparent 4px),
-        /* Layer B — horizontal scanlines, very subtle */
+            rgba(255, 255, 255, 0.012) 0px,
+            rgba(255, 255, 255, 0.012) 1px,
+            transparent 1px, transparent 4px),
+        /* Horizontal scanlines — almost imperceptible */
         repeating-linear-gradient(
             0deg,
-            rgba(255, 255, 255, 0.024) 0px,
-            rgba(255, 255, 255, 0.024) 1px,
-            transparent 1px,
-            transparent 3px),
-        /* Layer C — top-left chromatic wash (cyan tint) */
-        radial-gradient(ellipse at 0% 0%,
-            rgba(74, 216, 255, 0.18) 0%,
+            rgba(255, 255, 255, 0.014) 0px,
+            rgba(255, 255, 255, 0.014) 1px,
+            transparent 1px, transparent 3px),
+        /* Top-left sheen highlight (white-ish, very subtle) */
+        radial-gradient(ellipse at 25% 0%,
+            rgba(255, 255, 255, 0.10) 0%,
             transparent 55%),
-        /* Layer D — bottom-right counter-wash (pink tint) */
-        radial-gradient(ellipse at 100% 100%,
-            rgba(255, 90, 130, 0.12) 0%,
-            transparent 55%),
-        /* Layer E — base diagonal navy gradient */
-        linear-gradient(135deg,
-            rgba(46, 64, 110, 0.55) 0%,
-            rgba(22, 32, 60, 0.50) 50%,
-            rgba(8, 14, 32, 0.55) 100%);
+        /* Base — deep navy-black metallic */
+        linear-gradient(180deg,
+            #14192a 0%,
+            #0c1020 45%,
+            #04060e 100%);
+    /* Strip the cyan/pink chromatic washes — keep neutral */
     background-blend-mode: normal;
 }
 
-/* Stronger neon edge for the brand variant — Snap's "important
-   button" treatment. Top-left cyan glow + bottom-right pink. */
+/* Brand variant — KEEP the surface dark, add a cyan ACCENT
+   strip + outer rim glow. Snap-style "this button is the
+   important one without being a coloured block". */
 .menu-v2 .ui-shard.ui-shard--brand {
     --_shard-fill:
         repeating-linear-gradient(
             -38deg,
-            rgba(255, 255, 255, 0.025) 0px,
-            rgba(255, 255, 255, 0.025) 1px,
+            rgba(255, 255, 255, 0.014) 0px,
+            rgba(255, 255, 255, 0.014) 1px,
             transparent 1px, transparent 4px),
         repeating-linear-gradient(
             0deg,
-            rgba(255, 255, 255, 0.030) 0px,
-            rgba(255, 255, 255, 0.030) 1px,
+            rgba(255, 255, 255, 0.018) 0px,
+            rgba(255, 255, 255, 0.018) 1px,
             transparent 1px, transparent 3px),
-        radial-gradient(ellipse at 0% 0%,
-            rgba(74, 216, 255, 0.55) 0%,
-            rgba(74, 216, 255, 0.18) 35%,
-            transparent 70%),
-        radial-gradient(ellipse at 100% 100%,
-            rgba(255, 90, 130, 0.30) 0%,
-            transparent 50%),
-        linear-gradient(135deg,
-            rgba(20, 80, 120, 0.85) 0%,
-            rgba(8, 40, 70, 0.78) 50%,
-            rgba(2, 18, 36, 0.85) 100%);
+        /* Top-left sheen — tinted faintly cyan so the eye picks
+           up the brand identity at the highlight. The fill stays
+           dark; only the highlight is coloured. */
+        radial-gradient(ellipse at 25% 0%,
+            rgba(120, 200, 255, 0.18) 0%,
+            transparent 55%),
+        linear-gradient(180deg,
+            #0e1a2c 0%,
+            #08121f 50%,
+            #03060e 100%);
+    /* Cyan rim glow drawn outside the shard via filter:
+       drop-shadow at the host level (handled below in the
+       :hover/active rules). */
+    --_shard-glow: rgba(74, 216, 255, 0.32);
 }
 
 .menu-v2 .ui-shard.ui-shard--gold {
     --_shard-fill:
         repeating-linear-gradient(
             -38deg,
-            rgba(255, 255, 255, 0.025) 0px,
-            rgba(255, 255, 255, 0.025) 1px,
+            rgba(255, 255, 255, 0.014) 0px,
+            rgba(255, 255, 255, 0.014) 1px,
             transparent 1px, transparent 4px),
         repeating-linear-gradient(
             0deg,
-            rgba(255, 255, 255, 0.030) 0px,
-            rgba(255, 255, 255, 0.030) 1px,
+            rgba(255, 255, 255, 0.018) 0px,
+            rgba(255, 255, 255, 0.018) 1px,
             transparent 1px, transparent 3px),
-        radial-gradient(ellipse at 0% 0%,
-            rgba(255, 215, 106, 0.55) 0%,
-            rgba(255, 215, 106, 0.18) 35%,
-            transparent 70%),
-        radial-gradient(ellipse at 100% 100%,
-            rgba(255, 130, 80, 0.25) 0%,
-            transparent 50%),
-        linear-gradient(135deg,
-            rgba(80, 56, 14, 0.85) 0%,
-            rgba(50, 32, 6, 0.78) 50%,
-            rgba(22, 14, 2, 0.85) 100%);
+        radial-gradient(ellipse at 25% 0%,
+            rgba(255, 215, 130, 0.18) 0%,
+            transparent 55%),
+        linear-gradient(180deg,
+            #2a2010 0%,
+            #1a1408 50%,
+            #08060a 100%);
+    --_shard-glow: rgba(255, 215, 106, 0.32);
+}
+
+.menu-v2 .ui-shard.ui-shard--alert {
+    --_shard-fill:
+        repeating-linear-gradient(
+            -38deg,
+            rgba(255, 255, 255, 0.014) 0px,
+            rgba(255, 255, 255, 0.014) 1px,
+            transparent 1px, transparent 4px),
+        repeating-linear-gradient(
+            0deg,
+            rgba(255, 255, 255, 0.018) 0px,
+            rgba(255, 255, 255, 0.018) 1px,
+            transparent 1px, transparent 3px),
+        radial-gradient(ellipse at 25% 0%,
+            rgba(255, 130, 150, 0.18) 0%,
+            transparent 55%),
+        linear-gradient(180deg,
+            #281020 0%,
+            #1c0814 50%,
+            #08020e 100%);
+    --_shard-glow: rgba(255, 93, 122, 0.32);
+}
+
+/* Default rim glow (no glow when neutral) */
+.menu-v2 .ui-shard {
+    filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.55));
+}
+.menu-v2 .ui-shard:hover {
+    filter:
+        drop-shadow(0 8px 18px rgba(0, 0, 0, 0.6))
+        drop-shadow(0 0 12px var(--_shard-glow, transparent));
+}
+
+/* ::after — METALLIC SHEEN BAND
+ *
+ * Override the previous diagonal-only glint with a proper top-half
+ * polished-metal sheen: top 1px highlight + 1px-down inner
+ * subhighlight + diagonal glint that runs across the upper edge.
+ * Sits on top of the fill, follows the clip-path silhouette. */
+.menu-v2 .ui-shard::after {
+    background:
+        /* Diagonal glint — thin band of light, masked to top half */
+        linear-gradient(115deg,
+            transparent 30%,
+            rgba(255, 255, 255, 0.10) 47%,
+            rgba(255, 255, 255, 0.22) 50%,
+            rgba(255, 255, 255, 0.10) 53%,
+            transparent 70%);
+    box-shadow:
+        /* Top edge highlight — the polished-steel top sheen */
+        inset 0 1px 0 rgba(255, 255, 255, 0.55),
+        inset 0 2px 0 rgba(255, 255, 255, 0.10),
+        /* Bottom edge shade — defines the lower lip */
+        inset 0 -1px 0 rgba(0, 0, 0, 0.65),
+        /* Subtle side strokes for the metallic edge feel */
+        inset 1px 0 0 rgba(255, 255, 255, 0.08),
+        inset -1px 0 0 rgba(0, 0, 0, 0.32);
+    mask-image: linear-gradient(180deg, black 0%, black 36%, transparent 60%);
+    -webkit-mask-image: linear-gradient(180deg, black 0%, black 36%, transparent 60%);
 }
 
 
 /* ──────────────────────────────────────────────────────────
- * 4. SHARD LABELS — impact font + neon shadow
+ * 4. SHARD LABELS — clean white impact text
  *
- * The labels jump to the impact font (Saira 900 italic) and
- * pick up a chromatic shadow that matches the shard's tint.
+ * Drop the chromatic offsets. White core, single soft black
+ * drop-shadow at +2px y so the text sits crisply on the dark
+ * surface. Brand-tinted shards still get a faint coloured glow
+ * but no offset ghosts.
  * ────────────────────────────────────────────────────────── */
 .menu-v2 .ui-shard .mv2-cta-label,
 .menu-v2 .ui-shard .mv2-tile-label {
@@ -227,75 +283,57 @@ body.reduced-motion .menu-v2 .mv2-wordmark.title { animation: none; }
     letter-spacing: 0.05em;
     line-height: 1.05;
     text-transform: uppercase;
+    color: #ffffff;
     text-shadow:
-        0 0 14px rgba(255, 255, 255, 0.4),
-        0 2px 0 rgba(0, 0, 0, 0.55);
-    color: #fff;
+        0 2px 0 rgba(0, 0, 0, 0.55),
+        0 0 12px rgba(255, 255, 255, 0.10);
 }
 .menu-v2 .ui-shard.ui-shard--brand .mv2-cta-label {
     text-shadow:
-        -1px 0 0 rgba(74, 216, 255, 0.75),
-        1px 0 0 rgba(255, 90, 130, 0.45),
-        0 0 16px rgba(74, 216, 255, 0.6),
-        0 2px 0 rgba(0, 0, 0, 0.55);
+        0 2px 0 rgba(0, 0, 0, 0.55),
+        0 0 14px rgba(74, 216, 255, 0.45);
 }
 .menu-v2 .ui-shard.ui-shard--gold .mv2-cta-label {
     text-shadow:
-        -1px 0 0 rgba(255, 215, 106, 0.85),
-        1px 0 0 rgba(255, 130, 80, 0.65),
-        0 0 16px rgba(255, 215, 106, 0.6),
-        0 2px 0 rgba(0, 0, 0, 0.55);
+        0 2px 0 rgba(0, 0, 0, 0.55),
+        0 0 14px rgba(255, 215, 106, 0.45);
 }
-
-/* Tile label — slightly smaller than CTAs */
 .menu-v2 .ui-shard.mv2-tile .mv2-tile-label {
     font-size: 1.15rem;
     letter-spacing: 0.04em;
 }
 
-/* Eyebrow — keep small, switch to tech font */
+/* Eyebrow — small tech caption above the impact label */
 .menu-v2 .ui-shard .mv2-cta-eyebrow,
 .menu-v2 .ui-shard .mv2-tile-eyebrow {
     font-family: var(--ui-font-tech);
     font-size: 0.62rem;
     letter-spacing: 0.20em;
-    color: rgba(74, 216, 255, 0.85);
-    text-shadow: 0 0 6px rgba(74, 216, 255, 0.50);
+    color: rgba(255, 255, 255, 0.62);
+    text-shadow: none;
     text-transform: uppercase;
 }
-.menu-v2 .ui-shard.ui-shard--gold .mv2-cta-eyebrow,
-.menu-v2 .ui-shard.ui-shard--gold .mv2-tile-eyebrow {
-    color: rgba(255, 215, 106, 0.95);
-    text-shadow: 0 0 6px rgba(255, 215, 106, 0.55);
+.menu-v2 .ui-shard.ui-shard--brand .mv2-cta-eyebrow {
+    color: rgba(180, 230, 255, 0.85);
+}
+.menu-v2 .ui-shard.ui-shard--gold .mv2-cta-eyebrow {
+    color: rgba(255, 230, 180, 0.85);
 }
 
-/* Status sub-line stays Rajdhani; bump slightly */
 .menu-v2 .ui-shard .mv2-tile-status {
     font-family: var(--ui-font-body);
     font-size: 0.78rem;
-    color: rgba(255, 255, 255, 0.62);
+    color: rgba(255, 255, 255, 0.55);
     letter-spacing: 0.04em;
 }
 
 
 /* ──────────────────────────────────────────────────────────
- * 5. CORNER ACCENT TICKS
+ * 5. LED INDICATOR DOT — single-color, restrained
  *
- * Tiny L-brackets in two opposing inner corners of every shard.
- * Drawn as a third pseudo-element (we already use ::before for
- * the highlight wash and ::after for the rim sheen — the corner
- * marks live inside the eyebrow span via background-image since
- * we can't add a fourth pseudo-element to the shard root cleanly
- * without restructuring. Use the .mv2-tile-eyebrow's right-side
- * decoration for the top-right corner tick).
- *
- * Implementation: Add a small absolutely-positioned span via
- * box-shadow on a child. Cleaner approach: small SVG icons on
- * the eyebrow line.
- *
- * Pragmatic version below: a top-right corner indicator dot
- * (LED-light) + a bottom-left corner tick, both via pseudo-
- * elements on inner spans.
+ * Each shard's eyebrow leads with a 5px dot. Coloured to match
+ * the shard's accent (cyan for brand, gold for gold, white for
+ * neutral). Pulses softly.
  * ────────────────────────────────────────────────────────── */
 .menu-v2 .ui-shard .mv2-tile-eyebrow,
 .menu-v2 .ui-shard .mv2-cta-eyebrow {
@@ -303,36 +341,33 @@ body.reduced-motion .menu-v2 .mv2-wordmark.title { animation: none; }
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding-left: 14px;
+    padding-left: 12px;
 }
 .menu-v2 .ui-shard .mv2-tile-eyebrow::before,
 .menu-v2 .ui-shard .mv2-cta-eyebrow::before {
-    /* LED indicator dot to the LEFT of the eyebrow text. Pulses
-       softly to add life. */
     content: '';
     position: absolute;
     left: 0;
     top: 50%;
     transform: translateY(-50%);
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
     border-radius: 50%;
-    background: var(--ui-brand);
-    box-shadow:
-        0 0 6px var(--ui-brand),
-        0 0 12px rgba(74, 216, 255, 0.55);
-    animation: ui-led-pulse 2.4s ease-in-out infinite;
+    background: rgba(255, 255, 255, 0.65);
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.45);
+    animation: ui-led-pulse 2.6s ease-in-out infinite;
 }
-.menu-v2 .ui-shard.ui-shard--gold .mv2-cta-eyebrow::before,
-.menu-v2 .ui-shard.ui-shard--gold .mv2-tile-eyebrow::before {
+.menu-v2 .ui-shard.ui-shard--brand .mv2-cta-eyebrow::before {
+    background: var(--ui-brand);
+    box-shadow: 0 0 4px var(--ui-brand), 0 0 10px rgba(74, 216, 255, 0.55);
+}
+.menu-v2 .ui-shard.ui-shard--gold .mv2-cta-eyebrow::before {
     background: var(--ui-gold);
-    box-shadow:
-        0 0 6px var(--ui-gold),
-        0 0 12px rgba(255, 215, 106, 0.55);
+    box-shadow: 0 0 4px var(--ui-gold), 0 0 10px rgba(255, 215, 106, 0.55);
 }
 @keyframes ui-led-pulse {
-    0%, 100% { opacity: 0.85; transform: translateY(-50%) scale(1); }
-    50%      { opacity: 1;    transform: translateY(-50%) scale(1.15); }
+    0%, 100% { opacity: 0.75; transform: translateY(-50%) scale(1); }
+    50%      { opacity: 1;    transform: translateY(-50%) scale(1.18); }
 }
 body.reduced-motion .menu-v2 .ui-shard .mv2-tile-eyebrow::before,
 body.reduced-motion .menu-v2 .ui-shard .mv2-cta-eyebrow::before {
@@ -341,60 +376,51 @@ body.reduced-motion .menu-v2 .ui-shard .mv2-cta-eyebrow::before {
 
 
 /* ──────────────────────────────────────────────────────────
- * 6. SHARD ::after — REPLACE THE FLAT SHEEN WITH A DIAGONAL
- *    GLINT BAR
+ * 6. OPERATOR CHIP CLIP FIX
  *
- * The previous ::after drew a uniform top-edge sheen. For the
- * polished feel we want a diagonal "light catching the surface"
- * glint that reads as moving glass. Two-stop gradient at 30°,
- * very subtle, stays on hover so the surface feels reactive.
- * ────────────────────────────────────────────────────────── */
-.menu-v2 .ui-shard::after {
-    /* Override the snap.css default ::after content to add a
-       diagonal glint sheen + the inset edge box-shadow. */
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.45),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.42),
-        inset 1px 0 0 rgba(255, 255, 255, 0.10),
-        inset -1px 0 0 rgba(0, 0, 0, 0.30);
-    background:
-        linear-gradient(115deg,
-            transparent 35%,
-            rgba(255, 255, 255, 0.08) 48%,
-            rgba(255, 255, 255, 0.18) 50%,
-            rgba(255, 255, 255, 0.08) 52%,
-            transparent 65%);
-    /* Glint anchored to the top portion so it reads as a horizon
-       light, not a full-shard wash. */
-    mask-image: linear-gradient(180deg, black 0%, black 38%, transparent 65%);
-    -webkit-mask-image: linear-gradient(180deg, black 0%, black 38%, transparent 65%);
-}
-
-
-/* ──────────────────────────────────────────────────────────
- * 7. OPERATOR CHIP — neon polish
+ * The previous tab-l clip cut into the leading character because
+ * the slant began at x=0 with full diagonal pinch. Switch to the
+ * gentler shape-tab-l with MUCH more left padding so the slant
+ * never reaches the text.
  * ────────────────────────────────────────────────────────── */
 .menu-v2 .mv2-operator-chip.subtitle {
-    font-family: var(--ui-font-tech);
-    font-size: 0.78rem;
-    letter-spacing: 0.18em;
-    color: #b3ecff;
-    text-shadow:
-        0 0 6px rgba(74, 216, 255, 0.7),
-        0 0 12px rgba(74, 216, 255, 0.35);
-    background:
-        linear-gradient(180deg,
-            rgba(35, 90, 130, 0.55) 0%,
-            rgba(8, 28, 50, 0.62) 100%);
+    /* Use the parallelogram-r shape (slants away from the start)
+       so the leading edge is straight vertical and text never
+       clips. The right edge gets the slant instead. */
+    clip-path: var(--ui-shape-parallelogram-l);
+    -webkit-clip-path: var(--ui-shape-parallelogram-l);
+    padding-left: var(--ui-space-7);
+    padding-right: var(--ui-space-4);
     height: 36px;
     line-height: 36px;
-    padding-left: var(--ui-space-6);
-    padding-right: var(--ui-space-4);
+    font-family: var(--ui-font-tech);
+    font-size: 0.74rem;
+    letter-spacing: 0.18em;
+    color: #c4eaff;
+    text-shadow: 0 0 6px rgba(74, 216, 255, 0.35);
+    background:
+        repeating-linear-gradient(
+            -38deg,
+            rgba(255, 255, 255, 0.012) 0px,
+            rgba(255, 255, 255, 0.012) 1px,
+            transparent 1px, transparent 4px),
+        linear-gradient(180deg,
+            #14192a 0%,
+            #08101e 100%);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.32),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.55);
+}
+.menu-v2 .mv2-operator-chip.subtitle::before {
+    background: radial-gradient(ellipse at 25% 0%,
+        rgba(120, 200, 255, 0.18) 0%, transparent 65%);
+    clip-path: inherit;
+    -webkit-clip-path: inherit;
 }
 
 
 /* ──────────────────────────────────────────────────────────
- * 8. SPARKS / STREAK — texture pass
+ * 7. SPARKS / STREAK — same metallic monochrome
  * ────────────────────────────────────────────────────────── */
 .menu-v2 .mv2-sparks-chip,
 .menu-v2 .mv2-streak.login-streak {
@@ -404,46 +430,60 @@ body.reduced-motion .menu-v2 .ui-shard .mv2-cta-eyebrow::before {
     background:
         repeating-linear-gradient(
             -38deg,
-            rgba(255, 255, 255, 0.025) 0px,
-            rgba(255, 255, 255, 0.025) 1px,
+            rgba(255, 255, 255, 0.012) 0px,
+            rgba(255, 255, 255, 0.012) 1px,
             transparent 1px, transparent 4px),
         linear-gradient(180deg,
-            rgba(80, 60, 18, 0.68) 0%,
-            rgba(36, 24, 6, 0.75) 100%);
-}
-.menu-v2 .mv2-sparks-chip {
+            #1e1810 0%,
+            #0c0a08 100%);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.30),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.60);
     color: #ffe6a3;
-    text-shadow: 0 0 6px rgba(255, 215, 106, 0.55);
-}
-.menu-v2 .mv2-streak.login-streak {
-    color: #ffe6a3;
-    text-shadow: 0 0 6px rgba(255, 215, 106, 0.55);
-    font-size: 0.7rem;
+    text-shadow: 0 0 6px rgba(255, 215, 106, 0.45);
+    font-size: 0.74rem;
     letter-spacing: 0.18em;
 }
+.menu-v2 .mv2-sparks-chip {
+    clip-path: var(--ui-shape-parallelogram-r);
+    -webkit-clip-path: var(--ui-shape-parallelogram-r);
+    padding-left: var(--ui-space-4);
+    padding-right: var(--ui-space-7);
+}
+.menu-v2 .mv2-streak.login-streak {
+    clip-path: var(--ui-shape-parallelogram-l);
+    -webkit-clip-path: var(--ui-shape-parallelogram-l);
+    padding-left: var(--ui-space-7);
+    padding-right: var(--ui-space-4);
+}
 
 
 /* ──────────────────────────────────────────────────────────
- * 9. RESUME / INITIATE — chromatic edge ON HOVER
- *
- * Hovering the hero CTAs intensifies the neon — Snap-style "I
- * can feel it light up". Combines a brightness bump with a
- * tighter chromatic shadow on the label.
+ * 8. SETTINGS ICON — same metallic monochrome
  * ────────────────────────────────────────────────────────── */
-.menu-v2 .ui-shard.ui-shard--brand:hover {
-    --_shard-glow: rgba(74, 216, 255, 0.45);
+.menu-v2 .mv2-settings.ui-btn--icon {
+    background:
+        repeating-linear-gradient(
+            -38deg,
+            rgba(255, 255, 255, 0.012) 0px,
+            rgba(255, 255, 255, 0.012) 1px,
+            transparent 1px, transparent 4px),
+        linear-gradient(180deg,
+            #14192a 0%,
+            #08101e 100%);
+    color: rgba(255, 255, 255, 0.75);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.30),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.60);
 }
-.menu-v2 .ui-shard.ui-shard--gold:hover {
-    --_shard-glow: rgba(255, 215, 106, 0.45);
+.menu-v2 .mv2-settings.ui-btn--icon:hover {
+    color: #fff;
+    filter: brightness(1.15);
 }
 
 
 /* ──────────────────────────────────────────────────────────
- * 10. HERO BLOCK SPACING (post-portrait removal)
- *
- * Without the portrait hex above, the hero block can sit higher
- * and the wordmark dominates. Tighten the top padding so the
- * wordmark gets the room it deserves.
+ * 9. HERO BLOCK SPACING (post-portrait removal)
  * ────────────────────────────────────────────────────────── */
 .menu-v2 .mv2-hero {
     padding-top: var(--ui-space-8);
@@ -453,7 +493,7 @@ body.reduced-motion .menu-v2 .ui-shard .mv2-cta-eyebrow::before {
 
 
 /* ──────────────────────────────────────────────────────────
- * 11. FOOTER VERSION + STREAK
+ * 10. FOOTER VERSION + STREAK
  * ────────────────────────────────────────────────────────── */
 .menu-v2 .mv2-version {
     font-family: var(--ui-font-tech);
@@ -464,21 +504,144 @@ body.reduced-motion .menu-v2 .ui-shard .mv2-cta-eyebrow::before {
 
 
 /* ──────────────────────────────────────────────────────────
- * 12. SETTINGS ICON — same polish layer
+ * 11. SETTINGS MODAL — TAB OVERFLOW FIX
+ *
+ * The 5-tab row (AUDIO/DISPLAY/GAME/CREDITS/DEV) was running
+ * off the right edge on portrait phones because each tab had
+ * fixed padding that summed past the available width. Fix:
+ *   - flex: 1 1 0 makes every tab share width equally
+ *   - smaller font on narrow viewports
+ *   - drop the horizontal scroll (no longer needed; everything
+ *     fits)
+ *   - tighten padding so 5 equal tabs across a 380px modal
+ *     doesn't crowd
  * ────────────────────────────────────────────────────────── */
-.menu-v2 .mv2-settings.ui-btn--icon {
+#modal-settings .settings-tabs {
+    overflow: visible;
+    gap: 0;
+}
+#modal-settings .settings-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: var(--ui-space-2) var(--ui-space-1);
+    font-size: 0.7rem;
+    letter-spacing: 0.10em;
+    text-align: center;
+    /* Truncate gracefully if a label is longer than its column */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* The mobile/short label spans hide on wider widths, expand on
+   narrow widths. Keep the existing toggle but force the short
+   label on viewports too narrow for the full text. */
+@media (max-width: 480px) {
+    #modal-settings .settings-tab .settings-tab-full   { display: none; }
+    #modal-settings .settings-tab .settings-tab-short  { display: inline; }
+    #modal-settings .settings-tab { font-size: 0.66rem; letter-spacing: 0.08em; }
+}
+@media (min-width: 481px) {
+    #modal-settings .settings-tab .settings-tab-full   { display: inline; }
+    #modal-settings .settings-tab .settings-tab-short  { display: none; }
+}
+
+/* Settings modal — tighten panel padding and drop bottom margin
+   so the action row never gets pushed off the screen. */
+#modal-settings .modal-content.settings-modal {
+    padding: var(--ui-space-4) var(--ui-space-4) var(--ui-space-3);
+    gap: var(--ui-space-2);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 12. SETTINGS MODAL TITLE — clean white impact
+ * ────────────────────────────────────────────────────────── */
+#modal-settings .settings-title.neon-text-white {
+    font-family: var(--ui-font-impact);
+    font-weight: 900;
+    font-style: normal;
+    font-size: 1.4rem;
+    letter-spacing: 0.06em;
+    color: #fff;
+    text-shadow:
+        0 2px 0 rgba(0, 0, 0, 0.55),
+        0 0 12px rgba(255, 255, 255, 0.18);
+    background: none;
+    -webkit-text-fill-color: #fff;
+    text-align: center;
+    margin: 0 0 var(--ui-space-2);
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 13. SETTINGS MODAL — METALLIC PANEL SHEEN
+ *
+ * The legacy panel was a soft frosted-glass blur. Snap surfaces
+ * are deeper black with metallic top-edge sheen. Replace the
+ * glass-3 fill with a proper metallic plate.
+ * ────────────────────────────────────────────────────────── */
+#modal-settings .modal-content.settings-modal {
     background:
         repeating-linear-gradient(
             -38deg,
-            rgba(255, 255, 255, 0.025) 0px,
-            rgba(255, 255, 255, 0.025) 1px,
+            rgba(255, 255, 255, 0.012) 0px,
+            rgba(255, 255, 255, 0.012) 1px,
             transparent 1px, transparent 4px),
         linear-gradient(180deg,
-            rgba(40, 56, 92, 0.55) 0%,
-            rgba(16, 26, 48, 0.62) 100%);
-    color: #b3ecff;
+            #0e1322 0%,
+            #060a14 50%,
+            #02040a 100%);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.32),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.60),
+        0 16px 32px rgba(0, 0, 0, 0.50),
+        0 4px 12px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 }
-.menu-v2 .mv2-settings.ui-btn--icon:hover {
+
+
+/* ──────────────────────────────────────────────────────────
+ * 14. SETTINGS MODAL ACTION ROW
+ *
+ * Quick rules / Resume / Abort — give them the metallic shard
+ * treatment so they match the menu language.
+ * ────────────────────────────────────────────────────────── */
+#modal-settings > .modal-content > #btn-glossary,
+#modal-settings > .modal-content > #btn-resume,
+#modal-settings > .modal-content > #btn-quit {
+    font-family: var(--ui-font-impact);
+    font-weight: 900;
+    font-style: italic;
+    font-size: 1rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     color: #fff;
-    filter: brightness(1.18);
+    text-shadow: 0 2px 0 rgba(0, 0, 0, 0.55);
+    border-radius: 0;
+    border: none;
+    background-image: none;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.45),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.65),
+        0 4px 10px rgba(0, 0, 0, 0.4);
+    clip-path: var(--ui-shape-banner);
+    -webkit-clip-path: var(--ui-shape-banner);
+    padding: var(--ui-space-3) var(--ui-space-4);
+}
+#modal-settings > .modal-content > #btn-glossary {
+    background: linear-gradient(180deg, #14192a 0%, #08101e 100%);
+}
+#modal-settings > .modal-content > #btn-resume {
+    background: linear-gradient(180deg, #0e1a2c 0%, #06121e 100%);
+}
+#modal-settings > .modal-content > #btn-resume:hover {
+    filter: brightness(1.12) drop-shadow(0 0 14px rgba(74, 216, 255, 0.45));
+}
+#modal-settings > .modal-content > #btn-quit {
+    background: linear-gradient(180deg, #281020 0%, #100408 100%);
+}
+#modal-settings > .modal-content > #btn-quit:hover {
+    filter: brightness(1.12) drop-shadow(0 0 14px rgba(255, 93, 122, 0.45));
 }
