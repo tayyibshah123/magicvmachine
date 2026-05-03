@@ -389,6 +389,13 @@ const ROOMS = [
                 wait: 'tap'
             },
             {
+                story: 'Diamond pips above your HP track MOMENTUM. Combos, perfect parries and crits fill them.',
+                action: 'At 6 pips, APEX READY appears. Your next attack deals x1.5 damage.',
+                sub: 'MOMENTUM PROTOCOL · COMBO BONUS',
+                spot: 'player',
+                wait: 'tap'
+            },
+            {
                 story: 'Free combat now. Shield the EXECUTE. Strike between PLATING turns.',
                 action: 'Drop the Guardian. Use everything you have learned.',
                 sub: 'CONTAINMENT BREACH · TERMINATE',
@@ -987,29 +994,60 @@ export const Breakout = {
      * complete, so they advance immediately. */
     notify(event, data) {
         if (!this._active || !this._room) return;
-        const beat = this._room.sequence && this._room.sequence[this._beatIdx];
-        if (!beat || !beat.wait) return;
-        const w = beat.wait;
-        // Compose extended event keys for die-slot matching.
-        // event === 'die_used' with data.slot === 'attack' →
-        //   'die_used' OR 'die_used:attack' both match.
-        let matched = false;
-        if (w === event) matched = true;
-        else if (event === 'die_used' && data && data.slot && w === ('die_used:' + data.slot)) matched = true;
-        else if (event === 'die_used' && data && data.signature && w === 'die_used:signature') matched = true;
-        if (!matched) return;
-        const delayMs = (event === 'die_used') ? 1200 : 0;
-        if (delayMs > 0) {
-            const expectedIdx = this._beatIdx;
-            setTimeout(() => {
-                // Defensive: if the player did something that already
-                // advanced the beat (or the breakout ended), don't
-                // double-advance.
-                if (!this._active || this._beatIdx !== expectedIdx) return;
+        const seq = this._room.sequence;
+        if (!Array.isArray(seq)) return;
+        // Match against the CURRENT beat first.
+        const matchesBeat = (b) => {
+            if (!b || !b.wait) return false;
+            if (b.wait === event) return true;
+            if (event === 'die_used' && data && data.slot && b.wait === ('die_used:' + data.slot)) return true;
+            if (event === 'die_used' && data && data.signature && b.wait === 'die_used:signature') return true;
+            return false;
+        };
+        const beat = seq[this._beatIdx];
+        if (matchesBeat(beat)) {
+            const delayMs = (event === 'die_used') ? 1200 : 0;
+            if (delayMs > 0) {
+                const expectedIdx = this._beatIdx;
+                setTimeout(() => {
+                    if (!this._active || this._beatIdx !== expectedIdx) return;
+                    this._advanceBeat();
+                }, delayMs);
+            } else {
                 this._advanceBeat();
-            }, delayMs);
-        } else {
-            this._advanceBeat();
+            }
+            return;
+        }
+        // Out-of-order forgiveness — the player did something this beat
+        // didn't expect, but a LATER beat in the sequence is satisfied
+        // by the same action (e.g. they played MINION before the
+        // tutorial pointed at it). Without this, the tutorial would
+        // stall on the unmet beat until combat ended. Scan forward
+        // and jump to the matching beat instead. Intermediate beats
+        // are silently skipped — the player has demonstrated they
+        // understand the action that beat would have taught.
+        for (let i = this._beatIdx + 1; i < seq.length; i++) {
+            if (matchesBeat(seq[i])) {
+                const target = i + 1; // advance PAST the matched beat
+                const delayMs = (event === 'die_used') ? 1200 : 0;
+                const jump = () => {
+                    if (!this._active) return;
+                    // Hide tap hint immediately so the prompt doesn't
+                    // linger after we skipped past the tap-wait beat.
+                    const tapHint = document.getElementById('breakout-tap-hint');
+                    if (tapHint) tapHint.classList.remove('show');
+                    this._tapAdvanceArmed = false;
+                    if (target >= seq.length) {
+                        this._beatIdx = seq.length - 1;
+                        this._setSpotlight(null);
+                    } else {
+                        this._runBeat(target);
+                    }
+                };
+                if (delayMs > 0) setTimeout(jump, delayMs);
+                else jump();
+                return;
+            }
         }
     },
 

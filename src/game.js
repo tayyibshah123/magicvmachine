@@ -1513,6 +1513,21 @@ const Game = {
                     // "5 / 5" while gainMana could push the pool to 10.
                     const manaCap = ent.maxMana || ((ent.baseMana || 3) + 5);
                     txt += `\nMana: ${ent.mana}/${manaCap}`;
+                    // Momentum status — explain the diamond pips above
+                    // the HP bar so a long-press on the player avatar
+                    // teaches the mechanic without forcing a wiki dive.
+                    const m = this.momentum || 0;
+                    if (m > 0 || this._momentumApexArmed) {
+                        const tier = this._momentumApexArmed ? 'APEX READY'
+                                   : m >= 4 ? 'SURGE'
+                                   : 'FLOW';
+                        txt += `\nMomentum: ${m}/6 (${tier})`;
+                        if (this._momentumApexArmed) {
+                            txt += `\n  Next attack deals x1.5 damage.`;
+                        }
+                    } else {
+                        txt += `\nMomentum: 0/6  (combos, parries, crits fill it)`;
+                    }
                     if (ent.nextAttackMult > 1) txt += `\n\n🔥 CHARGED: Next Atk x${ent.nextAttackMult}`;
                     if (ent.incomingDamageMult > 1) {
                         const val = ent.incomingDamageMult === 1.5 ? "+50%" : `x${ent.incomingDamageMult}`;
@@ -13740,15 +13755,18 @@ async startTurn() {
                 // splash fires after the primary hit lands so the visual
                 // sequencing reads as "main hit, then echo".
                 const echoRoundActive = this.player.hasRelic('echo_round') && this.attacksThisTurn > 0 && (this.attacksThisTurn % 3) === 0;
-                // Momentum APEX — when the player has built to tier 6, the
-                // next attack auto-crits AND ignores enemy shield. Consumes
-                // the apex flag (resets momentum to 0). One-shot per build.
+                // Momentum APEX — when the player has built to tier 6,
+                // the next attack deals 1.5× damage. Consumes the apex
+                // flag (resets momentum to 0). One-shot per build. The
+                // earlier 2× + ignore-shield combo overshadowed crits;
+                // 1.5× sits between a Good QTE (1.15×) and a Perfect
+                // QTE (1.6×) so APEX feels like a steady reward for
+                // clean play rather than a free kill button.
                 let apexBonus = 1.0;
                 let apexBypassShield = false;
                 if (this._momentumApexArmed) {
-                    apexBonus = 2.0;
-                    apexBypassShield = true;
-                    ParticleSys.createFloatingText(this.player.x, this.player.y - 240, "APEX STRIKE", '#ff3300');
+                    apexBonus = 1.5;
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 240, "APEX STRIKE x1.5", '#ff3300');
                     if (this.triggerScreenFlash) this.triggerScreenFlash('rgba(255, 90, 30, 0.5)', 220);
                     if (this._tickMomentum) this._tickMomentum('apex_consume', 0);
                 }
@@ -19130,12 +19148,14 @@ drawEffects() {
                     ctx.fill();
                     ctx.shadowBlur = 0;
                 }
-                // APEX READY label when meter is at 6
+                // APEX READY label when meter is at 6. Shows what the
+                // payout actually is so the player doesn't have to hover
+                // to learn the rule.
                 if (this._momentumApexArmed) {
                     ctx.font = 'bold 11px "Orbitron"';
                     ctx.fillStyle = '#ff3300';
                     ctx.textAlign = 'center';
-                    ctx.fillText('APEX READY', entity.x, sY - 4);
+                    ctx.fillText('APEX READY · NEXT HIT x1.5', entity.x, sY - 4);
                 }
             }
         }
