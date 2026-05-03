@@ -449,6 +449,221 @@
 
 
 /* ──────────────────────────────────────────────────────────
+ * 12. HIDE THE LEGACY TITLE-FRAME IN MENU-V2
+ *
+ * The legacy `.title-frame` was sized to wrap the wordmark via
+ * `inset: -28px -36px` against a positioned parent. The menu-v2
+ * override changed it to `height: 100%` of `.mv2-hero`, which
+ * means the four cosmetic corner brackets land at the top + bottom
+ * of the entire 1fr middle row — leaving a tall empty rectangle
+ * between the brackets at the top and the wordmark at the bottom.
+ * That empty rectangle is the "long black area" the user flagged.
+ *
+ * The frame is purely cosmetic (Archivist Slain badge), so hide it
+ * in menu-v2 entirely. The wordmark stands alone with its own
+ * chromatic glow + tagline.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .mv2-title-frame.title-frame { display: none !important; }
+
+
+/* ──────────────────────────────────────────────────────────
+ * 13. CORNER-BRACKET BUTTONS — strip fills, add tech corners
+ *
+ * Per the user's reference image: the run-launch CTAs and the
+ * tile shards should be **transparent** with thin L-shaped
+ * corner brackets that frame the clickable area. The text
+ * (RESUME RUN / INITIATE RUN / SANCTUARY / SAVES / STREAK 1)
+ * carries the visual weight; the brackets just outline the
+ * tap target.
+ *
+ * Implementation
+ *   - Strip the `clip-path` so the buttons are simple rectangles.
+ *   - Strip the metallic gradient fill, the chromatic edge tints,
+ *     and the diagonal sheen.
+ *   - Draw four L-corners using a multi-image background
+ *     (8 thin strips total: two per corner). Pure CSS, no extra
+ *     DOM.
+ *   - Hover lifts the corner glow.
+ *   - Press dims the brackets briefly.
+ *
+ * Variants tint the bracket color + text glow:
+ *   ui-shard--brand → cyan (default)
+ *   ui-shard--gold  → gold
+ *   ui-shard--alert → pink
+ * ────────────────────────────────────────────────────────── */
+.menu-v2 .ui-shard {
+    --bracket-color: rgba(74, 216, 255, 0.85);
+    --bracket-glow:  rgba(74, 216, 255, 0.65);
+    --bracket-len: 22px;
+    --bracket-thickness: 2px;
+    --bracket-pad: 4px;
+    /* Strip the silhouette so the corners outline a clean rect. */
+    clip-path: none !important;
+    -webkit-clip-path: none !important;
+    /* Strip the metallic fill — the layered shard fills, the
+       chromatic edge tints, the diagonal noise / scanline
+       textures all clear out. The button reads as a void with
+       the brackets framing it. */
+    background:
+        /* Top-left corner: horizontal strip + vertical strip */
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        /* Top-right corner */
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) top    calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) top    calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        /* Bottom-left corner */
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            left  calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            left  calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        /* Bottom-right corner */
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        transparent;
+    background-blend-mode: normal;
+    /* Drop-shadow gives the brackets a soft outer glow without
+       affecting the now-transparent interior. */
+    filter: drop-shadow(0 0 6px var(--bracket-glow));
+    /* No more elevation card — the visual weight is now the text
+       inside the brackets, not a raised plate. */
+    box-shadow: none;
+    border: none;
+    /* Keep the button rectangular — no inset shadow rim. */
+    transition: filter var(--ui-duration-fast) var(--ui-ease-out),
+                transform var(--ui-duration-fast) var(--ui-ease-out);
+}
+
+/* Strip the ::after sheen — corner-bracket buttons have no fill
+   to highlight. */
+.menu-v2 .ui-shard::after { content: none !important; }
+.menu-v2 .ui-shard::before { content: none !important; }
+
+/* Brand variant — cyan brackets (default already matches; keep
+   explicit for hover overrides). */
+.menu-v2 .ui-shard.ui-shard--brand {
+    --bracket-color: rgba(74, 216, 255, 0.95);
+    --bracket-glow:  rgba(74, 216, 255, 0.75);
+}
+
+/* Gold variant — RESUME RUN / SANCTUARY badges */
+.menu-v2 .ui-shard.ui-shard--gold {
+    --bracket-color: rgba(255, 215, 106, 0.95);
+    --bracket-glow:  rgba(255, 215, 106, 0.7);
+}
+
+/* Alert variant — for danger/abort affordances */
+.menu-v2 .ui-shard.ui-shard--alert {
+    --bracket-color: rgba(255, 90, 130, 0.95);
+    --bracket-glow:  rgba(255, 90, 130, 0.7);
+}
+
+/* Hover lifts the glow; tap dims briefly. */
+.menu-v2 .ui-shard:hover {
+    filter: drop-shadow(0 0 12px var(--bracket-glow))
+            drop-shadow(0 0 24px var(--bracket-glow));
+    transform: translateY(-1px);
+}
+.menu-v2 .ui-shard:active {
+    filter: drop-shadow(0 0 4px var(--bracket-glow));
+    transform: translateY(0);
+}
+
+/* Inside the bracket frame, give the labels stronger glow so they
+   carry the visual weight previously held by the button fill. */
+.menu-v2 .ui-shard .mv2-cta-label,
+.menu-v2 .ui-shard .mv2-tile-label {
+    color: #ffffff;
+    text-shadow:
+        -1.5px 0 0 rgba(74, 216, 255, 0.85),
+         1.5px 0 0 rgba(255, 90, 130, 0.85),
+         0 0 14px rgba(255, 255, 255, 0.45),
+         0 2px 0 rgba(0, 0, 0, 0.55);
+}
+.menu-v2 .ui-shard.ui-shard--gold .mv2-cta-label {
+    text-shadow:
+        -1.5px 0 0 rgba(255, 215, 106, 0.85),
+         1.5px 0 0 rgba(255, 165, 70, 0.85),
+         0 0 16px rgba(255, 215, 106, 0.55),
+         0 2px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* The tile shards (CHALLENGE / ARCHIVE / SANCTUARY / INTEL / etc.)
+   are smaller — shrink the bracket length proportionally so the
+   corners don't dominate the smaller cells. */
+.menu-v2 .ui-shard.mv2-tile {
+    --bracket-len: 16px;
+    --bracket-pad: 3px;
+}
+
+/* The login-streak chip + sparks chip + operator chip — also
+   strip their silhouettes and apply the same bracket treatment.
+   The chips are MUCH smaller, so use a tighter bracket. */
+.menu-v2 .login-streak,
+.menu-v2 .mv2-streak.login-streak,
+.menu-v2 .mv2-sparks-chip,
+.menu-v2 .mv2-operator-chip.subtitle {
+    --bracket-color: rgba(74, 216, 255, 0.85);
+    --bracket-glow:  rgba(74, 216, 255, 0.55);
+    --bracket-len: 10px;
+    --bracket-thickness: 1.5px;
+    --bracket-pad: 2px;
+    clip-path: none !important;
+    -webkit-clip-path: none !important;
+    background:
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            calc(var(--bracket-pad)) calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) top    calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) top    calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            left  calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            left  calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-len) var(--bracket-thickness) no-repeat,
+        linear-gradient(var(--bracket-color), var(--bracket-color))
+            right calc(var(--bracket-pad)) bottom calc(var(--bracket-pad))
+            / var(--bracket-thickness) var(--bracket-len) no-repeat,
+        transparent !important;
+    border: none;
+    box-shadow: none;
+    filter: drop-shadow(0 0 4px var(--bracket-glow));
+}
+.menu-v2 .mv2-sparks-chip {
+    --bracket-color: rgba(255, 215, 106, 0.85);
+    --bracket-glow:  rgba(255, 215, 106, 0.55);
+}
+.menu-v2 .mv2-streak.login-streak {
+    --bracket-color: rgba(255, 215, 106, 0.85);
+    --bracket-glow:  rgba(255, 215, 106, 0.55);
+}
+
+
+/* ──────────────────────────────────────────────────────────
  * 11. FOOTER VERSION + STREAK
  * ────────────────────────────────────────────────────────── */
 .menu-v2 .mv2-version {
