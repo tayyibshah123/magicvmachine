@@ -11565,7 +11565,7 @@ updateHexBreach(dt) {
         this.enemy.y = (CONFIG && CONFIG.CANVAS_HEIGHT ? CONFIG.CANVAS_HEIGHT : 1920) * 0.28;
         if (this.player) {
             this.player.x = this.enemy.x;
-            this.player.y = (CONFIG && CONFIG.CANVAS_HEIGHT ? CONFIG.CANVAS_HEIGHT : 1920) * 0.72;
+            this.player.y = (CONFIG && CONFIG.CANVAS_HEIGHT ? CONFIG.CANVAS_HEIGHT : 1920) * 0.62;
         }
 
         // Scripted intent — first move shown immediately so the player

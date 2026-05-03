@@ -8,7 +8,7 @@ import { Game } from '../game.js';
 
 class Player extends Entity {
     constructor(classConfig) {
-        super(540, 1150, classConfig.name, 30); 
+        super(540, 950, classConfig.name, 30);
         
         // Initialize Arrays FIRST to prevent crashes
         this.minions = [];
