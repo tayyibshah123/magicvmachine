@@ -1427,6 +1427,28 @@ const EVENTS_DB = [
                 return "The cursor blinks once and goes still.";
             } }
         ]
+    },
+    /* Sector 2 only — only spawns when there are iced edges to clear.
+       The "thaw all" option pays a small HP cost; the "wait it out"
+       option leaves the ice in place but pays out fragments instead. */
+    {
+        title: "FROZEN VENT",
+        art: 'glitch',
+        desc: "A heat vent gushes intermittently behind a wall of ice. The temperature here could thaw a frozen path.",
+        condition: (g) => g.sector === 2
+            && g.map && g.map.icedEdges && g.map.icedEdges.size > 0,
+        options: [
+            { text: "Crack the vent (-3 HP, thaws all iced paths)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(3);
+                const n = (g.map && g.map.icedEdges) ? g.map.icedEdges.size : 0;
+                if (g.map && g.map.icedEdges) g.map.icedEdges.clear();
+                return `Steam roars through the network. ${n} frozen path${n === 1 ? '' : 's'} thawed.`;
+            } },
+            { text: "Bottle the vapour (+30 Fragments)", icon: 'coin-stack', effect: (g) => {
+                g.techFragments += 30;
+                return "You bottle the warm vapour and trade it onward. +30 Fragments.";
+            } }
+        ]
     }
 ];
 

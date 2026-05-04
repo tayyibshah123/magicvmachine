@@ -8232,6 +8232,70 @@ triggerSystemCrash() {
                 if (pick) pick.hot = true;
             }
         }
+        if (this.sector === 2) {
+            // Sector 2 — Iced Paths (Roadmap Part 30.4). Mark 1-2 random
+            // edges as iced; iced edges block traversal until thawed
+            // by a Heat Vent event. Storage is a Set of "fromId|toId"
+            // keys (edges aren't first-class objects in our map graph).
+            this.map.icedEdges = new Set();
+            // Build the candidate edge pool: every connection NOT
+            // touching start, the boss, or any choke node (shop / rest /
+            // elite). Also exclude edges whose target node has only one
+            // inbound — icing those would strand the layer above.
+            const inboundCount = new Map();
+            this.map.nodes.forEach(n => {
+                (n.connections || []).forEach(tid => {
+                    inboundCount.set(tid, (inboundCount.get(tid) || 0) + 1);
+                });
+            });
+            const candidates = [];
+            this.map.nodes.forEach(src => {
+                if (src.type === 'start' || src.type === 'shop'
+                    || src.type === 'rest' || src.type === 'elite') return;
+                (src.connections || []).forEach(tid => {
+                    const tgt = this.map.nodes.find(n => n.id === tid);
+                    if (!tgt) return;
+                    if (tgt.type === 'boss' || tgt.type === 'shop'
+                        || tgt.type === 'rest' || tgt.type === 'elite') return;
+                    if ((inboundCount.get(tid) || 0) <= 1) return;
+                    candidates.push({ from: src.id, to: tid });
+                });
+            });
+            const iceCount = Math.min(candidates.length, 1 + Math.floor(Math.random() * 2));
+            for (let i = 0; i < iceCount; i++) {
+                const idx = Math.floor(Math.random() * candidates.length);
+                const pick = candidates.splice(idx, 1)[0];
+                if (pick) this.map.icedEdges.add(`${pick.from}|${pick.to}`);
+            }
+        }
+        if (this.sector === 5) {
+            // Sector 5 — Glitched Branches (Roadmap Part 30.4). Mark 1-2
+            // random edges glitched; clicking through one has a 30%
+            // chance to reroute to a sibling target on the same layer.
+            // Visual is a cyan/magenta flicker on the edge.
+            this.map.glitchedEdges = new Set();
+            const candidates = [];
+            this.map.nodes.forEach(src => {
+                if (src.type === 'start') return;
+                (src.connections || []).forEach(tid => {
+                    const tgt = this.map.nodes.find(n => n.id === tid);
+                    if (!tgt || tgt.type === 'boss') return;
+                    // Need at least one sibling on the same layer to
+                    // reroute TO — otherwise the glitch has no effect.
+                    const siblings = this.map.nodes.filter(n =>
+                        n.layer === tgt.layer && n.id !== tid
+                    );
+                    if (!siblings.length) return;
+                    candidates.push({ from: src.id, to: tid });
+                });
+            });
+            const glitchCount = Math.min(candidates.length, 1 + Math.floor(Math.random() * 2));
+            for (let i = 0; i < glitchCount; i++) {
+                const idx = Math.floor(Math.random() * candidates.length);
+                const pick = candidates.splice(idx, 1)[0];
+                if (pick) this.map.glitchedEdges.add(`${pick.from}|${pick.to}`);
+            }
+        }
         // S1 / S4 lazy state lives on this.map itself — initialised
         // here so visitNode reads a defined counter on first move.
         if (this.sector === 1) this.map._s1MoveCount = 0;
@@ -8743,6 +8807,23 @@ triggerSystemCrash() {
                     color = 'rgba(200, 210, 255, 0.55)'; width = 1.2; dasharray = '3,4'; opacity = 0.9;
                 }
                 if (!color) return;
+                // Per-sector edge specials (Part 30.4). ICED edges (S2)
+                // get a frosted overlay + map-path-iced class which CSS
+                // disables animation on, since they can't be traversed.
+                // GLITCHED edges (S5) keep their base colour but pick up
+                // map-path-glitched which CSS flickers cyan↔magenta.
+                const _edgeKey = `${node.id}|${target.id}`;
+                const _iced     = this.map.icedEdges     && this.map.icedEdges.has(_edgeKey);
+                const _glitched = this.map.glitchedEdges && this.map.glitchedEdges.has(_edgeKey);
+                if (_iced) {
+                    color = '#88eaff';
+                    width = 1.6;
+                    dasharray = '4,5';
+                    opacity = 0.85;
+                    pathClass = 'map-path-iced';
+                } else if (_glitched) {
+                    pathClass = (pathClass ? pathClass + ' ' : '') + 'map-path-glitched';
+                }
                 const d = pathD(node, target);
                 // Outer glow underlay (wide, blurred)
                 svgHTML += `<path d="${d}" fill="none" stroke="${color}" stroke-width="${width * 2}" stroke-linecap="round" opacity="0.35" filter="url(#map-line-glow)"/>`;
@@ -8792,6 +8873,43 @@ triggerSystemCrash() {
 
         // FIX: Removed early return for 'event'.
         // It must flow through the logic below to update currentIdx correctly.
+
+        // ── S2 ICED PATH guard (Roadmap Part 30.4). Block traversal if
+        // the edge from current node to this one is iced. Plays a short
+        // "FROZEN PATH" toast so the player knows why the click bounced
+        // and which event-screen to look out for to thaw.
+        if (this.map && this.map.icedEdges && this.map.icedEdges.size) {
+            const edgeKey = `${this.map.currentIdx}|${node.id}`;
+            if (this.map.icedEdges.has(edgeKey)) {
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 100,
+                    'FROZEN PATH — FIND HEAT VENT', '#88eaff');
+                AudioMgr.playSound('defend');
+                return;
+            }
+        }
+
+        // ── S5 GLITCHED EDGE resolution (Roadmap Part 30.4). 30% chance
+        // to reroute to a random sibling on the same layer. Done BEFORE
+        // any state changes so the rerouted node becomes the actual
+        // target of the rest of this method.
+        if (this.map && this.map.glitchedEdges && this.map.glitchedEdges.size) {
+            const edgeKey = `${this.map.currentIdx}|${node.id}`;
+            if (this.map.glitchedEdges.has(edgeKey) && Math.random() < 0.3) {
+                const siblings = this.map.nodes.filter(n =>
+                    n.layer === node.layer && n.id !== node.id && n.type !== 'boss'
+                );
+                if (siblings.length) {
+                    const reroute = siblings[Math.floor(Math.random() * siblings.length)];
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 120,
+                        `GLITCH REROUTE → ${reroute.type.toUpperCase()}`, '#ff5eb9');
+                    AudioMgr.playSound('glitch_attack', { volume: 0.6 });
+                    node = reroute;
+                }
+            }
+            // Consume the glitch — only fires once. Player who returns
+            // to map after combat sees a clean edge.
+            this.map.glitchedEdges.delete(edgeKey);
+        }
 
         // ── Per-sector map specials (Roadmap Part 30.4) — fired BEFORE
         // the node action so HOT damage lands before combat starts and

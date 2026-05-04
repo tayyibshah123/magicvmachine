@@ -304,9 +304,13 @@ Built `src/services/class-vfx.js` with `playSummon` / `playDeath` for all 6 clas
 - ✅ **S3 — Magma Rivers**: `_applySectorMapSpecials` tags 1-2 non-special middle-layer nodes `hot` at map gen in sector 3. `_consumeSectorMapSpecials` deals 5 HP env damage (bypasses shield) before the node action fires. CSS adds a pulsing molten halo + "HOT −5" label above the node.
 - ✅ **S4 — Hive Corruption**: `_tickSectorMapSpecials` infests one random combat node every map move in sector 4. `_consumeSectorMapSpecials` flags `_infestedCombatPending`, which `setupCombat` reads to bump enemy HP +25%. `winCombat` doubles the frag drop on infested kills with a "HIVE BOUNTY" floater. CSS adds a green corrupting halo + hue-rotate animation + "INFESTED ×2" label.
 
-**Deferred (require map-graph generation changes — Week 3):**
-- ❌ **S2 — Iced Paths**: blocking some map edges until a heat-vent event opens them. Touches `generateMap` connection logic + needs the heat-vent event to exist.
-- ❌ **S5 — Glitched Branches**: paths flicker between 2 destinations, resolved on click. Touches edge rendering in renderMap + visitNode resolution. The existing `node.shifting` mechanic covers a similar spirit (event-type re-rolls during play) but is sector-agnostic.
+### Day 4 (v1.4.5) — Map per-sector specials S2 + S5 closed
+- ✅ **S2 — Iced Paths**: `_applySectorMapSpecials` now builds `this.map.icedEdges` (Set of "from|to") at sector-2 map gen. Inbound-count check ensures icing never strands a layer. `visitNode` blocks travel through iced edges with a "FROZEN PATH — FIND HEAT VENT" toast. `renderMap` paints iced edges in cyan with frosted dashes via the new `.map-path-iced` class.
+- ✅ **Heat Vent event**: new EVENTS_DB entry "FROZEN VENT" (sector-2 conditional, gated by `icedEdges.size > 0`). Two options — "Crack the vent (-3 HP, thaws all)" clears the Set; "Bottle the vapour (+30 Fragments)" lets the player bank fragments at the cost of leaving the route blocked.
+- ✅ **S5 — Glitched Branches**: `_applySectorMapSpecials` builds `this.map.glitchedEdges` at sector-5 map gen, validating that every glitched edge has at least one same-layer sibling to reroute to. `visitNode` rolls 30% on a glitched-edge click and reroutes to a random sibling on the same layer with a "GLITCH REROUTE" floater + glitch_attack SFX. `renderMap` flickers glitched edges cyan→magenta→purple via `.map-path-glitched` keyframe.
+- ✅ Both new edge classes hold static under `body.reduced-motion` and `body.perf-low`.
+
+Part 30.4 is now **fully shipped** — all 5 per-sector map specials live.
 
 ---
 

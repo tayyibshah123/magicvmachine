@@ -5475,6 +5475,32 @@ body.reduced-motion .map-svg-root .map-path-completed,
 body.perf-low      .map-svg-root .map-path-active,
 body.perf-low      .map-svg-root .map-path-completed { animation: none; }
 
+/* S2 — ICED edge. Cyan frosted dashes, no animation (it's blocked).
+   The thick blurred underlay is intentionally still drawn upstream
+   so the iced edge has presence without looking traversable. */
+.map-svg-root .map-path-iced {
+    stroke: #88eaff !important;
+    stroke-dasharray: 4 5;
+    filter: drop-shadow(0 0 4px rgba(136, 234, 255, 0.85));
+    opacity: 0.85;
+}
+
+/* S5 — GLITCHED edge. Hue-rotate animation cycles cyan→magenta→cyan
+   so the line reads as "unstable, might not go where you think". */
+.map-svg-root .map-path-glitched {
+    animation: map-path-glitch 1.2s steps(4, end) infinite;
+    filter: drop-shadow(0 0 6px rgba(255, 94, 185, 0.7));
+}
+@keyframes map-path-glitch {
+    0%   { stroke: #00f3ff; }
+    25%  { stroke: #ff5eb9; }
+    50%  { stroke: #00f3ff; }
+    75%  { stroke: #bc13fe; }
+    100% { stroke: #00f3ff; }
+}
+body.reduced-motion .map-svg-root .map-path-glitched,
+body.perf-low      .map-svg-root .map-path-glitched { animation: none; }
+
 .map-node-abs {
     position: absolute;
     width: 58px; height: 58px;
