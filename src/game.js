@@ -30,6 +30,7 @@ import { FpsHud } from './services/fps-hud.js';
 import { CombatStats } from './services/combat-stats.js';
 import { TurnDigest } from './services/turn-digest.js';
 import { CombatRecap } from './services/combat-recap.js';
+import { ClassVfx } from './services/class-vfx.js';
 import { Diag } from './services/diag.js';
 import { Breakout } from './services/breakout.js';
 import { UI } from './services/ui.js';
@@ -19280,6 +19281,20 @@ drawEffects() {
         // RESET BOSS SILENCE
         AudioMgr.bossSilence = false;
 
+        // Week 2 — class-fantasy death cinematic (Roadmap Part 26.3).
+        // Plays at the player's last x/y BEFORE the screen transitions
+        // to GAMEOVER so the burst lands on the combat scene (otherwise
+        // the player is already off-screen). Wrapped: revive path above
+        // already returned, so this only fires on a real death.
+        try {
+            if (this.player && this.player.classId
+                && this.currentState !== STATE.BREAKOUT
+                && this.currentState !== STATE.TUTORIAL_COMBAT) {
+                ClassVfx.playDeath(this.player.classId, this.player.x, this.player.y);
+                if (this.shake) this.shake(14);
+            }
+        } catch (_) { /* never block gameOver on a VFX failure */ }
+
         // Challenge attempt ended in death — drop the active flag so the
         // menu chip + next start don't think the player is still in one.
         if (this.challengeMode) {
@@ -23010,9 +23025,18 @@ drawEntity(entity) {
             // run yet at construction time).
             if (entity instanceof Minion && !entity._spawnVfxFired && entity.x && entity.y) {
                 entity._spawnVfxFired = true;
-                const color = entity.isPlayerSide ? '#00f3ff' : '#ff00ff';
-                if (ParticleSys.createShockwave) ParticleSys.createShockwave(entity.x, entity.y, color, 24);
-                if (ParticleSys.createSparks) ParticleSys.createSparks(entity.x, entity.y, color, 10);
+                // Week 2 — class-fantasy summon VFX for player-side minions
+                // (Roadmap Part 26.2). Each class gets a distinct layered
+                // burst from src/services/class-vfx.js. Falls back to the
+                // generic shockwave + sparks for enemy-side minions and
+                // player-side minions on tutorial / unknown class.
+                if (entity.isPlayerSide && this.player && this.player.classId) {
+                    try { ClassVfx.playSummon(this.player.classId, entity.x, entity.y); } catch (_) {}
+                } else {
+                    const color = entity.isPlayerSide ? '#00f3ff' : '#ff00ff';
+                    if (ParticleSys.createShockwave) ParticleSys.createShockwave(entity.x, entity.y, color, 24);
+                    if (ParticleSys.createSparks) ParticleSys.createSparks(entity.x, entity.y, color, 10);
+                }
             }
         }
 
