@@ -507,6 +507,11 @@ const Game = {
         if (typeof Achievements !== 'undefined') {
             if (this.techFragments >= 10000) Achievements.unlock('FRAGMENTS_10K');
         }
+        // Day 5 — 100k fragments share-trigger (one-shot per save). Checked
+        // at boot AND every fragment grant via _checkFragmentMilestone so
+        // a player who crosses the threshold mid-run sees the pulse on
+        // the next victory or game-over screen.
+        try { this._checkFragmentMilestone(); } catch (_) {}
         // Bind the loop ONCE so requestAnimationFrame doesn't allocate a new
         // bound function every frame. That allocation was a steady source of
         // GC churn on mobile and correlated with the combat-lag drift
@@ -18381,7 +18386,14 @@ drawEffects() {
                 if (this.sector >= 5 && this.player) {
                     const firstRunComplete = !Achievements.isUnlocked('FIRST_RUN_COMPLETE');
                     Achievements.unlock('FIRST_RUN_COMPLETE');
-                    if (firstRunComplete) this.grantSparks(10, 'first_run_complete');
+                    if (firstRunComplete) {
+                        this.grantSparks(10, 'first_run_complete');
+                        // Day 5 — share-worthy moment: first-ever Sector-5 clear.
+                        // The flag is consumed by _renderVictoryCard which adds a
+                        // pulse class to btn-share-victory + a hint label above it.
+                        // Persists once per save so we don't pulse on every clear.
+                        try { this._flagShareTrigger('s5_first_clear', 'FIRST SECTOR 5 CLEAR'); } catch (_) {}
+                    }
                     const map = {
                         tactician: 'CLASS_TACTICIAN', arcanist: 'CLASS_ARCANIST',
                         bloodstalker: 'CLASS_BLOODSTALKER', annihilator: 'CLASS_ANNIHILATOR',
@@ -18407,6 +18419,20 @@ drawEffects() {
                     if (sel >= 10) Achievements.unlock('ASC_10');
                     if (sel >= 5) Achievements.unlock('ASC_5');
                     if (sel >= 1) Achievements.unlock('ASC_1');
+                    // Day 5 — share triggers (Asc 5+ clear, custom-run heavy
+                    // negative load). Both fire on the post-Sector-5 win
+                    // path. Asc 5+ flags every time but the localStorage
+                    // de-dupe inside _flagShareTrigger keeps it to one
+                    // pulse per (sel-bucket, save) combo.
+                    if (sel >= 5) {
+                        try { this._flagShareTrigger('asc_' + sel + '_clear', `ASCENSION ${sel} CLEAR`); } catch (_) {}
+                    }
+                    const _customNegCount = Array.isArray(this._customRunActive)
+                        ? this._customRunActive.filter(m => m && m.kind === 'negative').length
+                        : 0;
+                    if (_customNegCount >= 3) {
+                        try { this._flagShareTrigger('custom_3plus_neg', `MASOCHIST CERTIFIED · ${_customNegCount} HANDICAPS`); } catch (_) {}
+                    }
                 }
                 // Naked Power / Pristine
                 if (this.player && (!this.player.relics || this.player.relics.length === 0)) {
@@ -19162,6 +19188,10 @@ drawEffects() {
         // Chronicle entry (Roadmap Part 27) — every loss logs.
         this._logRunHistory('loss', { defeatedBy: this.enemy ? this.enemy.name : 'unknown' });
 
+        // Day 5 — re-check the fragment milestone before painting the death
+        // card so the share-button pulse fires on the same screen the
+        // player just earned 100k on (vs. waiting until next boot).
+        try { this._checkFragmentMilestone(); } catch (_) {}
         this.renderDeathCards();
         this.renderRunSummary('screen-gameover');
         this.changeState(STATE.GAMEOVER);
@@ -19179,7 +19209,39 @@ drawEffects() {
         const killer = (this.enemy && this.enemy.name) ? this.enemy.name : 'UNKNOWN';
         const operator = (Onboarding.getName && Onboarding.getName()) || 'OPERATOR';
         if (title) title.textContent = `OPERATOR ${operator}`;
-        if (desc) desc.textContent = `Defeated by ${killer}`;
+        // Day 5 — Cause of Death pill replaces the bare "Defeated by NAME"
+        // line. Pulls the actual killing-blow amount from CombatLog so the
+        // line reads "CAUSE OF DEATH: Signal Jammer — 13 DMG" with the real
+        // hit, not just the killer's name. Glitch-stutter on entry; one-shot.
+        if (desc) {
+            const _entries = (typeof CombatLog !== 'undefined' && CombatLog._entries) || [];
+            const _playerName = this.player ? this.player.name : null;
+            // Killing blow = the most recent damage event landing on the player.
+            // If multiple damage events on the same tick all overlap, the last
+            // one in the log is the closest to lethal — that's the read.
+            let _killBlow = null;
+            for (let i = _entries.length - 1; i >= 0; i--) {
+                const e = _entries[i];
+                if (e.type === 'damage' && e.targetName === _playerName) { _killBlow = e; break; }
+            }
+            const _killer = (_killBlow && _killBlow.sourceName) || killer;
+            const _amount = (_killBlow && typeof _killBlow.amount === 'number') ? _killBlow.amount : 0;
+            // Build as a glass-pill child of desc so layout preserves and any
+            // existing CSS expectations on #go-desc still apply.
+            desc.innerHTML = `
+                <span class="go-cause stutter" role="status" aria-live="polite">
+                    <span class="go-cause-label">CAUSE OF DEATH</span>
+                    <span class="go-cause-name">${_killer}</span>
+                    ${_amount > 0 ? `<span class="go-cause-dmg">— ${_amount} DMG</span>` : ''}
+                </span>
+            `;
+            // Remove the stutter class after the animation so a re-open of
+            // the death screen (retry-then-die) re-fires the entry beat.
+            const pill = desc.querySelector('.go-cause');
+            if (pill) {
+                setTimeout(() => pill.classList.remove('stutter'), 760);
+            }
+        }
 
         // Paint the killing enemy into the portrait slot (same pattern as
         // char-select preview — swap ctx, suppress ambient particles, draw,
@@ -19329,6 +19391,11 @@ drawEffects() {
             retryBtn.classList.add('death-cta-primary');
             menuBtn.classList.add('death-cta-secondary');
         }
+        // Day 5 — share-trigger pulse on the death-screen share button.
+        // Currently the only condition that fires from the death path is
+        // the 100k-fragment milestone (the player can hit that on a run
+        // that ends in death too).
+        try { this._renderShareTriggerHint('btn-share-run'); } catch (_) {}
     },
 
     renderRunSummary(screenId) {
@@ -19362,6 +19429,10 @@ drawEffects() {
     },
 
     _renderVictoryCard() {
+        // Day 5 — refresh the 100k milestone check at the moment the
+        // victory card is built; if a player crossed 100k on this run's
+        // fragment payouts the pulse should be on the same screen.
+        try { this._checkFragmentMilestone(); } catch (_) {}
         const s = this.runStats || {};
         const turns = s.turns || this.turnCount || 0;
         const dmg   = s.totalDamage || 0;
@@ -19415,6 +19486,11 @@ drawEffects() {
                 </div>
             `).join('');
         }
+        // Day 5 — share-trigger pulse on the victory share button if a
+        // notable beat fired (Sector-5 first clear, Asc 5+, custom-run
+        // 3+ negative). One-shot consumed inside the helper so opening
+        // the victory card later doesn't re-pulse.
+        try { this._renderShareTriggerHint('btn-share-victory'); } catch (_) {}
     },
 
 	restoreCombatButtons() {
@@ -19474,6 +19550,53 @@ drawEffects() {
         this.shakeTime = amount;
     },
     updateHUD() {},
+
+    // Day 5 — share-worthy moment trigger. Records that a notable beat
+    // just happened so the next victory/death screen activation can pulse
+    // the SHARE button + display a one-line hint label above it. Each
+    // (id, save-file) pair only fires once so a player who already shared
+    // their first Sector-5 clear isn't pestered on every subsequent run.
+    //
+    // Called from:
+    //   - winCombat (Sector-5 first clear, Asc 5+ clear, custom-run 3+ neg)
+    //   - _checkFragmentMilestone (100k cumulative fragments)
+    _flagShareTrigger(id, label) {
+        try {
+            const key = 'mvm_share_seen_' + id;
+            if (localStorage.getItem(key)) return;
+            localStorage.setItem(key, '1');
+        } catch (_) { /* corporate Safari Private — ignore + still flag */ }
+        this._shareTriggerPending = { id, label };
+    },
+
+    _checkFragmentMilestone() {
+        // 100k cumulative fragments — a real grind milestone, not just a
+        // boot-day reward. Fires once per save.
+        if ((this.techFragments || 0) >= 100000) {
+            this._flagShareTrigger('frag_100k', 'FRAGMENT HOARDER · 100K');
+        }
+    },
+
+    _renderShareTriggerHint(buttonId) {
+        // Reads + clears the pending flag, decorates the share button with
+        // a pulse class + adds (or refreshes) a small hint label above it.
+        const pending = this._shareTriggerPending;
+        if (!pending) return;
+        const btn = document.getElementById(buttonId);
+        if (!btn) return;
+        btn.classList.add('share-trigger-pulse');
+        // One-line hint inserted just above the button. Idempotent — if the
+        // hint already exists from a prior render, replace its text.
+        let hint = btn.previousElementSibling;
+        if (!hint || !hint.classList.contains('share-trigger-hint')) {
+            hint = document.createElement('div');
+            hint.className = 'share-trigger-hint';
+            btn.parentNode.insertBefore(hint, btn);
+        }
+        hint.textContent = `★ ${pending.label} — SHARE THIS`;
+        // Consume so a second screen activation doesn't re-decorate.
+        this._shareTriggerPending = null;
+    },
 
     // Day 3 — keeps the sector-turn chip's data-num attribute in sync
     // (the .compact CSS rule reads data-num to render "S·1" instead of

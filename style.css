@@ -13421,7 +13421,36 @@ body.reduced-motion.bloodstalker-critical::after {
     padding-top: 24px !important;
     padding-bottom: 32px !important;
     -webkit-overflow-scrolling: touch;
+    /* Day 5 — cyberpunk scanline overlay. Faint horizontal lines
+       drawn via repeating gradient over the radial death-screen
+       backdrop. Pointer-events none so it never eats taps. */
+    position: relative;
 }
+#screen-gameover::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+        to bottom,
+        rgba(255, 0, 85, 0.0) 0px,
+        rgba(255, 0, 85, 0.0) 2px,
+        rgba(255, 30, 80, 0.06) 3px,
+        rgba(255, 30, 80, 0.0) 4px
+    );
+    z-index: 1;
+    animation: gameover-scanline-drift 14s linear infinite;
+    opacity: 0.85;
+}
+@keyframes gameover-scanline-drift {
+    from { background-position: 0 0; }
+    to   { background-position: 0 80px; }
+}
+/* All death-screen content sits above the scanline overlay. */
+#screen-gameover > * { position: relative; z-index: 2; }
+/* Reduced motion / low-tier perf: hold the scanline static. */
+body.reduced-motion #screen-gameover::before,
+body.perf-low      #screen-gameover::before { animation: none; }
 #screen-gameover .run-summary {
     /* Bottom margin so the last row sits above the safe-area / screen
        padding even when the panel is the last scrollable element. */
@@ -13437,6 +13466,99 @@ body.reduced-motion.bloodstalker-critical::after {
     94% { text-shadow: 2px 0 #ff0055, -2px 0 #00f3ff; }
     96% { text-shadow: 0 0 16px var(--neon-pink); }
 }
+/* Day 5 — Cause of Death pill (replaces the bare "Defeated by NAME"
+   line). One-shot glitch-stutter on entry then settles into a
+   steady neon-pink pulse. */
+.go-cause {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px auto 4px;
+    padding: 6px 14px;
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(0.8rem, 2.6cqw, 1rem);
+    letter-spacing: 0.16em;
+    color: #ffe2e8;
+    background: linear-gradient(135deg, rgba(35, 0, 12, 0.78), rgba(8, 0, 4, 0.92));
+    border: 1px solid rgba(255, 30, 80, 0.55);
+    border-radius: 999px;
+    box-shadow: 0 0 18px rgba(255, 30, 80, 0.35),
+                inset 0 1px 0 rgba(255, 100, 130, 0.35);
+    text-shadow: 0 0 8px rgba(255, 30, 80, 0.45);
+    backdrop-filter: blur(4px);
+}
+.go-cause-label {
+    color: #ff5d7a;
+    text-shadow: 0 0 8px rgba(255, 93, 122, 0.6);
+    font-size: 0.78em;
+    opacity: 0.9;
+}
+.go-cause-name {
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 0 10px rgba(255, 93, 122, 0.55);
+}
+.go-cause-dmg {
+    font-weight: 800;
+    color: #ffd76a;
+    text-shadow: 0 0 10px rgba(255, 215, 106, 0.6);
+}
+.go-cause.stutter {
+    animation: go-cause-stutter 720ms steps(1, end) 1;
+}
+@keyframes go-cause-stutter {
+    0%   { transform: translate(0,0); filter: none; }
+    8%   { transform: translate(-3px, 1px); filter: hue-rotate(35deg) contrast(1.4); }
+    14%  { transform: translate(2px, -2px); filter: invert(0.15); }
+    22%  { transform: translate(-1px, 0); filter: none; }
+    28%  { transform: translate(3px, 1px); filter: hue-rotate(-30deg) saturate(1.6); }
+    36%  { transform: translate(0, 0); filter: none; }
+    100% { transform: translate(0, 0); filter: none; }
+}
+body.reduced-motion .go-cause.stutter,
+body.perf-low      .go-cause.stutter { animation: none; }
+
+/* Day 5 — Share-trigger hint + pulse. Fired on the post-victory and
+   post-death screens when a notable beat just happened (Sector-5 first
+   clear, Asc 5+ clear, custom-run with 3+ negatives, 100k fragments).
+   Hint label sits above the share button; pulse is a soft gold halo
+   that decays after a few seconds so it draws the eye without strobing.
+*/
+.share-trigger-hint {
+    margin: 6px auto 4px;
+    padding: 4px 10px;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    color: var(--neon-gold, #ffd76a);
+    text-shadow: 0 0 8px rgba(255, 215, 106, 0.55);
+    background: linear-gradient(135deg, rgba(40, 30, 0, 0.55), rgba(20, 15, 0, 0.6));
+    border: 1px solid rgba(255, 215, 106, 0.4);
+    border-radius: 999px;
+    text-align: center;
+    max-width: max-content;
+    animation: share-hint-fade-in 360ms ease-out both;
+}
+@keyframes share-hint-fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.share-trigger-pulse {
+    animation: share-trigger-pulse 1.6s ease-in-out infinite;
+    border-color: var(--neon-gold, #ffd76a) !important;
+    color: var(--neon-gold, #ffd76a) !important;
+}
+@keyframes share-trigger-pulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(255, 215, 106, 0.35); }
+    50%      { box-shadow: 0 0 18px rgba(255, 215, 106, 0.85),
+                           0 0 30px rgba(255, 215, 106, 0.45); }
+}
+body.reduced-motion .share-trigger-pulse,
+body.perf-low      .share-trigger-pulse {
+    animation: none;
+    box-shadow: 0 0 14px rgba(255, 215, 106, 0.5);
+}
+
 .death-card-best {
     border-color: var(--neon-gold) !important;
     background: linear-gradient(180deg, rgba(40, 30, 0, 0.9), rgba(20, 15, 0, 0.95)) !important;

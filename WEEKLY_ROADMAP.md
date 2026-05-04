@@ -177,6 +177,22 @@ Pending Day-5 wiring: when the autopsy/share screens arrive, those modules can r
 
 **Acceptance:** running a test death and a test Sector-5 win both surface the right card; share generates a 1080×1080 PNG via existing share.js.
 
+**Day 5 completion notes (v1.4.0):**
+- ✅ **Cause of Death pill** replaces the bare "Defeated by NAME" line on the death screen. Reads the actual killing-blow amount from `CombatLog._entries`, renders as `CAUSE OF DEATH: <killer> — <N> DMG` with neon-pink/gold layered styling.
+- ✅ **Glitch-stutter on entry** — one-shot 720ms keyframe animation (translate + filter hue-rotate / invert / saturate) that fires when the death screen activates. Class is removed after 760ms so a retry-then-die cycle re-fires the entry beat.
+- ✅ **Cyberpunk scanline overlay** — `#screen-gameover::before` paints a faint repeating-linear-gradient that drifts 80px over 14s. All death-screen content lifted to z-index 2 above it. Held static under `body.reduced-motion` and `body.perf-low`.
+- ✅ **Share triggers wired** for all four conditions:
+  - **Sector 5 first clear** — fires inside `winCombat` boss-clear block, gated by `Achievements.isUnlocked('FIRST_RUN_COMPLETE')`.
+  - **Asc 5+ clear** — fires for every Asc-5+ run; localStorage de-dupe keys per (asc-bucket, save) so a 5-run streak doesn't pulse 5 times.
+  - **Custom Run with 3+ negative modifiers** — counts `this._customRunActive.filter(m => m.kind === 'negative')` at sector-5 win.
+  - **100k cumulative fragments** — checked at boot, on `gameOver` entry, and inside `_renderVictoryCard` so the milestone surfaces on the next victory/death screen the player sees.
+- ✅ **Visual feedback** — share-trigger flag adds a `.share-trigger-pulse` class to `btn-share-victory` (or `btn-share-run` on death) and inserts a `.share-trigger-hint` label above it (`★ FIRST SECTOR 5 CLEAR — SHARE THIS`). Pulse decays / disabled under reduced-motion / low-tier perf.
+- ✅ One-shot per save via localStorage `mvm_share_seen_<id>` keys so a player who already shared their first Sector-5 clear isn't re-pestered.
+
+Existing share infrastructure (`src/services/share.js` + `btn-share-run` + `btn-share-victory`) untouched — Day 5 just added the trigger layer + glass cause-of-death pill on top.
+
+Vitest: 98/98 green. Bump to v1.4.0 (minor — Day 5 closes the post-game feedback loop the roadmap called for).
+
 ### Day 6 — Per-enemy death dissolves + idle micro-animations (Part 26.5, 26.6)
 - [ ] **Death dissolves per `kind`**: `mirror` → glass-shatter into shards; `frost` → ice-crack + steam; `immolate` already does its own; `burrow` → sink with dust column; `clone` → digital phantom split; `aoe_sweep` → radial gust; `chaotic` → pixelated noise burst; `observer` → eye-implode flash; default → existing explosion. Reuse particle pool, no new sprites needed.
 - [ ] **Idle anims per shape**: gentle hover bob for `wisp` and `drone`, treadle for `tank`, leg-shift for `spider`, scope-creep for `sniper`. All cap at 2 sin() per frame and gate via `Perf.tier === 'high'` if total cost trips Day 1's budget.
