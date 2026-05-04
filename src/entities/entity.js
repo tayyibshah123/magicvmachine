@@ -443,6 +443,21 @@ class Entity {
             Game.player._lastDamageDealt = Math.max(Game.player._lastDamageDealt || 0, actualDmg);
         }
 
+        // Per-entity Mirror tracking — each enemy/minion remembers the most
+        // recent hit it took from the player and from the player's side
+        // (player + player-side minions). Mirror enemies read the
+        // player-only field so summoned minions don't feed the parent's
+        // reflect; mirror minions read the broader player-side field so
+        // any allied source counts.
+        if (actualDmg > 0 && source) {
+            if (source instanceof Player) {
+                this._lastPlayerHitDmg = actualDmg;
+                this._lastPlayerSideHitDmg = actualDmg;
+            } else if (Minion && source instanceof Minion && source.isPlayerSide) {
+                this._lastPlayerSideHitDmg = actualDmg;
+            }
+        }
+
         // Expansion (5.2.1) — Phage Pod death explosion.
         if (Enemy && this instanceof Enemy && this.kind === 'detonator' && this.currentHp <= 0 && !this._detonated) {
             this._detonated = true;

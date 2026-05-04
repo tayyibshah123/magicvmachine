@@ -7292,7 +7292,10 @@ triggerSystemCrash() {
                 break;
             case 'mirror_attack':
                 label = `${ICONS.intentAttack} MIRROR STRIKE`;
-                body  = `Reflects your last damage die back at you for <strong>${val} damage</strong>.`;
+                {
+                    const _mirrorPct = { 1: 50, 2: 75, 3: 100, 4: 150, 5: 200 }[this.sector || 1] || 50;
+                    body = `Reflects <strong>${_mirrorPct}%</strong> of the last hit it took back at you for <strong>${val} damage</strong>.`;
+                }
                 break;
             case 'frost_aoe':
                 label = `${ICONS.intentMultiAttack} FROST WAVE`;
@@ -18001,8 +18004,19 @@ drawEffects() {
 
             min.playAnim('lunge');
             await this.sleep(300);
-            const targets = [this.player, ...this.player.minions];
-            const t = targets[Math.floor(Math.random() * targets.length)];
+            // Mirror minion override — when the parent enemy is mirror-kind,
+            // the minion always strikes the player and deals a sector-scaled
+            // reflect of the last hit it took from the player OR a player-side
+            // minion (broader pool than the parent enemy, which excludes
+            // minion damage).
+            const _mirrorMinion = this.enemy && this.enemy.kind === 'mirror';
+            const targets = _mirrorMinion
+                ? [this.player]
+                : [this.player, ...this.player.minions];
+            const t = _mirrorMinion ? this.player : targets[Math.floor(Math.random() * targets.length)];
+            if (_mirrorMinion) {
+                ParticleSys.createFloatingText(min.x, min.y - 100, "REFLECT", "#88eaff");
+            }
             if(t) {
                 this.triggerVFX('micro_laser', min, t, () => {
                     // Null-safe leech: triggerVFX callbacks fire after a
@@ -18018,7 +18032,15 @@ drawEffects() {
                     // tick (chained kills via Bomb Bot, lifesteal, etc.),
                     // bail before invoking takeDamage on a dead entity.
                     if (!t || t.currentHp <= 0) return;
-                    const dmgOut = (typeof min.getEffectiveDamage === 'function') ? min.getEffectiveDamage(min.dmg) : min.dmg;
+                    let dmgOut;
+                    if (_mirrorMinion) {
+                        const _mirrorPctMap = { 1: 0.5, 2: 0.75, 3: 1.0, 4: 1.5, 5: 2.0 };
+                        const _pct = _mirrorPctMap[this.sector || 1] || 0.5;
+                        const _src = min._lastPlayerSideHitDmg || min.dmg;
+                        dmgOut = Math.max(4, Math.floor(_src * _pct));
+                    } else {
+                        dmgOut = (typeof min.getEffectiveDamage === 'function') ? min.getEffectiveDamage(min.dmg) : min.dmg;
+                    }
                     if (t.takeDamage(dmgOut, min) && t === this.player) { this.gameOver(); return; }
                     if (t !== this.player && t.currentHp <= 0) {
                          if (this.player.traits.maxMinions === 4 && Math.random() < 0.3) {
@@ -26217,10 +26239,101 @@ drawEntity(entity) {
                     ctx.fill();
                 }
             }
+            else if (this.enemy && this.enemy.kind === 'mirror') {
+                // MIRROR MINION — floating glass shard cluster. Translucent
+                // body reads as a held mirror plate; orbiting shards drift
+                // around it so the silhouette never looks like a generic
+                // prism minion. Glassy palette is fixed (cool blue-white)
+                // so the reflect identity reads at every sector.
+                const glassFill   = 'rgba(160, 220, 255, 0.18)';
+                const glassEdge   = '#cfeaff';
+                const shardCol    = '#bfe6ff';
+                const glow        = '#aee0ff';
+                const hover = Math.sin(time * 2.4) * 5;
+                ctx.translate(0, hover);
+
+                // Soft halo behind the shard cluster.
+                {
+                    const haloR = 30;
+                    const halo = ctx.createRadialGradient(0, 0, 4, 0, 0, haloR);
+                    halo.addColorStop(0, 'rgba(200, 235, 255, 0.55)');
+                    halo.addColorStop(0.6, 'rgba(140, 200, 255, 0.18)');
+                    halo.addColorStop(1, 'rgba(140, 200, 255, 0)');
+                    ctx.fillStyle = halo;
+                    ctx.beginPath(); ctx.arc(0, 0, haloR, 0, Math.PI * 2); ctx.fill();
+                }
+
+                // Central mirror plate — diamond, slowly tumbling. Two
+                // layers (back darker, front translucent) sell pane
+                // thickness at small scale.
+                ctx.save();
+                ctx.rotate(Math.sin(time * 0.6) * 0.25);
+                ctx.shadowColor = glow; ctx.shadowBlur = 14;
+                ctx.fillStyle = 'rgba(20, 40, 60, 0.55)';
+                ctx.strokeStyle = glassEdge; ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(0, -16); ctx.lineTo(11, 0); ctx.lineTo(0, 16); ctx.lineTo(-11, 0); ctx.closePath();
+                ctx.fill(); ctx.stroke();
+                // Front glass overlay with a diagonal highlight band.
+                ctx.fillStyle = glassFill;
+                ctx.beginPath();
+                ctx.moveTo(0, -16); ctx.lineTo(11, 0); ctx.lineTo(0, 16); ctx.lineTo(-11, 0); ctx.closePath();
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.lineWidth = 1.2;
+                ctx.beginPath(); ctx.moveTo(-7, -3); ctx.lineTo(4, 9); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(-3, -10); ctx.lineTo(8, 1); ctx.stroke();
+                ctx.restore();
+
+                // Orbiting glass shards — six small triangles drifting on
+                // wobbling orbits at varied radii so the cluster never
+                // locks into a stiff ring.
+                ctx.save();
+                ctx.shadowColor = glow; ctx.shadowBlur = 6;
+                for (let i = 0; i < 6; i++) {
+                    const baseA = (Math.PI * 2 / 6) * i + time * (0.5 + i * 0.07);
+                    const wob = Math.sin(time * 1.6 + i * 1.3) * 3;
+                    const orb = 22 + (i % 3) * 4 + wob;
+                    const sx = Math.cos(baseA) * orb;
+                    const sy = Math.sin(baseA) * orb * 0.9;
+                    const spin = baseA + time * 1.4;
+                    ctx.save();
+                    ctx.translate(sx, sy);
+                    ctx.rotate(spin);
+                    // Shard fill — translucent, pale-blue glass.
+                    ctx.fillStyle = 'rgba(190, 230, 255, 0.55)';
+                    ctx.strokeStyle = shardCol;
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(0, -4);
+                    ctx.lineTo(3, 1);
+                    ctx.lineTo(-2, 4);
+                    ctx.closePath();
+                    ctx.fill(); ctx.stroke();
+                    // Catch-light pip on each shard's leading edge.
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                    ctx.beginPath(); ctx.arc(0, -2, 0.7, 0, Math.PI * 2); ctx.fill();
+                    ctx.restore();
+                }
+                ctx.restore();
+
+                // Sweeping catch-light arc around the cluster — sells
+                // "glass surface catching the room light".
+                ctx.save();
+                const sweep = (time * 1.4) % (Math.PI * 2);
+                ctx.strokeStyle = 'rgba(235, 250, 255, 0.85)';
+                ctx.shadowColor = glow; ctx.shadowBlur = 8;
+                ctx.lineWidth = 1.6;
+                ctx.beginPath();
+                ctx.arc(0, 0, 18, sweep, sweep + 0.5);
+                ctx.stroke();
+                ctx.restore();
+            }
             else if (entity.tier === 3 || entity.name.includes("Glitch") || entity.name.includes("Guardian")) {
                 const pulse = 1 + 0.05 * Math.sin(time * 4);
                 ctx.scale(pulse, pulse);
-                ctx.save(); ctx.rotate(time * 0.8); 
+                ctx.save(); ctx.rotate(time * 0.8);
                 ctx.strokeStyle = mColor; ctx.lineWidth = 2; ctx.shadowColor = mGlow; ctx.shadowBlur = 15; ctx.fillStyle = mFill;
                 ctx.beginPath();
                 const spikes = 4;

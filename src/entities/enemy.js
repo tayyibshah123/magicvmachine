@@ -4,6 +4,14 @@ import { Entity } from './entity.js';
 import { Game } from '../game.js';
 import { STATE } from '../constants.js';
 
+// Mirror entity reflect percentage by sector. Ramps so a Sector-5 mirror
+// turns a heavy hit into double damage right back at the player.
+const MIRROR_REFLECT_PCT = { 1: 0.5, 2: 0.75, 3: 1.0, 4: 1.5, 5: 2.0 };
+function mirrorReflectPct(sector) {
+    return MIRROR_REFLECT_PCT[sector] || (sector >= 5 ? 2.0 : 0.5);
+}
+export { mirrorReflectPct };
+
 
 class Enemy extends Entity {
     constructor(template, level, isElite = false) {
@@ -313,9 +321,15 @@ class Enemy extends Entity {
             return { type: 'attack', val: this.baseDmg, target: getTarget() };
         }
         if (this.kind === 'mirror') {
-            // Reflects the player's last-used damage die value; falls back to baseDmg.
-            const mirrored = (Game.player && Game.player._lastDamageDealt) ? Game.player._lastDamageDealt : this.baseDmg;
-            return { type: 'mirror_attack', val: Math.max(4, Math.floor(mirrored * 0.85)), target: Game.player };
+            // Reflects a percentage of the last hit this entity took FROM
+            // THE PLAYER directly (player-side minion damage is excluded —
+            // mirror minions get the broader player-side pool). Reflect %
+            // ramps with sector so later mirrors punish bigger hits:
+            // S1 50% · S2 75% · S3 100% · S4 150% · S5 200%+.
+            const sector = (Game && Game.sector) || 1;
+            const pct = mirrorReflectPct(sector);
+            const baseSrc = this._lastPlayerHitDmg || this.baseDmg;
+            return { type: 'mirror_attack', val: Math.max(4, Math.floor(baseSrc * pct)), target: Game.player };
         }
         if (this.kind === 'frost') {
             // 50/50 frost AoE (Weak debuff) or basic attack.
