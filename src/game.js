@@ -12346,6 +12346,16 @@ async startTurn() {
         // Turn counter HUD (Phase 4e)
         const turnEl = document.getElementById('turn-display');
         if (turnEl) turnEl.innerText = `TURN ${this.turnCount}`;
+        // Sector/turn chip (Day 3 — mobile densification): collapse to a
+        // compact single-line pill once the player has had a few turns to
+        // read SECTOR and the mech blurb. Tap re-expands. We only auto-
+        // apply from turn 4 onward — turn 1-3 keeps the full label so a
+        // returning-from-shop player sees the full context again first.
+        this._syncSectorChip();
+        if (this.turnCount >= 4) {
+            const grp = document.querySelector('#hud .sector-turn-group');
+            if (grp && !grp.dataset.userExpanded) grp.classList.add('compact');
+        }
         this.player.incomingDamageMult = 1;
         this.freeRerollUsedThisTurn = false;
 
@@ -19407,6 +19417,36 @@ drawEffects() {
         this.shakeTime = amount;
     },
     updateHUD() {},
+
+    // Day 3 — keeps the sector-turn chip's data-num attribute in sync
+    // (the .compact CSS rule reads data-num to render "S·1" instead of
+    // "SECTOR 1") and lazily binds the tap-to-expand handler. Idempotent:
+    // safe to call from every turn, every sector change.
+    _syncSectorChip() {
+        const grp = document.querySelector('#hud .sector-turn-group');
+        if (!grp) return;
+        const sec = document.getElementById('sector-display');
+        if (sec) sec.setAttribute('data-num', String(this.sector || 1));
+        if (grp.dataset.tapBound) return;
+        grp.dataset.tapBound = '1';
+        // Make it focusable + keyboard-toggleable for accessibility — the
+        // chip is interactive (tap to read full sector blurb) and would
+        // otherwise be invisible to screen readers / keyboard users.
+        grp.setAttribute('role', 'button');
+        grp.setAttribute('tabindex', '0');
+        grp.setAttribute('aria-label', 'Sector and turn — tap to expand or collapse');
+        const _toggle = () => {
+            const expanded = grp.classList.toggle('compact');
+            // Track the player's last manual choice so the auto-collapse
+            // at turn 4+ doesn't override an explicit expand.
+            if (!expanded) grp.dataset.userExpanded = '1';
+            else delete grp.dataset.userExpanded;
+        };
+        grp.addEventListener('click', _toggle);
+        grp.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); _toggle(); }
+        });
+    },
 
     updateMinionPositions() {
         const spacing = 280;

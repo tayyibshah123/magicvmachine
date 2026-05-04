@@ -144,6 +144,14 @@ Non-actionable findings retained as documented (game-container is intentionally 
 
 **Acceptance:** at 360×800, the combat scene has no overlap between HUD chrome and entities; intent text remains readable.
 
+**Day 3 completion notes (v1.3.8):**
+- ✅ **Sector/turn chip restyled** as a glass-edged compact pill (cyan border + inset glow + backdrop-blur). Tap-to-toggle handler bound, role="button"/tabindex/aria-label set for keyboard + screen-reader access.
+- ✅ **Auto-collapse** at turn 4+ — chip flips to single-line "S·N TURN N" form, mech blurb hidden. Manual expand persists for the rest of combat (`data-user-expanded` flag) so an explicit player tap isn't overridden by the next auto-collapse.
+- ✅ **Tooltip** densified for mobile — `max-width: min(250px, calc(100% - 24px))` so it can't push past container edges on a 360-wide phone. Glass-edge inset highlight + backdrop blur for cyberpunk panel-family consistency.
+- ⏭ **Health-bar ribbon deferred to Day 6** — slimming the canvas bar from 30→18px breaks HP text (33px Orbitron) + shield/charges/effect-icon anchors that all key off bar height. Will revisit alongside enemy idle anims and per-kind death dissolves where I'm in canvas render anyway.
+
+98/98 vitest green. Three text-color tokens still readable for the chip in compact mode (sector pip uses neon-purple, turn counter inherits neon-blue).
+
 ### Day 4 — End-of-turn digest + end-of-combat recap (Part 31.1, 31.2)
 - [ ] **End-of-turn floater (2s)**: top-centre glass card — `TURN N · DEALT X · TAKEN Y · DICE USED Z · <class metric>`. Opacity fade in/out. Skippable with tap.
 - [ ] **End-of-combat recap card (3s, dismissible)**: portrait-vs-portrait, total dmg dealt vs taken, "Biggest hit: N", three highlight chips (combo names triggered, parries, lifesteals). Plays before the reward screen.
