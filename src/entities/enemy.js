@@ -89,6 +89,37 @@ class Enemy extends Entity {
         return Math.max(0, dmg);
     }
 
+    /* Roadmap Part 2.6 — intent clarity breakdown. Mirrors the math in
+       getEffectiveDamage but returns the chain of modifiers that turned
+       the raw value into the displayed value. Tooltips in game.js read
+       this so the player can see WHY their displayed intent damage went
+       up or down — "20 raw · ÷2 WEAK · ×1.25 BRITTLE = 12 final".
+       Called only on hover; the per-frame intent value resolution still
+       uses getEffectiveDamage's tighter path. */
+    getEffectiveDamageBreakdown(baseVal) {
+        const raw = baseVal || this.baseDmg;
+        const mods = [];
+        let dmg = raw;
+        const constrict = this.hasEffect('constrict');
+        if (constrict) {
+            const before = dmg;
+            dmg = Math.floor(dmg * constrict.val);
+            mods.push({ label: 'CONSTRICT', delta: dmg - before, factor: constrict.val });
+        }
+        const weak = this.hasEffect('weak');
+        if (weak) {
+            const before = dmg;
+            dmg = Math.floor(dmg * 0.5);
+            mods.push({ label: 'WEAK', delta: dmg - before, factor: 0.5 });
+        }
+        if (this.affixes && this.affixes.includes('Brittle')) {
+            const before = dmg;
+            dmg = Math.floor(dmg * 1.25);
+            mods.push({ label: 'BRITTLE', delta: dmg - before, factor: 1.25 });
+        }
+        return { raw, mods, final: Math.max(0, dmg) };
+    }
+
     decideTurn() {
         this.nextIntents = [];
         // Archivist rewind cooldown resets at the start of each round so the

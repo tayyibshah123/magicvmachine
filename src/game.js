@@ -31,6 +31,7 @@ import { CombatStats } from './services/combat-stats.js';
 import { TurnDigest } from './services/turn-digest.js';
 import { CombatRecap } from './services/combat-recap.js';
 import { ClassVfx } from './services/class-vfx.js';
+import { Cosmetics } from './services/cosmetics.js';
 import { Diag } from './services/diag.js';
 import { Breakout } from './services/breakout.js';
 import { UI } from './services/ui.js';
@@ -503,7 +504,17 @@ const Game = {
                 if (s.newStreak >= 7)  Achievements.unlock('STREAK_7');
                 if (s.newStreak >= 3)  Achievements.unlock('STREAK_3');
             }
+            // Roadmap Part 4.6 — grant streak-locked cosmetics whenever
+            // the streak is high enough. Idempotent inside the service,
+            // so calling it on every boot just no-ops once owned.
+            try { Cosmetics.grantFromStreak(s.newStreak || 0); } catch (_) {}
         } catch (e) { /* ignore */ }
+        // Apply the player's equipped cosmetic to <body> so the menu
+        // / sanctuary / combat all see the same body class set on first
+        // paint. Before this hook, equipping a cosmetic only took effect
+        // after the next equip-from-shop (because applyToBody only runs
+        // there) — a soft-reload would lose the visual.
+        try { Cosmetics.applyToBody(); } catch (_) {}
         // Fire fragment milestone at boot
         if (typeof Achievements !== 'undefined') {
             if (this.techFragments >= 10000) Achievements.unlock('FRAGMENTS_10K');
@@ -3907,6 +3918,68 @@ startQTE(type, x, y, callback, opts) {
                         try { Hints && Hints.trigger && Hints.trigger('first_sanctuary_spend'); } catch (_) {}
                         div.style.borderColor = '#ff3355';
                         setTimeout(() => div.style.borderColor = 'rgba(255,215,106,0.55)', 220);
+                    }
+                };
+                list.appendChild(div);
+            });
+        }
+
+        // Cosmetics (Roadmap Part 4.6) — pure-visual purchasables and
+        // streak unlocks. Reuses the same upgrade-card grid template
+        // so the section reads as another Sanctuary slot, not a
+        // separate screen. Equipped item gets a "EQUIPPED" pip;
+        // owned-but-unequipped items show "EQUIP". Locked items show
+        // their cost or the streak gate.
+        if (typeof Cosmetics !== 'undefined') {
+            const cosHeader = document.createElement('div');
+            cosHeader.className = 'meta-section-header';
+            cosHeader.style.cssText = 'grid-column: 1 / -1; padding: 14px 0 6px; color: #5eead4; font-family: Orbitron; letter-spacing: 0.12em; border-top: 1px solid rgba(94,234,212,0.35); margin-top: 8px; text-align: center;';
+            cosHeader.textContent = '◆ COSMETICS';
+            list.appendChild(cosHeader);
+            const equipped = Cosmetics.equipped();
+            Cosmetics.all().forEach(c => {
+                if (c.id === 'default') return; // hide the no-op default
+                const owned = Cosmetics.isOwned(c.id);
+                const isEquipped = owned && c.id === equipped;
+                const div = document.createElement('div');
+                div.className = `upgrade-card ${owned ? 'unlocked' : ''} cosmetic-card`;
+                if (!owned) div.style.borderColor = 'rgba(94,234,212,0.45)';
+                let priceText;
+                if (isEquipped) priceText = 'EQUIPPED';
+                else if (owned) priceText = 'EQUIP';
+                else if (c.requires === 'streak30') priceText = '30-DAY STREAK';
+                else if (c.requires === 'streak100') priceText = '100-DAY STREAK';
+                else priceText = c.cost + ' ✦';
+                div.innerHTML = `
+                    <div class="upgrade-icon" style="color: #5eead4;">◆</div>
+                    <div class="upgrade-info">
+                        <div class="upgrade-name">${c.name}</div>
+                        <div class="upgrade-desc">${c.desc}</div>
+                    </div>
+                    <div class="upgrade-cost" style="color: ${isEquipped ? '#ffd76a' : '#5eead4'};">${priceText}</div>
+                `;
+                div.onclick = () => {
+                    if (isEquipped) return;
+                    if (owned) {
+                        Cosmetics.equip(c.id);
+                        AudioMgr.playSound('click');
+                        this.renderMeta();
+                        return;
+                    }
+                    if (c.requires) {
+                        // Streak-gated — flash a "locked" outline and bail.
+                        div.style.borderColor = '#ff3355';
+                        setTimeout(() => div.style.borderColor = 'rgba(94,234,212,0.45)', 220);
+                        return;
+                    }
+                    if (Cosmetics.purchase(c.id)) {
+                        Cosmetics.equip(c.id);
+                        AudioMgr.playSound('upgrade');
+                        this.renderMeta();
+                    } else {
+                        try { Hints && Hints.trigger && Hints.trigger('first_sanctuary_spend'); } catch (_) {}
+                        div.style.borderColor = '#ff3355';
+                        setTimeout(() => div.style.borderColor = 'rgba(94,234,212,0.45)', 220);
                     }
                 };
                 list.appendChild(div);
@@ -7505,18 +7578,42 @@ triggerSystemCrash() {
             randomLine += `\n<span style="color:#ff00ff;">⚡ Glitch Modifier: damage values may roll randomly.</span>`;
         }
 
-        // Modifier transparency: show how the displayed value differs from the base.
+        // Modifier transparency (Roadmap Part 2.6 — intent clarity).
+        // When the displayed value differs from the raw intent.val, show
+        // a step-by-step breakdown built from the enemy's own
+        // getEffectiveDamageBreakdown() so the player can see exactly
+        // which buffs/debuffs shifted the number. Falls back to the
+        // older coarse rollup when the breakdown method isn't available
+        // (e.g. for non-Enemy intents that route through here).
         let modLine = '';
         if (val !== intent.val && intent.val !== undefined && val !== undefined) {
-            const sign = val < intent.val ? '-' : '+';
-            const delta = Math.abs(val - intent.val);
-            const reasons = [];
-            if (enemy && enemy.hasEffect && enemy.hasEffect('weak')) reasons.push('WEAK (−50%)');
-            if (enemy && enemy.hasEffect && enemy.hasEffect('constrict')) reasons.push('CONSTRICT');
-            if (this.player && this.player.hasEffect && this.player.hasEffect('vulnerable')) reasons.push('VULNERABLE (+1)');
-            if (this.player && this.player.hasEffect && this.player.hasEffect('frail')) reasons.push('FRAIL (+30%)');
-            const why = reasons.length ? ` (${reasons.join(', ')})` : '';
-            modLine = `\n<small style="color:#888;">(Base ${intent.val}, modified ${sign}${delta}${why})</small>`;
+            if (enemy && typeof enemy.getEffectiveDamageBreakdown === 'function') {
+                const bd = enemy.getEffectiveDamageBreakdown(intent.val);
+                if (bd && bd.mods && bd.mods.length) {
+                    const steps = bd.mods.map(m => {
+                        const pct = Math.round((m.factor - 1) * 100);
+                        const sign = pct >= 0 ? '+' : '';
+                        return `<span style="color:#aac;">${m.label}</span> <span style="color:#ccc;">(${sign}${pct}%)</span>`;
+                    }).join(' → ');
+                    modLine = `\n<small style="color:#888;">${bd.raw} raw → ${steps} = <strong style="color:#fff;">${bd.final}</strong></small>`;
+                }
+            }
+            // Fallback / additional context — player-side debuffs (vulnerable,
+            // frail) modify INCOMING damage, which the enemy-side
+            // breakdown doesn't capture. Append them as a player-side note.
+            const playerReasons = [];
+            if (this.player && this.player.hasEffect && this.player.hasEffect('vulnerable')) playerReasons.push('VULNERABLE (+1)');
+            if (this.player && this.player.hasEffect && this.player.hasEffect('frail')) playerReasons.push('FRAIL (+30%)');
+            if (playerReasons.length) {
+                modLine += `\n<small style="color:#a88;">+ on you: ${playerReasons.join(', ')}</small>`;
+            }
+            // Hard fallback — if nothing landed in modLine yet, show the
+            // legacy coarse rollup so the line never goes silent.
+            if (!modLine) {
+                const sign = val < intent.val ? '-' : '+';
+                const delta = Math.abs(val - intent.val);
+                modLine = `\n<small style="color:#888;">(Base ${intent.val}, modified ${sign}${delta})</small>`;
+            }
         }
 
         return `${indexLine}\n<span style="color:var(--neon-blue); font-weight:bold;">${label}</span>\n${body}${secondaryLine}${randomLine}${modLine}`;

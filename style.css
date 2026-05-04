@@ -899,6 +899,70 @@ body.asc-frame-silver   h1.title,
 body.asc-frame-gold     h1.title,
 body.asc-frame-obsidian h1.title { position: relative; }
 
+/* ─────────────────────────────────────────────────────────────────
+ * Cosmetics (Roadmap Part 4.6) — body classes applied by the
+ * Cosmetics service when an item is equipped. Pure visual; no
+ * gameplay effect. Stacks BEHIND the asc-frame-* bands from
+ * Week 2 (different layer, different earn).
+ * ───────────────────────────────────────────────────────────────── */
+/* Circuit Frame — soft cyan brackets around the menu title.
+   Earned at the 30-day login streak. */
+body.cosmetic-frame-circuit h1.title { position: relative; }
+body.cosmetic-frame-circuit h1.title::after {
+    content: '';
+    position: absolute;
+    inset: -14px -22px;
+    pointer-events: none;
+    border: 1.5px solid #4ad8ff;
+    border-radius: 6px;
+    opacity: 0.55;
+    box-shadow: 0 0 18px rgba(74, 216, 255, 0.45);
+    -webkit-mask:
+        linear-gradient(90deg, #000 0 18%, transparent 18% 82%, #000 82% 100%) top/100% 14px no-repeat,
+        linear-gradient(90deg, #000 0 18%, transparent 18% 82%, #000 82% 100%) bottom/100% 14px no-repeat,
+        linear-gradient(0deg,  #000 0 18%, transparent 18% 82%, #000 82% 100%) left/14px 100% no-repeat,
+        linear-gradient(0deg,  #000 0 18%, transparent 18% 82%, #000 82% 100%) right/14px 100% no-repeat;
+            mask:
+        linear-gradient(90deg, #000 0 18%, transparent 18% 82%, #000 82% 100%) top/100% 14px no-repeat,
+        linear-gradient(90deg, #000 0 18%, transparent 18% 82%, #000 82% 100%) bottom/100% 14px no-repeat,
+        linear-gradient(0deg,  #000 0 18%, transparent 18% 82%, #000 82% 100%) left/14px 100% no-repeat,
+        linear-gradient(0deg,  #000 0 18%, transparent 18% 82%, #000 82% 100%) right/14px 100% no-repeat;
+}
+/* Centurion Title — gold-overprint on the menu title. Earned at
+   the 100-day login streak. */
+body.cosmetic-title-centurion h1.title {
+    background: linear-gradient(90deg, #ffd76a, #fff7c2, #ffd76a) !important;
+    -webkit-background-clip: text !important;
+    background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    filter: drop-shadow(0 0 14px rgba(255, 215, 106, 0.7));
+}
+/* Glitch Overlay — title flickers magenta on the off-beat. */
+body.cosmetic-title-glitch h1.title {
+    animation: cosmetic-title-glitch 4.2s steps(8, end) infinite;
+}
+@keyframes cosmetic-title-glitch {
+    0%, 88%, 100% { text-shadow: 0 0 12px rgba(0, 243, 255, 0.55); }
+    90%   { text-shadow: -3px 0 #ff5eb9, 3px 0 #00f3ff; transform: translateX(-1px); }
+    93%   { text-shadow: 2px 0 #ff5eb9, -2px 0 #00f3ff; transform: translateX(2px); }
+    96%   { text-shadow: 0 0 12px rgba(255, 94, 185, 0.6); transform: translateX(0); }
+}
+body.reduced-motion.cosmetic-title-glitch h1.title,
+body.perf-low.cosmetic-title-glitch h1.title { animation: none; }
+/* Drift Echo — title leaves a ghost-trail when the menu enters.
+   One-shot via the existing screen-active class so the trail
+   reads as the menu "settling in" rather than constantly drifting. */
+body.cosmetic-title-drift #screen-start.active h1.title {
+    animation: cosmetic-title-drift 1.4s ease-out 1;
+}
+@keyframes cosmetic-title-drift {
+    0%   { text-shadow: -8px 0 rgba(0, 243, 255, 0.6), 8px 0 rgba(255, 94, 185, 0.6); transform: translateX(0); }
+    60%  { text-shadow: -3px 0 rgba(0, 243, 255, 0.4), 3px 0 rgba(255, 94, 185, 0.4); }
+    100% { text-shadow: 0 0 12px rgba(0, 243, 255, 0.5); }
+}
+body.reduced-motion.cosmetic-title-drift #screen-start.active h1.title,
+body.perf-low.cosmetic-title-drift #screen-start.active h1.title { animation: none; }
+
 /* Reward-flyer (P10): clone that animates from card → relic strip on pickup */
 .reward-flyer {
     position: fixed;
