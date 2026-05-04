@@ -586,7 +586,7 @@ body {
     margin: 0 auto;
 }
 .sector-intro.active .sector-intro-sweep {
-    animation: sector-sweep 1100ms ease-in-out;
+    animation: sector-sweep 2000ms ease-in-out;
 }
 @keyframes sector-sweep {
     0%   { opacity: 0; transform: scaleX(0.2); }

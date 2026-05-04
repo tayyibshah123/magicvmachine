@@ -5423,11 +5423,15 @@ triggerPhaseGlitch() {
         void overlay.offsetHeight;
         overlay.classList.add('active');
         if (AudioMgr && AudioMgr.playSound) AudioMgr.playSound('mana');
+        // Hold the panel long enough that the fade-in (~400ms) doesn't eat
+        // the readable window. 2000ms total = ~1.6s fully visible after the
+        // content settles, which clears the "at least 1s readable" bar with
+        // headroom for slower readers / the sector-mechanic blurb line.
         return new Promise(resolve => {
             setTimeout(() => {
                 overlay.classList.remove('active');
                 setTimeout(() => { overlay.classList.add('hidden'); resolve(); }, 240);
-            }, 1100);
+            }, 2000);
         });
     },
 
