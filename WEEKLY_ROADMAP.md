@@ -97,6 +97,27 @@ Target velocity: 1 shippable PR-equivalent per day, all under the constraints in
 
 **Acceptance:** combat at sector 5 with 1 boss + 2 minions + 3 player minions sustains ≥55fps mid-tier, ≥58fps high-tier.
 
+**Day 1 completion notes (v1.3.6):**
+- ✅ FPS HUD built — `src/services/fps-hud.js`. Glass-edged top-right panel showing live fps (mint/amber/red coded), tier badge, p50/p95/p99, top-4 render sections by avg ms.
+- ✅ Settings toggle wired — Settings → Accessibility → "Show FPS overlay (dev)". Persists in `mvm_settings_v1.showFps`. Default off → zero cost in prod.
+- ✅ DevTools shortcut — `__fps.show()` / `__fps.hide()` / `__fps.toggle()` (matches `__perf` / `__diag`).
+- ✅ Render annotation already in place — `PerfTrace` was already wired with `beginFrame/mark/endFrame` covering entities, intent line, effects, qte, health bars, particles.update, particles.draw, vignette, screenFlash. The HUD reads `Perf.trace.frameStats()` + `topSections()` directly, so no new measurement loop.
+- ✅ Hotspot pass — mirror-entity plate gradient cached (~180 allocs/sec saved at sector 5 with 1 mirror enemy + 2 minions); shimmer arc / second highlight pip dropped on `Perf.tier === 'low'`; mirror-minion shard count scales 6 (high) → 4 (mid) → 0 (low); all `shadowBlur` calls in mirror render now route through `Perf.shadowBlur(base)` instead of hard-coding.
+
+**Manual step (you):** Sideload v1.3.6 on a mid-spec phone (Pixel 6a / Galaxy A54 / iPhone 12), open Settings → Accessibility → toggle "Show FPS overlay (dev)", run a sector-5 combat, and paste the readout below:
+
+```
+Device:
+Browser:
+Idle (menu):       fps  /  p95
+Sector 1 combat:   fps  /  p95
+Sector 5 combat:   fps  /  p95   ← target
+Sector 5 boss P3:  fps  /  p95   ← worst case
+Top section costs:
+```
+
+Once recorded, the baseline gates Day 6 (idle anims) — if the worst case is under 50fps, `Perf.tier` will already auto-downgrade and we tighten further; if the worst case clears 55fps, Day 6 lands the full visual.
+
 ### Day 2 — Mobile viewport audit (Part 6, 25.7)
 - [ ] Test in Chrome devtools at: **360×800, 390×844 (iPhone 13), 414×896 (iPhone 11), 768×1024 (iPad portrait)**.
 - [ ] Fix: any clipped/overflow elements in combat HUD, dice tray, intent panel, reward screen, map.

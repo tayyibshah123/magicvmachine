@@ -594,6 +594,96 @@ body {
     100% { opacity: 0; transform: scaleX(1); }
 }
 
+/* FPS HUD — dev-only overlay (toggled in Settings → Accessibility).
+   Glass-edged panel, top-right, hugs the safe-area inset on notched
+   devices. Pointer-events disabled so it never eats input even when
+   visible mid-combat. Uses --ui-* tokens so the cyberpunk palette
+   stays consistent with the rest of the UI. */
+.fps-hud {
+    position: fixed;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    z-index: 11000;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 6px 9px;
+    min-width: 124px;
+    font-family: var(--font-tech, 'Audiowide', monospace);
+    font-size: 11px;
+    line-height: 1.2;
+    color: rgba(220, 240, 255, 0.92);
+    background: linear-gradient(150deg, rgba(8, 14, 28, 0.78), rgba(4, 8, 18, 0.86));
+    border: 1px solid rgba(74, 216, 255, 0.35);
+    border-radius: 6px;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 0 16px rgba(74, 216, 255, 0.18), inset 0 0 12px rgba(74, 216, 255, 0.08);
+    user-select: none;
+    -webkit-user-select: none;
+}
+.fps-hud.hidden { display: none; }
+.fps-hud-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+}
+.fps-hud-headline { font-size: 13px; }
+.fps-hud-fps {
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #5eead4; /* good — mint cyan */
+    text-shadow: 0 0 6px rgba(94, 234, 212, 0.55);
+}
+.fps-hud-fps[data-health="warn"] {
+    color: #ffd76a;
+    text-shadow: 0 0 6px rgba(255, 215, 106, 0.55);
+}
+.fps-hud-fps[data-health="bad"] {
+    color: #ff5d7a;
+    text-shadow: 0 0 6px rgba(255, 93, 122, 0.6);
+}
+.fps-hud-tier {
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    padding: 1px 6px;
+    border: 1px solid rgba(74, 216, 255, 0.5);
+    border-radius: 999px;
+    color: rgba(180, 220, 245, 0.92);
+}
+.fps-hud-sub {
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    color: rgba(190, 215, 235, 0.78);
+    justify-content: flex-start;
+    gap: 8px;
+}
+.fps-hud-sections {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 4px 6px;
+    padding-top: 3px;
+    border-top: 1px dashed rgba(74, 216, 255, 0.22);
+}
+.fps-hud-section {
+    font-size: 9px;
+    letter-spacing: 0.04em;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: rgba(74, 216, 255, 0.08);
+    color: rgba(210, 230, 245, 0.78);
+}
+.fps-hud-section b {
+    color: #4ad8ff;
+    font-weight: 700;
+}
+.fps-hud-section.fps-hud-empty {
+    background: transparent;
+    color: rgba(160, 180, 200, 0.4);
+    font-style: italic;
+}
+
 /* Reward-flyer (P10): clone that animates from card → relic strip on pickup */
 .reward-flyer {
     position: fixed;

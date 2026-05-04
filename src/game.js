@@ -26,6 +26,7 @@ import { SaveSync } from './services/save-sync.js';
 import { Onboarding } from './services/onboarding.js';
 import { ClassBriefing } from './services/class-briefing.js';
 import { Perf } from './services/perf.js';
+import { FpsHud } from './services/fps-hud.js';
 import { Diag } from './services/diag.js';
 import { Breakout } from './services/breakout.js';
 import { UI } from './services/ui.js';
@@ -215,6 +216,10 @@ const Game = {
         //   __perf.startTrace({ thresholdMs: 18 })    // tighter
         //   __perf.stopTrace()
         try { if (typeof window !== 'undefined') window.__perf = Perf; } catch (_) {}
+        // Expose the FPS HUD on window for quick DevTools toggling — matches
+        // the __perf / __diag pattern. Same toggle is wired to the
+        // "Show FPS overlay (dev)" checkbox in Settings → Accessibility.
+        try { if (typeof window !== 'undefined') window.__fps = FpsHud; } catch (_) {}
 
         // --- Diagnostic dump system ---
         // Always-on: rolling frame stats, error capture, gameplay event
@@ -953,6 +958,9 @@ const Game = {
                 try { localStorage.setItem('mvm_perf_override', v); } catch (e) {}
             }
             ParticleSys.createFloatingText(540, 800, 'PERF MODE: ' + v.toUpperCase() + ' (RESTART)', '#00f3ff');
+        });
+        hookSetting('chk-show-fps', (el) => {
+            FpsHud.toggle(!!el.checked);
         });
 
         // --- Achievements viewer ---
@@ -9007,6 +9015,7 @@ triggerSystemCrash() {
                 largeTouch: get('chk-large-touch'),
                 autoQTE: get('chk-auto-qte'),
                 perfTier: get('sel-perf-tier', 'value') || 'auto',
+                showFps: get('chk-show-fps'),
                 combatPace: Number(get('sld-combat-pace', 'value')) || 100,
                 handedness: get('sel-handedness', 'value') || 'right'
             };
@@ -9051,6 +9060,8 @@ triggerSystemCrash() {
             setCheck('chk-large-touch', !!s.largeTouch);
             setCheck('chk-auto-qte', !!s.autoQTE);
             setVal('sel-perf-tier', s.perfTier || 'auto');
+            setCheck('chk-show-fps', !!s.showFps);
+            if (s.showFps) FpsHud.show();
             if (s.reducedGlow) { document.body.classList.add('reduced-glow'); this.reducedGlow = true; }
             if (s.largeTouch)  document.body.classList.add('large-touch');
             if (s.autoQTE)     this.autoQTE = true;
@@ -26255,15 +26266,25 @@ drawEntity(entity) {
                 const glow        = '#aee0ff';
                 const hover = Math.sin(time * 2.4) * 5;
                 ctx.translate(0, hover);
+                // Tier-gate visual richness — low-tier devices get the
+                // plate + halo only; mid drops the catch-light sweep;
+                // high renders the full shard cluster.
+                const _mTier = Perf.tier;
+                const _shardCount = _mTier === 'low' ? 0 : (_mTier === 'mid' ? 4 : 6);
+                const _showSweep = _mTier !== 'low';
 
-                // Soft halo behind the shard cluster.
+                // Soft halo behind the shard cluster — cached gradient
+                // (entity-local, fixed radius/colors so the same canvas
+                // sprite is reused every frame across every mirror minion).
                 {
                     const haloR = 30;
-                    const halo = ctx.createRadialGradient(0, 0, 4, 0, 0, haloR);
-                    halo.addColorStop(0, 'rgba(200, 235, 255, 0.55)');
-                    halo.addColorStop(0.6, 'rgba(140, 200, 255, 0.18)');
-                    halo.addColorStop(1, 'rgba(140, 200, 255, 0)');
-                    ctx.fillStyle = halo;
+                    ctx.fillStyle = this._cachedGradient('mirror_minion_halo', () => {
+                        const g = ctx.createRadialGradient(0, 0, 4, 0, 0, haloR);
+                        g.addColorStop(0, 'rgba(200, 235, 255, 0.55)');
+                        g.addColorStop(0.6, 'rgba(140, 200, 255, 0.18)');
+                        g.addColorStop(1, 'rgba(140, 200, 255, 0)');
+                        return g;
+                    });
                     ctx.beginPath(); ctx.arc(0, 0, haloR, 0, Math.PI * 2); ctx.fill();
                 }
 
@@ -26272,7 +26293,7 @@ drawEntity(entity) {
                 // thickness at small scale.
                 ctx.save();
                 ctx.rotate(Math.sin(time * 0.6) * 0.25);
-                ctx.shadowColor = glow; ctx.shadowBlur = 14;
+                ctx.shadowColor = glow; ctx.shadowBlur = Perf.shadowBlur(14);
                 ctx.fillStyle = 'rgba(20, 40, 60, 0.55)';
                 ctx.strokeStyle = glassEdge; ctx.lineWidth = 1.5;
                 ctx.beginPath();
@@ -26290,49 +26311,49 @@ drawEntity(entity) {
                 ctx.beginPath(); ctx.moveTo(-3, -10); ctx.lineTo(8, 1); ctx.stroke();
                 ctx.restore();
 
-                // Orbiting glass shards — six small triangles drifting on
-                // wobbling orbits at varied radii so the cluster never
-                // locks into a stiff ring.
-                ctx.save();
-                ctx.shadowColor = glow; ctx.shadowBlur = 6;
-                for (let i = 0; i < 6; i++) {
-                    const baseA = (Math.PI * 2 / 6) * i + time * (0.5 + i * 0.07);
-                    const wob = Math.sin(time * 1.6 + i * 1.3) * 3;
-                    const orb = 22 + (i % 3) * 4 + wob;
-                    const sx = Math.cos(baseA) * orb;
-                    const sy = Math.sin(baseA) * orb * 0.9;
-                    const spin = baseA + time * 1.4;
+                // Orbiting glass shards — count scales with perf tier.
+                if (_shardCount > 0) {
                     ctx.save();
-                    ctx.translate(sx, sy);
-                    ctx.rotate(spin);
-                    // Shard fill — translucent, pale-blue glass.
-                    ctx.fillStyle = 'rgba(190, 230, 255, 0.55)';
-                    ctx.strokeStyle = shardCol;
-                    ctx.lineWidth = 1;
-                    ctx.beginPath();
-                    ctx.moveTo(0, -4);
-                    ctx.lineTo(3, 1);
-                    ctx.lineTo(-2, 4);
-                    ctx.closePath();
-                    ctx.fill(); ctx.stroke();
-                    // Catch-light pip on each shard's leading edge.
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-                    ctx.beginPath(); ctx.arc(0, -2, 0.7, 0, Math.PI * 2); ctx.fill();
+                    ctx.shadowColor = glow; ctx.shadowBlur = Perf.shadowBlur(6);
+                    for (let i = 0; i < _shardCount; i++) {
+                        const baseA = (Math.PI * 2 / _shardCount) * i + time * (0.5 + i * 0.07);
+                        const wob = Math.sin(time * 1.6 + i * 1.3) * 3;
+                        const orb = 22 + (i % 3) * 4 + wob;
+                        const sx = Math.cos(baseA) * orb;
+                        const sy = Math.sin(baseA) * orb * 0.9;
+                        const spin = baseA + time * 1.4;
+                        ctx.save();
+                        ctx.translate(sx, sy);
+                        ctx.rotate(spin);
+                        ctx.fillStyle = 'rgba(190, 230, 255, 0.55)';
+                        ctx.strokeStyle = shardCol;
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.moveTo(0, -4);
+                        ctx.lineTo(3, 1);
+                        ctx.lineTo(-2, 4);
+                        ctx.closePath();
+                        ctx.fill(); ctx.stroke();
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                        ctx.beginPath(); ctx.arc(0, -2, 0.7, 0, Math.PI * 2); ctx.fill();
+                        ctx.restore();
+                    }
                     ctx.restore();
                 }
-                ctx.restore();
 
-                // Sweeping catch-light arc around the cluster — sells
-                // "glass surface catching the room light".
-                ctx.save();
-                const sweep = (time * 1.4) % (Math.PI * 2);
-                ctx.strokeStyle = 'rgba(235, 250, 255, 0.85)';
-                ctx.shadowColor = glow; ctx.shadowBlur = 8;
-                ctx.lineWidth = 1.6;
-                ctx.beginPath();
-                ctx.arc(0, 0, 18, sweep, sweep + 0.5);
-                ctx.stroke();
-                ctx.restore();
+                // Sweeping catch-light arc — skipped on low-tier to save
+                // the third shadow-blur pass per minion.
+                if (_showSweep) {
+                    ctx.save();
+                    const sweep = (time * 1.4) % (Math.PI * 2);
+                    ctx.strokeStyle = 'rgba(235, 250, 255, 0.85)';
+                    ctx.shadowColor = glow; ctx.shadowBlur = Perf.shadowBlur(8);
+                    ctx.lineWidth = 1.6;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 18, sweep, sweep + 0.5);
+                    ctx.stroke();
+                    ctx.restore();
+                }
             }
             else if (entity.tier === 3 || entity.name.includes("Glitch") || entity.name.includes("Guardian")) {
                 const pulse = 1 + 0.05 * Math.sin(time * 4);
@@ -26561,38 +26582,45 @@ drawEntity(entity) {
                 this.enemy && this.enemy.kind === 'mirror');
             if (isMirrorEnemy || isMirrorMinion) {
                 ctx.save();
-                // Translucent mirror plate — pale-blue radial gradient
-                // gives the entity a "reflective surface" sheen without
-                // a hard ring outline.
+                // Translucent mirror plate — cached gradient. Was
+                // re-allocated per-entity-per-frame; with 1 mirror enemy +
+                // 2 mirror minions on screen at sector 5 that's ~180
+                // gradient allocations a second. The gradient is in
+                // entity-local space at fixed radius, so a single cached
+                // sprite drives every mirror entity in the scene.
                 const r = entity.radius * 1.05;
-                const grad = ctx.createRadialGradient(0, 0, r * 0.4, 0, 0, r);
-                grad.addColorStop(0, 'rgba(180, 235, 255, 0.20)');
-                grad.addColorStop(0.65, 'rgba(120, 200, 255, 0.08)');
-                grad.addColorStop(1, 'rgba(120, 200, 255, 0)');
-                ctx.fillStyle = grad;
+                const _gradKey = 'mirror_kind_plate_' + Math.round(r);
+                ctx.fillStyle = this._cachedGradient(_gradKey, () => {
+                    const g = ctx.createRadialGradient(0, 0, r * 0.4, 0, 0, r);
+                    g.addColorStop(0, 'rgba(180, 235, 255, 0.20)');
+                    g.addColorStop(0.65, 'rgba(120, 200, 255, 0.08)');
+                    g.addColorStop(1, 'rgba(120, 200, 255, 0)');
+                    return g;
+                });
                 ctx.beginPath();
                 ctx.arc(0, 0, r, 0, Math.PI * 2);
                 ctx.fill();
-                // Orbiting shimmer arc — short bright crescent that
-                // sweeps around the entity, mimicking light catching a
-                // mirror surface. Reads as "alive" / "pristine glass".
-                const sweep = (time * 1.2) % (Math.PI * 2);
-                ctx.strokeStyle = 'rgba(220, 245, 255, 0.85)';
-                ctx.shadowColor = '#cfe9ff';
-                ctx.shadowBlur = 10;
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(0, 0, r + 3, sweep, sweep + 0.55);
-                ctx.stroke();
-                // Small fixed pip on the opposite side — second highlight
-                // sells the curved-glass illusion.
-                ctx.beginPath();
-                ctx.arc(Math.cos(sweep + Math.PI) * (r * 0.55),
-                        Math.sin(sweep + Math.PI) * (r * 0.45),
-                        2 + Math.sin(time * 5) * 0.4, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-                ctx.shadowBlur = 6;
-                ctx.fill();
+                // Orbiting shimmer arc — only on mid+ tiers. The pip + arc
+                // are mostly cosmetic and can drop entirely on low-tier
+                // without losing the "is reflective" read (the plate fill
+                // already conveys it).
+                if (Perf.tier !== 'low') {
+                    const sweep = (time * 1.2) % (Math.PI * 2);
+                    ctx.strokeStyle = 'rgba(220, 245, 255, 0.85)';
+                    ctx.shadowColor = '#cfe9ff';
+                    ctx.shadowBlur = Perf.shadowBlur(10);
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, r + 3, sweep, sweep + 0.55);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(Math.cos(sweep + Math.PI) * (r * 0.55),
+                            Math.sin(sweep + Math.PI) * (r * 0.45),
+                            2 + Math.sin(time * 5) * 0.4, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                    ctx.shadowBlur = Perf.shadowBlur(6);
+                    ctx.fill();
+                }
                 ctx.restore();
             }
         }
