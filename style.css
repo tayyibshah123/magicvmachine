@@ -744,7 +744,12 @@ body {
     flex-direction: column;
     gap: 8px;
     width: 100%;
-    max-width: 360px;
+    /* Was hard 360px → on a 360-wide phone the grid hits the viewport edges
+       with zero margin. Capping with min(360px, calc(100% - 16px)) keeps the
+       desktop sizing while guaranteeing 8px of breathing room each side on
+       any narrow viewport. */
+    max-width: min(360px, calc(100% - 16px));
+    margin-inline: auto;
 }
 
 /* --- VISUAL FX & ANIMATIONS --- */
@@ -2857,7 +2862,9 @@ body.reduced-motion .boss-intro-stripe {
     to   { opacity: 1; transform: scale(1); }
 }
 .hex-result-card {
-    max-width: 360px;
+    /* Same fix as .skeleton-grid — guarantee 8px breathing room each side
+       on a 360-wide viewport so the card edge isn't kissing the screen. */
+    max-width: min(360px, calc(100% - 16px));
     width: 100%;
     padding: 22px 24px;
     text-align: center;
@@ -5350,7 +5357,11 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 .modal-backdrop.hidden { display: none; }
 .modal-shell {
     width: min(560px, 100%);
-    max-height: 92dvh;
+    /* 92dvh tracks the visible viewport but doesn't reserve room for the
+       notch / home-indicator gesture zone on iOS. Subtracting both safe-
+       area insets keeps the modal close button reachable on every device.
+       The 92% factor is preserved as the inner gap from each edge. */
+    max-height: calc(92dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     padding: var(--modal-pad);
     display: flex;
     flex-direction: column;
@@ -6264,7 +6275,11 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 .custom-run-panel {
     width: 100%;
     max-width: 760px;
-    max-height: 92dvh;
+    /* 92dvh tracks the visible viewport but doesn't reserve room for the
+       notch / home-indicator gesture zone on iOS. Subtracting both safe-
+       area insets keeps the modal close button reachable on every device.
+       The 92% factor is preserved as the inner gap from each edge. */
+    max-height: calc(92dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
@@ -6458,7 +6473,11 @@ body[data-hand="left"] .control-bar #btn-end-turn {
        100vh/92vh was the static "address bar collapsed" height, so the
        panel could overflow when the URL bar was visible. Falls back to
        vh on browsers without dvh support. */
-    max-height: 92dvh;
+    /* 92dvh tracks the visible viewport but doesn't reserve room for the
+       notch / home-indicator gesture zone on iOS. Subtracting both safe-
+       area insets keeps the modal close button reachable on every device.
+       The 92% factor is preserved as the inner gap from each edge. */
+    max-height: calc(92dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     padding: 16px;
     display: flex;
     flex-direction: column;
@@ -9036,7 +9055,10 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
     }
 
     .bottom-controls {
-        padding: 10px 10px 76px 10px !important;
+        /* Was 76px hard. On a notched iPhone the home-indicator gesture
+           zone is ~34px tall; add it explicitly so the dice tray + CTAs
+           sit above the iOS swipe area instead of overlapping it. */
+        padding: 10px 10px max(76px, calc(76px + env(safe-area-inset-bottom, 0px))) 10px !important;
     }
 
     /* Dice-flanking controls on mobile */
@@ -13307,7 +13329,11 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
 .sanctuary-npc-content {
     width: 100%;
     max-width: 640px;
-    max-height: 92dvh;
+    /* 92dvh tracks the visible viewport but doesn't reserve room for the
+       notch / home-indicator gesture zone on iOS. Subtracting both safe-
+       area insets keeps the modal close button reachable on every device.
+       The 92% factor is preserved as the inner gap from each edge. */
+    max-height: calc(92dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     overflow-y: auto;
     overscroll-behavior: contain;
     padding: var(--modal-pad);
@@ -13686,7 +13712,11 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     position: relative;
     z-index: 1;
     width: min(640px, 94vw);
-    max-height: 92dvh;
+    /* 92dvh tracks the visible viewport but doesn't reserve room for the
+       notch / home-indicator gesture zone on iOS. Subtracting both safe-
+       area insets keeps the modal close button reachable on every device.
+       The 92% factor is preserved as the inner gap from each edge. */
+    max-height: calc(92dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;

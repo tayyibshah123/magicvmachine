@@ -126,6 +126,16 @@ Once recorded, the baseline gates Day 6 (idle anims) — if the worst case is un
 
 **Acceptance:** screenshots from each width pasted into `mobile-qa.md` (new file) showing no overflow / no clipped text / no obscured CTAs.
 
+**Day 2 completion notes (v1.3.7):**
+- ✅ Static audit run at 360 / 390 / 414 / 768 widths — 5 issues found, no P0.
+- ✅ `.skeleton-grid` + `.hex-result-card` hardcoded `max-width: 360px` → `min(360px, calc(100% - 16px))` so cards never kiss the viewport edge.
+- ✅ All five `max-height: 92dvh` modal shells (modal-shell, custom-run-panel, loadout, sanctuary-npc, plus the dialog at line 6468) now subtract both safe-area insets. Was clipping the close button on notched iPhones with the URL bar showing.
+- ✅ Settings modal `max-height: calc(100vh - space-12)` → `calc(100dvh - safe-area-top - safe-area-bottom - space-8)`. dvh excludes the dynamic browser chrome; `100vh` referred to the *expanded* viewport so the modal could overflow.
+- ✅ Mobile `.bottom-controls` padding `76px` → `max(76px, 76px + env(safe-area-inset-bottom))` so the dice tray + CTAs clear the iOS home-indicator gesture zone.
+- ✅ `mobile-qa.md` checklist published — 8 screens × 4 widths = 32 cells the user fills in with devtools to verify.
+
+Non-actionable findings retained as documented (game-container is intentionally phone-shaped on every device, so "mobile overrides applying on desktop" is correct architecture).
+
 ### Day 3 — Combat HUD densification (Part 25.7)
 - [ ] **Health ribbon** overlay across the top of player + enemy sprites instead of the current floating bars (saves vertical space on portrait).
 - [ ] **Top-left collapsible chip** for SECTOR / TURN / FRAGMENTS — collapses to icon-only after 3 turns of inactivity, expands on tap.

@@ -72,7 +72,13 @@
 #modal-settings .modal-content.settings-modal {
     width: 100%;
     max-width: 460px;
-    max-height: calc(100vh - var(--ui-space-12));
+    /* dvh tracks the *visible* viewport on mobile (excludes the address bar
+       when it slides in/out). Was 100vh, which referred to the EXPANDED
+       viewport — on a 360-wide phone with the URL bar showing, the modal
+       could overflow off the bottom and the close button would scroll out
+       of reach. Subtracting both safe-area insets keeps the panel above
+       the home-indicator gesture zone too. */
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - var(--ui-space-8));
     margin: 0;
     padding: var(--ui-space-5) var(--ui-space-5) var(--ui-space-4);
     background: var(--ui-glass-3);
