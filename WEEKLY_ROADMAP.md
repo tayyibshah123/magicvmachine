@@ -159,6 +159,17 @@ Non-actionable findings retained as documented (game-container is intentionally 
 
 **Acceptance:** turn digest reads in <2s without breaking combat flow; recap card cleanly hands off to reward screen; both look like the existing intent-preview glass family.
 
+**Day 4 completion notes (v1.3.9):**
+- ✅ **`src/services/combat-stats.js`** — clean accumulator with per-turn + per-combat scopes. Resets at `setupCombat` / `startTurn`. Records: damage in/out (player vs minion vs enemy buckets), dice used, combo names, parries, lifesteal.
+- ✅ **`src/services/turn-digest.js`** — pinned-top 2s glass pill (`T·N · DEALT X · TAKEN Y · DICE Z · <extra>`). Skip-on-tap, fades in/out, respects `prefers-reduced-motion` (drops the slide). Skipped on turn 1 with no activity, skipped in tutorial/breakout (their pacing is scripted).
+- ✅ **`src/services/combat-recap.js`** — 3s glass dialog with portrait-vs-portrait header, totals, biggest hit, and up to 3 highlight chips (combo names with ×N grouping, perfect-parry counter, lifesteal totals). Awaited by `winCombat` so the reward screen waits cleanly. Tap-anywhere-to-skip + CONTINUE button.
+- ✅ Hooks wired: `entity.takeDamage` → `recordDamage` (broader source-kind detection than runStats — counts player-side minion damage too); `announce` closure → `recordCombo`; both perfect-QTE branches → `recordParry`; `useDie` → `recordDieUsed`; both lifesteal helpers → `recordLifesteal`.
+- ✅ Mobile-aware: digest pill clamps to `calc(100% - 24px)` and tightens font/gap at <380px so it can't overflow on a 360-wide phone. Recap card capped at `min(360px, calc(100% - 32px))` and uses safe-area insets for top/bottom padding.
+- ✅ Cyberpunk palette honoured: cyan brand for player labels, magenta for enemy, gold for dealt + biggest-hit, mint for lifesteal — all glass-edged with backdrop blur.
+- ✅ 98/98 vitest green. No new dependencies.
+
+Pending Day-5 wiring: when the autopsy/share screens arrive, those modules can read `CombatStats.snapshotCombat()` directly for their own data — same accumulator, no extra plumbing needed.
+
 ### Day 5 — Post-death autopsy + share-out hooks (Part 31.3, 31.4)
 - [ ] Replace the current Game Over screen with an **Autopsy card**: `CAUSE OF DEATH: <enemy name> — <amount> DMG`, generated **lesson** based on run telemetry (e.g. "0 mana spent — try Skill dice", "no rerolls used after turn 5"), `RESTART` + `MAIN MENU` + `SHARE` buttons.
 - [ ] Wire **share triggers**: Sector 5 first clear, Asc 5+ clear, Custom Run with 3+ negative modifiers, 100k fragments milestone. Use existing `src/services/share.js`.

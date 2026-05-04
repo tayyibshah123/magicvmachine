@@ -5,6 +5,7 @@ import { TooltipMgr } from '../ui/tooltip.js';
 import { Game } from '../game.js';
 import { ClassAbility } from '../ui/class-ability.js';
 import { Hints } from '../services/hints.js';
+import { CombatStats } from '../services/combat-stats.js';
 
 // Late-bound class refs (set by registerEntityClasses() after all modules load).
 // Avoids circular import TDZ: entity.js cannot eagerly import its own subclasses
@@ -792,6 +793,25 @@ class Entity {
         // breakdown. Counts only actual HP hits, not blocked damage.
         if (Game.runStats && this instanceof Player && actualDmg > 0) {
             Game.runStats.damageTaken = (Game.runStats.damageTaken || 0) + actualDmg;
+        }
+
+        // Day 4 — combat-scoped stats for the per-turn digest + per-combat
+        // recap. Source/target kind is derived from instance type so the
+        // tracker doesn't need attribution beyond what takeDamage already
+        // has access to. Run-stats above keep their own scope.
+        if (actualDmg > 0) {
+            let _srcKind = null;
+            if (source instanceof Player) _srcKind = 'player';
+            else if (Minion && source instanceof Minion) _srcKind = source.isPlayerSide ? 'minion' : 'enemyMinion';
+            else if (Enemy && source instanceof Enemy) _srcKind = 'enemy';
+            else if (source == null) _srcKind = 'env';
+            let _tgtKind = null;
+            if (this instanceof Player) _tgtKind = 'player';
+            else if (Minion && this instanceof Minion) _tgtKind = this.isPlayerSide ? 'minion' : 'enemyMinion';
+            else if (Enemy && this instanceof Enemy) _tgtKind = 'enemy';
+            if (_srcKind && _tgtKind) {
+                CombatStats.recordDamage(actualDmg, _srcKind, _tgtKind);
+            }
         }
 
         // Run stats tracking (player-dealt damage + kills)

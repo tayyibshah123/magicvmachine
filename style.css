@@ -707,6 +707,278 @@ body {
     100% { box-shadow: none; }
 }
 
+/* ─────────────────────────────────────────────────────────────────
+ * Day 4 — End-of-turn digest (TurnDigest)
+ *
+ * Top-centre 2s glass floater. Compact horizontal layout with pip +
+ * stat pills. Pointer-events on so a tap can skip it; doesn't block
+ * the canvas because it's parked above the safe-area top.
+ * ───────────────────────────────────────────────────────────────── */
+.turn-digest {
+    position: fixed;
+    top: max(56px, calc(56px + env(safe-area-inset-top, 0px)));
+    /* Centred horizontally, but constrained to the game-container
+       width so the floater doesn't overflow on a 360-wide phone. */
+    left: 50%;
+    transform: translateX(-50%) translateY(-12px);
+    z-index: 10500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    max-width: calc(100% - 24px);
+    font-family: var(--font-cyber, 'Orbitron', monospace);
+    font-size: 11px;
+    letter-spacing: 0.10em;
+    background: linear-gradient(150deg, rgba(8, 14, 28, 0.78), rgba(4, 8, 18, 0.88));
+    border: 1px solid rgba(74, 216, 255, 0.4);
+    border-radius: 999px;
+    box-shadow: 0 0 18px rgba(74, 216, 255, 0.22),
+                inset 0 1px 0 rgba(74, 216, 255, 0.45);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: rgba(225, 240, 255, 0.95);
+    pointer-events: auto;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 220ms var(--ease-out-smart),
+                transform 220ms var(--ease-out-smart);
+    user-select: none;
+    -webkit-user-select: none;
+    white-space: nowrap;
+}
+.turn-digest.hidden { display: none; }
+.turn-digest.active {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+.turn-digest.leaving {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+}
+/* Reduced-motion variant — drop the slide so vestibular-sensitive
+   players just see a hold. */
+.turn-digest.reduced-motion,
+.turn-digest.reduced-motion.active,
+.turn-digest.reduced-motion.leaving {
+    transform: translateX(-50%);
+}
+.turn-digest-pip {
+    font-weight: 800;
+    color: var(--neon-blue, #4ad8ff);
+    text-shadow: 0 0 6px rgba(74, 216, 255, 0.55);
+    padding-right: 4px;
+    border-right: 1px solid rgba(74, 216, 255, 0.25);
+}
+.turn-digest-stat {
+    font-weight: 600;
+}
+.turn-digest-dealt { color: #ffd76a; text-shadow: 0 0 6px rgba(255, 215, 106, 0.45); }
+.turn-digest-taken { color: #ff5d7a; text-shadow: 0 0 6px rgba(255, 93, 122, 0.45); }
+.turn-digest-dice  { color: #b3d2ee; }
+.turn-digest-extra { color: #5eead4; text-shadow: 0 0 6px rgba(94, 234, 212, 0.45); }
+.turn-digest-extra.hidden { display: none; }
+.turn-digest-stat.faded { opacity: 0.35; }
+
+/* Tighter spacing on very narrow phones so the pill doesn't push
+   off-screen at 360px when the dealt/taken numbers grow to 3+ digits. */
+@media (max-width: 380px) {
+    .turn-digest { font-size: 10px; gap: 6px; padding: 6px 10px; }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * Day 4 — End-of-combat recap (CombatRecap)
+ *
+ * Centre-screen 3s glass card. Backdrop dim so the player's eye
+ * settles on it; tap-anywhere-to-skip plus a CONTINUE button.
+ * ───────────────────────────────────────────────────────────────── */
+.combat-recap {
+    position: fixed;
+    inset: 0;
+    z-index: 10800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: max(16px, env(safe-area-inset-top, 0px))
+             16px
+             max(16px, env(safe-area-inset-bottom, 0px));
+    background: rgba(2, 4, 10, 0.55);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: auto;
+    opacity: 0;
+    transition: opacity 240ms var(--ease-out-smart);
+    cursor: pointer;
+}
+.combat-recap.hidden { display: none; }
+.combat-recap.active { opacity: 1; }
+.combat-recap.leaving { opacity: 0; }
+.combat-recap-card {
+    width: min(360px, calc(100% - 32px));
+    padding: 18px 18px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+    background: linear-gradient(155deg, rgba(10, 18, 36, 0.92), rgba(5, 9, 22, 0.95));
+    border: 1px solid rgba(74, 216, 255, 0.45);
+    border-radius: 12px;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6),
+                0 0 36px rgba(74, 216, 255, 0.18),
+                inset 0 1px 0 rgba(74, 216, 255, 0.55);
+    transform: translateY(8px) scale(0.98);
+    opacity: 0;
+    transition: transform 260ms var(--ease-out-smart),
+                opacity 240ms var(--ease-out-smart);
+    cursor: default;
+    color: rgba(230, 245, 255, 0.95);
+    font-family: var(--font-main);
+}
+.combat-recap.active .combat-recap-card {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+}
+.combat-recap.leaving .combat-recap-card {
+    transform: translateY(-4px) scale(0.99);
+    opacity: 0;
+}
+.combat-recap.reduced-motion .combat-recap-card,
+.combat-recap.reduced-motion.active .combat-recap-card,
+.combat-recap.reduced-motion.leaving .combat-recap-card {
+    transform: none;
+}
+
+/* Header — portrait labels only (no actual portrait sprites yet; the
+   player/enemy names + a glyph carry the read). */
+.combat-recap-portraits {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 10px;
+}
+.combat-recap-portrait {
+    padding: 8px 6px;
+    border-radius: 6px;
+    font-family: var(--font-cyber, 'Orbitron', monospace);
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    font-weight: 700;
+    border: 1px solid transparent;
+}
+.combat-recap-player {
+    color: var(--neon-blue, #4ad8ff);
+    text-shadow: 0 0 8px rgba(74, 216, 255, 0.6);
+    border-color: rgba(74, 216, 255, 0.35);
+    background: rgba(74, 216, 255, 0.06);
+}
+.combat-recap-enemy {
+    color: #ff5d7a;
+    text-shadow: 0 0 8px rgba(255, 93, 122, 0.6);
+    border-color: rgba(255, 93, 122, 0.35);
+    background: rgba(255, 93, 122, 0.06);
+}
+.combat-recap-vs {
+    font-family: var(--font-cyber, 'Orbitron', monospace);
+    font-size: 12px;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.65);
+    letter-spacing: 0.18em;
+}
+.combat-recap-row {
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    gap: 10px;
+}
+.combat-recap-stat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: rgba(8, 14, 28, 0.55);
+    border: 1px solid rgba(74, 216, 255, 0.18);
+}
+.combat-recap-stat-label {
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    color: rgba(180, 210, 235, 0.75);
+}
+.combat-recap-stat-val {
+    font-family: var(--font-cyber, 'Orbitron', monospace);
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 1;
+}
+.combat-recap-dealt .combat-recap-stat-val {
+    color: #ffd76a;
+    text-shadow: 0 0 10px rgba(255, 215, 106, 0.55);
+}
+.combat-recap-taken .combat-recap-stat-val {
+    color: #ff5d7a;
+    text-shadow: 0 0 10px rgba(255, 93, 122, 0.55);
+}
+.combat-recap-row-highlight {
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 0 0;
+}
+.combat-recap-highlight-label {
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    color: rgba(180, 210, 235, 0.75);
+}
+.combat-recap-highlight-val {
+    font-family: var(--font-cyber, 'Orbitron', monospace);
+    font-size: 26px;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 0 12px rgba(255, 255, 255, 0.55);
+}
+.combat-recap-chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 5px;
+    padding: 4px 0 0;
+}
+.combat-recap-chips.hidden { display: none; }
+.combat-recap-chip {
+    font-family: var(--font-cyber, 'Orbitron', monospace);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(74, 216, 255, 0.08);
+    border: 1px solid rgba(74, 216, 255, 0.32);
+    color: rgba(220, 240, 255, 0.92);
+}
+.recap-chip-combo { color: #ffd76a; border-color: rgba(255, 215, 106, 0.4); background: rgba(255, 215, 106, 0.07); }
+.recap-chip-parry { color: #4ad8ff; }
+.recap-chip-life  { color: #5eead4; border-color: rgba(94, 234, 212, 0.4); background: rgba(94, 234, 212, 0.06); }
+.combat-recap-skip {
+    margin-top: 6px;
+    padding: 8px 14px;
+    font-family: var(--font-cyber, 'Orbitron', monospace);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    font-weight: 700;
+    color: rgba(220, 240, 255, 0.95);
+    background: linear-gradient(90deg, rgba(74, 216, 255, 0.15), rgba(74, 216, 255, 0.08));
+    border: 1px solid rgba(74, 216, 255, 0.5);
+    border-radius: 6px;
+    cursor: pointer;
+    text-shadow: 0 0 6px rgba(74, 216, 255, 0.55);
+    transition: background 160ms var(--ease-out-smart);
+}
+.combat-recap-skip:hover,
+.combat-recap-skip:focus-visible {
+    background: linear-gradient(90deg, rgba(74, 216, 255, 0.28), rgba(74, 216, 255, 0.14));
+    outline: none;
+}
+
 /* Button-label crossfade — used by Game.setButtonLabel */
 .btn-label-fading {
     transition: opacity 140ms var(--ease-out-smart);

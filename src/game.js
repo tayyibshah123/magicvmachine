@@ -27,6 +27,9 @@ import { Onboarding } from './services/onboarding.js';
 import { ClassBriefing } from './services/class-briefing.js';
 import { Perf } from './services/perf.js';
 import { FpsHud } from './services/fps-hud.js';
+import { CombatStats } from './services/combat-stats.js';
+import { TurnDigest } from './services/turn-digest.js';
+import { CombatRecap } from './services/combat-recap.js';
 import { Diag } from './services/diag.js';
 import { Breakout } from './services/breakout.js';
 import { UI } from './services/ui.js';
@@ -3041,6 +3044,8 @@ startQTE(type, x, y, callback, opts) {
                      if (AudioMgr.playSting) AudioMgr.playSting('perfect_attack');
                      else AudioMgr.playSound('mana');
                      if (this.runStats) this.runStats.perfectQTEs = (this.runStats.perfectQTEs || 0) + 1;
+                     // Day 4 — recap-card highlight chip ("PERFECT PARRY" / "Nx PARRIES").
+                     try { CombatStats.recordParry(); } catch (_) {}
                      // Annihilator class rework: QTE crits grant a reroll token that
                      // bypasses the no-rerolls trait on the next reroll. Refresh
                      // the dice UI immediately so the reroll badge reflects the
@@ -3117,6 +3122,8 @@ startQTE(type, x, y, callback, opts) {
                      this.triggerSlowMo && this.triggerSlowMo(0.1, 0.085);
                      // Momentum: perfect parry is a high-value beat.
                      if (this._tickMomentum) this._tickMomentum('parry', 1);
+                     // Day 4 — recap-card "PERFECT PARRY" chip.
+                     try { CombatStats.recordParry(); } catch (_) {}
                      // Diag — count perfect parries separately from QTE
                      // perfects since the parry is a defensive read.
                      try { Diag.event && Diag.event('parry_perfect'); } catch (_) {}
@@ -11934,6 +11941,10 @@ async startCombat(type) {
         }
         
         this.player.mana = this.player.baseMana;
+        // Day 4 — reset per-combat stat accumulator. setupCombat is the
+        // single chokepoint that fires for every combat (standard, elite,
+        // boss, breakout, tutorial) so this is the cleanest entry point.
+        try { CombatStats.startCombat(); } catch (_) {}
         // Reset per-combat class-rework counters so they don't leak across fights.
         this.player.bloodTier = 0;
         // Annihilator anti-snowball: grant a single starter QTE-token at
@@ -12346,6 +12357,11 @@ async startTurn() {
         // Turn counter HUD (Phase 4e)
         const turnEl = document.getElementById('turn-display');
         if (turnEl) turnEl.innerText = `TURN ${this.turnCount}`;
+        // Day 4 — reset turn-scoped stat accumulator at the top of each
+        // player turn. The previous turn's totals were already snapshotted
+        // for the digest at the end of the enemy phase, so resetting now
+        // is safe and keeps the digest aligned to the player's window.
+        try { CombatStats.startTurn(this.turnCount); } catch (_) {}
         // Sector/turn chip (Day 3 — mobile densification): collapse to a
         // compact single-line pill once the player has had a few turns to
         // read SECTOR and the mech blurb. Tap re-expands. We only auto-
@@ -13297,6 +13313,9 @@ async startTurn() {
             this.comboSets[id] = { name, color, members: new Set(memberIds) };
             Hints.trigger('combo_double');
             Analytics.emit('combo_triggered', { name });
+            // Day 4 — feed the recap card so the highlight chips can
+            // surface "PINCER ×2 / FORTRESS / WILD PACK" etc.
+            try { CombatStats.recordCombo(name); } catch (_) {}
             if (this.player) {
                 ParticleSys.createFloatingText(
                     this.player.x, this.player.y - 180, `COMBO: ${name}`, color,
@@ -14100,6 +14119,8 @@ async startTurn() {
 
         TooltipMgr.hide();
         die.used = true;
+        // Day 4 — turn digest "DICE N" counter.
+        try { CombatStats.recordDieUsed(); } catch (_) {}
         this.haptic('die_use');
         // Track the most recent die type for the Archivist's Phase 2 archive
         // and any other "remember the last die" mechanic. Stored on the
@@ -14345,7 +14366,10 @@ async startTurn() {
                     if (!this.player.traits.lifesteal || delta <= 0) return;
                     const lTier = this.player.bloodTier || 0;
                     const lBonus = (this.player.traits.bloodTierLifestealBonus || 0) * lTier;
-                    this.player.heal(2 + lBonus);
+                    const _amt = 2 + lBonus;
+                    this.player.heal(_amt);
+                    // Day 4 — recap chip "LIFESTEAL +N".
+                    try { CombatStats.recordLifesteal(_amt); } catch (_) {}
                 };
 
                 // Blade Storm: 30% Chance (or combo FLURRY, guaranteed AoE).
@@ -15154,7 +15178,10 @@ async startTurn() {
             if (this.player && this.player.traits && this.player.traits.lifesteal && beforeHp > finalEnemy.currentHp) {
                 const lTier = this.player.bloodTier || 0;
                 const lBonus = (this.player.traits.bloodTierLifestealBonus || 0) * lTier;
-                this.player.heal(2 + lBonus);
+                const _amt = 2 + lBonus;
+                this.player.heal(_amt);
+                // Day 4 — recap chip.
+                try { CombatStats.recordLifesteal(_amt); } catch (_) {}
             }
             ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 100, name.toUpperCase(), label);
             return dead;
@@ -18130,6 +18157,15 @@ drawEffects() {
         }
 
         this.updateHUD();
+        // Day 4 — fire the end-of-turn digest BEFORE startTurn resets the
+        // per-turn accumulator. Skipped in Breakout (intro tutorial uses
+        // its own scripted beats and a digest would compete with them).
+        try {
+            if (this.currentState !== STATE.BREAKOUT && this.currentState !== STATE.TUTORIAL_COMBAT) {
+                const _snap = CombatStats.snapshotTurn();
+                TurnDigest.show(_snap);
+            }
+        } catch (_) {}
         this.startTurn();
       } catch (err) {
         this._recoverFromCombatError('endTurn', err, false);
@@ -18726,7 +18762,28 @@ drawEffects() {
         // reward picker so the player feels the loss explicitly.
         const skipEliteReward = wasElite && !wasBoss
             && this._ascEffects && this._ascEffects.noEliteRewards;
-        setTimeout(() => {
+        setTimeout(async () => {
+            if (this.currentState !== STATE.COMBAT_WIN) return;
+            // Day 4 — recap card plays between COMBAT_WIN dwell and the
+            // reward screen. Skipped in tutorial / breakout (their pacing
+            // is scripted and a recap would intrude). Skipped on the
+            // skipEliteReward branch since the dark-contract banner is
+            // its own emotional beat. Awaited so the reward screen waits
+            // for either the auto-dismiss or a player tap.
+            if (!skipEliteReward
+                && this.currentState !== STATE.TUTORIAL_COMBAT
+                && this.currentState !== STATE.BREAKOUT) {
+                try {
+                    const _snap = CombatStats.snapshotCombat();
+                    const _enemyName = (this.enemy && this.enemy.name) || 'ENEMY';
+                    const _playerName = (this.player && this.player.classId)
+                        ? this.player.classId.toUpperCase() : 'YOU';
+                    await CombatRecap.show(_snap, { playerName: _playerName, enemyName: _enemyName });
+                } catch (_) { /* never block reward on recap failure */ }
+            }
+            // Re-check state — a player could have left COMBAT_WIN via
+            // some other path (gameOver from a deferred death) while the
+            // recap was on screen.
             if (this.currentState !== STATE.COMBAT_WIN) return;
             if (skipEliteReward) {
                 ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
