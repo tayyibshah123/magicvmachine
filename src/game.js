@@ -972,6 +972,9 @@ const Game = {
         hookSetting('chk-auto-qte', (el) => {
             this.autoQTE = !!el.checked;
         });
+        hookSetting('chk-qte-wider', (el) => {
+            this.qteWiderWindow = !!el.checked;
+        });
         hookSetting('sel-perf-tier', (el) => {
             const v = el.value;
             if (v === 'auto') {
@@ -2892,6 +2895,14 @@ startQTE(type, x, y, callback, opts) {
         if (typeof Perf !== 'undefined' && Perf.tier === 'low') {
             perfectTol += 3 * scale;
             goodTol    += 5 * scale;
+        }
+        // Roadmap Part 2.4.3 — accessibility "wider QTE window" toggle.
+        // +50% tolerance on both perfect and good bands so motor-skill
+        // limited players can still hit perfects. Stacks ON TOP of the
+        // low-tier latency bonus so the two help each other.
+        if (this.qteWiderWindow) {
+            perfectTol *= 1.5;
+            goodTol    *= 1.5;
         }
 
         let quality = 'fail';
@@ -9491,6 +9502,7 @@ triggerSystemCrash() {
                 reducedGlow: get('chk-reduced-glow'),
                 largeTouch: get('chk-large-touch'),
                 autoQTE: get('chk-auto-qte'),
+                qteWiderWindow: get('chk-qte-wider'),
                 perfTier: get('sel-perf-tier', 'value') || 'auto',
                 showFps: get('chk-show-fps'),
                 combatPace: Number(get('sld-combat-pace', 'value')) || 100,
@@ -9536,6 +9548,8 @@ triggerSystemCrash() {
             setCheck('chk-reduced-glow', !!s.reducedGlow);
             setCheck('chk-large-touch', !!s.largeTouch);
             setCheck('chk-auto-qte', !!s.autoQTE);
+            setCheck('chk-qte-wider', !!s.qteWiderWindow);
+            this.qteWiderWindow = !!s.qteWiderWindow;
             setVal('sel-perf-tier', s.perfTier || 'auto');
             setCheck('chk-show-fps', !!s.showFps);
             if (s.showFps) FpsHud.show();
