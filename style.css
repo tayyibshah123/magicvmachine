@@ -5447,6 +5447,33 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 
 .map-svg-layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .map-svg-root  { width: 100%; height: 100%; }
+/* Day 7 — data-packet flow on the active route. The available path
+   (player's-current to a reachable next node) animates its
+   stroke-dashoffset so the dashes appear to flow forward along the
+   line. Subtle, infinite, no transform — pure dashoffset, cheap. */
+.map-svg-root .map-path-active {
+    animation: map-path-flow 1.4s linear infinite;
+}
+@keyframes map-path-flow {
+    from { stroke-dashoffset: 0; }
+    to   { stroke-dashoffset: -20; }
+}
+/* Completed routes get a soft "settled" reverse drift so they read
+   as established connections, not dead lines. Slower + lower contrast
+   than the active flow. */
+.map-svg-root .map-path-completed {
+    animation: map-path-settle 6s linear infinite;
+    opacity: 0.75;
+}
+@keyframes map-path-settle {
+    from { stroke-dashoffset: 0; }
+    to   { stroke-dashoffset: 6; }
+}
+/* Reduced motion / low-tier perf — hold the dashes static. */
+body.reduced-motion .map-svg-root .map-path-active,
+body.reduced-motion .map-svg-root .map-path-completed,
+body.perf-low      .map-svg-root .map-path-active,
+body.perf-low      .map-svg-root .map-path-completed { animation: none; }
 
 .map-node-abs {
     position: absolute;
@@ -5460,6 +5487,80 @@ body[data-hand="left"] .control-bar #btn-end-turn {
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
     transition: opacity 320ms var(--ease-out-smart), transform 320ms var(--ease-out-smart), box-shadow 220ms, border-color 200ms;
     color: #fff;
+}
+/* Day 7 — circuit-board node glyphs. Each type takes a distinct
+   silhouette via a chiplet ::after layer that sits behind the icon.
+   Wrapper stays circular for tap target + outer pulse glow (which
+   would otherwise get cut by clip-path); the chiplet carries the
+   shape and the per-type fill / inset highlight. The icon itself
+   remains centred and unclipped. */
+.map-node-abs::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    /* Per-type gradient supplied by the .map-node-abs[data-type] rules
+       below (background-image set on this pseudo). Inset shadow draws
+       the inside-edge stroke since regular border doesn't follow
+       clip-path silhouettes. */
+    background: radial-gradient(circle at 50% 40%, rgba(40, 45, 80, 0.95) 0%, rgba(8, 5, 20, 0.98) 75%);
+    box-shadow: inset 0 0 0 1.5px currentColor,
+                inset 0 0 8px rgba(0, 0, 0, 0.6);
+    border-radius: 50%;
+    transition: clip-path 240ms var(--ease-out-smart),
+                border-radius 240ms var(--ease-out-smart);
+}
+/* Icon + glow must paint above the chiplet. */
+.map-node-abs .map-node-icon,
+.map-node-abs .map-node-glow,
+.map-node-abs .map-here-arrow,
+.map-node-abs .map-shift-ring { z-index: 2; }
+/* Per-type silhouettes — clip + per-type gradient on ::after only
+   so the wrapper's circular hit target stays intact. */
+.map-node-abs[data-type="combat"]::after { /* hexagon (sharp horizontal) */
+    border-radius: 0;
+    clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%);
+    background: radial-gradient(circle at 50% 40%, rgba(80, 10, 30, 0.92) 0%, rgba(12, 3, 10, 0.96) 75%);
+}
+.map-node-abs[data-type="elite"]::after { /* diamond */
+    border-radius: 0;
+    clip-path: polygon(50% 4%, 96% 50%, 50% 96%, 4% 50%);
+    background: radial-gradient(circle at 50% 40%, rgba(90, 5, 60, 0.95) 0%, rgba(15, 2, 20, 0.98) 75%);
+}
+.map-node-abs[data-type="shop"]::after { /* rounded square */
+    border-radius: 8px;
+    clip-path: none;
+    background: radial-gradient(circle at 50% 40%, rgba(70, 50, 10, 0.92) 0%, rgba(18, 10, 2, 0.96) 75%);
+}
+.map-node-abs[data-type="event"]::after { /* octagon */
+    border-radius: 0;
+    clip-path: polygon(28% 4%, 72% 4%, 96% 28%, 96% 72%, 72% 96%, 28% 96%, 4% 72%, 4% 28%);
+    background: radial-gradient(circle at 50% 40%, rgba(55, 15, 85, 0.92) 0%, rgba(10, 3, 22, 0.95) 75%);
+}
+.map-node-abs[data-type="rest"]::after { /* circle pinched at top — pseudo-teardrop via clip-path polygon */
+    border-radius: 0;
+    clip-path: polygon(
+        50% 0%, 65% 14%, 80% 22%, 92% 36%, 98% 55%,
+        92% 78%, 75% 94%, 50% 100%, 25% 94%, 8% 78%,
+        2% 55%, 8% 36%, 20% 22%, 35% 14%
+    );
+    background: radial-gradient(circle at 50% 40%, rgba(10, 60, 40, 0.92) 0%, rgba(3, 15, 10, 0.95) 75%);
+}
+.map-node-abs[data-type="boss"]::after { /* jagged crown */
+    border-radius: 0;
+    clip-path: polygon(0 96%, 0 45%, 12% 28%, 25% 52%, 38% 12%, 50% 48%, 62% 12%, 75% 52%, 88% 28%, 100% 45%, 100% 96%);
+    background: radial-gradient(circle at 50% 60%, rgba(90, 0, 0, 0.95) 0%, rgba(20, 0, 5, 0.98) 75%);
+}
+.map-node-abs[data-type="treasure"]::after { /* 5-point star */
+    border-radius: 0;
+    clip-path: polygon(50% 4%, 61% 36%, 96% 36%, 68% 56%, 79% 92%, 50% 70%, 21% 92%, 32% 56%, 4% 36%, 39% 36%);
+    background: radial-gradient(circle at 50% 40%, rgba(70, 60, 10, 0.92) 0%, rgba(18, 14, 2, 0.96) 75%);
+}
+.map-node-abs[data-type="start"]::after { /* circle (default) */
+    border-radius: 50%;
+    clip-path: none;
+    background: radial-gradient(circle at 50% 40%, rgba(0, 50, 35, 0.9) 0%, rgba(0, 10, 15, 0.95) 75%);
 }
 .map-node-abs .map-node-icon {
     display: block;
@@ -5561,19 +5662,43 @@ body[data-hand="left"] .control-bar #btn-end-turn {
 }
 .map-here-arrow {
     position: absolute;
-    top: -26px;
+    top: -28px;
     left: 50%;
     transform: translateX(-50%);
-    color: var(--neon-gold);
-    font-size: 1.2rem;
-    text-shadow: 0 0 10px var(--neon-gold);
+    /* Day 7 — replaced the gold ▾ glyph with a small cyan diamond pip
+       so the "you are here" beat reads in the same brand colour as the
+       data-packet flow on the active path. The text content (▾) is
+       still emitted by JS but visually hidden via font-size: 0; the
+       ::before pseudo paints the pip. */
+    width: 14px;
+    height: 14px;
+    font-size: 0;
+    color: transparent;
     pointer-events: none;
     animation: map-here-bob 1.4s ease-in-out infinite;
+}
+.map-here-arrow::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, #00f3ff, #4ad8ff);
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    box-shadow: 0 0 10px rgba(74, 216, 255, 0.85),
+                0 0 22px rgba(74, 216, 255, 0.45);
+    animation: map-here-pulse 1.6s ease-in-out infinite;
 }
 @keyframes map-here-bob {
     0%, 100% { transform: translateX(-50%) translateY(0); }
     50%      { transform: translateX(-50%) translateY(-4px); }
 }
+@keyframes map-here-pulse {
+    0%, 100% { transform: scale(1);   filter: brightness(1); }
+    50%      { transform: scale(1.18); filter: brightness(1.35); }
+}
+body.reduced-motion .map-here-arrow,
+body.reduced-motion .map-here-arrow::before,
+body.perf-low      .map-here-arrow,
+body.perf-low      .map-here-arrow::before { animation: none; }
 
 /* Shifting node indicator — purple rotating ring */
 .map-node-abs.shifting {

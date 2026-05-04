@@ -8606,10 +8606,16 @@ triggerSystemCrash() {
                 if (!target) return;
                 let color = null, width = 1.2, dasharray = '', opacity = 1;
 
+                let pathClass = '';
                 if (completedIds.has(node.id) && completedIds.has(target.id)) {
                     color = '#00ff99'; width = 1.6;
+                    pathClass = 'map-path-completed';
                 } else if (completedIds.has(node.id) && availableIds.has(target.id)) {
                     color = '#00f3ff'; width = 1.8; dasharray = '6,4';
+                    // Day 7 — animated dash offset on available routes only.
+                    // Reads as data-packet flow toward the next reachable
+                    // node, drawing the player's eye to legal moves.
+                    pathClass = 'map-path-active';
                 } else if (availableIds.has(node.id) || availableIds.has(target.id)) {
                     color = 'rgba(200, 210, 255, 0.55)'; width = 1.2; dasharray = '3,4'; opacity = 0.9;
                 }
@@ -8618,7 +8624,7 @@ triggerSystemCrash() {
                 // Outer glow underlay (wide, blurred)
                 svgHTML += `<path d="${d}" fill="none" stroke="${color}" stroke-width="${width * 2}" stroke-linecap="round" opacity="0.35" filter="url(#map-line-glow)"/>`;
                 // Crisp top line
-                svgHTML += `<path d="${d}" fill="none" stroke="${color}" stroke-width="${width}" stroke-dasharray="${dasharray}" stroke-linecap="round" opacity="${opacity}"/>`;
+                svgHTML += `<path class="${pathClass}" d="${d}" fill="none" stroke="${color}" stroke-width="${width}" stroke-dasharray="${dasharray}" stroke-linecap="round" opacity="${opacity}"/>`;
             });
         });
 

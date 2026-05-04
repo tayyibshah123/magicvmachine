@@ -229,6 +229,64 @@ Vitest 98/98 green. Day 1 FPS target still hit assuming the per-shape idle gates
 
 **Acceptance:** map is the most-improved screen of the week; perf budget holds; tooltip works on touch (long-press, not hover-only).
 
+**Day 7 completion notes (v1.4.2):**
+- ✅ **Per-type circuit-board node glyphs** — `.map-node-abs::after` chiplet carries the per-type silhouette via `clip-path`: combat = sharp horizontal hexagon, elite = diamond, shop = rounded square, event = octagon, rest = pinched teardrop, boss = jagged crown, treasure = 5-point star, start = circle. Wrapper stays circular for tap target + outer pulse glow + hover ring (none of which can be `clip-path`'d). Inset box-shadow paints the inside-edge stroke that a regular border can't follow under clip-path.
+- ✅ **Animated trace connections** — available routes (`.map-path-active`) animate `stroke-dashoffset: 0 → -20` over 1.4s linear infinite, reading as data-packet flow toward reachable nodes. Completed routes (`.map-path-completed`) get a slower 6s settle drift at lower opacity. Pure dash-offset, no transform — cheap.
+- ✅ **Pulsing player position pip** — replaced the gold ▾ glyph above the current node with a brand-cyan diamond (clip-path polygon) that pulses scale 1 → 1.18 + brightness 1 → 1.35 every 1.6s. Layered over the existing gold node-pulse so the read is "you are here, this is the active beat".
+- ✅ **Visited dimmed** — already present (`completed { opacity: 0.55 }`); confirmed unchanged.
+- ✅ **Mobile fit** — node positions remain percentage-based (10–90% x, 10–92% y), so the map already fits any portrait viewport without horizontal scroll. Verified against the 360-wide pass from Day 2.
+- ✅ **Reduced-motion / low-tier** — both dash-offset animations and the player pip pulse hold static under `body.reduced-motion` and `body.perf-low`. The clip-path silhouettes stay (they're geometry, not motion).
+
+98/98 vitest green.
+
+---
+
+## 7. Week-end summary (2026-05-04 → 2026-05-11)
+
+| Day | Version | Theme | Status |
+|-----|---------|-------|--------|
+| 1 | 1.3.6 | FPS HUD + mirror render hotspot pass | ✅ |
+| 2 | 1.3.7 | Mobile viewport audit + dvh / safe-area fixes | ✅ |
+| 3 | 1.3.8 | Sector chip collapse + tooltip mobile densification | ✅ |
+| 4 | 1.3.9 | End-of-turn digest + end-of-combat recap | ✅ |
+| 5 | 1.4.0 | Cause-of-death pill + scanline + share triggers | ✅ |
+| 6 | 1.4.1 | Per-kind death dissolves + idle anims + slim HP ribbon | ✅ |
+| 7 | 1.4.2 | Map circuit-board glyphs + animated traces + cyan pip | ✅ |
+
+**Cumulative shipped:**
+- 5 new services (`fps-hud`, `combat-stats`, `turn-digest`, `combat-recap`)
+- 1 dispatcher inside `deathBurst` for per-`kind` dissolves
+- ~14 distinct visual / mobile / perf fixes
+- 1 mobile QA checklist (`mobile-qa.md`) for ongoing regression coverage
+- Version stepped 1.3.5 → 1.4.2 (7 PWA cache invalidations)
+- Vitest 98/98 green every commit
+
+**Outstanding from §5 — asset procurement asks (unchanged from Day 0):**
+The 8 audio items in §5 are still the most leveraged content drops for the Day 4–5 panels and Day 6 dissolves. Day 6 wired sensible fallbacks (`snap`, `earthquake`, `zap`, `beam`, `glitch_attack`, `siren`) so nothing is blocked, but custom stings would significantly upgrade the moments. The list:
+
+1. Combat recap sting (1.0–1.5s synthwave swell)
+2. Game-over autopsy drone (2–3s descending bass + vinyl crackle, loopable)
+3. Combo-trigger sting ×3 variants (0.4–0.8s glitchy zap)
+4. Shield-break SFX (0.6s glass-crack + electric snap, distinct from defend.ogg)
+5. Parry-success ping (0.3s bright high-frequency chime)
+6. Per-boss themes ×5 (90s loops, 110–130 BPM, distinct motifs)
+7. Menu / sanctuary track (90s ambient synthwave loop)
+8. UI tap variants ×2 (80–120ms soft synth ticks)
+
+Format: `.ogg` Vorbis q4 + `.m4a` AAC 128k. 44.1kHz stereo. Drop into `sfx/` or `music/`.
+
+**Manual verifications still owed:**
+- Day 1 device baseline — sideload v1.4.2 on a mid-spec phone, paste FPS readout into the §3 Day 1 placeholder block.
+- Day 2 mobile-qa.md — fill in the 32-cell checklist via Chrome devtools at 360/390/414/768.
+
+**Next-week recommended scope (Week 2):**
+With Foundation + Combat polish done, the highest-impact areas remaining per the audit:
+1. **Per-class attack/summon/death animations** (Part 26.1–26.3) — the single biggest content gap, 18 distinct anims at ~1 day per class (6 days). Defer one day for asset procurement turnaround.
+2. **Intel 2.0 Chronicle + Cipher tabs** (Part 27.1) — Bestiary thread already exists; extending the modal to 3 tabs is ~1–2 days.
+3. **Map per-sector special features** (Part 30.4) — sector-1 camera sweep, sector-2 iced paths, etc. ~3 days.
+
+Or pivot to a content drop instead — additional sector-X enemy roster, or wire the deferred Part 31.2 fragment-milestone share for 50k/250k tiers.
+
 ---
 
 ## 4. Non-negotiables for every PR this week
