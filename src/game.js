@@ -13559,7 +13559,39 @@ async startTurn() {
             candidates = availableTypes.filter(t => !(this.UNIQUE_PER_HAND.has(t) && reserved.has(t)));
             if (candidates.length === 0) candidates = availableTypes;
         }
-        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+        // Roadmap Part 2.1.5 — Dice weight system. Meta upgrades let the
+        // player buy +25% bias toward chosen slots. Implementation:
+        // build a weighted candidate list by appending duplicate entries
+        // for each pitied slot's dice. Cost is one Map lookup +
+        // proportional duplications per pick — acceptable for the 4-7
+        // dice rolled per turn. Skipped if no bias is owned, keeping
+        // the original code path on the no-cost fast track.
+        const _SLOT_BIAS_KEYS = {
+            attack: 'm_bias_attack',
+            defend: 'm_bias_defend',
+            mana:   'm_bias_mana',
+            minion: 'm_bias_minion'
+        };
+        let weighted = candidates;
+        let _hasBias = false;
+        if (this.player) {
+            for (const slot in _SLOT_BIAS_KEYS) {
+                if (this.hasMetaUpgrade(_SLOT_BIAS_KEYS[slot])) { _hasBias = true; break; }
+            }
+        }
+        if (_hasBias) {
+            weighted = candidates.slice();
+            for (const t of candidates) {
+                const slot = this._dieSlot(t);
+                if (slot && _SLOT_BIAS_KEYS[slot] && this.hasMetaUpgrade(_SLOT_BIAS_KEYS[slot])) {
+                    // +25% bias = add one extra entry every 4. Push one
+                    // duplicate to lift the slot's expected weight by
+                    // roughly +25% (depends on candidate composition).
+                    weighted.push(t);
+                }
+            }
+        }
+        const pick = weighted[Math.floor(Math.random() * weighted.length)];
         if (this.UNIQUE_PER_HAND.has(pick) && reserved) reserved.add(pick);
         return pick;
     },

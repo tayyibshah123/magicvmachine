@@ -364,7 +364,15 @@ const META_UPGRADES = [
     { id: 'm_dmg',        name: "Solar Flare",        desc: "All attacks deal +30% Damage.",              cost: 1500, icon: ICONS.metaSolar },
     { id: 'm_minion_atk', name: "Nano-Swarm",         desc: "Minions: +50% Dmg, +1 HP.",                  cost: 1100, icon: ICONS.metaSwarm },
     { id: 'm_shield',     name: "Hardened Hull",      desc: "Start combat with 15 Shield.",               cost: 900,  icon: ICONS.relicShield },
-    { id: 'm_relic',      name: "Data Cache",         desc: "Start run with a random Relic.",             cost: 2000, icon: ICONS.metaDataCache }
+    { id: 'm_relic',      name: "Data Cache",         desc: "Start run with a random Relic.",             cost: 2000, icon: ICONS.metaDataCache },
+    /* Roadmap Part 2.1.5 — Dice weight system. Each bias upgrade gives
+       a +25% roll-weighting toward its slot. Stackable across slots
+       (own multiple → bias multiple slots, useful for the Summoner's
+       attack+minion pivot). Mid cost — comparable to Tactical Link. */
+    { id: 'm_bias_attack', name: "Aim Override",      desc: "+25% chance attack dice land in your hand.",  cost: 900,  icon: ICONS.metaSolar },
+    { id: 'm_bias_defend', name: "Bulwark Routine",   desc: "+25% chance defend dice land in your hand.",  cost: 900,  icon: ICONS.relicShield },
+    { id: 'm_bias_mana',   name: "Conduit Tap",       desc: "+25% chance mana dice land in your hand.",    cost: 900,  icon: ICONS.metaMana },
+    { id: 'm_bias_minion', name: "Summon Imprint",    desc: "+25% chance minion dice land in your hand.",  cost: 900,  icon: ICONS.metaSwarm }
 ];
 
 const UPGRADES_POOL = [
