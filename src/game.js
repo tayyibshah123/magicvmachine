@@ -8202,6 +8202,113 @@ triggerSystemCrash() {
             }
         }
         this.map.currentIdx = 'start';
+        // Per-sector map mechanics (Roadmap Part 30.4) — applied once at
+        // map gen so the flag is part of the saved map state.
+        this._applySectorMapSpecials();
+    },
+
+    // Per-sector map specials (Part 30.4):
+    //   Sector 1 — Surveillance Camera Sweep (lazy: applied each visitNode)
+    //   Sector 3 — Magma Rivers (apply HOT to 1-2 nodes at gen time)
+    //   Sector 4 — Hive Corruption (lazy: applied each visitNode)
+    // Sector 2 (Iced Paths) and Sector 5 (Glitched Branches) deferred —
+    // both touch the connection graph and warrant a separate pass.
+    _applySectorMapSpecials() {
+        if (!this.map || !this.map.nodes) return;
+        if (this.sector === 3) {
+            // Mark 1-2 random non-special nodes as HOT — visiting them
+            // costs 5 HP up front. Nodes are picked from middle layers
+            // so the player has actual route choice (not the very first
+            // or last reachable node).
+            const candidates = this.map.nodes.filter(n =>
+                n.layer && n.layer >= 2 && n.layer <= 6
+                && n.type !== 'boss' && n.type !== 'rest'
+                && n.type !== 'shop' && n.type !== 'elite'
+            );
+            const hotCount = Math.min(candidates.length, 1 + Math.floor(Math.random() * 2));
+            for (let i = 0; i < hotCount; i++) {
+                const idx = Math.floor(Math.random() * candidates.length);
+                const pick = candidates.splice(idx, 1)[0];
+                if (pick) pick.hot = true;
+            }
+        }
+        // S1 / S4 lazy state lives on this.map itself — initialised
+        // here so visitNode reads a defined counter on first move.
+        if (this.sector === 1) this.map._s1MoveCount = 0;
+        if (this.sector === 4) this.map._s4MoveCount = 0;
+    },
+
+    // Resolve any per-sector special EFFECTS that fire when the player
+    // enters a flagged node. Runs BEFORE the node action so HOT damage
+    // pre-loads combat at lower HP and INFESTED bonuses are visible to
+    // setupCombat.
+    _consumeSectorMapSpecials(node) {
+        if (!node || !this.player) return;
+        // S3 — HOT node costs 5 HP up-front (env damage, ignores shield).
+        // The floater anchors at node coordinates aren't useful (DOM map
+        // vs canvas), so the floater drops at player.x/y — same beat.
+        if (node.hot && this.sector === 3) {
+            const HOT_DMG = 5;
+            try {
+                this.player.takeDamage(HOT_DMG, null, true, /*bypassShield*/ true);
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 100,
+                    `HOT TILE −${HOT_DMG}`, '#ff5d2e');
+                AudioMgr.playSound('hit', { playbackRate: 0.8 });
+            } catch (_) {}
+            // One-shot — clear the flag so leaving + re-entering (event
+            // node returning to map) doesn't re-bill the player.
+            node.hot = false;
+        }
+        // S1 — WATCHED node grants a small frag bonus (you slipped past
+        // surveillance). Cleared on consume so re-render doesn't re-mark.
+        if (node.watched && this.sector === 1) {
+            const SLIP_FRAGS = 5;
+            this.techFragments += SLIP_FRAGS;
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 100,
+                `SLIPPED SURVEILLANCE +${SLIP_FRAGS} FRAG`, '#5eead4');
+            AudioMgr.playSound('mana', { playbackRate: 1.2 });
+            const fragCountEl = document.getElementById('fragment-count');
+            if (fragCountEl) fragCountEl.innerText = `Fragments: ${this.techFragments}`;
+            node.watched = false;
+        }
+        // S4 — INFESTED. Stash a per-combat flag the next setupCombat /
+        // win path reads; clear the node flag so the same combat doesn't
+        // double-buff if the player reroutes.
+        if (node.infested && this.sector === 4) {
+            this._infestedCombatPending = true;
+        }
+    },
+
+    // Re-arm the lazy per-sector specials (S1 + S4) after a successful
+    // map move. Picks an unvisited, non-current, non-special node so
+    // the marker doesn't collide with shop / rest / boss / elite slots.
+    _tickSectorMapSpecials() {
+        if (!this.map || !this.map.nodes) return;
+        const pickEligible = () => this.map.nodes.filter(n =>
+            n.id !== this.map.currentIdx
+            && n.id !== 'start'
+            && n.status !== 'completed'
+            && n.type !== 'boss' && n.type !== 'shop'
+            && n.type !== 'rest' && n.type !== 'elite'
+        );
+        if (this.sector === 1) {
+            this.map._s1MoveCount = (this.map._s1MoveCount || 0) + 1;
+            // Re-mark every 2 moves; clear any prior watch first so only
+            // one node carries the marker at a time.
+            if (this.map._s1MoveCount % 2 === 0) {
+                this.map.nodes.forEach(n => { if (n.watched) n.watched = false; });
+                const pool = pickEligible();
+                if (pool.length) pool[Math.floor(Math.random() * pool.length)].watched = true;
+            }
+        }
+        if (this.sector === 4) {
+            this.map._s4MoveCount = (this.map._s4MoveCount || 0) + 1;
+            // Every move infests a new node; clear prior infestations
+            // so the player isn't permanently locked out of clean nodes.
+            this.map.nodes.forEach(n => { if (n.infested) n.infested = false; });
+            const pool = pickEligible().filter(n => n.type === 'combat');
+            if (pool.length) pool[Math.floor(Math.random() * pool.length)].infested = true;
+        }
     },
 
     // Randomization: when a shifting node is still un-visited at map re-render, roll a chance to reshuffle its type.
@@ -8533,7 +8640,15 @@ triggerSystemCrash() {
         this.map.nodes.forEach((node, idx) => {
             const el = document.createElement('div');
             const isCurrent = node.id === currentNodeId && node.status === 'completed';
-            const extraClass = (node.shifting ? ' shifting' : '') + (node.justShifted ? ' just-shifted' : '');
+            // Per-sector map specials (Part 30.4) — append the marker
+            // class so CSS can layer the sector-themed decoration on
+            // top of the node. Only one of these will ever apply
+            // (sector-gated upstream) but the OR-chain is harmless.
+            const sectorSpecialClass =
+                (node.watched  ? ' map-special-watched'  : '') +
+                (node.hot      ? ' map-special-hot'      : '') +
+                (node.infested ? ' map-special-infested' : '');
+            const extraClass = (node.shifting ? ' shifting' : '') + (node.justShifted ? ' just-shifted' : '') + sectorSpecialClass;
             el.className = `map-node-abs ${node.status}${isCurrent ? ' current' : ''}${extraClass} node-entering`;
             el.style.left = `${node.x}%`;
             el.style.top = `${node.y}%`;
@@ -8550,7 +8665,14 @@ triggerSystemCrash() {
                 el.onclick = () => this.visitNode(node);
             }
 
-            const tipPrefix = node.shifting ? 'SHIFTING · ' : '';
+            // Tooltip prefixes — accumulate any active sector specials
+            // so the player reads "WATCHED · COMBAT" / "HOT · EVENT"
+            // before committing the route.
+            let tipPrefix = '';
+            if (node.shifting) tipPrefix += 'SHIFTING · ';
+            if (node.watched)  tipPrefix += 'WATCHED · ';
+            if (node.hot)      tipPrefix += 'HOT (-5 HP) · ';
+            if (node.infested) tipPrefix += 'INFESTED · ';
             const tipText = tipPrefix + node.type.toUpperCase() + (node.status === 'available' ? '. Click to enter' : '');
             el.onmouseenter = (e) => TooltipMgr.show(tipText, e.clientX, e.clientY);
             el.onmouseleave = () => TooltipMgr.hide();
@@ -8665,17 +8787,22 @@ triggerSystemCrash() {
 
     visitNode(node) {
         AudioMgr.playSound('click');
-        
+
         if (node.type === 'start') return;
 
-        // FIX: Removed early return for 'event'. 
+        // FIX: Removed early return for 'event'.
         // It must flow through the logic below to update currentIdx correctly.
-        
+
+        // ── Per-sector map specials (Roadmap Part 30.4) — fired BEFORE
+        // the node action so HOT damage lands before combat starts and
+        // INFESTED enemy buffs are in place when setupCombat reads them.
+        this._consumeSectorMapSpecials(node);
+
         // 1. Update previous node status (Visuals & Locking)
         if (this.map.currentIdx !== node.id) {
             const previous = this.map.nodes.find(n => n.id === this.map.currentIdx);
             if(previous) previous.status = 'completed';
-            
+
             this.map.nodes.forEach(n => {
                 if (n.status === 'available' && n.id !== node.id) {
                     n.status = 'locked';
@@ -8685,7 +8812,13 @@ triggerSystemCrash() {
 
         // 2. Update Player Position (Crucial for completeCurrentNode to work)
         this.map.currentIdx = node.id;
-        
+
+        // ── After-move sector specials — S1 sweep + S4 corruption
+        // re-arm so the NEXT map view shows the new watched/infested
+        // node. Done after currentIdx update so we don't pick the
+        // node we just walked into.
+        this._tickSectorMapSpecials();
+
         // 3. Save Game (at start of node)
         this.saveGame();
 
@@ -11962,6 +12095,22 @@ async startCombat(type) {
                 mechPill.onmouseenter = mechPill.onmouseleave = mechPill.ontouchstart = null;
             }
         }
+
+        // Per-sector map special — Sector 4 INFESTED node (Roadmap Part 30.4).
+        // The Hive Corruption marker on a map node bumps the next combat's
+        // enemy by +25% HP and tags the win path so the frag drop doubles.
+        // Flag is one-shot — cleared right after consume so retreating /
+        // restarting a node doesn't permanently re-infest.
+        if (this._infestedCombatPending && this.enemy && !this.enemy.isBoss) {
+            this.enemy.maxHp = Math.floor(this.enemy.maxHp * 1.25);
+            this.enemy.currentHp = this.enemy.maxHp;
+            this.enemy.infested = true;
+            this._queueBossAnnouncement && this._queueBossAnnouncement(() => {
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 220,
+                    'INFESTED', '#7fff00');
+            });
+        }
+        this._infestedCombatPending = false;
 
         // Dynamic difficulty assist (§3.3) — if the player has lost to this
         // sector's boss 3+ times in a row (and they're not on any Ascension)
@@ -18798,6 +18947,18 @@ drawEffects() {
             const bonus = frags - before;
             if (bonus > 0 && this.enemy) {
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 130, `TWIST +${bonus}`, '#ffd76a');
+            }
+        }
+        // Sector 4 INFESTED — doubled frag drop on the infested combat
+        // (Roadmap Part 30.4). Reads the enemy.infested flag set in
+        // setupCombat and floats a clear callout so the bonus is legible.
+        if (this.enemy && this.enemy.infested) {
+            const before = frags;
+            frags *= 2;
+            const bonus = frags - before;
+            if (bonus > 0) {
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 150,
+                    `HIVE BOUNTY +${bonus}`, '#7fff00');
             }
         }
         this.techFragments += frags;

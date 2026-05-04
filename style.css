@@ -5700,6 +5700,113 @@ body.reduced-motion .map-here-arrow::before,
 body.perf-low      .map-here-arrow,
 body.perf-low      .map-here-arrow::before { animation: none; }
 
+/* Per-sector map specials (Roadmap Part 30.4) — each marker layers
+   ONTO the existing per-type chiplet without replacing it, so the
+   player still reads what type the node is. */
+
+/* S1 — WATCHED. Cyan sweeping spotlight that orbits the node, reads
+   as "surveillance has eyes on this slot". Visiting grants +5 frags. */
+.map-node-abs.map-special-watched {
+    box-shadow: 0 0 22px rgba(74, 216, 255, 0.55),
+                inset 0 0 14px rgba(74, 216, 255, 0.25);
+}
+.map-node-abs.map-special-watched::after,
+.map-node-abs.map-special-watched::before {
+    /* Don't override the per-type chiplet — the spotlight rides on a
+       dedicated decorative sibling instead. */
+}
+.map-node-abs.map-special-watched > .map-node-glow {
+    box-shadow: 0 0 16px var(--neon-blue);
+}
+.map-special-watched .map-node-icon {
+    filter: drop-shadow(0 0 6px var(--neon-blue));
+}
+.map-special-watched::before {
+    /* Sweeping spotlight arc — uses the conic-gradient as a rotating
+       sweep and clips to a thin ring with the node's outline shape. */
+    content: '';
+    position: absolute;
+    inset: -6px;
+    z-index: 3;
+    pointer-events: none;
+    border-radius: 50%;
+    background: conic-gradient(
+        from 0deg,
+        transparent 0deg,
+        rgba(74, 216, 255, 0.55) 30deg,
+        transparent 80deg,
+        transparent 360deg
+    );
+    -webkit-mask: radial-gradient(circle, transparent 60%, #000 62%, #000 78%, transparent 80%);
+            mask: radial-gradient(circle, transparent 60%, #000 62%, #000 78%, transparent 80%);
+    animation: map-watched-sweep 3.6s linear infinite;
+}
+@keyframes map-watched-sweep {
+    to { transform: rotate(360deg); }
+}
+
+/* S3 — HOT. Pulsing molten halo + 5 HP cost on entry. Magma read. */
+.map-node-abs.map-special-hot {
+    box-shadow: 0 0 22px rgba(255, 93, 46, 0.7),
+                inset 0 0 14px rgba(255, 93, 46, 0.4);
+    animation: map-hot-pulse 1.6s ease-in-out infinite;
+}
+@keyframes map-hot-pulse {
+    0%, 100% { box-shadow: 0 0 22px rgba(255, 93, 46, 0.6),
+                           inset 0 0 14px rgba(255, 93, 46, 0.3); }
+    50%      { box-shadow: 0 0 38px rgba(255, 93, 46, 1.0),
+                           inset 0 0 22px rgba(255, 93, 46, 0.55); }
+}
+.map-node-abs.map-special-hot::before {
+    content: 'HOT −5';
+    position: absolute;
+    top: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Orbitron', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.16em;
+    color: #ff5d2e;
+    text-shadow: 0 0 6px rgba(255, 93, 46, 0.85);
+    pointer-events: none;
+    z-index: 4;
+    white-space: nowrap;
+}
+
+/* S4 — INFESTED. Green corrupting halo + INFESTED label. Combat is
+   harder (+25% enemy HP) but pays double frags. */
+.map-node-abs.map-special-infested {
+    box-shadow: 0 0 22px rgba(127, 255, 0, 0.55),
+                inset 0 0 14px rgba(127, 255, 0, 0.32);
+    animation: map-infested-corrupt 2.2s ease-in-out infinite;
+}
+@keyframes map-infested-corrupt {
+    0%, 100% { filter: hue-rotate(0deg) brightness(1); }
+    50%      { filter: hue-rotate(15deg) brightness(1.2); }
+}
+.map-node-abs.map-special-infested::before {
+    content: 'INFESTED ×2';
+    position: absolute;
+    top: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Orbitron', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.16em;
+    color: #7fff00;
+    text-shadow: 0 0 6px rgba(127, 255, 0, 0.85);
+    pointer-events: none;
+    z-index: 4;
+    white-space: nowrap;
+}
+/* Reduced-motion / low-tier — drop the animations, keep the visual. */
+body.reduced-motion .map-node-abs.map-special-watched::before,
+body.reduced-motion .map-node-abs.map-special-hot,
+body.reduced-motion .map-node-abs.map-special-infested,
+body.perf-low      .map-node-abs.map-special-watched::before,
+body.perf-low      .map-node-abs.map-special-hot,
+body.perf-low      .map-node-abs.map-special-infested { animation: none; }
+
 /* Shifting node indicator — purple rotating ring */
 .map-node-abs.shifting {
     border-color: var(--neon-purple) !important;

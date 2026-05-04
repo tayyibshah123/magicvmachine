@@ -289,6 +289,27 @@ Or pivot to a content drop instead — additional sector-X enemy roster, or wire
 
 ---
 
+## 8. Week 2 progress
+
+### Day 1 (v1.4.3) — Per-class summon + death VFX
+**Audit win:** Part 26.1 (per-class **attack** VFX) was already shipped inline at game.js:14363-14380 + 15752-15940 — `attack_pawn_volley`, `attack_glyph_weave`, `attack_sanguine_bite`, `attack_overdrive`, `attack_bulwark_bash`, `attack_verdant_lash` all live. Shaved 6 days off the estimate.
+
+Built `src/services/class-vfx.js` with `playSummon` / `playDeath` for all 6 classes. Each branch reuses the existing particle pool + AudioMgr stings — no new sprite assets. Tier-gated (low-tier gets a single brand burst). Wired at `drawEntity` spawn-VFX path (player-side minions only) and `gameOver` (before screen transition).
+
+### Day 2 (no-op shipping audit) — Intel 2.0 already done
+**Audit win:** Part 27.1 (Intel 2.0 — Bestiary / Chronicle / Cipher 3-tab shell) is fully shipped. `index.html:597-625` carries the tab DOM, `game.js:10437-10902` has `_renderIntelProfile` / `_renderIntelDossier` (with progressive-disclosure tiers NEWCOMER → LOGGED → HUNTED → ADVERSARY → NEMESIS) / `_renderIntelChronicle` (stats banner + filter chips + win-loss styling) / `_renderIntelCipher` (5 chapters: THE FALL, NEW WORLD, RESISTANCE, CLASSES, TRUTH). `_wireIntelTabs` handles arrow-key nav + scroll reset. Saved another ~2 days.
+
+### Day 3 (v1.4.4) — Map per-sector specials (Part 30.4, partial)
+- ✅ **S1 — Surveillance Camera Sweep**: `_tickSectorMapSpecials` marks a random unvisited node `watched` every 2 map moves in sector 1. Visiting grants +5 fragments with a "SLIPPED SURVEILLANCE" floater. CSS layers a sweeping conic-gradient spotlight (radial mask) that orbits the node at 3.6s.
+- ✅ **S3 — Magma Rivers**: `_applySectorMapSpecials` tags 1-2 non-special middle-layer nodes `hot` at map gen in sector 3. `_consumeSectorMapSpecials` deals 5 HP env damage (bypasses shield) before the node action fires. CSS adds a pulsing molten halo + "HOT −5" label above the node.
+- ✅ **S4 — Hive Corruption**: `_tickSectorMapSpecials` infests one random combat node every map move in sector 4. `_consumeSectorMapSpecials` flags `_infestedCombatPending`, which `setupCombat` reads to bump enemy HP +25%. `winCombat` doubles the frag drop on infested kills with a "HIVE BOUNTY" floater. CSS adds a green corrupting halo + hue-rotate animation + "INFESTED ×2" label.
+
+**Deferred (require map-graph generation changes — Week 3):**
+- ❌ **S2 — Iced Paths**: blocking some map edges until a heat-vent event opens them. Touches `generateMap` connection logic + needs the heat-vent event to exist.
+- ❌ **S5 — Glitched Branches**: paths flicker between 2 destinations, resolved on click. Touches edge rendering in renderMap + visitNode resolution. The existing `node.shifting` mechanic covers a similar spirit (event-type re-rolls during play) but is sector-agnostic.
+
+---
+
 ## 4. Non-negotiables for every PR this week
 
 Each change must:
