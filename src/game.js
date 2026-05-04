@@ -12383,6 +12383,12 @@ async startCombat(type) {
         this.player.qteRerolls = (this.player.classId === 'annihilator') ? 1 : 0;
         this.player.bonusDrawNextTurn = 0;
         this.player._lastDamageDealt = 0;
+        // Per-slot pity reset (Roadmap Part 2.1.1) — fresh combat starts
+        // with no slot debt so the player isn't surprised by a forced
+        // pitied slot in turn 1 of combat 2 because they were lean on
+        // defends in combat 1.
+        this.player._slotMissStreak = { attack: 0, defend: 0, mana: 0, minion: 0 };
+        this.player.sigMissStreak = 0;
         // Reset per-combat Apex stack count so the next combat starts at ×1.
         if (Array.isArray(this.player.minions)) {
             this.player.minions.forEach(m => { if (m) m._apexStacks = 0; });
@@ -13636,6 +13642,37 @@ async startTurn() {
         // Pity: guarantee SIGNATURE after two straight misses.
         const sigPity = (this.player.sigMissStreak || 0) >= 2;
 
+        // Per-slot pity (Roadmap Part 2.1.1) — track how many turns have
+        // passed since each base slot (attack/defend/mana/minion) showed
+        // up in hand. After the threshold the slot with the longest
+        // streak is forced into one slot of the new hand, biased to the
+        // class's base die for that slot. Prevents the "where the hell
+        // is my defend die" run-killer hands. Threshold = 3 to keep the
+        // mechanic invisible most of the time and only fire when it
+        // genuinely matters.
+        if (!this.player._slotMissStreak) {
+            this.player._slotMissStreak = { attack: 0, defend: 0, mana: 0, minion: 0 };
+        }
+        const _SLOT_PITY_THRESHOLD = 3;
+        let _pitySlot = null;
+        let _pityType = null;
+        const _streaks = this.player._slotMissStreak;
+        const _slotsByMiss = ['attack', 'defend', 'mana', 'minion']
+            .filter(s => (_streaks[s] || 0) >= _SLOT_PITY_THRESHOLD)
+            .sort((a, b) => (_streaks[b] || 0) - (_streaks[a] || 0));
+        if (_slotsByMiss.length > 0) {
+            _pitySlot = _slotsByMiss[0];
+            // Find this class's base die for the pitied slot. Fall back
+            // to any available type that maps to the slot (covers the
+            // edge case where the player has a swapped-in alternate).
+            const cd = (this.player.classId && PLAYER_CLASSES.find(c => c.id === this.player.classId)) || null;
+            if (cd && cd.classDice && cd.classDice[_pitySlot] && availableTypes.includes(cd.classDice[_pitySlot])) {
+                _pityType = cd.classDice[_pitySlot];
+            } else {
+                _pityType = availableTypes.find(t => this._dieSlot(t) === _pitySlot) || null;
+            }
+        }
+
         const reserved = new Set();
         let sigPlaced = false;
         let basePlaced = false;
@@ -13643,12 +13680,21 @@ async startTurn() {
         // pin it into slot 0 before any other logic runs.
         const sealed = this.sealedDie;
         const sealedType = sealed && availableTypes.includes(sealed.type) ? sealed.type : null;
+        // The pity slot lands at position 1 (not 0 — that's reserved for
+        // sealed dice + signature pity already). If the hand is only one
+        // slot, the pity won't apply this turn — that's fine, a 1-die
+        // hand has bigger problems to surface.
+        const _PITY_SLOT_INDEX = 1;
         for (let i = 0; i < count; i++) {
             let k;
             const slotsLeft = count - i;
 
             if (i === 0 && sealedType) {
                 k = sealedType;
+            } else if (i === _PITY_SLOT_INDEX && _pityType) {
+                // Slot-pity placement — see _slotMissStreak block above.
+                k = _pityType;
+                _pityType = null; // single placement only, even if multiple slots over threshold
             } else if (hasSignature && !sigPlaced && (
                 sigPity ||
                 Math.random() < SIG_RATE ||
@@ -13673,6 +13719,26 @@ async startTurn() {
         }
 
         this.player.sigMissStreak = sigPlaced ? 0 : ((this.player.sigMissStreak || 0) + 1);
+
+        // Per-slot pity streak update (Roadmap Part 2.1.1) — after each
+        // roll, increment the miss-counter for any base slot that didn't
+        // appear in the hand and reset slots that did. Reading the just-
+        // rolled dicePool means the pity counter accurately reflects
+        // what the player will SEE, not just what we tried to deal.
+        if (this.player._slotMissStreak) {
+            const _slotsInHand = new Set();
+            this.dicePool.forEach(d => {
+                const s = this._dieSlot(d.type);
+                if (s) _slotsInHand.add(s);
+            });
+            ['attack', 'defend', 'mana', 'minion'].forEach(slot => {
+                if (_slotsInHand.has(slot)) {
+                    this.player._slotMissStreak[slot] = 0;
+                } else {
+                    this.player._slotMissStreak[slot] = (this.player._slotMissStreak[slot] || 0) + 1;
+                }
+            });
+        }
 
         // Archivist — seal every die that matches the type the boss archived
         // last turn. The flag is consumed (one-turn lockout) so the player
@@ -20020,11 +20086,15 @@ drawEffects() {
     },
 
     _checkFragmentMilestone() {
-        // 100k cumulative fragments — a real grind milestone, not just a
-        // boot-day reward. Fires once per save.
-        if ((this.techFragments || 0) >= 100000) {
-            this._flagShareTrigger('frag_100k', 'FRAGMENT HOARDER · 100K');
-        }
+        // Cumulative-fragment grind milestones — share-worthy beats keyed
+        // off the player's lifetime fragment total. Each tier fires once
+        // per save (the localStorage de-dupe inside _flagShareTrigger).
+        // Day 5 shipped 100k; Week 2 polish adds 50k as a mid-tier reach
+        // and 250k as a long-haul brag.
+        const f = this.techFragments || 0;
+        if (f >= 250000) this._flagShareTrigger('frag_250k', 'FRAGMENT BARON · 250K');
+        else if (f >= 100000) this._flagShareTrigger('frag_100k', 'FRAGMENT HOARDER · 100K');
+        else if (f >= 50000)  this._flagShareTrigger('frag_50k',  'FRAGMENT HUNTER · 50K');
     },
 
     _renderShareTriggerHint(buttonId) {
