@@ -650,6 +650,8 @@ const Game = {
             this.changeState(STATE.MENU); 
         });
         attachButtonEvent('btn-intel', () => this.changeState(STATE.INTEL));
+        attachButtonEvent('btn-ascension', () => this._openAscensionPanel());
+        attachButtonEvent('btn-ascension-close', () => this._closeAscensionPanel());
         attachButtonEvent('btn-back-intel', () => this.changeState(STATE.MENU));
         attachButtonEvent('btn-view-codex', () => this.changeState(STATE.CODEX));
         attachButtonEvent('btn-back-codex', () => this.changeState(STATE.INTEL));
@@ -3449,6 +3451,10 @@ startQTE(type, x, y, callback, opts) {
             case STATE.MENU:
                 activate('screen-start');
                 Unlocks.applyMenuVisibility();
+                // Ascension tile (Roadmap Part 28.2) — gated separately
+                // from the Unlocks map since it shares the FIRST_RUN_COMPLETE
+                // trigger with the Archive tile but lives in its own slot.
+                this._refreshAscensionTile && this._refreshAscensionTile();
                 this._startMenuPulse();
                 // Personalize the menu subtitle with the operator callsign.
                 {
@@ -10835,6 +10841,36 @@ triggerSystemCrash() {
         return { kind: 'minion', meta: null };
     },
 
+    // Roadmap Part 27.4 — sparse lookup of Ascension-tier-specific
+    // dossier notes. Returns the highest-tier note the player has
+    // earned (i.e. has actually killed this enemy at that asc level
+    // or higher). Bosses get the most flavour since their mechanics
+    // shift hardest under high ascension.
+    _ASC_DOSSIER_NOTES: {
+        'THE PANOPTICON':  [{ tier: 5,  text: "Phase 3 picks up Blind Protocol — every fourth turn it briefly redacts your dice icons." }],
+        'NULL_POINTER':    [{ tier: 5,  text: "The Void Pocket pulls a SECOND die at high tiers. Plan a turn-1 buffer to absorb the loss." }],
+        'THE COMPILER':    [{ tier: 5,  text: "Recompile twists debuffs into +damage 33% faster. Don't stack DoTs you can't burst through." }],
+        'HIVE PROTOCOL':   [{ tier: 5,  text: "Drone share crosses minion lines at high tiers. Splash damage spreads across the swarm." }],
+        'TESSERACT PRIME': [{ tier: 5,  text: "Reality Split fires on the FIRST attack at high tiers, not after Phase 3 trigger. Save block windows for turn 1." }],
+        'THE ARCHIVIST':   [{ tier: 10, text: "Archive consumes two dice slots at A10+. The locked dice rotate per turn — note the pattern in turn 1." }],
+        'Signal Jammer':   [{ tier: 5,  text: "Reflect ramps to 100% in the late sectors. Lead with chip damage, not haymakers." }],
+        'Phase Stalker':   [{ tier: 5,  text: "Pass-through chance climbs to 50% at high tiers. Don't bank the win on a single attack." }],
+        'Echo Phantom':    [{ tier: 5,  text: "Mirror Strike echoes the player-side total at A5+, not just direct damage. Mind your minion swing." }]
+    },
+    _dossierAscNote(name, maxAscSeen) {
+        if (!name || !maxAscSeen) return null;
+        const list = this._ASC_DOSSIER_NOTES[name];
+        if (!list || !list.length) return null;
+        // Return the highest tier the player has cleared this enemy at.
+        let best = null;
+        for (const note of list) {
+            if (maxAscSeen >= note.tier && (!best || note.tier > best.tier)) {
+                best = note;
+            }
+        }
+        return best;
+    },
+
     _dossierIntentSummary(meta) {
         if (!meta) return '';
         const moves = (meta.moves && Array.isArray(meta.moves)) ? meta.moves : null;
@@ -10928,6 +10964,15 @@ triggerSystemCrash() {
         }
         if (tier.reveal >= 4) {
             detailHtml += `<div class="intel-dossier-detail-line"><span class="lbl">Nemesis Note</span>You have made this target your specialty. Their patterns are no longer a surprise.</div>`;
+        }
+        // Roadmap Part 27.4 — Ascension-tier-specific dossier notes.
+        // Surfaces a per-tier intel snippet ONLY for entries the player
+        // has actually felled at that ascension level. Lookup table is
+        // sparse: not every enemy has a high-tier note, just the ones
+        // whose mechanics shift meaningfully under hard ascension.
+        const ascNote = this._dossierAscNote(name, record.maxAscSeen || 0);
+        if (ascNote) {
+            detailHtml += `<div class="intel-dossier-detail-line intel-dossier-asc-line"><span class="lbl">A${ascNote.tier}+ Intel</span>${ascNote.text}</div>`;
         }
         // Show the next reveal hint if not maxed.
         if (tier.next) {
@@ -18669,12 +18714,13 @@ drawEffects() {
         // Track the kill so the next time the player meets this enemy the
         // briefing shows "Encountered N times" and achievements can fire.
         if (this.enemy && this.enemy.name && this.currentState !== STATE.TUTORIAL_COMBAT) {
-            Intel.recordKill(this.enemy.name, this.sector);
+            const _asc = (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0;
+            Intel.recordKill(this.enemy.name, this.sector, _asc);
             // Also log any enemy-side minion kills for regular combats so
             // the total-kill counter climbs realistically.
             if (Array.isArray(this.enemy.minions)) {
                 this.enemy.minions.forEach(m => {
-                    if (m && m.name && m.currentHp <= 0) Intel.recordKill(m.name, this.sector);
+                    if (m && m.name && m.currentHp <= 0) Intel.recordKill(m.name, this.sector, _asc);
                 });
             }
         }
@@ -20000,6 +20046,117 @@ drawEffects() {
         hint.textContent = `★ ${pending.label} — SHARE THIS`;
         // Consume so a second screen activation doesn't re-decorate.
         this._shareTriggerPending = null;
+    },
+
+    // ─────────────────────────────────────────────────────────────────
+    // Ascension panel (Roadmap Part 28.2 + 28.3) — promoted from the
+    // dev-tab slider into a dedicated main-menu tile + modal. Gated to
+    // FIRST_RUN_COMPLETE so the player isn't surfaced a difficulty
+    // picker before they've seen the base game.
+    // ─────────────────────────────────────────────────────────────────
+    _ascUiGated() {
+        // Show the tile only after the player has cleared at least one
+        // run. Survives on the menu re-render so a returning player
+        // doesn't have to clear again.
+        try {
+            return typeof Achievements !== 'undefined'
+                && Achievements.isUnlocked
+                && Achievements.isUnlocked('FIRST_RUN_COMPLETE');
+        } catch (_) { return false; }
+    },
+    _refreshAscensionTile() {
+        const tile = document.getElementById('btn-ascension');
+        if (!tile) return;
+        const gated = !this._ascUiGated();
+        tile.classList.toggle('hidden', gated);
+        if (gated) return;
+        const status = document.getElementById('ascension-status-line');
+        const sel = (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0;
+        const tw  = (typeof Ascension !== 'undefined' && Ascension.twist)
+            ? Ascension.twist(sel) : { name: 'Standard' };
+        if (status) status.textContent = `A${sel} · ${(tw.name || 'STANDARD').toUpperCase()}`;
+        // Apply the cosmetic frame band (28.3) — keyed off the highest
+        // unlocked tier so the frame is a permanent earn, not tied to
+        // the currently-selected difficulty.
+        this._applyAscFrame();
+    },
+    _applyAscFrame() {
+        const cl = document.body && document.body.classList;
+        if (!cl) return;
+        cl.remove('asc-frame-bronze', 'asc-frame-silver', 'asc-frame-gold', 'asc-frame-obsidian');
+        const u = (typeof Ascension !== 'undefined' && Ascension.getUnlocked) ? Ascension.getUnlocked() : 0;
+        if (u >= 20) cl.add('asc-frame-obsidian');
+        else if (u >= 15) cl.add('asc-frame-gold');
+        else if (u >= 10) cl.add('asc-frame-silver');
+        else if (u >= 5)  cl.add('asc-frame-bronze');
+    },
+    _openAscensionPanel() {
+        const modal = document.getElementById('modal-ascension');
+        if (!modal) return;
+        this._renderAscensionLadder();
+        modal.classList.remove('hidden');
+        AudioMgr.playSound && AudioMgr.playSound('click');
+    },
+    _closeAscensionPanel() {
+        const modal = document.getElementById('modal-ascension');
+        if (modal) modal.classList.add('hidden');
+        AudioMgr.playSound && AudioMgr.playSound('click');
+    },
+    _renderAscensionLadder() {
+        const ladder = document.getElementById('ascension-ladder');
+        if (!ladder || typeof Ascension === 'undefined') return;
+        const unlocked = Ascension.getUnlocked();
+        const selected = Ascension.getSelected();
+        ladder.innerHTML = '';
+        // ASCENSION_TWISTS includes level 0 (Standard); render tiers 0..20.
+        for (let lvl = 0; lvl < ASCENSION_TWISTS.length; lvl++) {
+            const tw = ASCENSION_TWISTS[lvl];
+            if (!tw) continue;
+            const tier = document.createElement('div');
+            const isLocked = lvl > unlocked;
+            const isCurrent = lvl === selected;
+            const isCleared = lvl < selected || (lvl < unlocked && lvl !== selected);
+            tier.className = 'ascension-tier'
+                + (isLocked ? ' locked' : '')
+                + (isCurrent ? ' current' : '')
+                + (isCleared && !isCurrent && !isLocked ? ' cleared' : '');
+            tier.setAttribute('role', 'option');
+            tier.setAttribute('aria-selected', isCurrent ? 'true' : 'false');
+            const pip = isCurrent ? 'ACTIVE'
+                      : isLocked  ? 'LOCKED'
+                      : isCleared ? 'CLEARED'
+                      : 'READY';
+            const desc = isLocked
+                ? 'Clear the previous tier to unveil this modifier.'
+                : (tw.desc || '');
+            tier.innerHTML = `
+                <span class="ascension-tier-num">A${lvl}</span>
+                <div class="ascension-tier-body">
+                    <span class="ascension-tier-name">${(tw.name || '').toUpperCase()}</span>
+                    <span class="ascension-tier-desc">${desc}</span>
+                </div>
+                <span class="ascension-tier-pip">${pip}</span>
+            `;
+            if (!isLocked) {
+                tier.onclick = () => {
+                    Ascension.setSelected(lvl);
+                    AudioMgr.playSound && AudioMgr.playSound('click');
+                    this._renderAscensionLadder();
+                    this._refreshAscensionTile();
+                    const cur = document.getElementById('ascension-current-value');
+                    if (cur) cur.textContent = `A${lvl} · ${(tw.name || 'STANDARD').toUpperCase()}`;
+                };
+            }
+            ladder.appendChild(tier);
+        }
+        // Sync the header readout immediately so it matches whatever
+        // tier was selected when the panel opened.
+        const cur = document.getElementById('ascension-current-value');
+        if (cur) {
+            const sel = Ascension.getSelected();
+            const tw  = Ascension.twist(sel);
+            cur.textContent = `A${sel} · ${(tw.name || 'STANDARD').toUpperCase()}`;
+        }
     },
 
     // Day 3 — keeps the sector-turn chip's data-num attribute in sync

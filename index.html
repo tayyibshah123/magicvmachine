@@ -358,6 +358,11 @@
                             <div class="mv2-tile-label">INTEL</div>
                             <div class="mv2-tile-status">DECRYPT</div>
                         </button>
+                        <button id="btn-ascension" class="ui-shard ui-shard--shape-tab-l mv2-tile mv2-tile--ascension feature-locked-hidden" title="Pick a difficulty tier">
+                            <div class="mv2-tile-eyebrow">DIFFICULTY</div>
+                            <div class="mv2-tile-label">ASCENSION</div>
+                            <div id="ascension-status-line" class="mv2-tile-status">A0</div>
+                        </button>
                         <button id="btn-save-slots" class="ui-shard ui-shard--shape-tab-r mv2-tile mv2-tile--saves feature-locked-hidden">
                             <div class="mv2-tile-eyebrow">SLOTS</div>
                             <div class="mv2-tile-label">SAVES</div>
@@ -1281,6 +1286,23 @@
          possible (status from describeEffect, sectors from
          SECTOR_MECHANICS) so the glossary stays in sync with the
          live mechanics. -->
+    <!-- Ascension panel modal — vertical ladder of all 21 tiers (0-20).
+         Cleared tiers gold, current pulsing, future locked + teaser.
+         Opened from the ASCENSION main-menu tile (Roadmap Part 28.2). -->
+    <div id="modal-ascension" class="modal hidden" role="dialog" aria-labelledby="ascension-title">
+        <div class="modal-content ascension-modal glass-panel">
+            <div class="ascension-modal-head">
+                <h2 id="ascension-title" class="neon-text-pink">ASCENSION</h2>
+                <button id="btn-ascension-close" class="btn-icon" aria-label="Close ascension panel">×</button>
+            </div>
+            <div class="ascension-current">
+                <span class="ascension-current-label">SELECTED FOR NEXT RUN</span>
+                <span id="ascension-current-value" class="ascension-current-value">A0 · STANDARD</span>
+            </div>
+            <div id="ascension-ladder" class="ascension-ladder" role="listbox" aria-label="Ascension difficulty ladder"></div>
+        </div>
+    </div>
+
     <div id="modal-glossary" class="modal hidden">
         <div class="modal-content modal-glossary glass-panel glass-panel--premium">
             <div class="modal-glossary-head">

@@ -29,15 +29,19 @@ function write(data) {
 }
 
 // Normalise legacy `count` numbers to the v2 record shape on read so the
-// rest of the service can assume `{ count, firstSeen, lastSeen, sectors }`.
+// rest of the service can assume `{ count, firstSeen, lastSeen, sectors,
+// maxAscSeen }`. `maxAscSeen` is the highest Ascension tier the player
+// has confronted this enemy at — Roadmap Part 27.4 surfaces a per-tier
+// dossier note keyed off this value.
 function _entry(raw) {
-    if (raw == null) return { count: 0, firstSeen: 0, lastSeen: 0, sectors: [] };
-    if (typeof raw === 'number') return { count: raw, firstSeen: 0, lastSeen: 0, sectors: [] };
+    if (raw == null) return { count: 0, firstSeen: 0, lastSeen: 0, sectors: [], maxAscSeen: 0 };
+    if (typeof raw === 'number') return { count: raw, firstSeen: 0, lastSeen: 0, sectors: [], maxAscSeen: 0 };
     return {
         count: raw.count || 0,
         firstSeen: raw.firstSeen || 0,
         lastSeen: raw.lastSeen || 0,
-        sectors: Array.isArray(raw.sectors) ? raw.sectors.slice() : []
+        sectors: Array.isArray(raw.sectors) ? raw.sectors.slice() : [],
+        maxAscSeen: typeof raw.maxAscSeen === 'number' ? raw.maxAscSeen : 0
     };
 }
 
@@ -55,7 +59,7 @@ export const Intel = {
     // name (boss or regular — minions aren't tracked individually).
     // Optional `sector` records the zone the kill happened in so the
     // dossier can show "FIRST SEEN: SECTOR 2" style metadata.
-    recordKill(name, sector) {
+    recordKill(name, sector, ascLevel) {
         if (!name) return 0;
         const data = read();
         const e = _entry(data[name]);
@@ -66,6 +70,12 @@ export const Intel = {
         if (typeof sector === 'number' && sector > 0 && !e.sectors.includes(sector)) {
             e.sectors.push(sector);
             e.sectors.sort((a, b) => a - b);
+        }
+        // Record the highest ascension tier the player has felled this
+        // enemy at — the dossier surfaces a tier-specific intel note
+        // when this crosses each named threshold (Roadmap Part 27.4).
+        if (typeof ascLevel === 'number' && ascLevel > (e.maxAscSeen || 0)) {
+            e.maxAscSeen = ascLevel;
         }
         data[name] = e;
         write(data);
