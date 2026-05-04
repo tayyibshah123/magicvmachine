@@ -1633,13 +1633,17 @@ const Game = {
         }
 
         // Effect icon hit-test — mirrors the drawHealthBar effect bar geometry.
-        // Enemy bar sits below the HP bar (barY = entity.y - radius - 14);
-        // player + player-minion bars sit ABOVE the HP bar
-        // (barY = entity.y - radius - 50 - 28 - 6 = entity.y - radius - 84) so
-        // buffs don't crowd the dice tray. Use the same synthesized list the
-        // renderer uses so derived buffs/debuffs (overclock, charged, tact_primed,
-        // aegis_primed, exposed, armor, sig_thorns, firewall, blood_tier, elite
-        // affixes) are all hoverable, not just real effects.
+        // Day 6 — bar slimmed to 22px and y shifted by +4 to preserve its
+        // visual centre. New offsets:
+        //   Enemy bar drawn below HP bar at y + height + 6
+        //     = (entity.y - radius - 46) + 22 + 6 = entity.y - radius - 18
+        //   Player + player-minion bars sit ABOVE so buffs don't crowd the
+        //   dice tray. Drawn at y - barHeight - 6
+        //     = (entity.y - radius - 46) - 28 - 6 = entity.y - radius - 80
+        // Use the same synthesized list the renderer uses so derived
+        // buffs/debuffs (overclock, charged, tact_primed, aegis_primed,
+        // exposed, armor, sig_thorns, firewall, blood_tier, elite affixes)
+        // are all hoverable, not just real effects.
         {
             const ICON_W = 30, BAR_H = 28, PAD = 4;
             const effectEntities = [];
@@ -1651,7 +1655,7 @@ const Game = {
                 if (!statusList || statusList.length === 0) continue;
                 const buffsAbove = (ent instanceof Player) ||
                                    (ent instanceof Minion && ent.isPlayerSide);
-                const barY = buffsAbove ? (ent.y - ent.radius - 84) : (ent.y - ent.radius - 14);
+                const barY = buffsAbove ? (ent.y - ent.radius - 80) : (ent.y - ent.radius - 18);
                 const totalW = statusList.length * ICON_W;
                 const barX = ent.x - totalW / 2;
                 if (this.mouseY < barY - PAD || this.mouseY > barY + BAR_H + PAD) continue;
@@ -6324,15 +6328,115 @@ triggerPhaseGlitch() {
         const baseColor = isEnemySide ? '#ff3300' : '#6fe8ff';
         // Outward burst — sized to the entity radius so a boss reads bigger.
         const radius = Math.max(28, (entity.radius || 50) * 0.7);
-        ParticleSys.createExplosion && ParticleSys.createExplosion(x, y, Math.floor(radius * 0.7), baseColor);
-        ParticleSys.createSparks    && ParticleSys.createSparks(x, y, baseColor, 14);
-        ParticleSys.createShockwave && ParticleSys.createShockwave(x, y, baseColor, radius);
-        if (tier !== 'low') {
-            ParticleSys.createShockwave && ParticleSys.createShockwave(x, y, '#ffffff', radius + 12);
+        // Day 6 — kind-specific dissolve dispatch. Returns true if a
+        // custom dissolve fired (in which case we skip the generic
+        // explosion+sparks default to avoid double-painting). Reuses
+        // the particle pool exclusively, no new sprites.
+        const _customFired = this._kindDissolve && this._kindDissolve(entity, x, y, baseColor, radius, tier);
+        if (!_customFired) {
+            ParticleSys.createExplosion && ParticleSys.createExplosion(x, y, Math.floor(radius * 0.7), baseColor);
+            ParticleSys.createSparks    && ParticleSys.createSparks(x, y, baseColor, 14);
+            ParticleSys.createShockwave && ParticleSys.createShockwave(x, y, baseColor, radius);
+            if (tier !== 'low') {
+                ParticleSys.createShockwave && ParticleSys.createShockwave(x, y, '#ffffff', radius + 12);
+            }
         }
         if (this.hitStop) this.hitStop(60);
         if (this.shake) this.shake(entity.isBoss ? 14 : 6);
         if (tier === 'high' && this.triggerSlowMo) this.triggerSlowMo(0.6, 0.18);
+    },
+
+    // Day 6 — per-`kind` death dissolves. Each branch reuses primitives
+    // already in the particle pool (no new sprites). Visual identity per
+    // family so a kill reads as the family it was, not just "thing died".
+    // Returns true if a kind-specific dissolve was painted; false to let
+    // deathBurst fall back to the generic explosion+sparks+shockwave.
+    _kindDissolve(entity, x, y, baseColor, radius, tier) {
+        const kind = entity && entity.kind;
+        if (!kind) return false;
+        const _short = tier !== 'low'; // mid + high get the richer pass
+
+        // MIRROR — glass shatter into pale-blue shards drifting outward.
+        if (kind === 'mirror') {
+            ParticleSys.createShockwave && ParticleSys.createShockwave(x, y, '#cfeaff', radius);
+            ParticleSys.createSparks    && ParticleSys.createSparks(x, y, '#bfe6ff', _short ? 22 : 14);
+            ParticleSys.createSparks    && ParticleSys.createSparks(x, y, '#ffffff',  _short ? 12 : 8);
+            ParticleSys.createExplosion && ParticleSys.createExplosion(x, y, _short ? 24 : 14, '#cfeaff');
+            try { AudioMgr.playSound('snap', { playbackRate: 1.4, volume: 0.85 }); } catch (_) {}
+            return true;
+        }
+
+        // FROST — ice-crack + steam: pale-cyan shockwave then a mint-cyan
+        // shower (the "steam" rising tail).
+        if (kind === 'frost') {
+            ParticleSys.createShockwave && ParticleSys.createShockwave(x, y, '#88eaff', radius);
+            ParticleSys.createSparks    && ParticleSys.createSparks(x, y, '#88eaff', _short ? 18 : 12);
+            ParticleSys.createExplosion && ParticleSys.createExplosion(x, y, _short ? 20 : 12, '#a8f0ff');
+            ParticleSys.createTrail     && ParticleSys.createTrail(x, y - 30, '#cfeaff', 0.6);
+            try { AudioMgr.playSound('snap', { playbackRate: 0.7, volume: 0.7 }); } catch (_) {}
+            return true;
+        }
+
+        // BURROW — sink with a dust column. Wide low shockwave (the
+        // ground giving way) + neutral grey dust burst.
+        if (kind === 'burrow') {
+            ParticleSys.createShockwave && ParticleSys.createShockwave(x, y + 20, '#8c5a3c', radius * 1.1);
+            ParticleSys.createSparks    && ParticleSys.createSparks(x, y + 10, '#a87858', _short ? 16 : 10);
+            ParticleSys.createExplosion && ParticleSys.createExplosion(x, y + 6, _short ? 18 : 12, '#7a5237');
+            try { AudioMgr.playSound('earthquake', { playbackRate: 1.4, volume: 0.6 }); } catch (_) {}
+            return true;
+        }
+
+        // CLONE — digital phantom split. Two offset cyan/magenta bursts
+        // sell the "duplicate then diverge" idea.
+        if (kind === 'clone') {
+            ParticleSys.createExplosion && ParticleSys.createExplosion(x - 14, y, _short ? 18 : 12, '#00f3ff');
+            ParticleSys.createExplosion && ParticleSys.createExplosion(x + 14, y, _short ? 18 : 12, '#ff5eb9');
+            ParticleSys.createShockwave && ParticleSys.createShockwave(x, y, '#a877ff', radius);
+            ParticleSys.createSparks    && ParticleSys.createSparks(x, y, '#ffffff', _short ? 14 : 10);
+            try { AudioMgr.playSound('zap', { playbackRate: 1.2, volume: 0.7 }); } catch (_) {}
+            return true;
+        }
+
+        // AOE_SWEEP — radial gust. Wider but lower-density shockwave so
+        // it reads as "wind shear", not "explosion".
+        if (kind === 'aoe_sweep') {
+            ParticleSys.createShockwave && ParticleSys.createShockwave(x, y, baseColor, radius * 1.4);
+            ParticleSys.createShockwave && ParticleSys.createShockwave(x, y, '#ffffff', radius * 1.6);
+            ParticleSys.createSparks    && ParticleSys.createSparks(x, y, baseColor, _short ? 22 : 14);
+            try { AudioMgr.playSound('beam', { playbackRate: 0.9, volume: 0.7 }); } catch (_) {}
+            return true;
+        }
+
+        // CHAOTIC — pixelated noise burst: rainbow-ish triple sparks.
+        if (kind === 'chaotic') {
+            ParticleSys.createSparks    && ParticleSys.createSparks(x, y, '#ff5eb9', _short ? 14 : 10);
+            ParticleSys.createSparks    && ParticleSys.createSparks(x, y, '#5eead4', _short ? 14 : 10);
+            ParticleSys.createSparks    && ParticleSys.createSparks(x, y, '#ffd76a', _short ? 14 : 10);
+            ParticleSys.createExplosion && ParticleSys.createExplosion(x, y, _short ? 18 : 12, '#bc13fe');
+            try { AudioMgr.playSound('glitch_attack', { volume: 0.7 }); } catch (_) {}
+            return true;
+        }
+
+        // OBSERVER — eye-implode flash. Single concentrated white flash
+        // collapsing inward, no outward shockwave.
+        if (kind === 'observer') {
+            ParticleSys.createExplosion && ParticleSys.createExplosion(x, y, _short ? 22 : 14, '#ffffff');
+            ParticleSys.createSparks    && ParticleSys.createSparks(x, y, '#ff5d7a', _short ? 12 : 8);
+            ParticleSys.createShockwave && ParticleSys.createShockwave(x, y, '#ff5d7a', radius * 0.6);
+            if (this.triggerScreenFlash) this.triggerScreenFlash('rgba(255,255,255,0.3)', 180);
+            try { AudioMgr.playSound('siren', { playbackRate: 1.4, volume: 0.5, duration: 0.4, fadeOut: 0.2 }); } catch (_) {}
+            return true;
+        }
+
+        // DETONATOR — already plays its own AoE explosion in entity.js
+        // takeDamage. Returning true here skips the generic on top.
+        if (kind === 'detonator') return true;
+
+        // immolate / shielder / healer / buffer / armored / phase_shift /
+        // shield_break / swarm — fall through to the generic burst, which
+        // already reads correctly for those families.
+        return false;
     },
 
     async triggerBossPhaseTransition(enemy, phase = 2) {
@@ -19673,11 +19777,19 @@ drawEffects() {
         const ctx = this.ctx;
 
         // --- 1. BAR DIMENSIONS ---
+        // Day 6 — slimmed health "ribbon". Was 30px tall; now 22px so
+        // the bar reads as a horizontal strip with the HP text sitting
+        // ON it instead of dominating it. Visual centre preserved by
+        // shifting y down (30-22)/2 = 4px so shield + charges + effects
+        // anchored to bar.y stay close to their original positions.
+        // The 33px Orbitron HP sprite is intentionally taller than the
+        // ribbon now — that's the cyberpunk-cabinet "number-on-bar"
+        // read the densification pass aimed at.
         const width = (entity instanceof Minion) ? 96 : 192;
-        const height = 30;
+        const height = 22;
 
         const x = entity.x - width/2;
-        const y = entity.y - entity.radius - 50;
+        const y = entity.y - entity.radius - 50 + 4;
 
         // Draw Bar Background
         ctx.fillStyle = COLORS.HP_BAR_BG;
@@ -22927,16 +23039,51 @@ drawEntity(entity) {
                 animX = Math.sin((1 - eased) * Math.PI * 3) * 4;
                 scale = 1.0 - (1 - eased) * 0.06;
             }
-        } else if (entity.anim && entity.anim.timer === 0 && Perf && Perf.tier === 'high') {
-            // Idle breathing — high-tier only because the cost is two sin()
-            // per entity per frame and the visual sells "alive" without
-            // mid/low needing the boost. 1.8% scale + 1.6px bob, phased
-            // by entity id so a row of minions doesn't pulse in lockstep.
+        } else if (entity.anim && entity.anim.timer === 0 && Perf && Perf.tier !== 'low') {
+            // Day 6 — idle breathing + per-shape micro-anim.
+            //
+            // Was: high-tier only, single universal sin() driving scale + bob.
+            // Now: mid + high run a base breath plus an additional shape-
+            // specific gesture so each chassis silhouette feels alive in its
+            // own way (wisp hover, drone sway, tank treadle, spider leg
+            // shift, sniper scope creep). Total per-frame cost capped at 2
+            // sin() per entity — the per-shape branch reuses the breath
+            // value or computes a single sibling sin from the same phase.
+            // Strict low-tier still skips entirely so battery-budget devices
+            // get a static board.
             if (entity._breathPhase == null) entity._breathPhase = Math.random() * Math.PI * 2;
             const _bt = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
             const breath = Math.sin(_bt * 1.2 + entity._breathPhase);
             scale = 1.0 + breath * 0.018;
             animY = breath * 1.6;
+            // Per-shape gesture — one extra sin() max per frame. Only for
+            // enemy-side entities (player has its own class draw with
+            // built-in motion); the shape attribute is set on Enemy and
+            // sometimes inferred for unnamed minions.
+            const _isEnemySide = (typeof Enemy !== 'undefined' && entity instanceof Enemy)
+                || (Minion && entity instanceof Minion && entity.isPlayerSide === false);
+            if (_isEnemySide && Perf.tier === 'high') {
+                const shp = entity.shape;
+                if (shp === 'wisp' || shp === 'drone') {
+                    // Hover bob — slow, +/- 1.4px. Reuses the breath
+                    // value with a phase offset; no extra sin() call.
+                    animY += Math.sin(_bt * 0.8 + entity._breathPhase * 0.5) * 1.4;
+                } else if (shp === 'tank') {
+                    // Treadle — tiny side-to-side weight shift. Sells
+                    // "heavy chassis settling".
+                    animX += Math.sin(_bt * 1.6 + entity._breathPhase) * 0.9;
+                } else if (shp === 'spider') {
+                    // Leg-shift — quick 2.4Hz nudge, mirrored sign per
+                    // entity phase so adjacent spiders aren't synchronised.
+                    animX += Math.sin(_bt * 2.4 + entity._breathPhase) * 1.2;
+                } else if (shp === 'sniper') {
+                    // Scope-creep — vertical micro-drift + scale wobble
+                    // that reads as "tracking the player".
+                    const _scopeS = Math.sin(_bt * 0.6 + entity._breathPhase);
+                    animY += _scopeS * 0.8;
+                    scale  += _scopeS * 0.005;
+                }
+            }
         }
         
         const renderX = entity.x + animX;

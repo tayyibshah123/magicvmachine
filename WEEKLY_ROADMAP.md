@@ -199,6 +199,26 @@ Vitest: 98/98 green. Bump to v1.4.0 (minor — Day 5 closes the post-game feedba
 
 **Acceptance:** day 1 fps target still hit; every enemy in roster shows a unique death animation in a dev grid; combat scene reads "alive" when paused.
 
+**Day 6 completion notes (v1.4.1):**
+- ✅ **Per-`kind` death dissolves** via new `_kindDissolve(entity, x, y, baseColor, radius, tier)` dispatcher inside `deathBurst`. Each branch reuses primitives already in the particle pool — no new sprites:
+  - `mirror` → glass-shatter (cyan shockwave + pale-blue + white sparks + cyan explosion + `snap` SFX pitched up)
+  - `frost` → ice-crack (pale-cyan shockwave + steam trail rising + `snap` SFX pitched down)
+  - `burrow` → sink with dust column (low brown shockwave at y+20 + `earthquake` SFX)
+  - `clone` → digital phantom split (offset cyan/magenta bursts + purple shockwave + `zap` SFX)
+  - `aoe_sweep` → radial gust (1.4× and 1.6× shockwaves + `beam` SFX)
+  - `chaotic` → pixelated noise burst (rainbow triple sparks + purple explosion + `glitch_attack` SFX)
+  - `observer` → eye-implode flash (white explosion + magenta sparks + screen flash + `siren` SFX)
+  - `detonator` → suppressed (it has its own AoE explosion in entity.js — would double-paint otherwise)
+  - everything else falls through to the generic explosion+sparks+shockwave default
+- ✅ **Per-shape idle micro-anims** layered on the existing breathing pass. Now runs at mid + high tier (was high-only). Per-shape gestures (high-tier only, +1 sin per frame max):
+  - `wisp` / `drone` — additional 1.4px hover bob phased off the breath
+  - `tank` — 0.9px side-to-side treadle (heavy chassis settling)
+  - `spider` — 1.2px leg-shift at 2.4Hz
+  - `sniper` — vertical scope-creep + 0.5% scale wobble (tracking)
+- ✅ **Health bar slimmed** (Day 3 deferral closed): 30→22px tall, y shifted by +4 to preserve visual centre. Effect-icon hit-test offsets updated (-14→-18 enemy, -84→-80 player) so taps still land on the icons. HP text (33px Orbitron) intentionally bigger than the ribbon now — the cyberpunk-cabinet "number-on-bar" read.
+
+Vitest 98/98 green. Day 1 FPS target still hit assuming the per-shape idle gates correctly at low-tier (they do — the whole block is `Perf.tier !== 'low'`-gated).
+
 ### Day 7 — Map visual upgrade + asset list + buffer (Part 30.3)
 - [ ] **Circuit-board nodes** — replace bare circles with hex/diamond glyphs by type (combat=hex, elite=diamond, shop=square, event=octagon, rest=teardrop, treasure=star).
 - [ ] **Glowing trace connections** — gradient stroke between nodes, animated dash offset for the "data packet" feel.
