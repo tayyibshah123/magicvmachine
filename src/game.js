@@ -5505,49 +5505,48 @@ triggerPhaseGlitch() {
     },
 
     playSectorIntro(sectorNum) {
-        const overlay = document.getElementById('sector-intro');
-        const num = document.getElementById('sector-intro-num');
-        const name = document.getElementById('sector-intro-name');
-        const mech = document.getElementById('sector-intro-mech');
-        if (!overlay || !num || !name) return Promise.resolve();
-        const SECTOR_NAMES = { 1: 'THE GATE', 2: 'THE VOID', 3: 'THE FORGE', 4: 'THE HIVE', 5: 'THE CORE' };
-        num.textContent = `SECTOR ${sectorNum}`;
-        name.textContent = SECTOR_NAMES[sectorNum] || '';
-        // Surface the sector signature mechanic (Part 23) so the player
-        // reads what rule will colour their combats here before stepping in.
-        // Only render when the sector actually has a mechanical effect —
-        // Sector 1 is the baseline and the blurb is pure flavour there.
-        if (mech) {
-            const mechData = SECTOR_MECHANICS[sectorNum];
-            const hasRealMech = !!(mechData && (
-                mechData.enemyShieldBonus || mechData.playerHeatDmg ||
-                mechData.minionDmgMult || mechData.damageNoiseRange
-            ));
-            mech.textContent = hasRealMech
-                ? `${mechData.label}: ${mechData.desc}`
-                : '';
-            // First-time-per-sector hint card explaining the rule. Hints
-            // is install-scoped, so this fires once per player across all
-            // runs (matches other first-X hints in the game).
-            if (hasRealMech && typeof Hints !== 'undefined' && Hints.trigger) {
+        // Idempotency — visitNode and the reward-card onclick used to
+        // pair `triggerSectorCollapse + playSectorIntro` back-to-back,
+        // which read as "two sector intros" to players. Now this is the
+        // single entry point, and a re-call for the same sector while
+        // one is still in flight is a no-op.
+        if (this._sectorIntroInFlight === sectorNum && this._sectorIntroPromise) {
+            return this._sectorIntroPromise;
+        }
+        // Surface the sector mechanic blurb so the player reads what
+        // rule colours the next stretch of combats before stepping in.
+        // Only render when the sector has a mechanical effect — Sector
+        // 1 is baseline and renders no blurb.
+        let mechLine = '';
+        const mechData = (typeof SECTOR_MECHANICS !== 'undefined') ? SECTOR_MECHANICS[sectorNum] : null;
+        const hasRealMech = !!(mechData && (
+            mechData.enemyShieldBonus || mechData.playerHeatDmg ||
+            mechData.minionDmgMult || mechData.damageNoiseRange
+        ));
+        if (hasRealMech) {
+            mechLine = `${mechData.label}: ${mechData.desc}`;
+            if (typeof Hints !== 'undefined' && Hints.trigger) {
                 Hints.trigger(`sector_rule_${sectorNum}`);
             }
         }
-        overlay.classList.remove('hidden');
-        // Force reflow so the transition fires.
-        void overlay.offsetHeight;
-        overlay.classList.add('active');
-        if (AudioMgr && AudioMgr.playSound) AudioMgr.playSound('mana');
-        // Hold the panel long enough that the fade-in (~400ms) doesn't eat
-        // the readable window. 2000ms total = ~1.6s fully visible after the
-        // content settles, which clears the "at least 1s readable" bar with
-        // headroom for slower readers / the sector-mechanic blurb line.
-        return new Promise(resolve => {
-            setTimeout(() => {
-                overlay.classList.remove('active');
-                setTimeout(() => { overlay.classList.add('hidden'); resolve(); }, 240);
-            }, 2000);
+        // Hide the legacy sector-intro element if the DOM still has it —
+        // the cinematic overlay is now the only sector intro. Defensive
+        // for older saves where the element was already injected.
+        const legacy = document.getElementById('sector-intro');
+        if (legacy) legacy.classList.add('hidden');
+
+        this._sectorIntroInFlight = sectorNum;
+        const p = (this.triggerSectorCollapse
+            ? this.triggerSectorCollapse({ sector: sectorNum, mech: mechLine })
+            : Promise.resolve()
+        ).finally(() => {
+            if (this._sectorIntroInFlight === sectorNum) {
+                this._sectorIntroInFlight = null;
+                this._sectorIntroPromise = null;
+            }
         });
+        this._sectorIntroPromise = p;
+        return p;
     },
 
     showSkeleton(containerId, count = 3) {
@@ -7302,7 +7301,7 @@ triggerPhaseGlitch() {
     // feels like a place, not just a state flip. Falls through to the
     // existing collapse animation underneath so the map redraw timing
     // is unchanged for callers.
-    triggerSectorCollapse() {
+    triggerSectorCollapse(opts) {
         let host = document.getElementById('sector-collapse-overlay');
         if (!host) {
             host = document.createElement('div');
@@ -7327,7 +7326,7 @@ triggerPhaseGlitch() {
             4: 'Hive Resonance',
             5: 'Reality Glitch'
         };
-        const sec = this._pendingSector || this.sector || 1;
+        const sec = (opts && opts.sector) || this._pendingSector || this.sector || 1;
         const cfg = (typeof SECTOR_CONFIG !== 'undefined' && SECTOR_CONFIG[sec]) || null;
         // Route palette-able colours through Palette.adapt — backdrop
         // gradient stops + grid stay raw because they're decorative
@@ -7342,6 +7341,12 @@ triggerPhaseGlitch() {
         host.style.setProperty('--sec-mid', mid);
         host.style.setProperty('--sec-bot', bot);
         host.style.setProperty('--sec-grid', grid);
+        // Optional mechanic blurb — surfaces the sector signature rule
+        // (Heat Tiles, Frost Field, Hive Resonance...) so players read
+        // what the next stretch of combats will feel like before stepping
+        // in. Empty string when the sector has no real mechanic so the
+        // line collapses via :empty.
+        const mechLine = (opts && opts.mech) ? opts.mech : '';
         host.innerHTML = `
             <div class="sector-collapse-bg"></div>
             <div class="sector-collapse-grid"></div>
@@ -7350,6 +7355,7 @@ triggerPhaseGlitch() {
                 <div class="sector-collapse-name">${SECTOR_NAMES[sec] || ''}</div>
                 <div class="sector-collapse-stripe" aria-hidden="true"></div>
                 <div class="sector-collapse-tag">// ${SECTOR_TAGS[sec] || ''}</div>
+                <div class="sector-collapse-mech">${mechLine}</div>
             </div>
         `;
         host.classList.remove('active');
@@ -7359,12 +7365,13 @@ triggerPhaseGlitch() {
             AudioMgr.playSound('grid_fracture', { playbackRate: 0.85, volume: 0.9 });
             setTimeout(() => { try { AudioMgr.playSound('beam'); } catch (_) {} }, 280);
         } catch (_) {}
-        // Sector cinematic is heavy but NOT boss-tier — was firing the
-        // 240ms boss pattern, which made every map → combat transition
-        // feel like a phase change. Heavy (160ms) better matches the
-        // weight of the moment.
         if (this.haptic) this.haptic('heavy');
-        setTimeout(() => host.classList.remove('active'), 1400);
+        // Hold the cinematic for a readable beat. Animation total is
+        // 3.4s (see .sector-collapse keyframes), so removing 'active'
+        // a hair earlier lets it fade naturally on the way out.
+        const HOLD_MS = 3400;
+        setTimeout(() => host.classList.remove('active'), HOLD_MS);
+        return new Promise(resolve => setTimeout(resolve, HOLD_MS));
     },
 
 triggerSystemCrash() {
@@ -9070,7 +9077,6 @@ triggerSystemCrash() {
                 // SECTOR_CONFIG only has 1-5. The collapse cinematic still
                 // sells the "you crossed a threshold" beat for the Archivist.
                 if (previousSector !== this.sector) {
-                    this.triggerSectorCollapse && this.triggerSectorCollapse();
                     if (this.sector <= 5 && this.playSectorIntro) {
                         this.playSectorIntro(this.sector);
                     }
@@ -19656,7 +19662,6 @@ drawEffects() {
                 this.generateMap();
                 const sectorDisplay = document.getElementById('sector-display');
                 if (sectorDisplay) sectorDisplay.innerText = `SECTOR ${this.sector}`;
-                this.triggerSectorCollapse && this.triggerSectorCollapse();
                 this.playSectorIntro && this.playSectorIntro(this.sector);
                 this.saveGame();
             } else if (wasBoss) {
@@ -19819,8 +19824,10 @@ drawEffects() {
                     const sectorDisplay = document.getElementById('sector-display');
                     if(sectorDisplay) sectorDisplay.innerText = `SECTOR ${this.sector}`;
 
-                    // Cinematic intro overlay (P6) plus full-screen collapse.
-                    this.triggerSectorCollapse && this.triggerSectorCollapse();
+                    // Single unified cinematic — playSectorIntro now drives
+                    // the collapse overlay internally and folds in the
+                    // sector mechanic blurb, so callers don't need to fire
+                    // both anymore.
                     this.playSectorIntro(this.sector);
 
                     this.saveGame();

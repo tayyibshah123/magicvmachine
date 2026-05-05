@@ -3101,13 +3101,31 @@ body.reduced-motion #gameCanvas.cinematic-pan { animation: none !important; }
     opacity: 0;
     animation: sector-cinema-fade 0.55s ease-out 0.55s forwards;
 }
+/* Sector mechanic blurb — surfaces the sector signature rule
+   (Heat Tiles, Frost Field, Hive Resonance...) inside the cinematic
+   so the player reads what's coming before stepping in. */
+.sector-collapse-mech {
+    font-family: var(--font-main);
+    font-size: clamp(0.7rem, 2.4cqw, 0.95rem);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.85);
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
+    max-width: 80%;
+    margin: 14px auto 0;
+    line-height: 1.5;
+    transform: translateY(12px);
+    opacity: 0;
+    animation: sector-cinema-fade 0.6s ease-out 0.85s forwards;
+}
+.sector-collapse-mech:empty { display: none; }
 .sector-collapse.active {
-    animation: sector-collapse 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation: sector-collapse 3.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 @keyframes sector-collapse {
     0%   { opacity: 0; transform: translateY(-100%); }
-    20%  { opacity: 1; transform: translateY(0); }
-    72%  { opacity: 1; transform: translateY(0); }
+    9%   { opacity: 1; transform: translateY(0); }
+    88%  { opacity: 1; transform: translateY(0); }
     100% { opacity: 0; transform: translateY(60%); }
 }
 @keyframes sector-cinema-fade {
