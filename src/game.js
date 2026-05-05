@@ -3950,20 +3950,20 @@ startQTE(type, x, y, callback, opts) {
         this.renderSparks && this.renderSparks();
         const list = document.getElementById('upgrade-list');
         list.innerHTML = '';
-        list.className = 'meta-grid';
+        list.className = 'meta-grid sanctuary-compact';
 
-        // Helper used by both META_UPGRADES and SPARKS_UPGRADES to build
-        // a card with three states: not-owned (BUY for ✦), owned-on
-        // (TOGGLE OFF), owned-off (TOGGLE ON). Toggle is free — the
-        // sparks were spent at purchase, the toggle just dials the
-        // effect on/off.
+        // Compact toggle-aware card. Three states: not-owned (BUY for ✦),
+        // owned-on (◉ ON), owned-off (◯ OFF). Toggle is free — sparks were
+        // spent at purchase. The accent color drives the cost-pill tint
+        // and is overridden by class color in the SPECIALISATION section.
         const buildCard = (u, opts) => {
             const accent = (opts && opts.accent) || '#ffd76a';
             const owned = this.isMetaOwned(u.id);
             const enabled = owned && !(this.metaToggledOff && this.metaToggledOff.has(u.id));
             const div = document.createElement('div');
             div.className = `upgrade-card ${owned ? 'unlocked' : ''}${enabled ? '' : ' meta-toggled-off'}`;
-            if (!owned) div.style.borderColor = (opts && opts.borderUnowned) || `rgba(255,215,106,0.55)`;
+            if (opts && opts.classKey) div.dataset.classKey = opts.classKey;
+            if (!owned) div.style.borderColor = (opts && opts.borderUnowned) || `${accent}88`;
             let stateLabel;
             if (!owned) stateLabel = `${u.cost} ✦`;
             else if (enabled) stateLabel = '◉ ON';
@@ -3971,14 +3971,13 @@ startQTE(type, x, y, callback, opts) {
             div.innerHTML = `
                 <div class="upgrade-icon" style="color: ${accent};">${u.icon || '✦'}</div>
                 <div class="upgrade-info">
-                    <div class="upgrade-name">${u.name}</div>
+                    <div class="upgrade-name" style="color: ${owned ? 'var(--neon-gold)' : accent};">${u.name}</div>
                     <div class="upgrade-desc">${u.desc}</div>
                 </div>
                 <div class="upgrade-cost" style="color: ${enabled ? accent : (owned ? '#888' : accent)};">${stateLabel}</div>
             `;
             div.onclick = () => {
                 if (owned) {
-                    // Free toggle — flip the persistent enabled state.
                     this.toggleMetaUpgrade(u.id);
                     AudioMgr.playSound('click');
                     this.renderMeta();
@@ -4000,26 +3999,93 @@ startQTE(type, x, y, callback, opts) {
             return div;
         };
 
-        // META_UPGRADES — formerly fragment-cost, now ✦. Same ids so
-        // saved owned lists keep working.
-        META_UPGRADES.forEach(u => {
-            list.appendChild(buildCard(u, { accent: '#00f3ff' }));
-        });
-
-        // ── Sparks-tier section — content / option / QoL unlocks. Same
-        // toggle-aware card builder as META_UPGRADES so every sanctuary
-        // node is dial-on/dial-off after purchase.
-        if (typeof SPARKS_UPGRADES !== 'undefined' && SPARKS_UPGRADES.length > 0) {
+        // Section helper — heading bar + responsive 2-col grid of cards.
+        // Returns the inner grid so the caller can append filtered cards.
+        const addSection = (title, accent) => {
             const header = document.createElement('div');
-            header.className = 'meta-section-header';
-            header.style.cssText = 'grid-column: 1 / -1; padding: 14px 0 6px; color: #ffd76a; font-family: Orbitron; letter-spacing: 0.12em; border-top: 1px solid rgba(255,215,106,0.35); margin-top: 8px; text-align: center;';
-            header.textContent = '✦ SPARKS UNLOCKS';
+            header.className = 'sanctuary-section-header';
+            header.style.setProperty('--section-accent', accent);
+            header.innerHTML = `<span class="sanctuary-section-title">${title}</span>`;
             list.appendChild(header);
-            SPARKS_UPGRADES.forEach(u => {
-                const card = buildCard(u, { accent: '#ffd76a' });
-                card.classList.add('spark-card');
-                list.appendChild(card);
-            });
+            const grid = document.createElement('div');
+            grid.className = 'sanctuary-section-grid';
+            list.appendChild(grid);
+            return grid;
+        };
+
+        // ── Section ordering. Each row is { title, accent, ids[], src }.
+        // src 'meta' = META_UPGRADES, src 'sparks' = SPARKS_UPGRADES. ids
+        // pin the order within a section. Anything in META/SPARKS not
+        // listed below falls into a final "OTHER" sink so a forgotten
+        // entry can't disappear from the UI.
+        const META_BY_ID = new Map((typeof META_UPGRADES !== 'undefined' ? META_UPGRADES : []).map(u => [u.id, u]));
+        const SPARKS_BY_ID = new Map((typeof SPARKS_UPGRADES !== 'undefined' ? SPARKS_UPGRADES : []).map(u => [u.id, u]));
+        const seen = new Set();
+        const SECTIONS = [
+            { title: 'STARTING LOADOUT', accent: '#5eead4',
+              ids: ['m_life', 'm_mana', 'm_shield', 'm_cache_primer', 'm_relic'] },
+            { title: 'COMBAT EDGE', accent: '#ff5577',
+              ids: ['m_dmg', 'm_reroll', 'm_thorn', 'm_minion_atk'] },
+            { title: 'ECONOMY', accent: '#ffd76a',
+              ids: ['m_greed', 'm_discount'] },
+            { title: 'DICE TUNING', accent: '#bc13fe',
+              ids: ['m_bias_attack', 'm_bias_defend', 'm_bias_mana', 'm_bias_minion'] },
+            { title: 'RUN OPTIONS', accent: '#00f3ff',
+              ids: ['s_archive', 's_corrupt_pool', 's_event_pool', 's_extra_choice', 's_skill_seed', 's_dice_seed', 's_class_unlock', 's_relic_pick'] },
+            { title: 'ENDGAME', accent: '#ffd76a',
+              ids: ['s_signature', 's_endless'] },
+        ];
+
+        for (const sec of SECTIONS) {
+            const grid = addSection(sec.title, sec.accent);
+            for (const id of sec.ids) {
+                const u = META_BY_ID.get(id) || SPARKS_BY_ID.get(id);
+                if (!u) continue;
+                seen.add(id);
+                grid.appendChild(buildCard(u, { accent: sec.accent }));
+            }
+        }
+
+        // ── CLASS SPECIALISATION — class-locked sanctuary upgrades that
+        // only fire for the matching class. Tinted by class color so the
+        // section reads as "what each class gets" at a glance.
+        const CLASS_COLORS = {
+            tactician:    '#00f3ff',
+            arcanist:     '#bc13fe',
+            bloodstalker: '#ff0055',
+            annihilator:  '#ff8800',
+            sentinel:     '#ffffff',
+            summoner:     '#00ff99',
+        };
+        const classUpgrades = (typeof META_UPGRADES !== 'undefined' ? META_UPGRADES : [])
+            .filter(u => u.appliesToClass);
+        if (classUpgrades.length > 0) {
+            const grid = addSection('CLASS SPECIALISATION', '#ffd76a');
+            grid.classList.add('sanctuary-class-grid');
+            // Stable order matches PLAYER_CLASSES so the column reads in the
+            // same sequence as the character-select carousel.
+            const ORDER = ['tactician', 'arcanist', 'bloodstalker', 'annihilator', 'sentinel', 'summoner'];
+            classUpgrades.sort((a, b) => ORDER.indexOf(a.appliesToClass) - ORDER.indexOf(b.appliesToClass));
+            for (const u of classUpgrades) {
+                seen.add(u.id);
+                const accent = CLASS_COLORS[u.appliesToClass] || '#ffd76a';
+                grid.appendChild(buildCard(u, { accent, classKey: u.appliesToClass }));
+            }
+        }
+
+        // Catch-all for any META/SPARKS entries not picked up by an
+        // explicit section above. Belt-and-suspenders so adding a new
+        // upgrade in constants.js without updating SECTIONS still surfaces.
+        const orphans = [];
+        if (typeof META_UPGRADES !== 'undefined') {
+            for (const u of META_UPGRADES) if (!seen.has(u.id) && !u.appliesToClass) orphans.push(u);
+        }
+        if (typeof SPARKS_UPGRADES !== 'undefined') {
+            for (const u of SPARKS_UPGRADES) if (!seen.has(u.id)) orphans.push(u);
+        }
+        if (orphans.length > 0) {
+            const grid = addSection('OTHER', '#888');
+            for (const u of orphans) grid.appendChild(buildCard(u, { accent: '#aaa' }));
         }
 
         // Cosmetics (Roadmap Part 4.6) — pure-visual purchasables and

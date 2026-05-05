@@ -16,15 +16,45 @@ class Player extends Entity {
         this.diceUpgrades = [];
         this.signatureTier = 1;
 
-        this.classColor = classConfig.color || '#00ff99'; 
-        this.traits = classConfig.traits || {};
+        this.classColor = classConfig.color || '#00ff99';
+        // Shallow clone — class-specific Sanctuary upgrades mutate trait
+        // fields below. Without the clone we'd mutate the shared
+        // PLAYER_CLASSES.traits object and the buffs would compound on
+        // subsequent runs (each Sentinel would get +8, +16, +24 shield).
+        this.traits = Object.assign({}, classConfig.traits || {});
         this.baseMana = this.traits.baseMana || 3;
-        
+
         // Meta: Gaia's Heart (+20 Max HP)
         if(Game.hasMetaUpgrade('m_life')) this.maxHp += 20;
-        
+
         // Meta: Deep Roots
         if(Game.hasMetaUpgrade('m_mana')) this.baseMana += 1;
+
+        // ── Class specialisation Sanctuary upgrades. Each gates on the
+        // active class id (taken from classConfig since this.classId
+        // isn't assigned by the caller until after the constructor
+        // returns). Trait modifications compound with the existing
+        // class baselines so the class identity stays intact and the
+        // upgrade reads as "more of what you already do."
+        const cid = this.classId || (classConfig && classConfig.id);
+        if (cid === 'tactician' && Game.hasMetaUpgrade('cls_tactician')) {
+            this.traits.pipPerAttack = (this.traits.pipPerAttack || 1) + 1;
+        }
+        if (cid === 'arcanist' && Game.hasMetaUpgrade('cls_arcanist')) {
+            this.traits.manaPassive = (this.traits.manaPassive || 0) + 1;
+        }
+        if (cid === 'bloodstalker' && Game.hasMetaUpgrade('cls_bloodstalker')) {
+            this.traits.bloodTierLifestealBonus = (this.traits.bloodTierLifestealBonus || 0) + 1;
+        }
+        if (cid === 'annihilator' && Game.hasMetaUpgrade('cls_annihilator')) {
+            this.traits.dmgMultiplier = (this.traits.dmgMultiplier || 1) + 0.2;
+        }
+        if (cid === 'sentinel' && Game.hasMetaUpgrade('cls_sentinel')) {
+            this.traits.startShield = (this.traits.startShield || 0) + 8;
+        }
+        if (cid === 'summoner' && Game.hasMetaUpgrade('cls_summoner')) {
+            this.traits.startMinionBuff = (this.traits.startMinionBuff || 1) + 0.2;
+        }
         
         // Meta: Double Edge (Formerly Thorns)
         if(Game.hasMetaUpgrade('m_thorn')) {

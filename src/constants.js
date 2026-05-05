@@ -383,7 +383,20 @@ const META_UPGRADES = [
     // stash so the early shop has a real ceiling instead of "you can
     // only afford one node-1 item." 5 ✦ for +100 ≈ a quarter of a
     // mid-tier shop run by sector 1.
-    { id: 'm_cache_primer', name: "Cache Primer",     desc: "Start each run with +100 Fragments.",        cost: 5,  icon: ICONS.metaRecycler }
+    { id: 'm_cache_primer', name: "Cache Primer",     desc: "Start each run with +100 Fragments.",        cost: 5,  icon: ICONS.metaRecycler },
+
+    // ── Class specialisation upgrades. Each only applies when the run's
+    // active class matches `appliesToClass`. Trait-modifying — Player's
+    // constructor reads them and bumps the relevant class trait field
+    // (manaPassive, startShield, startMinionBuff, etc.) so every
+    // downstream system already wired into traits picks up the boost
+    // for free.
+    { id: 'cls_tactician',    name: "Command Drill",     desc: "Tactician: attacks build +1 extra Command pip.",       cost: 8, icon: ICONS.classTactician,    appliesToClass: 'tactician' },
+    { id: 'cls_arcanist',     name: "Conduit Reservoir", desc: "Arcanist: Flux Regen ticks 2 Mana per turn (was 1).",  cost: 8, icon: ICONS.classArcanist,     appliesToClass: 'arcanist' },
+    { id: 'cls_bloodstalker', name: "Sanguine Primer",   desc: "Blood Stalker: each Blood Tier grants +2 lifesteal (was +1).", cost: 8, icon: ICONS.classBloodstalker, appliesToClass: 'bloodstalker' },
+    { id: 'cls_annihilator',  name: "Overcore Tuning",   desc: "Annihilator: outgoing damage multiplier 1.7× (was 1.5×).",     cost: 8, icon: ICONS.classAnnihilator,  appliesToClass: 'annihilator' },
+    { id: 'cls_sentinel',     name: "Aegis Surplus",     desc: "Sentinel: combat-start shield 18 (was 10).",           cost: 8, icon: ICONS.classSentinel,     appliesToClass: 'sentinel' },
+    { id: 'cls_summoner',     name: "Verdant Awakening", desc: "Summoner: starting Spirits scale to +60% stats (was +40%).",   cost: 8, icon: ICONS.classSummoner,     appliesToClass: 'summoner' }
 ];
 
 const UPGRADES_POOL = [

@@ -1809,6 +1809,101 @@ body[data-transition-dir="up"]    .screen { transform: translateY(50px) scale(0.
     color: rgba(200, 200, 210, 0.7) !important;
 }
 
+/* ── Sleek + sectioned Sanctuary layout. Replaces the long single-column
+   list with named sections (STARTING LOADOUT / COMBAT EDGE / ECONOMY
+   / etc). Each section has its own 2-col compact grid so a phone
+   reads ~6 cards per scroll instead of ~3. */
+.meta-grid.sanctuary-compact {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 6px 8px 14px;
+}
+.sanctuary-section-header {
+    --section-accent: #ffd76a;
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 14px 4px 6px;
+    color: var(--section-accent);
+    font-family: var(--font-cyber, 'Orbitron', sans-serif);
+    letter-spacing: 0.18em;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+}
+.sanctuary-section-header::before,
+.sanctuary-section-header::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--section-accent), transparent);
+    opacity: 0.55;
+}
+.sanctuary-section-title {
+    text-shadow: 0 0 8px var(--section-accent);
+    flex: 0 0 auto;
+    padding: 0 4px;
+}
+.sanctuary-section-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+@media (min-width: 720px) {
+    .sanctuary-section-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 1080px) {
+    .sanctuary-section-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+/* Compact card inside the new sectioned layout — tighter padding,
+   smaller icon, smaller text, smaller cost pill. The base
+   .upgrade-card rules above still apply for unlocked / hover /
+   toggled-off variants; this just shrinks the metrics. */
+.sanctuary-section-grid .upgrade-card {
+    padding: 8px 8px 7px;
+    gap: 4px;
+    border-radius: 9px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+.sanctuary-section-grid .upgrade-icon {
+    font-size: 1.4rem;
+    margin-bottom: 0;
+    width: 28px;
+    height: 28px;
+    line-height: 1;
+}
+.sanctuary-section-grid .upgrade-name {
+    font-size: 0.72rem;
+    line-height: 1.1;
+    letter-spacing: 0.05em;
+    text-shadow: none;
+}
+.sanctuary-section-grid .upgrade-desc {
+    font-size: 0.65rem;
+    line-height: 1.25;
+    opacity: 0.8;
+}
+.sanctuary-section-grid .upgrade-cost {
+    font-size: 0.72rem;
+    padding: 4px 8px;
+    margin-top: 3px;
+    border-radius: 3px;
+}
+/* Class specialisation grid — classKey data attribute drives a class-
+   color edge accent so each card reads as "this is the X-class buff"
+   without needing to reread the title. */
+.sanctuary-class-grid .upgrade-card {
+    border-left-width: 3px;
+    border-left-style: solid;
+}
+.sanctuary-class-grid .upgrade-card[data-class-key="tactician"]    { border-left-color: #00f3ff; }
+.sanctuary-class-grid .upgrade-card[data-class-key="arcanist"]     { border-left-color: #bc13fe; }
+.sanctuary-class-grid .upgrade-card[data-class-key="bloodstalker"] { border-left-color: #ff0055; }
+.sanctuary-class-grid .upgrade-card[data-class-key="annihilator"]  { border-left-color: #ff8800; }
+.sanctuary-class-grid .upgrade-card[data-class-key="sentinel"]     { border-left-color: #ffffff; }
+.sanctuary-class-grid .upgrade-card[data-class-key="summoner"]     { border-left-color: #00ff99; }
+
 /* Card Content */
 .upgrade-icon {
     font-size: 2.2rem;
