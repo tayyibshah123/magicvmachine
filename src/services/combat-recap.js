@@ -1,19 +1,18 @@
-// End-of-combat recap card — 3s glass dialog with portrait-vs-portrait
-// header, total damage dealt vs taken, biggest hit, and three highlight
-// chips (combos triggered, parries, lifesteal). Plays before the reward
-// screen so the player gets a moment to appreciate the win.
+// End-of-combat recap card — portrait-vs-portrait header, dealt/taken
+// totals, biggest hit, combat-quality bonus tally, and Sparks call-out.
+// Fires after the COMBAT_WIN dwell, before the reward screen.
 //
 // Day 4 — Part 31.2.
+// Updated: dismiss is manual-only (Continue button) so the player can
+// read the breakdown at their own pace; bonus tally + Spark surfacing
+// added so wins feel earned, especially against elites/bosses.
 //
-// Returns a Promise that resolves when the card auto-dismisses or the
-// player taps it. Hands off cleanly to the reward screen.
+// Returns a Promise that resolves only when Continue is tapped.
 
 let host = null;
 
-const HOLD_MS = 2800;
-const IN_MS   = 240;
-const OUT_MS  = 200;
-const REDUCE_HOLD_MS = 2000;
+const IN_MS  = 240;
+const OUT_MS = 200;
 
 function reducedMotion() {
     return typeof matchMedia === 'function'
@@ -28,6 +27,7 @@ function ensureHost() {
     el.setAttribute('aria-label', 'Combat recap');
     el.innerHTML = `
         <div class="combat-recap-card">
+            <div class="combat-recap-fx-burst" aria-hidden="true"></div>
             <div class="combat-recap-portraits">
                 <div class="combat-recap-portrait combat-recap-player">
                     <span class="combat-recap-pname" data-bind="player">YOU</span>
@@ -52,6 +52,8 @@ function ensureHost() {
                 <span class="combat-recap-highlight-val" data-bind="biggestHit">0</span>
             </div>
             <div class="combat-recap-chips" data-bind="chips"></div>
+            <div class="combat-recap-tally" data-bind="tally"></div>
+            <div class="combat-recap-spark" data-bind="spark"></div>
             <button class="combat-recap-skip" type="button" data-action="skip">CONTINUE</button>
         </div>
     `;
@@ -63,7 +65,6 @@ function ensureHost() {
 function buildChips(snap) {
     const chips = [];
     if (snap.combos && snap.combos.length) {
-        // Group identical combos by name with ×N tail. Keeps card narrow.
         const counts = new Map();
         snap.combos.forEach(c => counts.set(c, (counts.get(c) || 0) + 1));
         const top = Array.from(counts.entries())
@@ -88,8 +89,47 @@ function buildChips(snap) {
             label: `LIFESTEAL +${snap.lifesteal}`
         });
     }
-    // Cap at 3 chips so the card height stays predictable on narrow phones.
     return chips.slice(0, 3);
+}
+
+// Render the frag breakdown — base kill payout plus any bonus lines
+// supplied by winCombat (full health, flawless, parries, quick kill).
+function renderTally(opts) {
+    const tier = opts && opts.tier;
+    const baseFrag = (opts && opts.baseFrag) || 0;
+    const bonuses = (opts && opts.bonuses) || [];
+    const totalFrag = (opts && opts.totalFrag) || baseFrag;
+    const baseLabel = tier === 'boss'  ? 'BOSS DEFEATED'
+                    : tier === 'elite' ? 'ELITE DEFEATED'
+                    : 'ENEMY DEFEATED';
+    const lines = [];
+    if (baseFrag > 0) {
+        lines.push(`<div class="recap-tally-line recap-tally-base"><span class="recap-tally-label">${baseLabel}</span><span class="recap-tally-val">+${baseFrag}</span></div>`);
+    }
+    bonuses.filter(b => b && b.frag > 0).forEach(b => {
+        lines.push(`<div class="recap-tally-line recap-tally-bonus"><span class="recap-tally-label">${b.label}</span><span class="recap-tally-val">+${b.frag}</span></div>`);
+    });
+    if (lines.length) {
+        lines.push(`<div class="recap-tally-total"><span class="recap-tally-label">TOTAL FRAG</span><span class="recap-tally-val">+${totalFrag}</span></div>`);
+    }
+    return lines.join('');
+}
+
+// Spark call-out — high-value reward earned from skilled play (boss kills,
+// flawless elites). Rendered as a separate pulsing gold panel so the
+// player can't miss the moment they earn one.
+function renderSpark(opts) {
+    const sparks = (opts && opts.bonusSparks) || 0;
+    if (sparks <= 0) return '';
+    const reason = (opts && opts.sparkReason) || 'BONUS';
+    const plural = sparks === 1 ? 'SPARK' : 'SPARKS';
+    return `
+        <div class="combat-recap-spark-inner">
+            <span class="recap-spark-icon">✦</span>
+            <span class="recap-spark-amt">+${sparks} ${plural}</span>
+            <span class="recap-spark-reason">${reason}</span>
+        </div>
+    `;
 }
 
 export const CombatRecap = {
@@ -97,6 +137,7 @@ export const CombatRecap = {
         if (!snap) return Promise.resolve();
         const playerName = (opts && opts.playerName) || 'YOU';
         const enemyName  = (opts && opts.enemyName)  || 'ENEMY';
+        const tier       = (opts && opts.tier)       || 'normal';
         const el = ensureHost();
         const setText = (key, txt) => {
             const n = el.querySelector(`[data-bind="${key}"]`);
@@ -117,14 +158,33 @@ export const CombatRecap = {
             chipsEl.classList.toggle('hidden', chips.length === 0);
         }
 
+        const tallyEl = el.querySelector('[data-bind="tally"]');
+        if (tallyEl) {
+            tallyEl.innerHTML = renderTally(opts);
+            tallyEl.classList.toggle('hidden', !tallyEl.innerHTML);
+        }
+
+        const sparkEl = el.querySelector('[data-bind="spark"]');
+        if (sparkEl) {
+            const sparkHtml = renderSpark(opts);
+            sparkEl.innerHTML = sparkHtml;
+            sparkEl.classList.toggle('hidden', !sparkHtml);
+        }
+
+        // Tier-aware glow class — bosses get the gold treatment, elites
+        // a violet shimmer, normal mooks the default cyan.
+        const card = el.querySelector('.combat-recap-card');
+        if (card) {
+            card.classList.remove('tier-normal', 'tier-elite', 'tier-boss');
+            card.classList.add('tier-' + tier);
+        }
+
         return new Promise(resolve => {
             let settled = false;
-            let holdTimer = 0;
             let outTimer = 0;
             const dismiss = () => {
                 if (settled) return;
                 settled = true;
-                if (holdTimer) clearTimeout(holdTimer);
                 el.classList.remove('active');
                 el.classList.add('leaving');
                 outTimer = setTimeout(() => {
@@ -138,13 +198,9 @@ export const CombatRecap = {
             if (skipBtn) {
                 skipBtn.onclick = (e) => { e.stopPropagation(); dismiss(); };
             }
-            // Tap-anywhere-to-dismiss as a backstop. Skip button is the
-            // visible CTA; the wider tap area is muscle-memory insurance.
-            const onTap = (e) => {
-                if (e.target && e.target.tagName === 'BUTTON') return;
-                dismiss();
-            };
-            el.addEventListener('click', onTap, { once: true });
+            // No tap-anywhere or auto-dismiss — the player must tap
+            // Continue. Lets them read the bonus breakdown at their own
+            // pace and prevents accidental skips on touch input.
 
             el.classList.remove('hidden', 'leaving');
             // eslint-disable-next-line no-unused-expressions
@@ -152,9 +208,6 @@ export const CombatRecap = {
             el.classList.add('active');
             if (reducedMotion()) el.classList.add('reduced-motion');
             else el.classList.remove('reduced-motion');
-
-            const hold = reducedMotion() ? REDUCE_HOLD_MS : HOLD_MS;
-            holdTimer = setTimeout(dismiss, hold);
         });
     }
 };

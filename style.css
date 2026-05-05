@@ -1258,6 +1258,218 @@ body.perf-low.cosmetic-title-drift #screen-start.active h1.title { animation: no
     outline: none;
 }
 
+/* Frag breakdown — itemised tally below the chips. Base kill payout
+   then any combat-quality bonus lines, summed with a TOTAL row. */
+.combat-recap-tally {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px 4px 2px;
+    margin-top: 2px;
+    border-top: 1px dashed rgba(74, 216, 255, 0.18);
+}
+.combat-recap-tally.hidden { display: none; }
+.recap-tally-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: var(--font-cyber, 'Orbitron', monospace);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: rgba(200, 220, 240, 0.82);
+    opacity: 0;
+    transform: translateX(-6px);
+    animation: recap-line-in 360ms var(--ease-out-smart) forwards;
+}
+.combat-recap.active .recap-tally-line:nth-child(1) { animation-delay: 200ms; }
+.combat-recap.active .recap-tally-line:nth-child(2) { animation-delay: 320ms; }
+.combat-recap.active .recap-tally-line:nth-child(3) { animation-delay: 440ms; }
+.combat-recap.active .recap-tally-line:nth-child(4) { animation-delay: 560ms; }
+.combat-recap.active .recap-tally-line:nth-child(5) { animation-delay: 680ms; }
+.combat-recap.active .recap-tally-line:nth-child(6) { animation-delay: 800ms; }
+@keyframes recap-line-in {
+    to { opacity: 1; transform: translateX(0); }
+}
+.recap-tally-label {
+    color: rgba(200, 220, 240, 0.82);
+}
+.recap-tally-val {
+    color: #ffd76a;
+    font-weight: 700;
+    text-shadow: 0 0 6px rgba(255, 215, 106, 0.45);
+}
+.recap-tally-bonus .recap-tally-label {
+    color: #7fffaf;
+}
+.recap-tally-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: var(--font-cyber, 'Orbitron', monospace);
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 215, 106, 0.28);
+    color: #fff;
+    opacity: 0;
+    transform: translateY(4px);
+    animation: recap-total-in 420ms var(--ease-out-smart) forwards;
+    animation-delay: 880ms;
+}
+@keyframes recap-total-in {
+    to { opacity: 1; transform: translateY(0); }
+}
+.recap-tally-total .recap-tally-val {
+    color: #ffd76a;
+    font-size: 15px;
+    text-shadow: 0 0 12px rgba(255, 215, 106, 0.7);
+}
+
+/* Spark earned — high-value reward banner. Pulsing gold panel that
+   the player can't miss. Hidden when no Sparks were granted. */
+.combat-recap-spark {
+    margin-top: 8px;
+    padding: 0;
+    opacity: 0;
+    transform: scale(0.92);
+    animation: recap-spark-pop 520ms var(--ease-out-smart) forwards;
+    animation-delay: 1000ms;
+}
+.combat-recap-spark.hidden { display: none; }
+.combat-recap-spark-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    background: linear-gradient(120deg, rgba(255, 215, 106, 0.16), rgba(255, 170, 60, 0.08), rgba(255, 215, 106, 0.16));
+    background-size: 220% 100%;
+    border: 1px solid rgba(255, 215, 106, 0.6);
+    box-shadow: 0 0 18px rgba(255, 215, 106, 0.35),
+                inset 0 0 12px rgba(255, 215, 106, 0.18);
+    animation: recap-spark-shimmer 2200ms ease-in-out infinite;
+    font-family: var(--font-cyber, 'Orbitron', monospace);
+}
+@keyframes recap-spark-shimmer {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; box-shadow: 0 0 26px rgba(255, 215, 106, 0.55), inset 0 0 16px rgba(255, 215, 106, 0.28); }
+    100% { background-position: 0% 50%; }
+}
+@keyframes recap-spark-pop {
+    0%   { opacity: 0; transform: scale(0.85); }
+    60%  { opacity: 1; transform: scale(1.08); }
+    100% { opacity: 1; transform: scale(1); }
+}
+.recap-spark-icon {
+    font-size: 22px;
+    color: #ffd76a;
+    text-shadow: 0 0 12px rgba(255, 215, 106, 0.85), 0 0 24px rgba(255, 170, 60, 0.5);
+    animation: recap-spark-spin 3200ms linear infinite;
+}
+@keyframes recap-spark-spin {
+    from { transform: rotate(0); }
+    to   { transform: rotate(360deg); }
+}
+.recap-spark-amt {
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    color: #fff;
+    text-shadow: 0 0 10px rgba(255, 215, 106, 0.7);
+}
+.recap-spark-reason {
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    color: rgba(255, 215, 106, 0.85);
+    margin-left: 4px;
+}
+
+/* Tier-aware card glow — bosses get the gold halo + animated border,
+   elites a violet shimmer, normal kills the default cyan. */
+.combat-recap-card.tier-elite {
+    border-color: rgba(188, 19, 254, 0.55);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6),
+                0 0 48px rgba(188, 19, 254, 0.28),
+                inset 0 1px 0 rgba(188, 19, 254, 0.55);
+}
+.combat-recap-card.tier-boss {
+    border-color: rgba(255, 215, 106, 0.7);
+    box-shadow: 0 14px 56px rgba(0, 0, 0, 0.7),
+                0 0 60px rgba(255, 215, 106, 0.4),
+                0 0 120px rgba(255, 170, 60, 0.18),
+                inset 0 1px 0 rgba(255, 215, 106, 0.65);
+    animation: recap-boss-pulse 2400ms ease-in-out infinite;
+}
+@keyframes recap-boss-pulse {
+    0%, 100% {
+        box-shadow: 0 14px 56px rgba(0, 0, 0, 0.7),
+                    0 0 60px rgba(255, 215, 106, 0.4),
+                    0 0 120px rgba(255, 170, 60, 0.18),
+                    inset 0 1px 0 rgba(255, 215, 106, 0.65);
+    }
+    50% {
+        box-shadow: 0 14px 56px rgba(0, 0, 0, 0.7),
+                    0 0 80px rgba(255, 215, 106, 0.6),
+                    0 0 160px rgba(255, 170, 60, 0.32),
+                    inset 0 1px 0 rgba(255, 215, 106, 0.85);
+    }
+}
+
+/* Entry burst — radial flash inside the card on open. Sells the
+   "you earned this" beat without needing canvas particles. */
+.combat-recap-fx-burst {
+    position: absolute;
+    inset: -20%;
+    border-radius: 50%;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(circle at center,
+                rgba(255, 215, 106, 0.45) 0%,
+                rgba(255, 215, 106, 0.18) 28%,
+                rgba(255, 215, 106, 0.0) 60%);
+    transform: scale(0.4);
+    z-index: 0;
+}
+.combat-recap-card { position: relative; overflow: hidden; }
+.combat-recap-card > *:not(.combat-recap-fx-burst) {
+    position: relative;
+    z-index: 1;
+}
+.combat-recap.active .combat-recap-fx-burst {
+    animation: recap-burst 900ms var(--ease-out-smart) forwards;
+}
+@keyframes recap-burst {
+    0%   { opacity: 0;   transform: scale(0.4); }
+    25%  { opacity: 1;   transform: scale(1.05); }
+    100% { opacity: 0;   transform: scale(1.5); }
+}
+.combat-recap-card.tier-elite .combat-recap-fx-burst {
+    background: radial-gradient(circle at center,
+                rgba(188, 19, 254, 0.5) 0%,
+                rgba(188, 19, 254, 0.2) 28%,
+                rgba(188, 19, 254, 0.0) 60%);
+}
+.combat-recap-card.tier-boss .combat-recap-fx-burst {
+    background: radial-gradient(circle at center,
+                rgba(255, 230, 140, 0.6) 0%,
+                rgba(255, 215, 106, 0.28) 28%,
+                rgba(255, 170, 60, 0.0) 60%);
+}
+.combat-recap.reduced-motion .combat-recap-fx-burst,
+.combat-recap.reduced-motion .recap-tally-line,
+.combat-recap.reduced-motion .recap-tally-total,
+.combat-recap.reduced-motion .combat-recap-spark {
+    animation: none;
+    opacity: 1;
+    transform: none;
+}
+.combat-recap.reduced-motion .combat-recap-card.tier-boss {
+    animation: none;
+}
+
 /* Button-label crossfade — used by Game.setButtonLabel */
 .btn-label-fading {
     transition: opacity 140ms var(--ease-out-smart);

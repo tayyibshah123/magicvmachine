@@ -19355,12 +19355,80 @@ drawEffects() {
             this.player.baseMana = (this.player.baseMana || 3) + stacks;
             ParticleSys.createFloatingText(this.player.x, this.player.y - 120, `VOID SIPHON +${stacks} MAX MANA`, "#aa00ff");
         }
-        this.saveGame();
-
         // Capture celebration metadata before clearing combat state.
         const wasBoss = !!this.enemy.isBoss;
         const wasElite = !!this.enemy.isElite;
         const killName = this.enemy.name || '';
+
+        // --- COMBAT-QUALITY BONUSES (recap surfacing) ---
+        // Bonus frag/sparks awarded for the *way* the fight was won —
+        // surfaced on the recap card so players see HOW their frags
+        // broke down. Base drop (frags above) stays unchanged; these
+        // stack on top. Sparks here are the high-value reward path
+        // (flawless on a tough enemy) and grant via the silent grant
+        // so the in-world floater doesn't fight the recap card.
+        const _stats = (typeof CombatStats !== 'undefined' && CombatStats.snapshotCombat)
+            ? CombatStats.snapshotCombat() : null;
+        const recapBonuses = [];
+        let _bonusFrags = 0;
+        let _bonusSparks = 0;
+        let _sparkReason = '';
+        if (_stats) {
+            const _maxHp = (this.player && this.player.maxHp) || 0;
+            const _hp    = (this.player && this.player.currentHp) || 0;
+            if (_maxHp > 0 && _hp >= _maxHp) {
+                recapBonuses.push({ label: 'FULL HEALTH', frag: 20 });
+                _bonusFrags += 20;
+            }
+            if (_stats.taken === 0) {
+                recapBonuses.push({ label: 'FLAWLESS', frag: 25 });
+                _bonusFrags += 25;
+            }
+            if (_stats.parries > 0) {
+                const parryFrag = 5 * _stats.parries;
+                recapBonuses.push({ label: `PERFECT PARRY ×${_stats.parries}`, frag: parryFrag });
+                _bonusFrags += parryFrag;
+            }
+            // Quick kill — a 1-turn clear earns a bonus on regular/elite
+            // fights. Bosses are excluded; their multi-phase reward sits
+            // on the existing boss-spark grant.
+            if (!wasBoss && (this.turnCount || 0) <= 1) {
+                recapBonuses.push({ label: 'QUICK KILL', frag: 30 });
+                _bonusFrags += 30;
+            }
+            // Flawless elite/boss = a Spark bonus. Sparks are the
+            // run-permanent currency, so highlighting them here makes
+            // skilled play feel meaningful.
+            if (_stats.taken === 0 && (wasElite || wasBoss)) {
+                _bonusSparks = wasBoss ? 2 : 1;
+                _sparkReason = wasBoss ? 'FLAWLESS BOSS' : 'FLAWLESS ELITE';
+                recapBonuses.push({ label: _sparkReason, sparks: _bonusSparks });
+            }
+        }
+        if (_bonusFrags > 0) {
+            this.techFragments += _bonusFrags;
+            frags += _bonusFrags;
+        }
+        if (_bonusSparks > 0) {
+            const reason = wasBoss ? 'flawless_boss_s' + (this.sector || 1)
+                                   : 'flawless_elite_s' + (this.sector || 1);
+            this.grantSparks(_bonusSparks, reason, { silent: true });
+        }
+        const baseFragForRecap = frags - _bonusFrags;
+        // Stash for the deferred recap (showCombatWin's setTimeout) since
+        // this.enemy gets nulled below — without a stash the recap title
+        // would fall back to the generic "ENEMY".
+        this._recapPayload = {
+            bonuses: recapBonuses,
+            baseFrag: baseFragForRecap,
+            totalFrag: frags,
+            bonusSparks: _bonusSparks,
+            sparkReason: _sparkReason,
+            killName,
+            tier: wasBoss ? 'boss' : (wasElite ? 'elite' : 'normal')
+        };
+
+        this.saveGame();
 
         // Persist only the boss name for the reward screen's "DESTROYED"
         // banner — non-boss kills go straight back to the map and don't
@@ -19455,10 +19523,22 @@ drawEffects() {
                 && this.currentState !== STATE.BREAKOUT) {
                 try {
                     const _snap = CombatStats.snapshotCombat();
-                    const _enemyName = (this.enemy && this.enemy.name) || 'ENEMY';
+                    const _payload = this._recapPayload || {};
+                    const _enemyName = _payload.killName
+                        || ((this.enemy && this.enemy.name) || 'ENEMY');
                     const _playerName = (this.player && this.player.classId)
                         ? this.player.classId.toUpperCase() : 'YOU';
-                    await CombatRecap.show(_snap, { playerName: _playerName, enemyName: _enemyName });
+                    await CombatRecap.show(_snap, {
+                        playerName: _playerName,
+                        enemyName: _enemyName,
+                        tier: _payload.tier || 'normal',
+                        baseFrag: _payload.baseFrag || 0,
+                        totalFrag: _payload.totalFrag || 0,
+                        bonuses: _payload.bonuses || [],
+                        bonusSparks: _payload.bonusSparks || 0,
+                        sparkReason: _payload.sparkReason || ''
+                    });
+                    this._recapPayload = null;
                 } catch (_) { /* never block reward on recap failure */ }
             }
             // Re-check state — a player could have left COMBAT_WIN via
