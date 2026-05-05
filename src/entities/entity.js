@@ -767,8 +767,26 @@ class Entity {
         // Bloodstalker class rework: Blood Tier ramps on every kill; each tier
         // grants +1 lifesteal via traits.bloodTierLifestealBonus (see Game.player.bloodTier reader in useDie).
         if (diedByPlayer && killedTargetIsHostile && Game.player && Game.player.traits && Game.player.traits.bloodTierPerKill > 0) {
-            Game.player.bloodTier = (Game.player.bloodTier || 0) + Game.player.traits.bloodTierPerKill;
+            // Bloodstalker module: VERMILION HUNGER — every kill grants
+            // an extra +1 Blood Tier per stack on top of the base trait.
+            const hungerStacks = (Game.player.hasRelic && Game.player.hasRelic('vermilion_hunger') && Game.stackCount)
+                ? Game.stackCount('vermilion_hunger') : 0;
+            const tierGain = Game.player.traits.bloodTierPerKill + hungerStacks;
+            Game.player.bloodTier = (Game.player.bloodTier || 0) + tierGain;
             ParticleSys.createFloatingText(Game.player.x, Game.player.y - 150, `BLOOD TIER ${Game.player.bloodTier}`, '#ff2244');
+        }
+        // Bloodstalker module: PREDATOR'S MARK — killing an enemy that
+        // has Bleed heals 5 HP and grants +1 reroll per stack. Read
+        // BEFORE the effects array gets cleared elsewhere; check here
+        // while the corpse still carries its status icons.
+        if (diedByPlayer && killedTargetIsHostile && Game.player && Game.player.hasRelic
+            && Game.player.hasRelic('predators_mark')
+            && this.hasEffect && this.hasEffect('bleed')) {
+            const stacks = (Game.stackCount && Game.stackCount('predators_mark')) || 1;
+            Game.player.heal(5 * stacks);
+            Game.rerolls = (Game.rerolls || 0) + stacks;
+            ParticleSys.createFloatingText(Game.player.x, Game.player.y - 130,
+                `PREDATOR +${5 * stacks} HP +${stacks} REROLL`, '#ff1a3a');
         }
         if (diedByPlayer && killedTargetIsHostile && Game.player && Game.player.hasRelic('med_dispenser')) {
             const stacks = Game.stackCount('med_dispenser');
@@ -983,12 +1001,18 @@ class Entity {
                 Game.turnStats.shieldGained = (Game.turnStats.shieldGained || 0) + amount;
             }
         }
-        // Relic: KINETIC BATTERY — every 3 shields gained → +1 Reroll.
+        // Module: KINETIC BATTERY — every 5 shields gained crosses a
+        // threshold; each cross hands the player +1 reroll PER stack.
+        // Stacking now scales the REWARD (not the threshold), so 2x
+        // reads as "every 5 shields → +2 rerolls" instead of the old
+        // "every 6 shields → +2 rerolls" (same ratio = no benefit).
         if (!silent && this instanceof Player && amount > 0 && this.hasRelic('kinetic_battery') && Game) {
             this._kineticCounter = (this._kineticCounter || 0) + amount;
-            const rolls = Math.floor(this._kineticCounter / 3);
-            if (rolls > 0) {
-                this._kineticCounter -= rolls * 3;
+            const triggers = Math.floor(this._kineticCounter / 5);
+            if (triggers > 0) {
+                this._kineticCounter -= triggers * 5;
+                const stacks = (Game.stackCount && Game.stackCount('kinetic_battery')) || 1;
+                const rolls = triggers * stacks;
                 Game.rerolls = (Game.rerolls || 0) + rolls;
                 ParticleSys.createFloatingText(this.x, this.y - 140, `KINETIC +${rolls} REROLL`, '#00f3ff');
             }

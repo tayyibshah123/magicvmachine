@@ -4305,7 +4305,11 @@ startQTE(type, x, y, callback, opts) {
             const current = UPGRADES_POOL.find(r => r.id === saved);
             const cost = 150;
             const picks = [];
-            const pool = [...UPGRADES_POOL];
+            // Class-locked modules don't surface in the Smith bank — the
+            // player picks a starting module BEFORE they pick a class,
+            // and a class-locked module would either lock them into one
+            // class or roll dead if they pick a different one.
+            const pool = UPGRADES_POOL.filter(r => !r.classLocked);
             while (picks.length < 3 && pool.length > 0) {
                 picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
             }
@@ -4347,7 +4351,9 @@ startQTE(type, x, y, callback, opts) {
             const today = new Date().toISOString().slice(0, 10);
             let h0 = 0;
             for (let i = 0; i < today.length; i++) h0 = ((h0 * 31) + today.charCodeAt(i)) | 0;
-            const pool = [...UPGRADES_POOL];
+            // Oracle previews next-run shop relics — the player hasn't
+            // picked a class yet, so class-locked modules are filtered.
+            const pool = UPGRADES_POOL.filter(r => !r.classLocked);
             const picks = [];
             for (let i = 0; i < 3 && pool.length > 0; i++) {
                 const idx = Math.abs(h0 + i * 7919) % pool.length;
@@ -5299,6 +5305,77 @@ startQTE(type, x, y, callback, opts) {
         // stacks (see startTurn handler). Only the +DMG bonus scales.
         if (relic.id === 'aegis_cycler') {
             return `At start of turn, convert 5 Shield into +${3 * count} DMG next attack.`;
+        }
+
+        // Kinetic Battery — every 5 shields gained crosses the threshold;
+        // each cross hands the player +N rerolls (N = stacks). Stacking
+        // pumps the reward, NOT the threshold (the prior fallback regex
+        // doubled both, which left the ratio unchanged at 2x = no win).
+        if (relic.id === 'kinetic_battery') {
+            return `Every 5 shields gained grants +${count} Reroll${count > 1 ? 's' : ''}.`;
+        }
+
+        // Overcharge Vent — threshold ("every 5 mana spent") is fixed in
+        // the startTurn handler; only the +2 damage stipend scales.
+        if (relic.id === 'overcharge_vent') {
+            return `Every 5 Mana spent in a combat: +${2 * count} damage until combat ends.`;
+        }
+
+        // Tidal Recycler — threshold (Shield > Max HP/2) is fixed; the
+        // Mana payout scales linearly with stacks.
+        if (relic.id === 'tidal_recycler') {
+            return `When Shield > Max HP/2 at turn start, gain +${count} Mana.`;
+        }
+
+        // Tactician's Eye — matching-slot threshold is fixed at 2 same;
+        // the +effect bonus per affected die scales with stacks (the
+        // mana branch caps at +1 per stack to avoid trivialising mana).
+        if (relic.id === 'tacticians_eye') {
+            return `Each die rolled with matching slot (2+ same): +${2 * count} effect (+${count} mana on Mana dice).`;
+        }
+
+        // Echo Round — single-shot trigger description (relic in the
+        // ONE_COPY_MAX list below; stacking is filtered from offers).
+        if (relic.id === 'echo_round') {
+            return "Every 3rd attack also hits a random enemy for 50% damage.";
+        }
+
+        // Last Stand — binary safety-net trigger; stacking adds nothing.
+        if (relic.id === 'last_stand') {
+            return "Below 33% HP: +30% damage, +1 Reroll at turn start.";
+        }
+
+        // Ghost Cache — once-per-run revive; stacking adds nothing.
+        if (relic.id === 'ghost_cache') {
+            return "Once per run, auto-revive a dead minion with 1 HP.";
+        }
+
+        // Spark Battery — once-per-combat first reroll bonus; stacking
+        // adds nothing because the flag is per-combat binary.
+        if (relic.id === 'spark_battery') {
+            return "First reroll each combat grants +1 Mana.";
+        }
+
+        // ── Class-locked module descriptions (kept here so the same
+        // pin-the-threshold rule applies as the generic-pool relics
+        // above — only the reward number scales with stacks).
+
+        // Bloodstalker — Crimson Tithe: extra HP-per-attack scales linearly.
+        if (relic.id === 'crimson_tithe') {
+            return `Lifesteal heals an extra ${2 * count} HP per attack.`;
+        }
+        // Bloodstalker — Vermilion Hunger: bonus blood tier per kill scales.
+        if (relic.id === 'vermilion_hunger') {
+            return `Each kill grants +${count} extra Blood Tier.`;
+        }
+        // Bloodstalker — Predator's Mark: heal + reroll on bleeding kill.
+        if (relic.id === 'predators_mark') {
+            return `Killing a Bleeding enemy heals ${5 * count} HP and grants +${count} Reroll${count > 1 ? 's' : ''}.`;
+        }
+        // Arcanist — Flux Overload: extra +1 mana per turn per stack
+        // on top of the class's baseline Flux Regen tick.
+        if (relic.id === 'flux_overload') {
+            return `Flux Regen grants +${count} extra Mana per turn.`;
         }
 
         return relic.desc.replace(/(\d+)/g, (match) => {
@@ -9196,12 +9273,15 @@ triggerSystemCrash() {
             // Random module — pick from UPGRADES_POOL (excluding already-
             // owned uniques) so rest nodes can hand out a relic in
             // addition to the heal/meditate/tinker options. Mirrors the
-            // shop's relic pool for consistency.
+            // shop's relic pool for consistency. Class-locked modules
+            // are filtered to the matching class only.
             document.getElementById('screen-rest').classList.remove('active');
             document.getElementById('screen-rest').classList.add('hidden');
             const ownedIds = new Set((this.player.relics || []).map(r => r.id));
-            const pool = UPGRADES_POOL.filter(r => !ownedIds.has(r.id));
-            const fallback = UPGRADES_POOL;
+            const cidRest = this.player && this.player.classId;
+            const eligible = UPGRADES_POOL.filter(r => !r.classLocked || r.classLocked === cidRest);
+            const pool = eligible.filter(r => !ownedIds.has(r.id));
+            const fallback = eligible;
             const picked = (pool.length > 0 ? pool : fallback)[Math.floor(Math.random() * (pool.length > 0 ? pool.length : fallback.length))];
             if (picked) {
                 this.player.addRelic(picked);
@@ -11589,8 +11669,10 @@ triggerSystemCrash() {
             // corrupted-tier entries, and gold-rarity relics so the starter
             // set stays to "common / neutral" as the modifier implies.
             if (m.startRelicCount && typeof UPGRADES_POOL !== 'undefined') {
+                const cidStart = this.player && this.player.classId;
                 const eligible = UPGRADES_POOL.filter(r =>
-                    r && !r.instant && r.rarity !== 'gold' && r.rarity !== 'red' && r.rarity !== 'corrupted');
+                    r && !r.instant && r.rarity !== 'gold' && r.rarity !== 'red' && r.rarity !== 'corrupted'
+                    && (!r.classLocked || r.classLocked === cidStart));
                 for (let i = 0; i < m.startRelicCount && eligible.length > 0; i++) {
                     const pick = eligible[Math.floor(Math.random() * eligible.length)];
                     if (pick && this.player.addRelic) {
@@ -13072,9 +13154,13 @@ async startTurn() {
         // +2 outgoing damage permanently (within the combat). Tracked
         // via _overchargeVentBonus on the player; reset in setupCombat.
         // Bonus accumulates here as the mana counter passes 5/10/15…
+        // Stacking now multiplies the +2 reward by stack count (was a
+        // flat +2 regardless of how many stacks the player owned, so
+        // additional copies were strictly wasted).
         if (this.player.hasRelic && this.player.hasRelic('overcharge_vent')) {
             const spent = this._manaSpentThisCombat || 0;
-            const expectedBonus = Math.floor(spent / 5) * 2;
+            const stacks = this.stackCount('overcharge_vent') || 1;
+            const expectedBonus = Math.floor(spent / 5) * 2 * stacks;
             const cur = this.player._overchargeVentBonus || 0;
             if (expectedBonus > cur) {
                 const delta = expectedBonus - cur;
@@ -13235,10 +13321,15 @@ async startTurn() {
         // Arcanist Flux Regen: passive mana tick at the start of every turn.
         // Capped at baseMana + 5 so the Mana Bank can't balloon infinitely if
         // the player hoards — still encourages spending within a few turns.
+        // Module: FLUX OVERLOAD (arcanist-locked) — adds +1 to the per-turn
+        // tick per stack on top of the class trait. Lifts the cap by the
+        // same amount so the extra flux can actually land.
         if (this.player.traits.manaPassive > 0) {
-            const cap = (this.player.baseMana || 3) + 5;
+            const fluxStacks = this.stackCount('flux_overload');
+            const passive = this.player.traits.manaPassive + fluxStacks;
+            const cap = (this.player.baseMana || 3) + 5 + fluxStacks;
             if ((this.player.mana || 0) < cap) {
-                const gain = Math.min(this.player.traits.manaPassive, cap - (this.player.mana || 0));
+                const gain = Math.min(passive, cap - (this.player.mana || 0));
                 this.player.mana = (this.player.mana || 0) + gain;
                 if (gain > 0) ParticleSys.createFloatingText(this.player.x, this.player.y - 110, `+${gain} FLUX`, "#bc13fe");
             }
@@ -14963,8 +15054,9 @@ async startTurn() {
                 // _detectAndApplyCombos at roll time. Read here for ATK
                 // dice; analogous reads below for DEF (shield) and MANA.
                 if (die._tacticiansEye) {
-                    dmg += 2;
-                    ParticleSys.createFloatingText(this.player.x, this.player.y - 110, "EYE +2", "#00f3ff");
+                    const eyeStacks = this.stackCount('tacticians_eye') || 1;
+                    dmg += 2 * eyeStacks;
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 110, `EYE +${2 * eyeStacks}`, "#00f3ff");
                 }
                 // Relic: AEGIS CYCLER — next-attack flat bonus from shield conversion.
                 if (this.player.nextAttackFlatBonus) {
@@ -15039,7 +15131,13 @@ async startTurn() {
                     if (!this.player.traits.lifesteal || delta <= 0) return;
                     const lTier = this.player.bloodTier || 0;
                     const lBonus = (this.player.traits.bloodTierLifestealBonus || 0) * lTier;
-                    const _amt = 2 + lBonus;
+                    // Module: CRIMSON TITHE — bloodstalker-locked. Adds
+                    // +2 HP per attack per stack on top of the base 2 +
+                    // tier bonus. Lifesteal trait is bloodstalker-only,
+                    // so the relic only fires for that class anyway.
+                    const titheStacks = (this.stackCount && this.stackCount('crimson_tithe')) || 0;
+                    const tithe = titheStacks * 2;
+                    const _amt = 2 + lBonus + tithe;
                     this.player.heal(_amt);
                     // Day 4 — recap chip "LIFESTEAL +N".
                     try { CombatStats.recordLifesteal(_amt); } catch (_) {}
@@ -15174,10 +15272,11 @@ async startTurn() {
             } else if (this._dieSlot(type) === 'defend') {
                 const defendClassId = this.player.classId;
                 let shieldAmt = isUpgraded ? 10 : 5;
-                // Module: TACTICIAN'S EYE — matching-slot peer = +2 shield.
+                // Module: TACTICIAN'S EYE — matching-slot peer = +2 shield per stack.
                 if (die._tacticiansEye) {
-                    shieldAmt += 2;
-                    ParticleSys.createFloatingText(this.player.x, this.player.y - 110, "EYE +2", "#00f3ff");
+                    const eyeStacks = this.stackCount('tacticians_eye') || 1;
+                    shieldAmt += 2 * eyeStacks;
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 110, `EYE +${2 * eyeStacks}`, "#00f3ff");
                 }
                 // Combo: BULWARK doubles the first shield gained this roll.
                 if (this.comboBulwark) {
@@ -15280,11 +15379,14 @@ async startTurn() {
                 // Module: TACTICIAN'S EYE — matching mana peer adds +1
                 // mana on top of the base. Smaller bonus than +2 dmg/
                 // shield because mana caps tighter and a +2 mana on a
-                // 5-cap pool is way over-powered.
-                let manaGain = (isUpgraded ? 2 : 1) + (die._tacticiansEye ? 1 : 0);
+                // 5-cap pool is way over-powered. Stacks scale by 1
+                // mana per stack (so 2x = +2, 3x = +3 — still tighter
+                // than the dmg/shield branches).
+                const eyeStacksMana = die._tacticiansEye ? (this.stackCount('tacticians_eye') || 1) : 0;
+                let manaGain = (isUpgraded ? 2 : 1) + eyeStacksMana;
                 this.gainMana(manaGain);
                 if (die._tacticiansEye) {
-                    ParticleSys.createFloatingText(this.player.x, this.player.y - 110, "EYE +1", "#00f3ff");
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 110, `EYE +${eyeStacksMana}`, "#00f3ff");
                 }
                 if(isUpgraded) {
                     this.player.heal(1); // Skill: Soul Battery (Heal 1)
@@ -15851,7 +15953,9 @@ async startTurn() {
             if (this.player && this.player.traits && this.player.traits.lifesteal && beforeHp > finalEnemy.currentHp) {
                 const lTier = this.player.bloodTier || 0;
                 const lBonus = (this.player.traits.bloodTierLifestealBonus || 0) * lTier;
-                const _amt = 2 + lBonus;
+                // Crimson Tithe — see applyLifesteal helper above.
+                const titheStacks = (this.stackCount && this.stackCount('crimson_tithe')) || 0;
+                const _amt = 2 + lBonus + (titheStacks * 2);
                 this.player.heal(_amt);
                 // Day 4 — recap chip.
                 try { CombatStats.recordLifesteal(_amt); } catch (_) {}
@@ -19592,7 +19696,16 @@ drawEffects() {
         if(this.player.hasRelic('manifestor')) choices = 4;
         
         let pool = [...UPGRADES_POOL];
-        
+
+        // Class-locked modules surface ONLY in the matching class's
+        // reward screens. Generic-pool modules are unaffected. Each
+        // class has at least 3 locked entries so the identity-pure
+        // pool always has something to roll.
+        if (this.player && this.player.classId) {
+            const cid = this.player.classId;
+            pool = pool.filter(r => !r.classLocked || r.classLocked === cid);
+        }
+
         // --- ADD CORRUPTED RELICS (If Ascended) ---
         // Gated entries require minimum corruption level.
         if (this.corruptionLevel > 0 && typeof CORRUPTED_RELICS !== 'undefined') {
@@ -19647,6 +19760,14 @@ drawEffects() {
             'dice_cache',     // once-per-turn draw, fixed
             'volt_primer',    // first-attack +5, fixed
             'salvage_protocol', // +3 frags per kill, fixed
+            // Audit pass: these read like stackable relics (no rarity gate
+            // on the card), but the live handlers don't read stackCount —
+            // a second copy was strictly wasted before the audit. Filter
+            // them after the first pickup so the offer pool stays clean.
+            'echo_round',     // every-3rd-attack splash, binary flag
+            'last_stand',     // sub-33% safety-net trigger, fixed
+            'ghost_cache',    // once-per-run minion revive, single-shot
+            'spark_battery',  // first reroll each combat = +1 mana, binary flag
         ];
         for (const id of ONE_COPY_MAX) {
             if (this.player.hasRelic(id)) pool = pool.filter(i => i.id !== id);

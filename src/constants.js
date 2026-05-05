@@ -402,7 +402,7 @@ const UPGRADES_POOL = [
     { id: 'gamblers_chip',   name: "Gambler's Chip",  desc: "+2 Rerolls per turn, but -5 Max HP.",                                                icon: ICONS.relicGambler },
     { id: 'hologram',        name: "Hologram",        desc: "15% chance to dodge an attack completely.",                                          icon: ICONS.relicHologram },
     { id: 'solar_battery',   name: "Solar Battery",   desc: "Every 2nd turn, gain +1 Mana.",                                                      icon: ICONS.metaSolar },
-    { id: 'neural_link',     name: "Neural Link",     desc: "Minions gain +3 HP and +3 DMG.",                                                     icon: ICONS.constrict },
+    { id: 'neural_link',     name: "Neural Link",     desc: "Minions gain +3 HP and +3 DMG.",                                                     icon: ICONS.constrict, classLocked: 'summoner' },
     { id: 'recycle_bin',     name: "Recycle Bin",     desc: "Gaining Mana heals 1 HP (Max 5/turn).",                                              icon: ICONS.metaRecycler },
     { id: 'firewall',        name: "Firewall",        desc: "First hit of 30+ DMG each combat: soften by 15 and gain 15 Shield.",                  icon: ICONS.defend },
     { id: 'thorn_mail',      name: "Thorn Mail",      desc: "Gain 2 Block whenever you deal damage.",                                             icon: ICONS.thorns },
@@ -411,30 +411,30 @@ const UPGRADES_POOL = [
     { id: 'coolant_loop',    name: "Coolant Loop",    desc: "When your Shield breaks, heal 2 HP.",                                                icon: ICONS.relicCoolant },
 
     // --- V1.1 relic expansion ---
-    { id: 'aegis_cycler',    name: "Aegis Cycler",    desc: "At start of turn, convert 5 Shield into +3 DMG next attack.",                        icon: ICONS.relicShield },
+    { id: 'aegis_cycler',    name: "Aegis Cycler",    desc: "At start of turn, convert 5 Shield into +3 DMG next attack.",                        icon: ICONS.relicShield, classLocked: 'sentinel' },
     { id: 'static_capacitor',name: "Static Capacitor",desc: "At start of turn, zap a random enemy for 10 DMG if you hold 3+ Mana.",              icon: ICONS.overcharge },
     { id: 'shard_reactor',   name: "Shard Reactor",   desc: "Gain +1 Mana whenever a minion dies (yours or enemy's).",                            icon: ICONS.relicBattery },
-    { id: 'swarm_beacon',    name: "Swarm Beacon",    desc: "Your minions deal +1 DMG for each minion alive.",                                   icon: ICONS.minion },
+    { id: 'swarm_beacon',    name: "Swarm Beacon",    desc: "Your minions deal +1 DMG for each minion alive.",                                   icon: ICONS.minion, classLocked: 'summoner' },
     { id: 'leyline_cache',   name: "Leyline Cache",   desc: "Gain +50% Fragments from combat rewards.",                                           icon: ICONS.relicManifest },
     { id: 'bait_drone',      name: "Bait Drone",      desc: "Summon a decoy minion each combat. HP scales with sector (so late-game drones actually survive a round).", icon: ICONS.minion },
     { id: 'retaliator',      name: "Retaliator",      desc: "After taking 20+ damage in a single hit, deal 10 DMG back.",                         icon: ICONS.thorns },
-    { id: 'dice_cache',      name: "Dice Cache",      desc: "Your first reroll each turn is free (doesn't consume a reroll).",                  icon: ICONS.metaReroll },
-    { id: 'hex_fragment',    name: "Hex Fragment",    desc: "Skill dice cost -1 Mana (minimum 0).",                                               icon: ICONS.classArcanist },
+    { id: 'dice_cache',      name: "Dice Cache",      desc: "Your first reroll each turn is free (doesn't consume a reroll).",                  icon: ICONS.metaReroll, classLocked: 'tactician' },
+    { id: 'hex_fragment',    name: "Hex Fragment",    desc: "Skill dice cost -1 Mana (minimum 0).",                                               icon: ICONS.classArcanist, classLocked: 'arcanist' },
     { id: 'iron_lung',       name: "Iron Lung",       desc: "The first Defend die each turn grants +5 extra Shield.",                             icon: ICONS.defend },
-    { id: 'dusk_protocol',   name: "Dusk Protocol",   desc: "After turn 5, deal +10% damage per turn beyond.",                                    icon: ICONS.relicTitan },
-    { id: 'dawn_protocol',   name: "Dawn Protocol",   desc: "First attack of each combat deals +100% damage.",                                    icon: ICONS.relicTitan },
+    { id: 'dusk_protocol',   name: "Dusk Protocol",   desc: "After turn 5, deal +10% damage per turn beyond.",                                    icon: ICONS.relicTitan,    classLocked: 'annihilator' },
+    { id: 'dawn_protocol',   name: "Dawn Protocol",   desc: "First attack of each combat deals +100% damage.",                                    icon: ICONS.relicTitan,    classLocked: 'annihilator' },
     { id: 'reflection_glass',name: "Reflection Glass",desc: "Dodging an attack deals 8 DMG to the attacker.",                                     icon: ICONS.relicHologram },
     { id: 'venom_edge',      name: "Venom Edge",      desc: "Attacks apply 1 stack of Poison (2 DMG/turn for 3 turns).",                          icon: ICONS.attack },
-    { id: 'kinetic_battery', name: "Kinetic Battery", desc: "Every 3 shields gained grants +1 Reroll.",                                           icon: ICONS.metaReroll },
+    { id: 'kinetic_battery', name: "Kinetic Battery", desc: "Every 5 shields gained grants +1 Reroll.",                                           icon: ICONS.metaReroll, rarity: 'gold' },
     { id: 'salvage_arm',     name: "Salvage Arm",     desc: "Elite kills drop +15 Fragments.",                                                    icon: ICONS.relicLoot },
     { id: 'ghost_cache',     name: "Ghost Cache",     desc: "Once per run, auto-revive a dead minion with 1 HP.",                                 icon: ICONS.relicSecondLife },
-    { id: 'warden_protocol', name: "Warden Protocol", desc: "Your minions gain +3 Shield at start of each turn.",                                 icon: ICONS.defend },
+    { id: 'warden_protocol', name: "Warden Protocol", desc: "Your minions gain +3 Shield at start of each turn.",                                 icon: ICONS.defend,        classLocked: 'sentinel' },
     { id: 'tempo_loop',      name: "Tempo Loop",      desc: "Each unused die at end of turn grants +3 Shield next turn.",                         icon: ICONS.classTactician },
-    { id: 'echo_chamber',    name: "Echo Chamber",    desc: "First skill die each combat costs 0 Mana.",                                          icon: ICONS.classArcanist, rarity: 'gold' },
-    { id: 'nano_forge',      name: "Nano Forge",      desc: "At combat start, spawn a free Minion at +50% stats.",                                icon: ICONS.minion,        rarity: 'gold' },
+    { id: 'echo_chamber',    name: "Echo Chamber",    desc: "First skill die each combat costs 0 Mana.",                                          icon: ICONS.classArcanist, rarity: 'gold', classLocked: 'arcanist' },
+    { id: 'nano_forge',      name: "Nano Forge",      desc: "At combat start, spawn a free Minion at +50% stats.",                                icon: ICONS.minion,        rarity: 'gold', classLocked: 'summoner' },
     { id: 'celestial_sync',  name: "Celestial Sync",  desc: "Perfect QTEs also heal 3 HP.",                                                       icon: ICONS.intentHeal },
     { id: 'dervish_mode',    name: "Dervish Mode",    desc: "After 3 attacks in a single turn, gain +2 Mana.",                                    icon: ICONS.relicBattery },
-    { id: 'iron_vault',      name: "Iron Vault",      desc: "Shield does not decay at end of turn (max 50 carry).",                               icon: ICONS.relicShield,   rarity: 'gold' },
+    { id: 'iron_vault',      name: "Iron Vault",      desc: "Shield does not decay at end of turn (max 50 carry).",                               icon: ICONS.relicShield,   rarity: 'gold', classLocked: 'sentinel' },
 
     // --- Part 5 relic expansion ---
     { id: 'reinforced_shell',name: "Reinforced Shell",desc: "+20 Max HP.",                                                                        icon: ICONS.relicHull,     instant: true },
@@ -447,7 +447,7 @@ const UPGRADES_POOL = [
     // plumbs into damage / reroll / mana / shield events.
     { id: 'kindling',        name: "Kindling",        desc: "Bleed and Poison ticks deal +1 damage per stack of Kindling.",                       icon: ICONS.bldAttack },
     { id: 'last_stand',      name: "Last Stand",      desc: "Below 33% HP: +30% damage, +1 Reroll at turn start.",                                icon: ICONS.bldDefend },
-    { id: 'spark_battery',   name: "Spark Battery",   desc: "First reroll each combat grants +1 Mana.",                                           icon: ICONS.metaReroll },
+    { id: 'spark_battery',   name: "Spark Battery",   desc: "First reroll each combat grants +1 Mana.",                                           icon: ICONS.metaReroll, classLocked: 'tactician' },
     { id: 'siphon_blade',    name: "Siphon Blade",    desc: "Killing an enemy heals 4 HP and refunds 1 Mana.",                                    icon: ICONS.bldAttack },
 
     // ── Module expansion (round 2) — synergy fillers and class-leaning
@@ -458,8 +458,21 @@ const UPGRADES_POOL = [
     { id: 'phalanx_drive',   name: "Phalanx Drive",   desc: "Minions: +1 damage per other minion-affecting Module owned.",                        icon: ICONS.constrict },
     { id: 'echo_round',      name: "Echo Round",      desc: "Every 3rd attack also hits a random enemy for 50% damage.",                          icon: ICONS.attack },
     { id: 'tidal_recycler',  name: "Tidal Recycler",  desc: "When Shield > Max HP/2 at turn start, gain +1 Mana.",                                icon: ICONS.relicShieldGen },
-    { id: 'munitions_belt',  name: "Munitions Belt",  desc: "Skill dice (Meteor, Earthquake, etc.) gain +25% effect.",                            icon: ICONS.classAnnihilator },
-    { id: 'tacticians_eye',  name: "Tactician's Eye", desc: "Each die rolled with matching slot (2+ same): +2 to its effect.",                    icon: ICONS.classTactician },
+    { id: 'munitions_belt',  name: "Munitions Belt",  desc: "Skill dice (Meteor, Earthquake, etc.) gain +25% effect.",                            icon: ICONS.classAnnihilator, classLocked: 'annihilator' },
+    { id: 'tacticians_eye',  name: "Tactician's Eye", desc: "Each die rolled with matching slot (2+ same): +2 to its effect.",                    icon: ICONS.classTactician,   classLocked: 'tactician' },
+
+    // ── Class-locked module expansion (Part X). Each class earns a
+    // small private pool of high-fantasy modules that ONLY surface in
+    // its own reward screens. Generic-pool modules still appear for
+    // every class — these layer on top so each class has at least 3
+    // identity-pure picks.
+    //
+    // Bloodstalker (lifesteal / blood ramp):
+    { id: 'crimson_tithe',   name: "Crimson Tithe",   desc: "Lifesteal heals an extra 2 HP per attack.",                                          icon: ICONS.bldAttack,    rarity: 'gold', classLocked: 'bloodstalker' },
+    { id: 'vermilion_hunger',name: "Vermilion Hunger",desc: "Each kill grants +1 extra Blood Tier.",                                              icon: ICONS.bldMana,                      classLocked: 'bloodstalker' },
+    { id: 'predators_mark',  name: "Predator's Mark", desc: "Killing a Bleeding enemy heals 5 HP and grants +1 Reroll.",                          icon: ICONS.bldDefend,                    classLocked: 'bloodstalker' },
+    // Arcanist (mana). hex_fragment + echo_chamber + flux_overload = 3.
+    { id: 'flux_overload',   name: "Flux Overload",   desc: "Flux Regen grants +1 extra Mana per turn.",                                          icon: ICONS.classArcanist,               classLocked: 'arcanist' },
 
     // --- Sector 0 Breakout reward — Cellkey Shard ---
     // Awarded once, on completion of the Cage Guardian fight in the
@@ -894,7 +907,8 @@ const EVENTS_DB = [
             { text: "Buy Random Module (-50 Fragments)", icon: 'gem', effect: (g) => {
                 if (g.techFragments >= 50) {
                     g.techFragments -= 50;
-                    const pool = UPGRADES_POOL;
+                    const cid = g.player && g.player.classId;
+                    const pool = UPGRADES_POOL.filter(r => !r.classLocked || r.classLocked === cid);
                     const item = pool[Math.floor(Math.random() * pool.length)];
                     g.player.addRelic(item);
                     return "ACQUIRED: " + item.name;
@@ -990,7 +1004,8 @@ const EVENTS_DB = [
         options: [
             { text: "Sacrifice a minion (Unlock Random Relic)", icon: 'minion', effect: (g) => {
                 if (g.player.minions.length > 0) g.player.minions.shift();
-                const pool = UPGRADES_POOL;
+                const cid = g.player && g.player.classId;
+                const pool = UPGRADES_POOL.filter(r => !r.classLocked || r.classLocked === cid);
                 const item = pool[Math.floor(Math.random() * pool.length)];
                 g.player.addRelic(item);
                 return "Oracle speaks once more: " + item.name;
@@ -1032,7 +1047,8 @@ const EVENTS_DB = [
         options: [
             { text: "Shatter (take 5 DMG, random Relic)", icon: 'gem', effect: (g) => {
                 g.player.takeDamage(5);
-                const pool = UPGRADES_POOL;
+                const cid = g.player && g.player.classId;
+                const pool = UPGRADES_POOL.filter(r => !r.classLocked || r.classLocked === cid);
                 const item = pool[Math.floor(Math.random() * pool.length)];
                 g.player.addRelic(item);
                 return "A fragment embeds: " + item.name;
@@ -1107,7 +1123,8 @@ const EVENTS_DB = [
             { text: "Buy discounted relic (-60 Fragments)", icon: 'gem', effect: (g) => {
                 if (g.techFragments < 60) return "Not enough Fragments.";
                 g.techFragments -= 60;
-                const pool = UPGRADES_POOL;
+                const cid = g.player && g.player.classId;
+                const pool = UPGRADES_POOL.filter(r => !r.classLocked || r.classLocked === cid);
                 const item = pool[Math.floor(Math.random() * pool.length)];
                 g.player.addRelic(item);
                 return "ACQUIRED: " + item.name;
@@ -1345,7 +1362,9 @@ const EVENTS_DB = [
                 return "The flux ledger settles.";
             } },
             { text: "Forgive the debt (+1 Spark, random Module)", icon: 'star', effect: (g) => {
-                const pool = (typeof UPGRADES_POOL !== 'undefined') ? UPGRADES_POOL : [];
+                const cid = g.player && g.player.classId;
+                const base = (typeof UPGRADES_POOL !== 'undefined') ? UPGRADES_POOL : [];
+                const pool = base.filter(r => !r.classLocked || r.classLocked === cid);
                 if (pool.length) {
                     const item = pool[Math.floor(Math.random() * pool.length)];
                     g.player.addRelic && g.player.addRelic(item);
@@ -1383,7 +1402,9 @@ const EVENTS_DB = [
         options: [
             { text: "Reach through (-8 HP, random Module + random Corrupted)", icon: 'gem', effect: (g) => {
                 g.player.takeDamage(8);
-                const a = (typeof UPGRADES_POOL !== 'undefined') ? UPGRADES_POOL : [];
+                const cid = g.player && g.player.classId;
+                const aBase = (typeof UPGRADES_POOL !== 'undefined') ? UPGRADES_POOL : [];
+                const a = aBase.filter(r => !r.classLocked || r.classLocked === cid);
                 const b = (typeof CORRUPTED_RELICS !== 'undefined') ? CORRUPTED_RELICS : [];
                 if (a.length) g.player.addRelic && g.player.addRelic(a[Math.floor(Math.random() * a.length)]);
                 if (b.length) g.player.addRelic && g.player.addRelic(b[Math.floor(Math.random() * b.length)]);

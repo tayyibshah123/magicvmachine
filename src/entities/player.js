@@ -31,9 +31,14 @@ class Player extends Entity {
             this.addRelic({ id: 'spike_armor', name: "Double Edge", desc: "Reflect 30% damage.", icon: ICONS.relicDoubleEdge });
         }
         
-        // Meta: Data Cache
+        // Meta: Data Cache — random starting relic. Filtered to entries
+        // the current class is allowed to roll so a Sentinel doesn't
+        // start with a Bloodstalker-locked module. classId hasn't been
+        // assigned by the caller yet at constructor time, so fall back
+        // to classConfig.id which DOES carry the picked class.
         if(Game.hasMetaUpgrade('m_relic')) {
-            const pool = [...UPGRADES_POOL];
+            const cid = this.classId || (classConfig && classConfig.id);
+            const pool = UPGRADES_POOL.filter(r => !r.classLocked || r.classLocked === cid);
             const randomRelic = pool[Math.floor(Math.random() * pool.length)];
             this.addRelic(randomRelic);
         }
