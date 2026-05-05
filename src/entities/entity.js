@@ -306,6 +306,20 @@ class Entity {
             }
         }
 
+        // Non-combat HP floor — events, relic costs, and other out-of-combat
+        // damage sources (e.g. Skyglass Shatter, Medbay decline, Static
+        // shrine) must never drop the player to 0. Nothing outside combat
+        // triggers the gameOver / second-life path, so a 0 HP player would
+        // be carried into the next fight stuck at 0 HP. Clamp the deduction
+        // so at least 1 HP remains. Combat states (incl. tutorial + breakout
+        // prologue) keep their lethal behaviour untouched.
+        if (this instanceof Player && actualDmg > 0
+            && Game && Game.currentState !== STATE.COMBAT
+            && Game.currentState !== STATE.TUTORIAL_COMBAT
+            && Game.currentState !== STATE.BREAKOUT) {
+            actualDmg = Math.min(actualDmg, Math.max(0, this.currentHp - 1));
+        }
+
         // Hologram: 15% Dodge — routed through Game._luckyChance so
         // Ascension 17 (Aurelia's Curse) halves it as advertised.
         if (this instanceof Player && this.hasRelic('hologram')

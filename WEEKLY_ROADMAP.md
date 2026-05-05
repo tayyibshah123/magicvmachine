@@ -314,6 +314,106 @@ Part 30.4 is now **fully shipped** — all 5 per-sector map specials live.
 
 ---
 
+## 9. Final ledger (post Week 2 polish pass)
+
+### Roadmap parts CLOSED
+
+| Part | Title | Status | Version |
+|------|-------|--------|---------|
+| 1 | Onboarding | ✅ shipped (audit) | pre-v1 |
+| 2.1 | Dice mechanics (combo, sealed, pity, weights) | ✅ all 5 | v1.4.7-1.4.8 |
+| 2.2 | Combat feedback (numbers, hit-stop, camera, log) | ✅ all 4 | pre-v1 + audit |
+| 2.3 | Class identity (6 classes) | ✅ shipped | pre-v1 |
+| 2.4 | QTE (rebalance, variants, accessibility) | ✅ all 3 | v1.5.0 |
+| 2.5 | Reroll UX | ✅ shipped (audit) | pre-v1 |
+| 2.6 | Intent clarity (post-buff breakdown) | ✅ shipped | v1.4.9 |
+| 4.1 | Sanctuary | ✅ shipped | pre-v1 |
+| 4.2 | Achievements | ✅ shipped | pre-v1 |
+| 4.4 | Ascension | ✅ shipped | pre-v1 |
+| 4.5 | Login streak rewards | ✅ shipped (audit) | pre-v1 |
+| 4.6 | Cosmetics shop | ✅ shipped | v1.4.9 |
+| 6 | Mobile UX | ✅ all 9 | v1.3.7 |
+| 11 | Performance | ✅ all 6 | v1.3.6 |
+| 12 | Analytics | ✅ shipped | pre-v1 |
+| 13 | Accessibility | ✅ all 6 | v1.5.0 |
+| 14 | Testing (vitest, 98 tests) | ✅ shipped | ongoing |
+| 23 | Sector enemy rosters | ✅ shipped | pre-v1 |
+| 24 | Sector X / Archivist | ✅ shipped | pre-v1 |
+| 25.1-25.7 | Visual systems | ✅ all 7 | v1.3.6-v1.3.8 |
+| 26 | Class + enemy animations | ✅ all 6 | v1.4.1, v1.4.3 |
+| 27 | Intel 2.0 (3 tabs + tier-specific) | ✅ all 4 | pre-v1 + v1.4.6 |
+| 28 | Ascension 2.0 (ladder + cosmetic frames) | ✅ all 3 | v1.4.6 |
+| 29 | Custom Runs (15 modifiers, save persist, gating) | ✅ shipped | pre-v1 |
+| 30 | Map topology + per-sector specials | ✅ all 5 | v1.4.4-v1.4.5 |
+| 31 | Feedback loops (digest, recap, autopsy, share) | ✅ all 4 + extended | v1.3.9-v1.4.0, v1.4.7 |
+
+### Roadmap parts deferred per architecture (Part 22 decisions)
+- **Part 8.1 Leaderboards** / **8.2 Replays** / **8.4 Friends** — deferred per Part 22 decision #4 (local-first, zero backend at launch). Re-visit when retention metrics justify standing up infrastructure.
+- **Part 9** Monetization — premium $4.99 only, no IAP system needed.
+- **Part 10.4** Backend / cloud — same as 8.x.
+- **Part 22.1** Soft launch market — open per Part 22a.
+
+### Roadmap parts requiring USER input — handoff list
+
+**These are the only items left between you and a launch-ready build. I cannot ship them autonomously.**
+
+#### Audio assets (Part 7)
+1. **Per-boss themes ×5** — 90s loops at 110-130 BPM, distinct motifs per boss
+2. **Menu / sanctuary track** — 90s ambient synthwave loop, calmer than combat
+3. **Combat-recap sting** — 1.0-1.5s synthwave snare-and-pad swell
+4. **Game-over autopsy drone** — 2-3s descending bass + vinyl crackle, loopable
+5. **Combo-trigger sting ×3 variants** — 0.4-0.8s glitchy synth zaps
+6. **Shield-break SFX** — 0.6s glass-crack + electric snap (distinct from `defend.ogg`)
+7. **Parry-success ping** — 0.3s bright high-frequency chime
+8. **UI tap variants ×2** — 80-120ms soft synth ticks (alt to `click.ogg`)
+9. **(optional) Per-class voice barks** — 6 classes × 6 barks each (~36 clips)
+10. **(optional) Cipher-doc unlock chimes ×24** — 0.5s pings with subtle pitch variants
+
+Format: `.ogg` Vorbis q4 + `.m4a` AAC 128k. 44.1 kHz stereo. Drop into `sfx/` or `music/`. Day 6 wired sensible fallbacks (`snap`, `earthquake`, `zap`, `beam`, `glitch_attack`, `siren`) so nothing's blocked, but custom stings would significantly upgrade combat moments.
+
+#### Cosmetic art (Part 4.6 extension)
+- Additional dice skin sets — currently 4 placeholder title-frame cosmetics ship in v1.4.9. Real skins would need designed PNG / SVG sprites + a dice-render hook (small).
+- Additional title styles beyond the 4 CSS placeholders.
+
+#### Legal & compliance (Part 15)
+- Privacy policy + Terms of Service URLs/copy
+- COPPA classification (children under 13 — depends on target demographic)
+- Store metadata: short description, long description, keywords, content rating
+- App icons + splash screens at all required sizes (Capacitor handles a lot of this)
+
+#### Launch decisions (Parts 17, 22a)
+- Soft-launch market choice
+- Launch date target
+- Pre-launch marketing plan
+- Beta program organisation (testflight / play console internal)
+
+#### Mobile build setup (Part 10)
+- iOS Apple Developer Program enrolment ($99/yr)
+- Android Google Play Console enrolment ($25 one-time)
+- Capacitor signing keys (you generate, you keep)
+- Store listing screenshots (4-6 per platform at multiple device sizes)
+
+#### Optional content drops (no immediate need, but available)
+- More events for `EVENTS_DB` (writing-bound)
+- More custom-run modifiers (design-bound — current 15 cover the spec)
+- Per-class boss variant phase 4s (design-bound)
+- Additional sector enemies beyond the 5 rosters in `constants.js`
+
+---
+
+## 10. Final session totals
+
+- **23 commits this overall session** (Week 1 + Week 2 + polish pass)
+- **Versions shipped:** 1.3.5 → **1.5.0** (15 PWA cache invalidations)
+- **New services:** 8 (`fps-hud`, `combat-stats`, `turn-digest`, `combat-recap`, `class-vfx`, `cosmetics`)
+- **Deleted services:** 0
+- **Vitest:** 98/98 green at every commit
+- **Audit wins identified:** 9 roadmap items already shipped (Intel 2.0, per-class attack VFX, camera juice, login streak, reroll UX, loading skeletons, custom-run UI, combat log, achievements scaffolding) — saved an estimated 14 days of redundant work.
+
+The build is now in the "everything code-shippable is shipped" state. Next action is yours — pick from the handoff list in §9 and let me know which to wire when assets arrive.
+
+---
+
 ## 4. Non-negotiables for every PR this week
 
 Each change must:

@@ -915,8 +915,8 @@ const EVENTS_DB = [
         desc: "This node is leaking data. You can absorb it, but it will corrupt your max integrity.",
         options: [
             { text: "Absorb (-4 Max HP, +150 Fragments)", icon: 'skull', effect: (g) => {
-                g.player.maxHp -= 4;
-                if (g.player.currentHp > g.player.maxHp) g.player.currentHp = g.player.maxHp;
+                g.player.maxHp = Math.max(5, g.player.maxHp - 4);
+                g.player.currentHp = Math.max(1, Math.min(g.player.currentHp, g.player.maxHp));
                 g.techFragments += 150;
                 return "Data absorbed. Integrity compromised.";
             } },
@@ -1086,8 +1086,8 @@ const EVENTS_DB = [
         options: [
             { text: "Drink deep (+2 Base Mana, -5 Max HP)", icon: 'mana-drop', effect: (g) => {
                 g.player.baseMana += 2;
-                g.player.maxHp -= 5;
-                if (g.player.currentHp > g.player.maxHp) g.player.currentHp = g.player.maxHp;
+                g.player.maxHp = Math.max(5, g.player.maxHp - 5);
+                g.player.currentHp = Math.max(1, Math.min(g.player.currentHp, g.player.maxHp));
                 return "Current rises.";
             } },
             { text: "Bottle a sip (+1 Base Mana)", icon: 'mana-drop', effect: (g) => { g.player.baseMana += 1; return "Stored safely."; } },

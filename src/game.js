@@ -12135,6 +12135,15 @@ updateHexBreach(dt) {
 
 async startCombat(type) {
         // --- CLEANUP PHASE ---
+        // Recovery clamp for legacy saves where an out-of-combat damage
+        // event (e.g. Skyglass Shatter, Medbay decline) dropped the player
+        // to 0 HP without triggering a death. The takeDamage path now
+        // floors non-combat damage at 1 HP, but a save written before the
+        // fix can still carry 0 HP into the next fight; this restores them
+        // to 1 HP so combat is winnable instead of softlocked at zero.
+        if (this.player && this.player.currentHp <= 0 && this.player.maxHp > 0) {
+            this.player.currentHp = 1;
+        }
         // Combat-generation counter — incremented every time a new combat
         // starts. Any async work still in flight from the previous combat
         // (endTurn awaiting sleep, minion attack callback, etc.) can check
