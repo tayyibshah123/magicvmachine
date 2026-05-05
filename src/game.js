@@ -3466,7 +3466,24 @@ startQTE(type, x, y, callback, opts) {
             void el.offsetHeight;
             // Use double-rAF: first frame paints initial state, second frame triggers
             // the transition by adding `.active`. Reliable in all browsers.
-            requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('active')));
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                el.classList.add('active');
+                // Belt-and-suspenders: re-clear .hidden in case the 500ms
+                // post-removeAll-active hidden-race callback fired between
+                // our remove('hidden') above and this rAF. Without this, a
+                // throttled rAF chain (iOS Brave swapping tabs, app backgrounded)
+                // could leave the screen stuck with both .hidden and .active,
+                // showing nothing but the canvas (the "stuck cinematic" report).
+                el.classList.remove('hidden');
+            }));
+            // Last-resort fallback for rAFs that don't fire within the
+            // hidden-race window (heavy throttling). Idempotent — adding an
+            // already-present class is a no-op. Anything later than ~600ms
+            // is past the 500ms hidden timer, so we MUST also strip .hidden.
+            setTimeout(() => {
+                el.classList.add('active');
+                el.classList.remove('hidden');
+            }, 600);
         };
 
         switch(newState) {
@@ -6034,7 +6051,11 @@ triggerPhaseGlitch() {
         // Token list used by both error and rejection paths. Matches the raw
         // identifier so "Can't find variable: __firefox__" (Safari) and
         // "window.__firefox__ is undefined" (Chromium) both get caught.
-        const EXT_TOKEN_RE = /__firefox__|__gCrWeb|__gBleyer|webkit\.messageHandlers|Grammarly|__REACT_DEVTOOLS_|__REDUX_DEVTOOLS_|ResizeObserver loop/i;
+        // Wallet/web3 tokens cover Brave's iOS built-in wallet (which throws
+        // "undefined is not an object (evaluating 'window.ethereum.selectedAddress
+        // = undefined')" on every page load when a site doesn't use web3),
+        // plus MetaMask / Coinbase / Phantom / Solana / Tron content scripts.
+        const EXT_TOKEN_RE = /__firefox__|__gCrWeb|__gBleyer|webkit\.messageHandlers|Grammarly|__REACT_DEVTOOLS_|__REDUX_DEVTOOLS_|ResizeObserver loop|window\.ethereum|\bethereum\b|selectedAddress|\bweb3\b|MetaMask|coinbaseSolana|coinbaseWalletExtension|phantom\.solana|window\.solana|window\.tronLink|window\.tronWeb/i;
         const isExternalError = (event) => {
             const msg = String((event && (event.message || (event.error && event.error.message))) || '');
             // Opaque cross-origin script errors — browsers strip all detail.
