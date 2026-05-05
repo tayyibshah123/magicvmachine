@@ -1717,12 +1717,21 @@ body[data-transition-dir="up"]    .screen { transform: translateY(50px) scale(0.
     text-shadow: 0 0 20px var(--neon-green), 0 0 40px rgba(0, 255, 153, 0.3), 0 0 5px #fff !important;
 }
 
-/* Header Styling */
+/* Header Styling — compact so the upgrade list gets more vertical
+   room on portrait phones. Title was 2.5rem with 4px letter-spacing
+   which ate ~140px before the first card; new metrics ~70px. */
 #screen-meta h2 {
-    font-size: 2.5rem;
-    margin: 10px 0 5px 0;
-    text-shadow: 0 0 15px var(--neon-green), 0 0 5px #fff;
-    letter-spacing: 4px;
+    font-size: 1.6rem;
+    margin: 8px 0 4px 0;
+    text-shadow: 0 0 12px var(--neon-green), 0 0 4px #fff;
+    letter-spacing: 0.22em;
+}
+#screen-meta .sanctuary-currencies {
+    margin-bottom: 4px !important;
+}
+#screen-meta .sanctuary-sparks {
+    padding: 4px 12px !important;
+    font-size: 0.85rem !important;
 }
 
 #fragment-count {
@@ -1809,15 +1818,17 @@ body[data-transition-dir="up"]    .screen { transform: translateY(50px) scale(0.
     color: rgba(200, 200, 210, 0.7) !important;
 }
 
-/* ── Sleek + sectioned Sanctuary layout. Replaces the long single-column
-   list with named sections (STARTING LOADOUT / COMBAT EDGE / ECONOMY
-   / etc). Each section has its own 2-col compact grid so a phone
-   reads ~6 cards per scroll instead of ~3. */
+/* ── Sleek + sectioned Sanctuary layout. Cards are HORIZONTAL rows so
+   a phone fits ~6-8 cards per scroll instead of the ~2 the vertical
+   layout produced. Icon left, name + desc center (desc clamped to 2
+   lines), cost pill right. Section bands separated by accent rules. */
 .meta-grid.sanctuary-compact {
     display: flex;
     flex-direction: column;
     gap: 0;
-    padding: 6px 8px 14px;
+    padding: 4px 8px 14px;
+    max-width: 720px;
+    margin: 0 auto;
 }
 .sanctuary-section-header {
     --section-accent: #ffd76a;
@@ -1825,11 +1836,11 @@ body[data-transition-dir="up"]    .screen { transform: translateY(50px) scale(0.
     display: flex;
     align-items: center;
     gap: 10px;
-    margin: 14px 4px 6px;
+    margin: 10px 2px 4px;
     color: var(--section-accent);
     font-family: var(--font-cyber, 'Orbitron', sans-serif);
     letter-spacing: 0.18em;
-    font-size: 0.78rem;
+    font-size: 0.7rem;
     text-transform: uppercase;
 }
 .sanctuary-section-header::before,
@@ -1847,48 +1858,71 @@ body[data-transition-dir="up"]    .screen { transform: translateY(50px) scale(0.
 }
 .sanctuary-section-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 6px;
 }
-@media (min-width: 720px) {
+@media (min-width: 540px) {
+    .sanctuary-section-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 900px) {
     .sanctuary-section-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
-@media (min-width: 1080px) {
-    .sanctuary-section-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-/* Compact card inside the new sectioned layout — tighter padding,
-   smaller icon, smaller text, smaller cost pill. The base
-   .upgrade-card rules above still apply for unlocked / hover /
-   toggled-off variants; this just shrinks the metrics. */
+/* Horizontal compact card — overrides the column-flex base so the
+   icon, info block, and cost pill share one row. Icon stays left,
+   info expands, cost pill snaps right. Roughly 50px tall. */
 .sanctuary-section-grid .upgrade-card {
-    padding: 8px 8px 7px;
-    gap: 4px;
-    border-radius: 9px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+    flex-direction: row;
+    align-items: center;
+    text-align: left;
+    padding: 6px 8px;
+    gap: 8px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    min-height: 0;
 }
 .sanctuary-section-grid .upgrade-icon {
-    font-size: 1.4rem;
-    margin-bottom: 0;
-    width: 28px;
-    height: 28px;
+    font-size: 1.0rem;
+    margin: 0;
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
     line-height: 1;
+    filter: none;
+}
+.sanctuary-section-grid .upgrade-info {
+    flex: 1 1 auto;
+    gap: 1px;
+    align-items: stretch;
+    min-width: 0;
 }
 .sanctuary-section-grid .upgrade-name {
     font-size: 0.72rem;
-    line-height: 1.1;
-    letter-spacing: 0.05em;
+    line-height: 1.15;
+    letter-spacing: 0.04em;
     text-shadow: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .sanctuary-section-grid .upgrade-desc {
-    font-size: 0.65rem;
+    font-size: 0.62rem;
     line-height: 1.25;
-    opacity: 0.8;
+    opacity: 0.78;
+    /* Two-line clamp keeps height predictable; overflow truncates. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 .sanctuary-section-grid .upgrade-cost {
-    font-size: 0.72rem;
-    padding: 4px 8px;
-    margin-top: 3px;
-    border-radius: 3px;
+    font-size: 0.7rem;
+    padding: 4px 7px;
+    margin: 0;
+    border-radius: 4px;
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 44px;
+    text-align: center;
 }
 /* Class specialisation grid — classKey data attribute drives a class-
    color edge accent so each card reads as "this is the X-class buff"
@@ -1903,6 +1937,82 @@ body[data-transition-dir="up"]    .screen { transform: translateY(50px) scale(0.
 .sanctuary-class-grid .upgrade-card[data-class-key="annihilator"]  { border-left-color: #ff8800; }
 .sanctuary-class-grid .upgrade-card[data-class-key="sentinel"]     { border-left-color: #ffffff; }
 .sanctuary-class-grid .upgrade-card[data-class-key="summoner"]     { border-left-color: #00ff99; }
+
+/* ── Endless Spire continue/retire prompt. Fires after the Sector 5
+   boss kill when s_endless is owned. Centred glass card on top of a
+   dim backdrop; mirrors the pause/error overlay aesthetic. */
+.endless-prompt {
+    position: fixed;
+    inset: 0;
+    z-index: 9900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(0, 0, 0, 0.78);
+    backdrop-filter: blur(6px);
+    animation: endless-prompt-fade 280ms ease-out both;
+}
+@keyframes endless-prompt-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+.endless-prompt-card {
+    width: 100%;
+    max-width: 460px;
+    background: linear-gradient(140deg, rgba(20, 30, 60, 0.95), rgba(8, 5, 20, 0.96));
+    border: 1px solid rgba(255, 215, 106, 0.55);
+    border-radius: 14px;
+    padding: 22px 22px 20px;
+    text-align: center;
+    box-shadow: 0 0 40px rgba(255, 215, 106, 0.18), 0 12px 32px rgba(0, 0, 0, 0.6);
+    color: #fff;
+}
+.endless-prompt-tag {
+    font-family: var(--font-cyber, 'Orbitron', sans-serif);
+    color: #ffd76a;
+    font-size: 0.72rem;
+    letter-spacing: 0.32em;
+    margin-bottom: 6px;
+    opacity: 0.85;
+}
+.endless-prompt-card h2 {
+    font-family: var(--font-cyber, 'Orbitron', sans-serif);
+    font-size: 1.6rem;
+    letter-spacing: 0.18em;
+    margin: 4px 0 10px;
+    color: #fff;
+    text-shadow: 0 0 14px rgba(255, 215, 106, 0.45);
+}
+.endless-prompt-card p {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    opacity: 0.85;
+    margin: 6px 0;
+}
+.endless-prompt-best {
+    margin-top: 12px !important;
+    font-family: var(--font-cyber, 'Orbitron', sans-serif);
+    letter-spacing: 0.2em;
+    font-size: 0.72rem !important;
+    opacity: 0.9 !important;
+}
+.endless-prompt-best span {
+    color: #ffd76a;
+    text-shadow: 0 0 10px rgba(255, 215, 106, 0.6);
+}
+.endless-prompt-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 16px;
+}
+.endless-prompt-actions .btn {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 0.95rem;
+    letter-spacing: 0.12em;
+}
 
 /* Card Content */
 .upgrade-icon {
@@ -3432,8 +3542,10 @@ body.reduced-motion .victory-tally * {
     color: rgba(255, 255, 255, 0.6);
     font-size: 1.4rem;
     line-height: 1;
-    width: 32px;
-    height: 32px;
+    /* Hit target bumped 32→44 to clear the iOS minimum tap target.
+       Padding absorbs the size; the icon stays visually 1.4rem. */
+    width: 44px;
+    height: 44px;
     cursor: pointer;
     padding: 0;
 }
@@ -6123,7 +6235,10 @@ body.perf-low      .map-svg-root .map-path-glitched { animation: none; }
 
 .map-node-abs {
     position: absolute;
-    width: 58px; height: 58px;
+    /* Hit target bumped 58→64 so a 1× DPR phone clears the iOS 44pt
+       minimum with margin. Visual size stays large enough to read on
+       the map without crowding. */
+    width: 64px; height: 64px;
     border-radius: 50%;
     background: radial-gradient(circle at 50% 40%, rgba(40, 45, 80, 0.9) 0%, rgba(8, 5, 20, 0.95) 75%);
     border: 2px solid #555;

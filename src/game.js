@@ -1475,6 +1475,68 @@ const Game = {
         if (fragCountEl) fragCountEl.innerText = `Fragments: 0`;
     },
 
+    // Endless Spire continue prompt. Fires on Sector 5 boss kill when
+    // s_endless is owned. CONTINUE pushes the run into Sector 6+ via
+    // _enterEndlessSector; RETIRE ends the run on STATE.ENDING.
+    _endlessAwaitContinue() {
+        const existing = document.getElementById('endless-prompt');
+        if (existing) existing.remove();
+        const best = parseInt((typeof localStorage !== 'undefined' && localStorage.getItem('mvm_endless_best')) || '0', 10) || 0;
+        const overlay = document.createElement('div');
+        overlay.id = 'endless-prompt';
+        overlay.className = 'endless-prompt';
+        const bestLine = best > 0
+            ? `<p class="endless-prompt-best">DEEPEST RUN SO FAR — <span>SECTOR ${best}</span></p>`
+            : `<p class="endless-prompt-best">FIRST TIME PAST THE 5TH SECTOR.</p>`;
+        overlay.innerHTML = `
+            <div class="endless-prompt-card">
+                <div class="endless-prompt-tag">// ENDLESS SPIRE</div>
+                <h2>SECTOR 5 CLEARED</h2>
+                <p>The grid past this point is unstable. Each sector escalates enemy stats. Death wipes the run as normal.</p>
+                ${bestLine}
+                <div class="endless-prompt-actions">
+                    <button id="btn-endless-continue" class="btn primary">CONTINUE INTO SECTOR 6</button>
+                    <button id="btn-endless-retire" class="btn secondary">RETIRE (END RUN)</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        const cont = document.getElementById('btn-endless-continue');
+        const ret  = document.getElementById('btn-endless-retire');
+        if (cont) cont.onclick = () => {
+            overlay.remove();
+            this._enterEndlessSector();
+        };
+        if (ret) ret.onclick = () => {
+            overlay.remove();
+            this.changeState(STATE.ENDING);
+        };
+    },
+
+    // Roll the run forward into the next endless sector. Skips the
+    // run-currency wipe (the run is continuing, not ending), increments
+    // sector, regenerates the map, replays the sector intro cinematic,
+    // and persists deepest-sector personal best to localStorage.
+    _enterEndlessSector() {
+        this.sector = (this.sector || 5) + 1;
+        this._endlessActive = true;
+        // Personal best — track the deepest sector ever entered, not
+        // cleared. Survives run end / save wipes; pure cross-run bragging.
+        try {
+            const prev = parseInt(localStorage.getItem('mvm_endless_best') || '0', 10) || 0;
+            if (this.sector > prev) {
+                localStorage.setItem('mvm_endless_best', String(this.sector));
+            }
+        } catch (_) {}
+        this.bossDefeated = false;
+        this.generateMap();
+        const sectorDisplay = document.getElementById('sector-display');
+        if (sectorDisplay) sectorDisplay.innerText = `SECTOR ${this.sector}`;
+        if (this.playSectorIntro) this.playSectorIntro(this.sector);
+        this.saveGame();
+        this.changeState(STATE.MAP);
+    },
+
     /* Newcomer assist gate. Returns true when:
      *   - The player is on runs 1-3 of a fresh profile (auto window), OR
      *   - The player has explicitly picked the INITIATE difficulty tier
@@ -3960,6 +4022,16 @@ startQTE(type, x, y, callback, opts) {
             const accent = (opts && opts.accent) || '#ffd76a';
             const owned = this.isMetaOwned(u.id);
             const enabled = owned && !(this.metaToggledOff && this.metaToggledOff.has(u.id));
+            // Dynamic desc enrichment — Endless Spire surfaces its
+            // deepest-sector personal best inline once the player has
+            // pushed past Sector 5 at least once.
+            let descText = u.desc;
+            if (u.id === 's_endless') {
+                try {
+                    const best = parseInt(localStorage.getItem('mvm_endless_best') || '0', 10) || 0;
+                    if (best > 0) descText = `${u.desc} (Best: Sector ${best})`;
+                } catch (_) {}
+            }
             const div = document.createElement('div');
             div.className = `upgrade-card ${owned ? 'unlocked' : ''}${enabled ? '' : ' meta-toggled-off'}`;
             if (opts && opts.classKey) div.dataset.classKey = opts.classKey;
@@ -3972,7 +4044,7 @@ startQTE(type, x, y, callback, opts) {
                 <div class="upgrade-icon" style="color: ${accent};">${u.icon || '✦'}</div>
                 <div class="upgrade-info">
                     <div class="upgrade-name" style="color: ${owned ? 'var(--neon-gold)' : accent};">${u.name}</div>
-                    <div class="upgrade-desc">${u.desc}</div>
+                    <div class="upgrade-desc">${descText}</div>
                 </div>
                 <div class="upgrade-cost" style="color: ${enabled ? accent : (owned ? '#888' : accent)};">${stateLabel}</div>
             `;
@@ -19284,8 +19356,13 @@ drawEffects() {
                         fragments: this.techFragments || 0
                     });
                 }
-                // Signature die evolution: T1 -> T2 after sector 2 clear, T2 -> T3 after sector 4 clear
-                if (this.player) {
+                // Signature die evolution: T1 -> T2 after sector 2 clear,
+                // T2 -> T3 after sector 4 clear. GATED on `s_signature` —
+                // without the Sanctuary upgrade owned, every signature
+                // stays at Tier 1 for the run. Audit found the upgrade
+                // was previously inert: tier-ups fired regardless of
+                // ownership, so the 20 ✦ cost bought nothing.
+                if (this.player && this.hasMetaUpgrade('s_signature')) {
                     const prevTier = this.player.signatureTier || 1;
                     let nextTier = prevTier;
                     if (this.sector >= 4) nextTier = 3;
@@ -19537,6 +19614,22 @@ drawEffects() {
             // fresh run starts clean instead of inheriting the final
             // sector's theme on the menu.
             AudioMgr.clearSectorMusic && AudioMgr.clearSectorMusic();
+
+            // ── ENDLESS SPIRE branch. If the Sanctuary upgrade is
+            // owned (and we're not inside a Challenge/Archive run,
+            // which have their own end-conditions), surface a CONTINUE
+            // / RETIRE prompt before the run-end cinematic. Continue
+            // pushes into Sector 6+ which the existing enemy/boss
+            // pipeline handles via fallbacks (BOSS_DATA[1] for unknown
+            // sectors, sectorMult linear scaling already gives +20%
+            // per sector). Retire routes to STATE.ENDING as before.
+            if (!this.challengeMode && !this.archiveMode && this.hasMetaUpgrade('s_endless')) {
+                // Restore the run-frag balance we wiped a moment ago —
+                // the run isn't actually ending if the player continues.
+                this.techFragments = this._lastRunFinalFrags || 0;
+                this._endlessAwaitContinue();
+                return;
+            }
 
             this.changeState(STATE.ENDING);
             return;
