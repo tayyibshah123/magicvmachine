@@ -530,7 +530,11 @@
             <div id="screen-meta" class="screen hidden">
                 <h2 class="neon-text-green" style="text-shadow: 0 0 15px lime; margin-top: 20px; margin-bottom: 10px;">SANCTUARY</h2>
                 <div class="sanctuary-currencies" style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-bottom:8px;">
-                    <div id="fragment-count" class="currency-display neon-text-gold">Fragments: 0</div>
+                    <!-- Fragment counter removed from the Sanctuary header — fragments are
+                         a run-only currency and the Sanctuary is a between-run surface, so
+                         the value is always 0 here. The dev-frag button still updates it
+                         via the off-screen #fragment-count node below for in-run displays. -->
+                    <div id="fragment-count" class="currency-display neon-text-gold" style="display:none;">Fragments: 0</div>
                     <div class="sanctuary-sparks" aria-label="Sparks">
                         <span style="font-size:18px; line-height:1;">✦</span>
                         <span id="sanctuary-sparks">0</span>

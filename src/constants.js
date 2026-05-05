@@ -354,25 +354,36 @@ const DICE_TYPES = {
     RECKLESS_CHARGE: { name: "Reckless Charge", icon: ICONS.recklessCharge, color: '#ff2200', desc: 'Next Attack x2 DMG.\nTake x3 DMG until next turn.', cost: 2, isSkill: true, locked: true, target: 'self' }
 };
 
+// Sanctuary upgrades — costs are now in SPARKS (✦), the persistent
+// meta-currency. Fragments became a run-only resource; the old fragment
+// costs (400-2000) made these unreachable once cross-run fragment carry
+// was removed. All entries are toggleable in the Sanctuary so a player
+// can dial them off for a harder ascension run without refunding.
 const META_UPGRADES = [
-    { id: 'm_life',       name: "Gaia's Heart",       desc: "Start runs with +20 Max HP.",                cost: 400,  icon: ICONS.metaLife },
-    { id: 'm_mana',       name: "Deep Roots",         desc: "Start runs with +1 Base Mana.",              cost: 600,  icon: ICONS.metaMana },
-    { id: 'm_greed',      name: "Recycler",           desc: "+20% Fragment gain.",                        cost: 800,  icon: ICONS.metaRecycler },
-    { id: 'm_discount',   name: "Merchant Protocol",  desc: "Shop items 25% cheaper.",                    cost: 500,  icon: ICONS.metaMerchant },
-    { id: 'm_thorn',      name: "Double Edge",        desc: "Start with Double Edge (Reflect 30% Dmg).",  cost: 1200, icon: ICONS.relicDoubleEdge },
-    { id: 'm_reroll',     name: "Tactical Link",      desc: "+1 Reroll per turn.",                        cost: 1000, icon: ICONS.metaReroll },
-    { id: 'm_dmg',        name: "Solar Flare",        desc: "All attacks deal +30% Damage.",              cost: 1500, icon: ICONS.metaSolar },
-    { id: 'm_minion_atk', name: "Nano-Swarm",         desc: "Minions: +50% Dmg, +1 HP.",                  cost: 1100, icon: ICONS.metaSwarm },
-    { id: 'm_shield',     name: "Hardened Hull",      desc: "Start combat with 15 Shield.",               cost: 900,  icon: ICONS.relicShield },
-    { id: 'm_relic',      name: "Data Cache",         desc: "Start run with a random Relic.",             cost: 2000, icon: ICONS.metaDataCache },
+    { id: 'm_life',       name: "Gaia's Heart",       desc: "Start runs with +20 Max HP.",                cost: 5,  icon: ICONS.metaLife },
+    { id: 'm_mana',       name: "Deep Roots",         desc: "Start runs with +1 Base Mana.",              cost: 8,  icon: ICONS.metaMana },
+    { id: 'm_greed',      name: "Recycler",           desc: "+20% Fragment gain (within a run).",         cost: 4,  icon: ICONS.metaRecycler },
+    { id: 'm_discount',   name: "Merchant Protocol",  desc: "Shop items 25% cheaper.",                    cost: 6,  icon: ICONS.metaMerchant },
+    { id: 'm_thorn',      name: "Double Edge",        desc: "Start with Double Edge (Reflect 30% Dmg).",  cost: 8,  icon: ICONS.relicDoubleEdge },
+    { id: 'm_reroll',     name: "Tactical Link",      desc: "+1 Reroll per turn.",                        cost: 10, icon: ICONS.metaReroll },
+    { id: 'm_dmg',        name: "Solar Flare",        desc: "All attacks deal +30% Damage.",              cost: 12, icon: ICONS.metaSolar },
+    { id: 'm_minion_atk', name: "Nano-Swarm",         desc: "Minions: +50% Dmg, +1 HP.",                  cost: 8,  icon: ICONS.metaSwarm },
+    { id: 'm_shield',     name: "Hardened Hull",      desc: "Start combat with 15 Shield.",               cost: 6,  icon: ICONS.relicShield },
+    { id: 'm_relic',      name: "Data Cache",         desc: "Start run with a random Relic.",             cost: 12, icon: ICONS.metaDataCache },
     /* Roadmap Part 2.1.5 — Dice weight system. Each bias upgrade gives
        a +25% roll-weighting toward its slot. Stackable across slots
        (own multiple → bias multiple slots, useful for the Summoner's
-       attack+minion pivot). Mid cost — comparable to Tactical Link. */
-    { id: 'm_bias_attack', name: "Aim Override",      desc: "+25% chance attack dice land in your hand.",  cost: 900,  icon: ICONS.metaSolar },
-    { id: 'm_bias_defend', name: "Bulwark Routine",   desc: "+25% chance defend dice land in your hand.",  cost: 900,  icon: ICONS.relicShield },
-    { id: 'm_bias_mana',   name: "Conduit Tap",       desc: "+25% chance mana dice land in your hand.",    cost: 900,  icon: ICONS.metaMana },
-    { id: 'm_bias_minion', name: "Summon Imprint",    desc: "+25% chance minion dice land in your hand.",  cost: 900,  icon: ICONS.metaSwarm }
+       attack+minion pivot). */
+    { id: 'm_bias_attack', name: "Aim Override",      desc: "+25% chance attack dice land in your hand.", cost: 6,  icon: ICONS.metaSolar },
+    { id: 'm_bias_defend', name: "Bulwark Routine",   desc: "+25% chance defend dice land in your hand.", cost: 6,  icon: ICONS.relicShield },
+    { id: 'm_bias_mana',   name: "Conduit Tap",       desc: "+25% chance mana dice land in your hand.",   cost: 6,  icon: ICONS.metaMana },
+    { id: 'm_bias_minion', name: "Summon Imprint",    desc: "+25% chance minion dice land in your hand.", cost: 6,  icon: ICONS.metaSwarm },
+    // Cache Primer — the only sanctuary upgrade that buys into the
+    // RUN-only fragment economy. Pre-loads the run with a starting
+    // stash so the early shop has a real ceiling instead of "you can
+    // only afford one node-1 item." 5 ✦ for +100 ≈ a quarter of a
+    // mid-tier shop run by sector 1.
+    { id: 'm_cache_primer', name: "Cache Primer",     desc: "Start each run with +100 Fragments.",        cost: 5,  icon: ICONS.metaRecycler }
 ];
 
 const UPGRADES_POOL = [

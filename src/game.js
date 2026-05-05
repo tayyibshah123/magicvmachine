@@ -321,10 +321,39 @@ const Game = {
 
         // ... (Keep existing LocalStorage loading logic unchanged) ...
         try {
-            const savedFrags = localStorage.getItem('mvm_fragments');
-            this.techFragments = savedFrags ? parseInt(savedFrags) : 0;
+            // Fragments are now a RUN-ONLY currency. The cross-run
+            // localStorage key (`mvm_fragments`) is no longer the source
+            // of truth — boot starts at 0; an in-flight run blob loaded
+            // by loadGame() restores the mid-run balance. End-of-run
+            // wipes via _resetRunCurrency().
+            this.techFragments = 0;
+            // Legacy fragment hoard from previous installs is converted
+            // 1:1 → 100:1 to Sparks the first time the new build boots,
+            // then the key is purged. Without this a returning player's
+            // fragment stockpile would silently vanish.
+            try {
+                const legacyFrags = parseInt(localStorage.getItem('mvm_fragments') || '0', 10);
+                const migrated   = localStorage.getItem('mvm_frag_to_spark_migrated');
+                if (legacyFrags > 0 && !migrated) {
+                    const sparkBonus = Math.floor(legacyFrags / 100);
+                    if (sparkBonus > 0) {
+                        const prior = parseInt(localStorage.getItem('mvm_sparks') || '0', 10);
+                        const priorL = parseInt(localStorage.getItem('mvm_sparks_lifetime') || '0', 10);
+                        localStorage.setItem('mvm_sparks', String(prior + sparkBonus));
+                        localStorage.setItem('mvm_sparks_lifetime', String(priorL + sparkBonus));
+                    }
+                    localStorage.setItem('mvm_frag_to_spark_migrated', '1');
+                }
+                localStorage.removeItem('mvm_fragments');
+            } catch (_) { /* migration is best-effort */ }
             const savedMeta = localStorage.getItem('mvm_upgrades');
             this.metaUpgrades = savedMeta ? JSON.parse(savedMeta) : [];
+            // User-toggled-off meta upgrades. Persists across runs so
+            // toggling Solar Flare off stays off until they flip it back.
+            // Separate from `_disabledMetaThisRun` (the per-run Apostate
+            // ascension curse) — both lists are checked by hasMetaUpgrade.
+            const savedDisabled = localStorage.getItem('mvm_meta_disabled');
+            this.metaToggledOff = new Set(savedDisabled ? JSON.parse(savedDisabled) : []);
             const savedEncrypted = localStorage.getItem('mvm_encrypted');
             this.encryptedFiles = savedEncrypted ? parseInt(savedEncrypted) : 0;
             const savedLore = localStorage.getItem('mvm_lore');
@@ -333,11 +362,11 @@ const Game = {
             this.seenFlags = savedSeen ? JSON.parse(savedSeen) : {};
             const savedCorruption = localStorage.getItem('mvm_corruption');
             this.corruptionLevel = savedCorruption ? parseInt(savedCorruption) : 0;
-            // SPARKS — persistent meta currency. Earned only at significant
-            // events (boss kill, sector clear, full-run win, hex breach,
-            // first-of-class clear). Spent in the Sanctuary on permanent
-            // upgrades, not consumed inside a run. Frags remain the
-            // mid-run currency and reset on death; Sparks persist.
+            // SPARKS — the only persistent currency now. Earned at
+            // significant events (boss kill, sector clear, full-run
+            // win, hex breach), spent in the Sanctuary. Fragments are
+            // run-only: they spawn from kills/events, fund the in-run
+            // shop, and wipe at run end (death / sector-5 clear / quit).
             const savedSparks = localStorage.getItem('mvm_sparks');
             this.sparks = savedSparks ? parseInt(savedSparks) : 0;
             const savedSparkLifetime = localStorage.getItem('mvm_sparks_lifetime');
@@ -358,6 +387,7 @@ const Game = {
             console.warn("LocalStorage error:", e);
             this.techFragments = 0; this.metaUpgrades = []; this.seenFlags = {}; this.corruptionLevel = 0;
             this.sparks = 0; this.sparksLifetime = 0;
+            this.metaToggledOff = new Set();
         }
 
         if (this.corruptionLevel > 0) {
@@ -491,11 +521,15 @@ const Game = {
         this._EnemyClass = Enemy;
         this._PlayerClass = Player;
         this.changeState(STATE.MENU);
-        // Process login streak — grants bonus fragments daily
+        // Process login streak. The streak service grants any milestone
+        // Sparks itself (via Game.grantSparks). The legacy bonusFragments
+        // value used to drop into techFragments here, but fragments are
+        // run-only now and would be wiped at the next run start — so we
+        // surface the streak banner without re-granting them. Sparks
+        // already cover the meaningful daily reward.
         try {
             const s = Streak.tick();
             if (s.claimedReward) {
-                this.techFragments += s.bonusFragments;
                 this._streakBonusPending = { streak: s.newStreak, bonus: s.bonusFragments };
             }
             // Streak-tier achievements
@@ -1025,8 +1059,10 @@ const Game = {
             };
         }
         attachButtonEvent('btn-dev-frags', () => {
+            // Dev-only fragment top-up. Run-only currency now, so the
+            // standalone localStorage write is gone — the value lives
+            // in saveGame's run blob and the live HUD.
             this.techFragments += 500;
-            try { localStorage.setItem('mvm_fragments', this.techFragments); } catch (e) {}
             const el = d.getElementById('fragment-count');
             if (el) el.innerText = `Fragments: ${this.techFragments}`;
             const runFrag = d.getElementById('run-fragments');
@@ -1396,8 +1432,47 @@ const Game = {
     },
 
     hasMetaUpgrade(id) {
+        // Per-run curse (Ascension 19 Apostate) takes precedence.
         if (this._disabledMetaThisRun && this._disabledMetaThisRun.has(id)) return false;
+        // Player-driven persistent toggle. Owning the upgrade isn't
+        // enough — every effect read goes through hasMetaUpgrade so a
+        // toggled-off entry stays inert across runs until re-enabled.
+        if (this.metaToggledOff && this.metaToggledOff.has(id)) return false;
         return this.metaUpgrades.includes(id);
+    },
+
+    // Ownership check that ignores both curse + toggle state. Used by
+    // the Sanctuary UI to decide whether to render "BUY" vs "TOGGLE".
+    isMetaOwned(id) {
+        return !!(this.metaUpgrades && this.metaUpgrades.includes(id));
+    },
+
+    // Player-controlled enable/disable for owned upgrades. The toggle
+    // does NOT refund Sparks — it's a "dial down for a harder run"
+    // affordance, not an undo button. Persists to localStorage so the
+    // setting carries across runs and reloads.
+    toggleMetaUpgrade(id) {
+        if (!this.isMetaOwned(id)) return;
+        if (!this.metaToggledOff) this.metaToggledOff = new Set();
+        if (this.metaToggledOff.has(id)) this.metaToggledOff.delete(id);
+        else this.metaToggledOff.add(id);
+        try {
+            localStorage.setItem('mvm_meta_disabled', JSON.stringify(Array.from(this.metaToggledOff)));
+        } catch (_) {}
+    },
+
+    // Run-end currency wipe. Called from gameOver, the sector-5 victory
+    // path, quitRun, and the start of every new run as a belt-and-
+    // suspenders. Fragments are RUN-ONLY now: they accumulate through
+    // a run, fund the shop, then zero out the moment the run ends.
+    // Sparks (the persistent meta currency) are untouched.
+    _resetRunCurrency() {
+        this.techFragments = 0;
+        try { localStorage.removeItem('mvm_fragments'); } catch (_) {}
+        const fragEl = (typeof document !== 'undefined') ? document.getElementById('run-fragments') : null;
+        if (fragEl) fragEl.innerText = '0';
+        const fragCountEl = (typeof document !== 'undefined') ? document.getElementById('fragment-count') : null;
+        if (fragCountEl) fragCountEl.innerText = `Fragments: 0`;
     },
 
     /* Newcomer assist gate. Returns true when:
@@ -3877,42 +3952,63 @@ startQTE(type, x, y, callback, opts) {
         list.innerHTML = '';
         list.className = 'meta-grid';
 
-        META_UPGRADES.forEach(u => {
-            const unlocked = this.hasMetaUpgrade(u.id);
+        // Helper used by both META_UPGRADES and SPARKS_UPGRADES to build
+        // a card with three states: not-owned (BUY for ✦), owned-on
+        // (TOGGLE OFF), owned-off (TOGGLE ON). Toggle is free — the
+        // sparks were spent at purchase, the toggle just dials the
+        // effect on/off.
+        const buildCard = (u, opts) => {
+            const accent = (opts && opts.accent) || '#ffd76a';
+            const owned = this.isMetaOwned(u.id);
+            const enabled = owned && !(this.metaToggledOff && this.metaToggledOff.has(u.id));
             const div = document.createElement('div');
-            div.className = `upgrade-card ${unlocked ? 'unlocked' : ''}`;
+            div.className = `upgrade-card ${owned ? 'unlocked' : ''}${enabled ? '' : ' meta-toggled-off'}`;
+            if (!owned) div.style.borderColor = (opts && opts.borderUnowned) || `rgba(255,215,106,0.55)`;
+            let stateLabel;
+            if (!owned) stateLabel = `${u.cost} ✦`;
+            else if (enabled) stateLabel = '◉ ON';
+            else stateLabel = '◯ OFF';
             div.innerHTML = `
-                <div class="upgrade-icon">${u.icon}</div>
+                <div class="upgrade-icon" style="color: ${accent};">${u.icon || '✦'}</div>
                 <div class="upgrade-info">
                     <div class="upgrade-name">${u.name}</div>
                     <div class="upgrade-desc">${u.desc}</div>
                 </div>
-                <div class="upgrade-cost">${unlocked ? 'INSTALLED' : u.cost + ' F'}</div>
+                <div class="upgrade-cost" style="color: ${enabled ? accent : (owned ? '#888' : accent)};">${stateLabel}</div>
             `;
             div.onclick = () => {
-                if (unlocked) return;
-                if (this.techFragments >= u.cost) {
-                    this.techFragments -= u.cost;
-                    this.metaUpgrades.push(u.id);
-                    try {
-                        localStorage.setItem('mvm_fragments', this.techFragments);
-                        localStorage.setItem('mvm_upgrades', JSON.stringify(this.metaUpgrades));
-                    } catch(e) { console.warn("Save failed", e); }
-
-                    document.getElementById('fragment-count').innerText = `Fragments: ${this.techFragments}`;
-                    AudioMgr.playSound('upgrade');
+                if (owned) {
+                    // Free toggle — flip the persistent enabled state.
+                    this.toggleMetaUpgrade(u.id);
+                    AudioMgr.playSound('click');
                     this.renderMeta();
+                    return;
+                }
+                if ((this.sparks || 0) >= u.cost) {
+                    if (this.spendSparks(u.cost, 'meta_' + u.id)) {
+                        this.metaUpgrades.push(u.id);
+                        try { localStorage.setItem('mvm_upgrades', JSON.stringify(this.metaUpgrades)); } catch (e) {}
+                        AudioMgr.playSound('upgrade');
+                        this.renderMeta();
+                    }
                 } else {
-                    div.style.borderColor = 'red';
-                    setTimeout(() => div.style.borderColor = '', 200);
+                    try { Hints && Hints.trigger && Hints.trigger('first_sanctuary_spend'); } catch (_) {}
+                    div.style.borderColor = '#ff3355';
+                    setTimeout(() => { div.style.borderColor = ''; }, 220);
                 }
             };
-            list.appendChild(div);
+            return div;
+        };
+
+        // META_UPGRADES — formerly fragment-cost, now ✦. Same ids so
+        // saved owned lists keep working.
+        META_UPGRADES.forEach(u => {
+            list.appendChild(buildCard(u, { accent: '#00f3ff' }));
         });
 
-        // ── Sparks tier — section header + cards. Sparks-cost meta nodes
-        // are content/option/QoL unlocks, not raw stat creep. Empty list
-        // would render an empty header; skip render if no entries.
+        // ── Sparks-tier section — content / option / QoL unlocks. Same
+        // toggle-aware card builder as META_UPGRADES so every sanctuary
+        // node is dial-on/dial-off after purchase.
         if (typeof SPARKS_UPGRADES !== 'undefined' && SPARKS_UPGRADES.length > 0) {
             const header = document.createElement('div');
             header.className = 'meta-section-header';
@@ -3920,35 +4016,9 @@ startQTE(type, x, y, callback, opts) {
             header.textContent = '✦ SPARKS UNLOCKS';
             list.appendChild(header);
             SPARKS_UPGRADES.forEach(u => {
-                const unlocked = this.hasMetaUpgrade(u.id);
-                const div = document.createElement('div');
-                div.className = `upgrade-card ${unlocked ? 'unlocked' : ''} spark-card`;
-                if (!unlocked) div.style.borderColor = 'rgba(255,215,106,0.55)';
-                div.innerHTML = `
-                    <div class="upgrade-icon" style="color: #ffd76a;">✦</div>
-                    <div class="upgrade-info">
-                        <div class="upgrade-name">${u.name}</div>
-                        <div class="upgrade-desc">${u.desc}</div>
-                    </div>
-                    <div class="upgrade-cost" style="color: #ffd76a;">${unlocked ? 'INSTALLED' : u.cost + ' ✦'}</div>
-                `;
-                div.onclick = () => {
-                    if (unlocked) return;
-                    if ((this.sparks || 0) >= u.cost) {
-                        if (this.spendSparks(u.cost, 'meta_' + u.id)) {
-                            this.metaUpgrades.push(u.id);
-                            try { localStorage.setItem('mvm_upgrades', JSON.stringify(this.metaUpgrades)); } catch (e) {}
-                            AudioMgr.playSound('upgrade');
-                            this.renderMeta();
-                        }
-                    } else {
-                        // First-time-on-Sanctuary nudge: hint that Sparks are needed.
-                        try { Hints && Hints.trigger && Hints.trigger('first_sanctuary_spend'); } catch (_) {}
-                        div.style.borderColor = '#ff3355';
-                        setTimeout(() => div.style.borderColor = 'rgba(255,215,106,0.55)', 220);
-                    }
-                };
-                list.appendChild(div);
+                const card = buildCard(u, { accent: '#ffd76a' });
+                card.classList.add('spark-card');
+                list.appendChild(card);
             });
         }
 
@@ -4303,7 +4373,11 @@ startQTE(type, x, y, callback, opts) {
             title.textContent = 'SMITH';
             const saved = localStorage.getItem('mvm_start_relic') || '';
             const current = UPGRADES_POOL.find(r => r.id === saved);
-            const cost = 150;
+            // Smith now bills in Sparks. Fragments are run-only and would
+            // be 0 the moment the player walked into the Sanctuary, so
+            // the 150-frag price-tag was dead UI. 4 ✦ ≈ a Hex Breach
+            // payout for a one-shot starter relic — fair tempo cost.
+            const cost = 4;
             const picks = [];
             // Class-locked modules don't surface in the Smith bank — the
             // player picks a starting module BEFORE they pick a class,
@@ -4316,10 +4390,10 @@ startQTE(type, x, y, callback, opts) {
             const curLine = current
                 ? `<p>Your banked starting relic: <b style="color:var(--neon-gold)">${current.name}</b>. It will be granted on your next run.</p>`
                 : `<p>No starting relic banked. Roll a new one below.</p>`;
-            const fragments = `<p>Fragments: <b style="color:var(--neon-gold)">${this.techFragments || 0}</b> &nbsp;·&nbsp; Reroll cost: <b>${cost}</b></p>`;
+            const sparkLine = `<p>Sparks: <b style="color:var(--neon-gold)">${this.sparks || 0} ✦</b> &nbsp;·&nbsp; Reroll cost: <b>${cost} ✦</b></p>`;
             body.innerHTML = `
                 ${curLine}
-                ${fragments}
+                ${sparkLine}
                 <div class="npc-picks">
                     ${picks.map(p => `
                         <div class="npc-relic-pick" data-relic-id="${p.id}">
@@ -4331,14 +4405,12 @@ startQTE(type, x, y, callback, opts) {
             `;
             body.querySelectorAll('.npc-relic-pick').forEach(el => {
                 el.onclick = () => {
-                    if ((this.techFragments || 0) < cost) {
+                    if (!this.spendSparks(cost, 'smith_reroll')) {
                         AudioMgr.playSound('defend');
-                        ParticleSys.createFloatingText(540, 800, 'NOT ENOUGH FRAGMENTS', '#ff3355');
+                        ParticleSys.createFloatingText(540, 800, 'NOT ENOUGH SPARKS', '#ff3355');
                         return;
                     }
-                    this.techFragments -= cost;
                     try { localStorage.setItem('mvm_start_relic', el.dataset.relicId); } catch (e) {}
-                    try { localStorage.setItem('mvm_fragments', String(this.techFragments)); } catch (e) {}
                     AudioMgr.playSound('upgrade');
                     ParticleSys.createFloatingText(540, 800, 'RELIC BANKED', '#ffd76a');
                     this.openSanctuaryNPC('smith'); // refresh
@@ -5169,6 +5241,19 @@ startQTE(type, x, y, callback, opts) {
         this.player.classId = cls.id;
         this.sector = 1;
         this.bossDefeated = false;
+        // Wipe last run's fragment stash before applying the new run's
+        // starting bonuses. Fragments are now run-only — without this
+        // explicit reset, a quitRun → startNew chain would carry over.
+        this._resetRunCurrency();
+        // CACHE PRIMER (sanctuary upgrade) — pre-loads the new run with
+        // a starting fragment stash. hasMetaUpgrade respects the player's
+        // toggle, so a disabled Cache Primer pays nothing. Applied AFTER
+        // _resetRunCurrency so the +100 lands on a clean balance.
+        if (this.hasMetaUpgrade('m_cache_primer')) {
+            this.techFragments += 100;
+            const fragEl = document.getElementById('run-fragments');
+            if (fragEl) fragEl.innerText = String(this.techFragments);
+        }
         // Pacts are run-scoped — clear any leftovers so a Challenge attempt
         // started right after a previous one doesn't carry over signed pacts.
         this.activePacts = new Set();
@@ -10029,6 +10114,11 @@ triggerSystemCrash() {
             this.map = data.map || { nodes: [], currentIdx: 'start' };
             this.map.currentIdx = data.currentIdx || 'start';
             this.bossDefeated = !!data.bossDefeated;
+            // Fragments are run-only — saveGame writes them to the run
+            // blob, loadGame restores them. Pre-rewrite this lived in
+            // the standalone mvm_fragments key (now removed), so a
+            // mid-run resume needs the explicit pull here.
+            this.techFragments = (typeof data.fragments === 'number') ? data.fragments : 0;
             this.challengeMode = !!data.challengeMode;
             this.archiveMode = !!data.archiveMode;
             // Keep the Challenge active flag in localStorage in sync with the
@@ -10725,7 +10815,6 @@ triggerSystemCrash() {
                 div.onclick = () => {
                     if (this.techFragments >= item.cost) {
                         this.techFragments -= item.cost;
-                        try { localStorage.setItem('mvm_fragments', this.techFragments); } catch(e) {}
                         item.action();
                         item.purchased = true;
                         AudioMgr.playSound('buy');
@@ -10754,7 +10843,6 @@ triggerSystemCrash() {
                 div.onclick = () => {
                     if (this.techFragments >= item.cost) {
                         this.techFragments -= item.cost;
-                        try { localStorage.setItem('mvm_fragments', this.techFragments); } catch(e) {}
                         this.player.diceUpgrades.push(item.key);
                         item.purchased = true;
                         AudioMgr.playSound('upgrade');
@@ -11925,13 +12013,14 @@ updateHexBreach(dt) {
         AudioMgr.playSound('upgrade');
 
         this.encryptedFiles--;
-        this.techFragments += 300;
-        // SPARKS — successful Hex Breach is a "significant event" earnable
-        // outside of combat. Modest payout to reward optional engagement
-        // with the intel system without warping run economy.
-        this.grantSparks(3, 'hex_breach', { silent: true });
+        // Encrypted intel files drop SPARKS only now — fragments became
+        // a run-only resource, so awarding them outside a run would
+        // immediately get wiped at run end. The full Spark payout
+        // replaces the old "300 frags + 3 sparks" combo.
+        const breachSparks = 8;
+        this.grantSparks(breachSparks, 'hex_breach', { silent: true });
 
-        const rewards = [`+300 Fragments`, `+3 ✦ Sparks`];
+        const rewards = [`+${breachSparks} ✦ Sparks`];
         // Custom Run: Silent Chronicle — no lore unlocks this run.
         if (this._customDisableLore) {
             rewards.push('Database access denied (Silent Chronicle)');
@@ -11963,7 +12052,7 @@ updateHexBreach(dt) {
         this._showHexResult({
             kind: 'fail',
             title: 'BREACH DETECTED',
-            rewards: ['Encrypted file purged', 'No fragments awarded']
+            rewards: ['Encrypted file purged', 'No Sparks awarded']
         });
     },
 
@@ -12013,7 +12102,10 @@ updateHexBreach(dt) {
 
     saveData() {
         try {
-            localStorage.setItem('mvm_fragments', this.techFragments);
+            // Fragments are run-only — they live in saveGame's run blob
+            // (which has its own localStorage slot) and the live HUD,
+            // not in the cross-run mvm_fragments key. Persist only the
+            // post-run encrypted-file inventory + lore-codex unlocks.
             localStorage.setItem('mvm_encrypted', this.encryptedFiles);
             localStorage.setItem('mvm_lore', JSON.stringify(this.unlockedLore));
         } catch(e) {}
@@ -19357,15 +19449,23 @@ drawEffects() {
                 }
             }
             
-            // 3. Rewards
-            this.techFragments += 1000;
+            // 3. Rewards. The +1000 fragment tradition is gone — fragments
+            // are run-only now and would wipe two lines down anyway, so a
+            // celebratory bonus has nothing to land on. The 15+ Sparks
+            // grant earlier in this branch is the run-win payout proper.
+            // Encrypted files (intel) still drop on full clear.
             this.encryptedFiles += 3;
-            this.bossDefeated = true; 
-            
+            this.bossDefeated = true;
+
             this.saveGame();
-            
+
             this._clearSave();
             document.getElementById('btn-load-save').style.display = 'none';
+
+            // Run ended in victory — wipe run-only fragments. Sparks /
+            // sparksLifetime / sanctuary upgrades all persist.
+            this._lastRunFinalFrags = this.techFragments || 0;
+            this._resetRunCurrency();
 
             // Run ended in victory — release the sector music lock so a
             // fresh run starts clean instead of inheriting the final
@@ -20085,10 +20185,18 @@ drawEffects() {
         // Chronicle entry (Roadmap Part 27) — every loss logs.
         this._logRunHistory('loss', { defeatedBy: this.enemy ? this.enemy.name : 'unknown' });
 
-        // Day 5 — re-check the fragment milestone before painting the death
-        // card so the share-button pulse fires on the same screen the
-        // player just earned 100k on (vs. waiting until next boot).
-        try { this._checkFragmentMilestone(); } catch (_) {}
+        // Snapshot the final run-frag count for the death card BEFORE
+        // wiping. The card surfaces "this run earned X fragments";
+        // after the wipe, techFragments is 0 and the line would read 0.
+        this._lastRunFinalFrags = this.techFragments || 0;
+        // Run-end currency wipe — fragments are run-only, so a death
+        // zeroes them out before the death screen renders. Sparks
+        // (persistent) are untouched.
+        this._resetRunCurrency();
+        // Sparks-lifetime milestones replace the old fragment-hoard
+        // milestones (those tracked cumulative fragments which no
+        // longer make sense post-wipe).
+        try { this._checkSparkMilestone(); } catch (_) {}
         this.renderDeathCards();
         this.renderRunSummary('screen-gameover');
         this.changeState(STATE.GAMEOVER);
@@ -20434,6 +20542,9 @@ drawEffects() {
         this.archiveMode = false;
         this.activePacts = new Set();
         this._renderPactPills && this._renderPactPills();
+        // Quitting mid-run still ends the run for currency purposes —
+        // wipe run-only fragments. Sparks earned this run stay banked.
+        this._resetRunCurrency();
         this.changeState(STATE.MENU);
     },
     
@@ -20467,15 +20578,20 @@ drawEffects() {
     },
 
     _checkFragmentMilestone() {
-        // Cumulative-fragment grind milestones — share-worthy beats keyed
-        // off the player's lifetime fragment total. Each tier fires once
-        // per save (the localStorage de-dupe inside _flagShareTrigger).
-        // Day 5 shipped 100k; Week 2 polish adds 50k as a mid-tier reach
-        // and 250k as a long-haul brag.
-        const f = this.techFragments || 0;
-        if (f >= 250000) this._flagShareTrigger('frag_250k', 'FRAGMENT BARON · 250K');
-        else if (f >= 100000) this._flagShareTrigger('frag_100k', 'FRAGMENT HOARDER · 100K');
-        else if (f >= 50000)  this._flagShareTrigger('frag_50k',  'FRAGMENT HUNTER · 50K');
+        // Legacy alias — fragment milestones are gone (run-only currency
+        // can't accumulate across runs). Route to the Spark milestone
+        // checker so any stale call site still does something sensible.
+        if (this._checkSparkMilestone) this._checkSparkMilestone();
+    },
+
+    _checkSparkMilestone() {
+        // Lifetime Spark milestones — share-worthy beats keyed off the
+        // persistent meta-currency total. Replaces the old fragment
+        // milestones now that fragments wipe at run end.
+        const s = this.sparksLifetime || 0;
+        if (s >= 500) this._flagShareTrigger('spark_500', 'SPARK BARON · 500 ✦');
+        else if (s >= 200) this._flagShareTrigger('spark_200', 'SPARK HOARDER · 200 ✦');
+        else if (s >= 75)  this._flagShareTrigger('spark_75',  'SPARK HUNTER · 75 ✦');
     },
 
     _renderShareTriggerHint(buttonId) {
