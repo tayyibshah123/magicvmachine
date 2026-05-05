@@ -686,6 +686,12 @@ const Game = {
         attachButtonEvent('btn-char-detail-confirm', () => this.confirmCharDetail());
         // btn-tutorial-mode removed — tutorial only fires from the storyboard's TUTORIAL button.
         attachButtonEvent('btn-tutorial-skip', () => this.skipFirstRunTutorial());
+        // Main-menu TUTORIAL tile — practice flow. Spawns the scripted
+        // tutorial fight WITHOUT starting a real run; the
+        // `_tutorialReturnToMenu` flag routes openPostTutorial /
+        // skipFirstRunTutorial back to STATE.MENU on completion instead
+        // of dropping the player into Sector 1.
+        attachButtonEvent('btn-menu-tutorial', () => this.startMenuTutorial());
         attachButtonEvent('btn-finish-story', () => { 
             AudioMgr.startMusic(); 
             this.changeState(STATE.MENU); 
@@ -3786,6 +3792,23 @@ startQTE(type, x, y, callback, opts) {
         }
     },
 
+    // Main-menu TUTORIAL practice mode. Doesn't start a real run —
+    // boots the scripted tutorial fight with a mock Tactician player
+    // and routes back to STATE.MENU on completion (or skip). Useful
+    // for veterans refreshing mechanics without burning a save slot.
+    startMenuTutorial() {
+        this._tutorialReturnToMenu = true;
+        // Manual mode (tutorialAutoRun=false) so startTutorial spawns
+        // the mock player; auto-run expects a real run-class player.
+        this.tutorialAutoRun = false;
+        // Reset the "first run done" flag locally so the scripted
+        // tutorial UI fires correctly. Restored at completion below.
+        this._priorFirstRunDone = localStorage.getItem('mvm_first_run_done');
+        try { localStorage.removeItem('mvm_first_run_done'); } catch (_) {}
+        AudioMgr.startMusic && AudioMgr.startMusic();
+        this.startTutorial();
+    },
+
     openPostTutorial() {
         // Achievement: tutorial complete
         if (typeof Achievements !== 'undefined') Achievements.unlock('TUTORIAL_DONE');
@@ -3833,6 +3856,27 @@ startQTE(type, x, y, callback, opts) {
             this.generateMap();
         }
         this.renderRelics();
+        // Menu-tutorial branch — practice flow set _tutorialReturnToMenu
+        // before starting. After the recap, restore the prior first-run
+        // flag (so the player's actual progression isn't reset by the
+        // practice run) and route back to MENU instead of MAP.
+        if (this._tutorialReturnToMenu) {
+            this._showPostTutorialRecap(() => {
+                this._tutorialReturnToMenu = false;
+                if (this._priorFirstRunDone) {
+                    try { localStorage.setItem('mvm_first_run_done', this._priorFirstRunDone); } catch (_) {}
+                } else {
+                    try { localStorage.removeItem('mvm_first_run_done'); } catch (_) {}
+                }
+                this._priorFirstRunDone = null;
+                // Drop the mock player so the menu doesn't keep stale state.
+                this.player = null;
+                this.enemy = null;
+                this.dicePool = [];
+                this.changeState(STATE.MENU);
+            });
+            return;
+        }
         this._showPostTutorialRecap(() => {
             this.changeState(STATE.MAP);
             this.saveGame();
@@ -3886,11 +3930,21 @@ startQTE(type, x, y, callback, opts) {
     },
 
     skipFirstRunTutorial() {
-        if (!this.tutorialAutoRun) return;
+        // Allow skip from auto-run (real first-run tutorial) OR the
+        // menu-launched practice tutorial. Without this second branch,
+        // the menu tutorial's skip button would early-return and the
+        // player would be stranded.
+        if (!this.tutorialAutoRun && !this._tutorialReturnToMenu) return;
+        const isMenuMode = !!this._tutorialReturnToMenu;
         this._cleanupTutorialListeners();
         this.tutorialAutoRun = false;
         document.body.classList.remove('tutorial-auto-run');
-        localStorage.setItem('mvm_first_run_done', '1');
+        // Only flip the persistent first-run flag if this is the REAL
+        // first-run skip. The practice tutorial restores the prior
+        // value below so a returning veteran's progression isn't reset.
+        if (!isMenuMode) {
+            localStorage.setItem('mvm_first_run_done', '1');
+        }
         // Force-kill the tutorial enemy so we can exit combat cleanly.
         const narrPane = document.getElementById('tutorial-narration');
         if (narrPane) narrPane.classList.add('hidden');
@@ -3910,6 +3964,21 @@ startQTE(type, x, y, callback, opts) {
             this.player.effects = [];
             this.player.mana = this.player.baseMana || 3;
             this.player.currentHp = this.player.maxHp;
+        }
+        // Menu-tutorial branch — restore the prior first-run flag so
+        // the player's actual progression isn't reset, drop the mock
+        // player, and route back to MENU instead of MAP.
+        if (isMenuMode) {
+            this._tutorialReturnToMenu = false;
+            if (this._priorFirstRunDone) {
+                try { localStorage.setItem('mvm_first_run_done', this._priorFirstRunDone); } catch (_) {}
+            } else {
+                try { localStorage.removeItem('mvm_first_run_done'); } catch (_) {}
+            }
+            this._priorFirstRunDone = null;
+            this.player = null;
+            this.changeState(STATE.MENU);
+            return;
         }
         if (!this.map || !this.map.nodes || this.map.nodes.length === 0) {
             this.generateMap();
@@ -8413,17 +8482,26 @@ triggerSystemCrash() {
             }
         ];
 
-        // Render stage + controls. (Phase 2 v2: manual advance only, dual buttons at end.)
+        // Render stage + controls. The TUTORIAL / SKIP TO GAME pair on
+        // the last scene was removed — the tutorial moved to a dedicated
+        // main-menu tile (#btn-menu-tutorial), and the storyboard now
+        // ends with a single CONTINUE that drops the player straight
+        // into character select. Back-arrow lets the player rewind a
+        // scene at a time without restarting from scene 1.
         content.innerHTML = `
             <div class="sb-stage">
                 <div class="sb-scene-wrap" id="sb-scene-wrap"></div>
+                <button id="sb-btn-back" class="sb-back-arrow hidden" aria-label="Previous scene">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M15 5 L8 12 L15 19"/>
+                    </svg>
+                </button>
                 <div class="sb-progress" id="sb-progress">
                     ${scenes.map((_, i) => `<div class="sb-dot" data-i="${i}"></div>`).join('')}
                 </div>
                 <div class="sb-controls" id="sb-controls">
                     <button id="sb-btn-next" class="btn primary">NEXT</button>
-                    <button id="sb-btn-tutorial" class="btn primary hidden">TUTORIAL</button>
-                    <button id="sb-btn-begin" class="btn secondary hidden">SKIP TO GAME</button>
+                    <button id="sb-btn-begin" class="btn primary hidden">CONTINUE</button>
                 </div>
             </div>`;
 
@@ -8432,9 +8510,9 @@ triggerSystemCrash() {
 
         const wrap = document.getElementById('sb-scene-wrap');
         const dots = Array.from(content.querySelectorAll('.sb-dot'));
-        const btnNext     = document.getElementById('sb-btn-next');
-        const btnTutorial = document.getElementById('sb-btn-tutorial');
-        const btnBegin    = document.getElementById('sb-btn-begin');
+        const btnNext  = document.getElementById('sb-btn-next');
+        const btnBack  = document.getElementById('sb-btn-back');
+        const btnBegin = document.getElementById('sb-btn-begin');
 
         let sceneIdx = 0;
 
@@ -8446,26 +8524,25 @@ triggerSystemCrash() {
                     ${scenes[i].art}
                     <div class="sb-line">${scenes[i].line}</div>
                 </div>`;
-            // On the final scene, swap NEXT for the two start buttons.
             const isLast = (i === scenes.length - 1);
             btnNext.classList.toggle('hidden', isLast);
-            btnTutorial.classList.toggle('hidden', !isLast);
             btnBegin.classList.toggle('hidden', !isLast);
+            // Back arrow hidden on the very first scene; visible
+            // everywhere else so a player can rewind without
+            // restarting the storyboard from scratch.
+            if (btnBack) btnBack.classList.toggle('hidden', i === 0);
         };
 
         btnNext.onclick = () => {
             if (sceneIdx < scenes.length - 1) showScene(sceneIdx + 1);
         };
-
-        btnTutorial.onclick = () => {
-            // Keep first_run_done UNSET so the tutorial fires after character select.
-            try { localStorage.removeItem('mvm_first_run_done'); } catch (e) {}
-            AudioMgr.startMusic();
-            this.goToCharSelect();
+        if (btnBack) btnBack.onclick = () => {
+            if (sceneIdx > 0) showScene(sceneIdx - 1);
         };
-
         btnBegin.onclick = () => {
-            // Mark first-run done so the tutorial is skipped on selectClass.
+            // Storyboard's only end CTA — the standalone tutorial lives
+            // on the main menu now, so the storyboard always drops the
+            // player straight into character select.
             try { localStorage.setItem('mvm_first_run_done', '1'); } catch (e) {}
             AudioMgr.startMusic();
             this.goToCharSelect();
@@ -28748,9 +28825,11 @@ drawEntity(entity) {
         // Skip button is now a sibling, shown whenever the narration pane
         // is shown and hidden alongside it. Lives at the bottom-center of
         // the game container regardless of where the pane is anchored.
+        // Also shown for the menu-launched practice tutorial so players
+        // can bail back to the main menu mid-fight.
         const skipBtn = document.getElementById('btn-tutorial-skip');
         if (skipBtn) {
-            if (this.tutorialAutoRun) skipBtn.classList.remove('hidden');
+            if (this.tutorialAutoRun || this._tutorialReturnToMenu) skipBtn.classList.remove('hidden');
             else skipBtn.classList.add('hidden');
         }
 
