@@ -275,7 +275,12 @@ export const ICONS = {
     arcMinion: _wrap(`<circle cx="12" cy="8" r="3" fill="currentColor" fill-opacity="0.4"/><path d="M12 11 Q10 16 8 20" stroke-width="1.8"/><path d="M12 11 Q14 16 16 20" stroke-width="1.8"/><path d="M9 6 L7 4 M15 6 L17 4" stroke-width="1.2"/><circle cx="12" cy="8" r="1" fill="currentColor"/>`, { sw: 1.6 }),
 
     // -------- BLOODSTALKER CLASS DICE (red/organic sharp) --------
-    bldAttack: _wrap(`<path d="M18 4 Q14 4 10 10 Q8 14 6 18" stroke-width="2.2"/><path d="M4 20 L6 18 L8 20" fill="currentColor"/><circle cx="14" cy="10" r="1.2" fill="currentColor"/><circle cx="11" cy="14" r="1" fill="currentColor"/><circle cx="16" cy="7" r="0.8" fill="currentColor"/><path d="M18 4 L20 3 M18 4 L20 6" stroke-width="1.4"/>`, { sw: 1.6 }),
+    // BITE — twin curved fangs framing a blood drip. Old icon read as
+    // a curling tail with stray pips; this version paints two sharp
+    // fangs, the connecting upper jaw arc, and a tear-shaped droplet
+    // falling from between them so the silhouette is unmistakably
+    // "bite" at thumbnail size.
+    bldAttack: _wrap(`<path d="M5 4 Q12 2 19 4" stroke-width="1.8"/><path d="M5 4 Q5 11 8 14 Q9.5 15.5 11 14 Q11 9 8 6 Z" fill="currentColor" fill-opacity="0.55"/><path d="M19 4 Q19 11 16 14 Q14.5 15.5 13 14 Q13 9 16 6 Z" fill="currentColor" fill-opacity="0.55"/><path d="M5 4 Q5 11 8 14 Q9.5 15.5 11 14 Q11 9 8 6 Z" stroke-width="1.6"/><path d="M19 4 Q19 11 16 14 Q14.5 15.5 13 14 Q13 9 16 6 Z" stroke-width="1.6"/><path d="M12 16 Q11 19 12 22 Q13 19 12 16 Z" fill="currentColor"/>`, { sw: 1.6 }),
     bldDefend: _wrap(`<path d="M12 21 L4 13 Q1 10 4 7 Q7 4 12 9 Q17 4 20 7 Q23 10 20 13 Z" fill="currentColor" fill-opacity="0.3"/><path d="M8 12 L16 12" stroke-width="2"/><path d="M12 9 L12 15" stroke-width="1.2" stroke-dasharray="1 2"/>`, { sw: 1.6 }),
     bldMana: _wrap(`<path d="M12 3 Q7 10 7 14 Q7 20 12 20 Q17 20 17 14 Q17 10 12 3 Z" fill="currentColor" fill-opacity="0.35"/><path d="M12 8 L15 12 L12 16 L9 12 Z" stroke-width="1.2"/>`, { sw: 1.6 }),
     bldMinion: _wrap(`<path d="M6 11 Q6 5 12 5 Q18 5 18 11 L18 14 L15 14 L15 18 L9 18 L9 14 L6 14 Z" fill="currentColor" fill-opacity="0.22"/><circle cx="9" cy="10" r="1.4" fill="currentColor"/><circle cx="15" cy="10" r="1.4" fill="currentColor"/><path d="M10 14 L11 16 M14 14 L13 16" stroke-width="1.4"/>`, { sw: 1.6 }),

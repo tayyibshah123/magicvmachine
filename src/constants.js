@@ -472,7 +472,7 @@ const UPGRADES_POOL = [
     { id: 'kindling',        name: "Kindling",        desc: "Bleed and Poison ticks deal +1 damage per stack of Kindling.",                       icon: ICONS.bldAttack },
     { id: 'last_stand',      name: "Last Stand",      desc: "Below 33% HP: +30% damage, +1 Reroll at turn start.",                                icon: ICONS.bldDefend },
     { id: 'spark_battery',   name: "Spark Battery",   desc: "First reroll each combat grants +1 Mana.",                                           icon: ICONS.metaReroll, classLocked: 'tactician' },
-    { id: 'siphon_blade',    name: "Siphon Blade",    desc: "Killing an enemy heals 4 HP and refunds 1 Mana.",                                    icon: ICONS.bldAttack },
+    { id: 'siphon_blade',    name: "Siphon Blade",    desc: "Killing an enemy heals 4 HP and refunds 1 Mana.",                                    icon: ICONS.bldAttack, rarity: 'gold' },
 
     // ── Module expansion (round 2) — synergy fillers and class-leaning
     // payoffs. All slot into existing turn-start / damage / kill paths.
