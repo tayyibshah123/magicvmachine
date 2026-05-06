@@ -262,19 +262,14 @@
                 <!-- DROP BAY shell — header / title / hero / console / tabs / footer -->
                 <div class="db-shell">
 
-                    <!-- HEADER — minimal status strip. Operator chip
-                         left, Sparks + gear right. Ascension chip rolls
-                         INTO the operator chip block when level > 0
-                         (no red call-out — fits the sleeker palette).
-                         All chips inherit the class accent via the
-                         --db-accent CSS variable. -->
+                    <!-- HEADER — minimal status strip. Operator + sparks
+                         + gear. Ascension is no longer a header chip —
+                         it appears as subtext within the RESUME button
+                         (and is implied via the Ascension picker that
+                         the operator chip routes into). -->
                     <div class="db-hdr">
                         <div class="db-hdr-left">
                             <div class="subtitle db-chip mv2-operator-chip" aria-label="Operator callsign"></div>
-                            <button id="btn-ascension" class="db-chip db-asc-chip feature-locked-hidden" data-level="0" title="Pick a difficulty tier" aria-label="Ascension">
-                                <span class="led" aria-hidden="true"></span>
-                                <span id="ascension-status-line">A0</span>
-                            </button>
                         </div>
                         <div class="db-hdr-right">
                             <div id="menu-sparks-pill" class="db-chip db-sparks-chip feature-locked-hidden" aria-label="Sparks">
@@ -287,27 +282,12 @@
                         </div>
                     </div>
 
-                    <!-- TITLE — emblazoned hero block. The .db-emblem
-                         is a layered animated emblem (rotating ring +
-                         counter-segments + halo + crosshair) that fills
-                         the upper third behind the wordmark. The
-                         Archivist Slain cosmetic frame still sits inside
-                         the row for the post-archive-kill reveal. -->
+                    <!-- TITLE — big, dynamic wordmark. The Archivist Slain
+                         cosmetic frame is mounted but rendered behind/at
+                         the wordmark's level for the post-archive-kill
+                         brass reveal. Tagline removed (the game shouldn't
+                         read like a tech demo). -->
                     <div class="db-title-row">
-                        <div class="db-emblem" aria-hidden="true">
-                            <div class="db-emblem-halo"></div>
-                            <div class="db-emblem-ring-outer"></div>
-                            <div class="db-emblem-ring-mid"></div>
-                            <div class="db-emblem-ring-inner"></div>
-                            <div class="db-emblem-crosshair">
-                                <span class="cl"></span><span class="cr"></span>
-                                <span class="ct"></span><span class="cb"></span>
-                            </div>
-                            <span class="db-emblem-corner tl"></span>
-                            <span class="db-emblem-corner tr"></span>
-                            <span class="db-emblem-corner bl"></span>
-                            <span class="db-emblem-corner br"></span>
-                        </div>
                         <div class="title-frame mv2-title-frame db-title-frame" id="title-frame" data-archivist-tier="0" aria-hidden="true">
                             <span class="title-frame-corner tl"></span>
                             <span class="title-frame-corner tr"></span>
@@ -316,57 +296,62 @@
                             <span class="title-frame-badge" id="title-frame-badge">ARCHIVIST SLAIN</span>
                         </div>
                         <h1 class="title mv2-wordmark db-wordmark">MAGIC <span class="vs">v</span> MACHINE</h1>
-                        <div class="db-subtitle"><span class="pip" aria-hidden="true"></span>// CYBERPUNK ROGUELITE · ALPHA</div>
                     </div>
 
-                    <!-- HERO — class portrait (hex with radar / rings /
-                         orbit motes / scan), class identity, and the
-                         3-cell ops readout strip. -->
-                    <div class="db-hero">
-                        <div class="db-portrait" id="menu-portrait">
-                            <div class="db-hex"></div>
-                            <div class="db-hex-edge"></div>
-                            <div class="db-floor-ring"></div>
-                            <div class="db-ring-2"></div>
-                            <div class="db-radar"></div>
-                            <div class="db-ring"></div>
-                            <div class="db-orbit"><i></i><i></i><i></i><i></i></div>
-                            <div class="db-scanline"></div>
-                            <div class="db-core">
-                                <span class="db-glyph" aria-hidden="true"></span>
-                                <!-- Class portrait canvas — JS paints
-                                     last-played class via _paintCharPreview.
-                                     Falls back to the sigil text when no
-                                     class history exists. -->
-                                <canvas id="menu-portrait-canvas" class="db-portrait-canvas" width="200" height="200" data-class-id="" aria-hidden="true"></canvas>
-                                <span class="db-sigil" id="menu-portrait-sigil" aria-hidden="true">◆ TAC</span>
+                    <!-- ORB — centerpiece. Layered animated emblem (halo +
+                         rotating rings + crosshair + corner brackets +
+                         orbiting particles + radial sparkle bursts). The
+                         hex portrait is gone; this orb IS the visual
+                         anchor of the menu. -->
+                    <div class="db-orb-stage">
+                        <div class="db-orb" aria-hidden="true">
+                            <div class="db-orb-halo"></div>
+                            <div class="db-orb-ring-outer"></div>
+                            <div class="db-orb-ring-mid"></div>
+                            <div class="db-orb-ring-inner"></div>
+                            <div class="db-orb-crosshair">
+                                <span class="cl"></span><span class="cr"></span>
+                                <span class="ct"></span><span class="cb"></span>
                             </div>
-                            <span class="db-tier" id="menu-portrait-tier">TIER 1</span>
-                            <span class="db-codebadge" id="menu-portrait-code">// OPERATOR</span>
-                        </div>
-
-                        <div class="db-id-block">
-                            <div class="db-id-class" id="menu-id-class">OPERATOR</div>
-                            <div class="db-id-sig" id="menu-id-sig">SIG · UNCHOSEN</div>
-                        </div>
-
-                        <div class="db-ops">
-                            <div class="db-ops-cell"><div class="lbl">LAST</div><div class="val" id="menu-ops-last">—</div></div>
-                            <div class="db-ops-cell"><div class="lbl">SPARKS</div><div class="val" id="menu-ops-sparks">0</div></div>
-                            <div class="db-ops-cell"><div class="lbl">FILES</div><div class="val" id="menu-ops-files">0</div></div>
+                            <span class="db-orb-corner tl"></span>
+                            <span class="db-orb-corner tr"></span>
+                            <span class="db-orb-corner bl"></span>
+                            <span class="db-orb-corner br"></span>
+                            <!-- Orbiting motes — 6 around the orb axis,
+                                 each with its own delay so they trail
+                                 in sequence rather than as a fixed
+                                 rosette. -->
+                            <div class="db-orb-orbit">
+                                <i></i><i></i><i></i><i></i><i></i><i></i>
+                            </div>
+                            <!-- Radial spark burst — 8 strokes radiating
+                                 outward, individually animated for the
+                                 "energy field" feel. -->
+                            <div class="db-orb-sparks">
+                                <i></i><i></i><i></i><i></i>
+                                <i></i><i></i><i></i><i></i>
+                            </div>
+                            <!-- Centre core — bright pulsing dot. -->
+                            <div class="db-orb-core"></div>
                         </div>
                     </div>
 
-                    <!-- DEPLOY console — RESUME (only when save exists)
-                         layered above INITIATE RUN. The mockup placed
-                         RESUME below; promoting it above keeps the
-                         expected "primary action lowest, fingers reach
-                         it first" mobile pattern. -->
+                    <!-- OPS — 3-cell readout strip (last sector,
+                         sparks, encrypted files). -->
+                    <div class="db-ops">
+                        <div class="db-ops-cell"><div class="lbl">LAST</div><div class="val" id="menu-ops-last">—</div></div>
+                        <div class="db-ops-cell"><div class="lbl">SPARKS</div><div class="val" id="menu-ops-sparks">0</div></div>
+                        <div class="db-ops-cell"><div class="lbl">FILES</div><div class="val" id="menu-ops-files">0</div></div>
+                    </div>
+
+                    <!-- CONSOLE — RESUME (with Ascension + Sector + class
+                         subtext) above INITIATE. -->
                     <div class="db-console">
                         <button id="btn-load-save" class="db-resume hidden">
                             <div class="db-resume-meta-block">
                                 <div class="ey">CONTINUE</div>
                                 <div class="meta" id="db-resume-meta">RESUME RUN</div>
+                                <div class="db-resume-sub" id="db-resume-sub" aria-hidden="true"></div>
                             </div>
                             <div class="progress" id="db-resume-progress" aria-hidden="true">
                                 <span></span><span></span><span></span><span></span><span></span>
@@ -382,6 +367,14 @@
                         </button>
                     </div>
 
+                    <!-- Hidden ascension button — kept alive so the
+                         existing click handler (which opens the picker)
+                         can still be invoked programmatically if needed.
+                         Surface stays in char-select / settings flow. -->
+                    <button id="btn-ascension" class="hidden feature-locked-hidden" aria-hidden="true" title="Pick a difficulty tier">
+                        <span id="ascension-status-line">A0</span>
+                    </button>
+
                     <!-- INSTRUMENT DOCK — 5 minimal icon+label tabs.
                          All inherit the run accent from --db-accent so
                          the dock feels like a single instrument cluster
@@ -392,28 +385,28 @@
                          + intel count survive as hidden / count-slot
                          children so the existing JS stays compatible. -->
                     <div class="db-cluster">
-                        <button id="btn-challenge" class="db-tab">
+                        <button id="btn-challenge" class="db-tab" aria-label="Challenge — daily boss-rush mode">
                             <span class="pip" id="db-pip-challenge" aria-hidden="true"></span>
                             <span class="icon" aria-hidden="true">⚔</span>
                             <span class="ttl">CHALLENGE</span>
                             <span id="challenge-status-line" class="db-tab-status hidden"></span>
                         </button>
-                        <button id="btn-upgrades" class="db-tab feature-locked-hidden">
+                        <button id="btn-upgrades" class="db-tab feature-locked-hidden" aria-label="Sanctuary — spend Sparks on permanent upgrades">
                             <span class="pip" id="db-pip-sanctuary" aria-hidden="true"></span>
                             <span class="icon" aria-hidden="true">✦</span>
                             <span class="ttl">SANCTUARY</span>
                         </button>
-                        <button id="btn-intel" class="db-tab feature-locked-hidden">
+                        <button id="btn-intel" class="db-tab feature-locked-hidden" aria-label="Intel — review decrypted files">
                             <span class="pip" id="db-pip-intel" aria-hidden="true"></span>
                             <span class="icon" aria-hidden="true">▤</span>
                             <span class="ttl">INTEL<span id="btn-intel-count" class="db-tab-count"></span></span>
                         </button>
-                        <button id="btn-save-slots" class="db-tab feature-locked-hidden">
+                        <button id="btn-save-slots" class="db-tab feature-locked-hidden" aria-label="Save slots — switch between A · B · C">
                             <span class="pip" aria-hidden="true"></span>
                             <span class="icon" aria-hidden="true">⊟</span>
                             <span class="ttl">SAVES</span>
                         </button>
-                        <button id="btn-menu-tutorial" class="db-tab">
+                        <button id="btn-menu-tutorial" class="db-tab" aria-label="Tutorial — practice combat without committing to a run">
                             <span class="pip" aria-hidden="true"></span>
                             <span class="icon" aria-hidden="true">▶</span>
                             <span class="ttl">TUTORIAL</span>
@@ -423,7 +416,7 @@
                     <!-- FOOTER — streak chip + version stamp. -->
                     <div class="db-footer">
                         <div id="login-streak" class="login-streak db-streak hidden"></div>
-                        <span class="db-version">ALPHA V1.7.1</span>
+                        <span class="db-version">ALPHA V1.7.2</span>
                     </div>
                 </div>
 

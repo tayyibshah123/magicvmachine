@@ -390,10 +390,8 @@ const Game = {
             this.metaToggledOff = new Set();
         }
 
-        if (this.corruptionLevel > 0) {
-            const sub = document.querySelector('.subtitle');
-            if(sub) { sub.innerText = `ASCENSION LEVEL ${this.corruptionLevel}`; sub.style.color = '#ff0055'; }
-        }
+        // Operator chip on the Drop Bay menu always reads the operator
+        // callsign — ascension is surfaced in the RESUME subtext now.
         this.effects = [];
         const fragEl = document.getElementById('run-fragments');
         if(fragEl) fragEl.innerText = this.techFragments;
@@ -417,7 +415,11 @@ const Game = {
             // Capacitor WebView, where `new Audio(src)` has to look up
             // and validate the codec on the gesture-blocking thread.
             AudioMgr.init();
-            setTimeout(() => { try { AudioMgr.startMusic(); } catch (_) {} }, 0);
+            // Start music SYNCHRONOUSLY inside the gesture — iOS Safari /
+            // Brave-iOS autoplay policy revokes the unlock if the .play()
+            // call lands off the gesture stack. The earlier setTimeout(0)
+            // here was breaking that and leaving the menu silent on iOS.
+            try { AudioMgr.startMusic(); } catch (_) {}
             ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'].forEach(ev =>
                 window.removeEventListener(ev, unlockAudio)
             );
@@ -1033,11 +1035,8 @@ const Game = {
             ascSlider.onchange = (e) => {
                 this.corruptionLevel = parseInt(e.target.value, 10) || 0;
                 try { localStorage.setItem('mvm_corruption', this.corruptionLevel); } catch (err) {}
-                // Update menu ascension label if visible
-                if (this.corruptionLevel > 0) {
-                    const sub = d.querySelector('.subtitle');
-                    if (sub) { sub.innerText = `ASCENSION LEVEL ${this.corruptionLevel}`; sub.style.color = '#ff0055'; }
-                }
+                // Drop Bay menu reads ascension from the RESUME subtext
+                // — no more red-recolouring the operator chip on level up.
                 ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, 60, `ASCENSION → ${this.corruptionLevel}`, '#ff0055');
             };
         }
@@ -3661,6 +3660,12 @@ startQTE(type, x, y, callback, opts) {
                 // trigger with the Archive tile but lives in its own slot.
                 this._refreshAscensionTile && this._refreshAscensionTile();
                 this._startMenuPulse();
+                // Make sure music is playing on the menu. Belt-and-suspenders
+                // — the splash dismissal and gesture unlock both call this,
+                // but if the player got here via quitRun / changeState
+                // without crossing a gesture (e.g. an internal redirect)
+                // this is the catch-all. startMusic is idempotent.
+                try { AudioMgr.startMusic && AudioMgr.startMusic(); } catch (_) {}
                 // Personalize the menu subtitle with the operator callsign.
                 {
                     const subEl = document.querySelector('#screen-start .subtitle');
@@ -3688,13 +3693,11 @@ startQTE(type, x, y, callback, opts) {
                             ? `[${this.encryptedFiles}]` : '';
                     }
                 }
-                if (this.corruptionLevel > 0) {
-                    const subtitleEl = document.querySelector('.subtitle');
-                    if (subtitleEl) {
-                        subtitleEl.innerText = `ASCENSION LEVEL ${this.corruptionLevel}`;
-                        subtitleEl.style.color = '#ff0055';
-                    }
-                }
+                // Drop Bay menu — operator chip always reads the
+                // operator callsign; ascension lives in the RESUME
+                // button's subtext (see _renderMenuDropBay). Skip the
+                // legacy "ASCENSION LEVEL N" overwrite that re-coloured
+                // the operator chip red on every menu visit.
                 this._refreshMenuChips();
                 break;
 
@@ -9162,53 +9165,6 @@ triggerSystemCrash() {
         root.style.setProperty('--db-accent', accent);
         root.style.setProperty('--db-accent-rgb', `${r}, ${g}, ${b}`);
 
-        // ── Portrait canvas. _paintCharPreview reads data-class-id
-        // and pulls the cached entity sprite. Sets data-painted="1"
-        // so CSS can fade in the canvas + dim the fallback sigil.
-        const canvas = document.getElementById('menu-portrait-canvas');
-        if (canvas) {
-            if (cls) {
-                canvas.dataset.classId = cls.id;
-                try {
-                    if (typeof this._paintCharPreview === 'function') {
-                        this._paintCharPreview(canvas);
-                        canvas.dataset.painted = '1';
-                    }
-                } catch (_) { canvas.dataset.painted = '0'; }
-            } else {
-                canvas.dataset.painted = '0';
-            }
-        }
-
-        // ── Sigil text + tier + code badges
-        const sigilEl = document.getElementById('menu-portrait-sigil');
-        const codeEl  = document.getElementById('menu-portrait-code');
-        const tierEl  = document.getElementById('menu-portrait-tier');
-        if (sigilEl) sigilEl.textContent = cls
-            ? `◆ ${cls.id.slice(0, 3).toUpperCase()}`
-            : '◆ NEW';
-        if (codeEl)  codeEl.textContent = cls
-            ? `// ${cls.name.toUpperCase()}`
-            : '// OPERATOR';
-        if (tierEl) {
-            const sigUnlocked = (typeof this.hasMetaUpgrade === 'function')
-                && this.hasMetaUpgrade('s_signature');
-            tierEl.textContent = sigUnlocked ? 'TIER 3' : 'TIER 1';
-        }
-
-        // ── Class identity strip (name + signature die)
-        const idClassEl = document.getElementById('menu-id-class');
-        const idSigEl   = document.getElementById('menu-id-sig');
-        if (idClassEl) idClassEl.textContent = cls ? cls.name.toUpperCase() : 'OPERATOR';
-        if (idSigEl) {
-            if (cls && typeof SIGNATURE_DICE !== 'undefined' && SIGNATURE_DICE[cls.id]) {
-                const sig = SIGNATURE_DICE[cls.id][0];
-                idSigEl.textContent = sig ? `SIG · ${sig.name.toUpperCase()}` : 'SIG · UNCHOSEN';
-            } else {
-                idSigEl.textContent = 'SIG · UNCHOSEN';
-            }
-        }
-
         // ── Ops cells: LAST · SPARKS · FILES
         const opsLast = document.getElementById('menu-ops-last');
         if (opsLast) {
@@ -9228,9 +9184,12 @@ triggerSystemCrash() {
         if (opsFiles) opsFiles.textContent = String(this.encryptedFiles || 0);
 
         // ── RESUME bar visibility + content. Hide when no save; show
-        // sector + class + a 5-dot progress strip otherwise.
+        // primary "RESUME RUN" label with a sub-line carrying
+        // ASCENSION · SECTOR · CLASS so the difficulty + run state
+        // is legible without a separate header chip.
         const resumeBtn  = document.getElementById('btn-load-save');
         const resumeMeta = document.getElementById('db-resume-meta');
+        const resumeSub  = document.getElementById('db-resume-sub');
         const resumeProg = document.getElementById('db-resume-progress');
         if (resumeBtn) {
             if (saveBlob && saveBlob.player && saveBlob.player.classId) {
@@ -9239,7 +9198,16 @@ triggerSystemCrash() {
                     ? PLAYER_CLASSES.find(c => c.id === saveBlob.player.classId) : null;
                 const className = saveCls ? saveCls.name.toUpperCase()
                     : String(saveBlob.player.classId || '').toUpperCase();
-                if (resumeMeta) resumeMeta.textContent = `SECTOR ${sector} · ${className}`;
+                const ascLvl = (typeof Ascension !== 'undefined' && Ascension.getSelected)
+                    ? Ascension.getSelected() : 0;
+                if (resumeMeta) resumeMeta.textContent = 'RESUME RUN';
+                if (resumeSub) {
+                    const segments = [];
+                    if (ascLvl > 0) segments.push(`A${ascLvl}`);
+                    segments.push(`SECTOR ${sector}`);
+                    segments.push(className);
+                    resumeSub.textContent = segments.join(' · ');
+                }
                 if (resumeProg) {
                     const dots = resumeProg.querySelectorAll('span');
                     const lit  = Math.min(5, Math.max(0, sector));

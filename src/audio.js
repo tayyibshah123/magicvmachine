@@ -105,7 +105,13 @@ const AudioMgr = {
         if (this.ctx && this.ctx.state !== 'running') {
             this.ctx.resume().catch(() => {});
         }
-        this.bgm.play().catch(() => {});
+        this.bgm.play().catch(e => {
+            // Most common cause: iOS autoplay policy revoked the
+            // unlock between the gesture and the fade-in tick.
+            // Log so a player reporting silence can paste the
+            // console output and we can see the rejection name.
+            console.warn('[bgm] play() rejected during fade-in', e && e.name);
+        });
         const start = performance.now();
         this._fadeInterval = setInterval(() => {
             const t = Math.min(1, (performance.now() - start) / durationMs);
@@ -221,7 +227,9 @@ const AudioMgr = {
         this.bgm.loop = false;
         this._setBgmVolume(currentVol);
         this.bgm.addEventListener('ended', () => this._onShuffleTrackEnded());
-        this.bgm.play().catch(() => {});
+        this.bgm.play().catch(e => {
+            console.warn('[bgm] shuffle track play failed', e && e.name);
+        });
     },
 
     _loadTrackPreference() {
