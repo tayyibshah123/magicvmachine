@@ -704,16 +704,15 @@ body.perf-low .menu-v2 .mv2-bg-particles span {
  * Wider (tablets, landscape): the bento expands its max-width and
  * the hero row goes 2-column (CTA on left, twist card on right).
  * ────────────────────────────────────────────────────────── */
-@media (min-width: 600px) {
-    .menu-v2 .mv2-bento { max-width: 600px; }
-    .menu-v2 .mv2-bento-row--hero {
-        grid-template-columns: 1fr 1fr;
-    }
-    .menu-v2 .mv2-bento-row--hero .mv2-cta-resume {
-        grid-column: 1 / -1;
-    }
-}
-@media (max-width: 320px) {
+/* Removed the prior `@media (min-width: 600px)` block that widened
+   the bento to 600px and split the hero row into 2 columns. The
+   game container is locked to a 432×768 mobile shape on every
+   platform; that media query was reading the WINDOW width on
+   desktop, not the container's, so PC users got a layout that
+   wouldn't fit and tiles started overlapping (Sanctuary squashing
+   INTEL, etc). Mobile and PC now share the single-column hero +
+   2-col tiles layout. */
+@container gc (max-width: 320px) {
     .menu-v2 .mv2-bento-row--tiles {
         grid-template-columns: 1fr;
     }

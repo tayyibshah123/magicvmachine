@@ -478,11 +478,12 @@
     grid-template-columns: 1fr 1fr;
     gap: var(--ui-space-3);
 }
-@media (min-width: 600px) {
-    .menu-v2 .mv2-bento-row--tiles {
-        grid-template-columns: 1fr 1fr 1fr;
-    }
-}
+/* Removed the prior `@media (min-width: 600px)` block that widened
+   the bento tile grid to 3 columns on desktop windows. The game
+   container is mobile-shaped (432×768) on every platform, so a
+   3-col grid blew out of the container and shoved tiles out of
+   place. Tiles now stay in the 2×3 layout matching the mobile
+   reference on all platforms. */
 
 
 /* ──────────────────────────────────────────────────────────
