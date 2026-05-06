@@ -7990,11 +7990,18 @@ triggerSystemCrash() {
         }
 
         // Secondary effect chained onto an attack (e.g. attack + bleed).
+        // Surface the secondary's `val` if present so EMPOWER-style
+        // buffs can quote the +DMG amount instead of just naming the
+        // status. Audit (Compiler boss) found the player saw "Also
+        // applies EMPOWER" with zero indication that this added +5 DMG
+        // to every subsequent attack.
         let secondaryLine = '';
         if (intent.secondary) {
             const secId = intent.secondary.id || intent.secondary.type;
             const secName = this._friendlyIntentName(secId);
-            secondaryLine = `\n<em>+ Also applies ${secName}.</em>`;
+            const secVal = (typeof intent.secondary.val === 'number' && intent.secondary.val > 0)
+                ? ` <strong>(+${intent.secondary.val} DMG)</strong>` : '';
+            secondaryLine = `\n<em>+ Also applies ${secName}${secVal}.</em>`;
         }
 
         // Honest flag for randomized boss intents (e.g. NULL_POINTER picks a random target).
@@ -12884,6 +12891,30 @@ async startCombat(type) {
             this._queueBossAnnouncement(() => {
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200, "ARMOR PLATED (10)", "#ffaa00");
             });
+            // Bolster Mechs — orange industrial hovering jets that
+            // fly escort. Two spawn at combat start; each one feeds
+            // the boss +10 Shield per round and every 3rd round a
+            // 2× damage charge for the Compiler's next attack. 300 HP
+            // each so they're a real subsidiary objective, not chip
+            // damage. Visual = orange hover-jet sprite via the
+            // _isBolsterMech flag (read by the minion drawer).
+            for (let i = 0; i < 2; i++) {
+                const m = new Minion(
+                    this.enemy.x + (i === 0 ? -200 : 200),
+                    this.enemy.y + 70,
+                    this.enemy.minions.length + 1,
+                    /*isPlayerSide*/ false,
+                    /*tier*/ 2
+                );
+                m.name = "Bolster Mech";
+                m.maxHp = 300;
+                m.currentHp = 300;
+                m.dmg = 6; // light chip if it ever attacks directly (it shouldn't)
+                m._isBolsterMech = true;
+                m._bolsterTickCount = 0;
+                m.spawnTimer = 1.0;
+                this.enemy.minions.push(m);
+            }
         }
         // ----------------------------------------------
 
@@ -13232,6 +13263,34 @@ async startTurn() {
 
         this.turnCount++;
 
+        // --- THE COMPILER: BOLSTER MECH support tick ---
+        // Each living Bolster Mech feeds the Compiler +10 shield every
+        // round, and on every 3rd round flags "next compiler attack
+        // deals 2× damage". The bolster mechs themselves don't attack
+        // — they're standalone bodyguards (300 HP each) the player
+        // must clear to stop the support flow.
+        if (this.enemy && this.enemy.name === 'THE COMPILER' && this.enemy.currentHp > 0
+            && Array.isArray(this.enemy.minions)) {
+            const bolsters = this.enemy.minions.filter(m => m && m._isBolsterMech && m.currentHp > 0);
+            if (bolsters.length > 0) {
+                const shieldPerMech = 10;
+                const totalShield = shieldPerMech * bolsters.length;
+                this.enemy.addShield(totalShield);
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120,
+                    `BOLSTER +${totalShield} SHIELD`, '#ff8800');
+                bolsters.forEach(m => {
+                    m._bolsterTickCount = (m._bolsterTickCount || 0) + 1;
+                });
+                // Every 3rd shared tick, surge the boss's next attack.
+                const sharedTick = bolsters[0]._bolsterTickCount;
+                if (sharedTick % 3 === 0) {
+                    this.enemy._bolsterDamageMult = 2;
+                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 160,
+                        `BOLSTER × ${bolsters.length}: NEXT HIT 2×`, '#ffaa00');
+                    AudioMgr.playSound('upgrade');
+                }
+            }
+        }
         // --- THE COMPILER: Recompile (every 3 turns, debuffs → buffs) ---
         // Converts any debuff effects on the boss into an attack buff of
         // equal magnitude. Teaches players that pressure must be sustained,
@@ -18624,12 +18683,19 @@ drawEffects() {
             if (intent.secondary) {
                 const isImproved = (this.enemy.isElite || this.enemy.isBoss);
                 if (intent.secondary.type === 'buff') {
+                    // Honour an explicit `val` on the secondary if the
+                    // intent generator set one (Compiler's FORTIFY does;
+                    // legacy intents fall back to the old isImproved
+                    // table). Floater quotes the actual amount so the
+                    // player sees the buff land instead of guessing.
+                    const explicitDmg = (typeof intent.secondary.val === 'number' && intent.secondary.val > 0)
+                        ? intent.secondary.val : null;
                     const hpGain = isImproved ? 15 : 5;
-                    const dmgGain = isImproved ? 5 : 2;
+                    const dmgGain = explicitDmg !== null ? explicitDmg : (isImproved ? 5 : 2);
                     this.enemy.maxHp += hpGain;
                     this.enemy.currentHp += hpGain;
                     this.enemy.baseDmg += dmgGain;
-                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "EMPOWERED!", "#ff00ff");
+                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, `EMPOWERED +${dmgGain} DMG`, "#ff00ff");
                     AudioMgr.playSound('upgrade');
                     await this.sleep(400);
                 } else if (intent.secondary.type === 'debuff') {
@@ -18774,7 +18840,16 @@ drawEffects() {
                 // Riot Suppressor: single QTE then damage everyone player-side.
                 // The sweep arc telegraphs as a fast wind-up; accelerate
                 // pattern matches the visual cue.
-                const dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
+                let dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
+                // Bolster Mech 2× charge — consume the flag if the
+                // Compiler is the attacker. Only the first attack of
+                // the turn gets the multiplier; the flag is one-shot.
+                if (this.enemy && this.enemy.name === 'THE COMPILER' && this.enemy._bolsterDamageMult) {
+                    dmg = Math.floor(dmg * this.enemy._bolsterDamageMult);
+                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200,
+                        `BOLSTER × ${this.enemy._bolsterDamageMult}`, '#ffaa00');
+                    this.enemy._bolsterDamageMult = 0;
+                }
                 await this.sleep(300);
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, "SWEEP ARC", "#ff3355");
                 const mult = await this.startQTE('DEFEND', this.player.x, this.player.y, null, { pattern: 'accelerate', incomingDamage: dmg });
@@ -27963,10 +28038,86 @@ drawEntity(entity) {
 
             ctx.save();
             ctx.scale(1.8, 1.8);
-            
+
+            // --- BOLSTER MECH (Compiler bodyguard) — orange industrial
+            // hovering jet. Trapezoid hull + chevron canopy + twin
+            // bottom-thrusters with flickering plumes. Bobs on a sine
+            // wave to read as anti-grav, plus a slow rotating intake
+            // fan in the centre. Skinned pure orange so it stands
+            // apart from sector minions visually as well as semantically.
+            if (entity._isBolsterMech) {
+                const bolsterOrange = '#ff8800';
+                const bolsterDeep   = '#cc5500';
+                const bolsterCore   = '#ffb84d';
+                const hover = Math.sin(time * 3.2) * 4;
+                ctx.save();
+                ctx.translate(0, hover);
+                // Hull (trapezoid) — orange with deep-orange underside.
+                ctx.fillStyle = bolsterDeep;
+                ctx.strokeStyle = bolsterOrange;
+                ctx.lineWidth = 1.6;
+                ctx.shadowColor = bolsterOrange;
+                ctx.shadowBlur = Perf.shadowBlur(10);
+                ctx.beginPath();
+                ctx.moveTo(-16, -10);
+                ctx.lineTo(16, -10);
+                ctx.lineTo(20, 6);
+                ctx.lineTo(-20, 6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                // Top fin/canopy.
+                ctx.fillStyle = bolsterOrange;
+                ctx.beginPath();
+                ctx.moveTo(-8, -10);
+                ctx.lineTo(8, -10);
+                ctx.lineTo(0, -18);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                // Central glowing intake — pulses with the hover bob.
+                const corePulse = 0.6 + 0.4 * Math.sin(time * 5);
+                ctx.fillStyle = `rgba(255, 184, 77, ${corePulse})`;
+                ctx.shadowColor = bolsterCore;
+                ctx.shadowBlur = Perf.shadowBlur(14);
+                ctx.beginPath();
+                ctx.arc(0, -2, 4 + corePulse, 0, Math.PI * 2);
+                ctx.fill();
+                // Side warning beacons (alternating blink).
+                ctx.shadowBlur = 0;
+                const beaconA = (Math.sin(time * 6) > 0) ? 1 : 0.2;
+                const beaconB = (Math.sin(time * 6 + Math.PI) > 0) ? 1 : 0.2;
+                ctx.fillStyle = `rgba(255, 60, 0, ${beaconA})`;
+                ctx.beginPath(); ctx.arc(-14, -8, 1.6, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = `rgba(255, 60, 0, ${beaconB})`;
+                ctx.beginPath(); ctx.arc(14, -8, 1.6, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
+                // Twin downward jet plumes — drawn outside the hover
+                // translate so the exhaust looks like it's pinned to
+                // the air below the hull instead of moving with it.
+                ctx.save();
+                const plumeFlick = 0.5 + 0.5 * Math.random();
+                const plumeLen = 12 + plumeFlick * 6;
+                ctx.fillStyle = `rgba(255, 140, 0, ${0.65 * plumeFlick})`;
+                ctx.shadowColor = bolsterOrange;
+                ctx.shadowBlur = Perf.shadowBlur(8);
+                ctx.beginPath();
+                ctx.moveTo(-12, 6 + hover);
+                ctx.lineTo(-7, 6 + hover);
+                ctx.lineTo(-9.5, 6 + hover + plumeLen);
+                ctx.closePath();
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(7, 6 + hover);
+                ctx.lineTo(12, 6 + hover);
+                ctx.lineTo(9.5, 6 + hover + plumeLen);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
             // Tier 3 or Named Minions (Boss Minions) use the Safe "Elite" Design
             // --- VOID SPAWN (eldritch tentacled horror) ---
-            if (entity.isVoidSpawn) {
+            else if (entity.isVoidSpawn) {
                 const voidPurple = '#bc13fe';
                 const voidDark = '#1a0022';
                 const breathing = 1 + 0.08 * Math.sin(time * 2.3);

@@ -293,6 +293,30 @@ class Enemy extends Entity {
                 }
             }
 
+            // --- THE COMPILER SPECIAL LOGIC ---
+            // (a) Every basic attack becomes AoE — fits the "industrial
+            //     crusher" fantasy and pairs with the Bolster Mech
+            //     bodyguards that boost his next-turn damage.
+            // (b) FORTIFY's secondary EMPOWER carries an explicit `val`
+            //     so the intent panel can quote the +DMG amount instead
+            //     of leaving the buff invisible (audit found the player
+            //     could see the EMPOWER label but had no idea what it
+            //     did because the value was hidden in math).
+            if (this.name === "THE COMPILER") {
+                const cMoves = this.bossData.moves;
+                const cRoll = this._pickBossMove(cMoves);
+                if (cRoll === 'attack') {
+                    return { type: 'aoe_sweep', val: Math.floor(this.baseDmg * 0.85), isAOE: true };
+                }
+                if (cRoll === 'shield') {
+                    return { type: 'shield', val: this.bossData.shieldVal || 100 };
+                }
+                if (cRoll === 'buff') {
+                    return { type: 'buff', val: 0, secondary: { type: 'buff', id: 'empower', val: 5 } };
+                }
+                return { type: 'aoe_sweep', val: Math.floor(this.baseDmg * 0.85), isAOE: true };
+            }
+
             const moves = this.bossData.moves;
             const roll = this._pickBossMove(moves);
 
