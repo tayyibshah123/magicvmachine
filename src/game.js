@@ -20452,10 +20452,20 @@ drawEffects() {
                     if(item.id === 'reinforced_shell') { this.player.maxHp += 20; this.player.currentHp += 20; }
                     if(item.id === 'mana_battery') this.player.baseMana += 1;
                 } else if (item._isFusion) {
-                    // FUSION pick — consume both source modules, install
-                    // the fusion as a single new relic, mark fired so it
-                    // doesn't surface again. Synergy memory cleared too
-                    // because the fusion replaces synergy parts.
+                    // FUSION pick — consume one stack of each source
+                    // module (intentional: any extra stacks the player
+                    // owns are kept) and install the fusion as a single
+                    // new relic. `firedFusions` tracks installed fusions
+                    // so the same pair can't be re-rolled forever.
+                    //
+                    // synergiesTriggered is intentionally NOT cleared:
+                    // it's a one-shot refire guard, not a live buff
+                    // source. If the player completed SHIELD ENGINE
+                    // before fusing, the +30 frag/banner already fired
+                    // — re-firing it after a re-collect would double-
+                    // dip. The reward-card "needs N more" hint reads
+                    // from CURRENT ownership, so missing parts surface
+                    // correctly post-fusion.
                     this.firedFusions = this.firedFusions || new Set();
                     this.firedFusions.add(item.id);
                     if (Array.isArray(item.ids)) {
