@@ -543,7 +543,8 @@ const SPARKS_UPGRADES = [
     { id: 's_class_unlock', name: "Heretic Protocol", cost: 12, category: 'modifier', desc: "Unlock the HERETIC custom-run modifier (start with 1 Corrupted Module, +25% Frags)." },
     { id: 's_relic_pick',   name: "Curator's Choice", cost: 15, category: 'loadout',  desc: "Pick your starting Module from 3 options." },
     { id: 's_signature',    name: "Signature Forge",  cost: 20, category: 'class',    desc: "Permanently unlock Signature Tier 2 + Tier 3 evolutions." },
-    { id: 's_endless',      name: "Endless Spire",    cost: 25, category: 'marquee',  desc: "After Sector 5, continue into escalating Endless Sectors with personal-best tracking." }
+    { id: 's_endless',      name: "Endless Spire",    cost: 25, category: 'marquee',  desc: "After Sector 5, continue into escalating Endless Sectors with personal-best tracking." },
+    { id: 's_archivist_key',name: "Archivist Key",    cost: 1000, category: 'marquee',desc: "Unlock THE ARCHIVIST as a required boss after Sector 5. Defeat to choose: continue Endless or return home." }
 ];
 
 // Synergies: when the player owns ALL listed ids, a one-time banner fires.
@@ -929,7 +930,7 @@ const BOSS_DATA = {
         subtitle: "KEEPER OF DEAD RUNS",
         hp: 500,
         dmg: 30,
-        actionsPerTurn: 2,
+        actionsPerTurn: 3,
         color: '#ffd76a',
         moves: ['attack'],
         shieldVal: 30,

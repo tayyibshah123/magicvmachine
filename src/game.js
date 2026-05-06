@@ -634,29 +634,6 @@ const Game = {
             localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
             this.playIntro();
         });
-        attachButtonEvent('btn-archive', () => {
-            // ARCHIVE — single fight against THE ARCHIVIST. Only callable
-            // after the first Sector 5 clear (mvm_gameCompleted is set in
-            // winCombat's TESSERACT PRIME branch).
-            if (localStorage.getItem('mvm_gameCompleted') !== 'true') {
-                ParticleSys.createFloatingText(540, 600, 'ARCHIVE LOCKED. CLEAR SECTOR 5 FIRST', '#888');
-                return;
-            }
-            this.archiveMode = true;
-            this.challengeMode = false;
-            Challenge.markActive(false);
-            this.seenFlags['intro_cinematic'] = true;
-            localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
-            localStorage.setItem('mvm_first_run_done', '1');
-            this.tutorialAutoRun = false;
-            this._clearSave();
-            const btnLoad = document.getElementById('btn-load-save');
-            if (btnLoad) btnLoad.style.display = 'none';
-            if (this.showPhaseBanner) {
-                this.showPhaseBanner('THE ARCHIVE', 'A KEEPER REMEMBERS', 'enemy');
-            }
-            this.changeState(STATE.CHAR_SELECT);
-        });
         attachButtonEvent('btn-challenge', () => {
             // Challenge Mode — boss rush with rest nodes between bosses. Skip
             // the storyboard / first-run tutorial since Challenge is a focused
@@ -1516,6 +1493,52 @@ const Game = {
         if (ret) ret.onclick = () => {
             overlay.remove();
             this.changeState(STATE.ENDING);
+        };
+    },
+
+    // Post-Archivist decision overlay. Reuses the same `.endless-prompt`
+    // styling so the visual language is consistent with the existing
+    // Sector-5 → Endless prompt. CONTINUE only renders when the player
+    // also owns Endless Spire (s_endless); without it the only option
+    // is RETURN HOME (STATE.VICTORY).
+    _archivistVictoryChoice() {
+        const existing = document.getElementById('archivist-victory-prompt');
+        if (existing) existing.remove();
+        const showEndless = this.hasMetaUpgrade('s_endless');
+        const overlay = document.createElement('div');
+        overlay.id = 'archivist-victory-prompt';
+        overlay.className = 'endless-prompt';
+        overlay.innerHTML = `
+            <div class="endless-prompt-card">
+                <div class="endless-prompt-tag">// ARCHIVIST SLAIN</div>
+                <h2>THE ARCHIVE IS CLOSED</h2>
+                <p>You unmade the keeper. The grid is silent. Choose your next move.</p>
+                <div class="endless-prompt-actions">
+                    ${showEndless ? '<button id="btn-arch-continue" class="btn primary">CONTINUE INTO ENDLESS</button>' : ''}
+                    <button id="btn-arch-home" class="btn ${showEndless ? 'secondary' : 'primary'}">RETURN HOME</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        const cont = document.getElementById('btn-arch-continue');
+        const home = document.getElementById('btn-arch-home');
+        if (cont) cont.onclick = () => {
+            overlay.remove();
+            this.archiveMode = false;
+            // Endless takes over from here — _enterEndlessSector bumps to
+            // sector+1 (so set sector=6 first to land on Sector 7).
+            this.sector = 6;
+            this.bossDefeated = false;
+            this._enterEndlessSector();
+        };
+        if (home) home.onclick = () => {
+            overlay.remove();
+            this.archiveMode = false;
+            this._archivistFacedThisRun = false;
+            this._clearSave();
+            const btnLoad = document.getElementById('btn-load-save');
+            if (btnLoad) btnLoad.style.display = 'none';
+            this.changeState(STATE.VICTORY);
         };
     },
 
@@ -5448,6 +5471,9 @@ startQTE(type, x, y, callback, opts) {
         this.player.classId = cls.id;
         this.sector = 1;
         this.bossDefeated = false;
+        // Reset the Archivist gate flag so a fresh run can route into the
+        // Sector X arena after Sector 5 even if the prior run already did.
+        this._archivistFacedThisRun = false;
         // Wipe last run's fragment stash before applying the new run's
         // starting bonuses. Fragments are now run-only — without this
         // explicit reset, a quitRun → startNew chain would carry over.
@@ -8596,12 +8622,24 @@ triggerSystemCrash() {
         // occasional "shifting" nodes whose type rerolls as the run progresses.
         this.map.nodes = [];
 
-        const LEVELS = 9; // compact, readable
-        // Per-level node count: entry/exit narrow, middle wide.
-        // [start=1] L1=2 L2=3 L3=3 (shop) L4=3 L5=1 (elite gate) L6=3 L7=3 (rest) L8=2 [boss=1]
-        const layout = [2, 3, 3, 3, 1, 3, 3, 2];
+        // Rest-bookended layout: 2 forced rest nodes right after start
+        // (before the player ever fights anything) AND 2 forced rest
+        // nodes right before the boss. Branching combat lives in the
+        // middle. Shop and Elite chokes preserved on the same relative
+        // beats they had in the legacy 9-layer map.
+        //
+        //   L0 start                L7 elite (forced)
+        //   L1 rest (forced)        L8 combat (3 wide)
+        //   L2 rest (forced)        L9 rest (forced)
+        //   L3 combat (3 wide)      L10 rest (forced)
+        //   L4 combat (3 wide)      L11 boss
+        //   L5 shop (forced)
+        //   L6 combat (3 wide)
+        const LEVELS = 11;
+        // Per-level node count for L1..L10. Boss layer (L11) is always 1.
+        const layout = [1, 1, 3, 3, 1, 3, 1, 3, 1, 1];
         // Fixed "choke" levels for key node types (everyone must pass these).
-        const CHOKES = { 3: 'shop', 5: 'elite', 7: 'rest' };
+        const CHOKES = { 1: 'rest', 2: 'rest', 5: 'shop', 7: 'elite', 9: 'rest', 10: 'rest' };
 
         // Start at the bottom — pulled inward from the edge so the node never clips the frame.
         this.map.nodes.push({ id: 'start', layer: 0, lane: 0, x: 50, y: 92, type: 'start', connections: [], status: 'completed' });
@@ -9009,60 +9047,6 @@ triggerSystemCrash() {
                 frame.classList.add('shown');
             } else {
                 frame.classList.remove('shown');
-            }
-        }
-
-        // Archive button — reveals once the player has cleared Sector 5 at
-        // least once. The flag is set in winCombat's TESSERACT PRIME branch.
-        const archiveBtn = document.getElementById('btn-archive');
-        if (archiveBtn) {
-            const unlocked = localStorage.getItem('mvm_gameCompleted') === 'true';
-            archiveBtn.classList.toggle('hidden', !unlocked);
-            // First-reveal shimmer — when the player has unlocked Archive but
-            // has never seen the menu pop up since, paint a one-time glow +
-            // hint so the new entry isn't silently appearing in the menu list.
-            if (unlocked) {
-                const seenArchive = localStorage.getItem('mvm_archive_menu_seen') === '1';
-                if (!seenArchive) {
-                    archiveBtn.classList.add('archive-just-unlocked');
-                    setTimeout(() => archiveBtn.classList.remove('archive-just-unlocked'), 6000);
-                    try { localStorage.setItem('mvm_archive_menu_seen', '1'); } catch (_) {}
-                    if (typeof Hints !== 'undefined' && Hints.trigger) {
-                        Hints.trigger('first_archive_unlock');
-                    }
-                }
-            }
-            // Archive status moved to a sub-line below the button, same
-            // pattern as Challenge — the button label stays clean.
-            const statusArch = document.getElementById('archive-status-line');
-            if (unlocked && statusArch) {
-                statusArch.style.display = '';
-                const last = (Archive.getHistory() || [])[0];
-                if (last) {
-                    statusArch.textContent = `LAST · ${last.turns || 0}T · A${last.ascension || 0}`;
-                } else {
-                    statusArch.textContent = 'READY';
-                }
-            } else if (statusArch) {
-                statusArch.style.display = 'none';
-            }
-            // Personal-best line — separate from Challenge so the player
-            // sees the Archive track on its own ladder.
-            const archPb = Archive.personalBest && Archive.personalBest();
-            let archPbEl = document.getElementById('archive-personal-best');
-            if (unlocked && archPb) {
-                if (!archPbEl && archiveBtn.parentNode) {
-                    archPbEl = document.createElement('div');
-                    archPbEl.id = 'archive-personal-best';
-                    archPbEl.style.cssText = 'font-size:0.65rem; letter-spacing:0.12em; color:#ffd76a; opacity:0.85; margin-top:4px; text-align:center;';
-                    archiveBtn.parentNode.insertBefore(archPbEl, archiveBtn.nextSibling);
-                }
-                if (archPbEl) {
-                    archPbEl.textContent = `BEST: ${archPb.turns || 0}T · A${archPb.ascension || 0}`;
-                    archPbEl.style.display = '';
-                }
-            } else if (archPbEl) {
-                archPbEl.style.display = 'none';
             }
         }
 
@@ -10247,6 +10231,7 @@ triggerSystemCrash() {
             bossDefeated: this.bossDefeated,
             challengeMode: !!this.challengeMode,
             archiveMode: !!this.archiveMode,
+            archivistFacedThisRun: !!this._archivistFacedThisRun,
             activePacts: this.activePacts ? Array.from(this.activePacts) : [],
             // Persist per-run rolling stats so the victory/death screen's
             // breakdown (biggest hit, rerolls used, perfect QTEs, HP lost)
@@ -10351,6 +10336,10 @@ triggerSystemCrash() {
             this.techFragments = (typeof data.fragments === 'number') ? data.fragments : 0;
             this.challengeMode = !!data.challengeMode;
             this.archiveMode = !!data.archiveMode;
+            // Restore the once-per-run Archivist gate so a save loaded mid-
+            // archive-arena (or post-Sector-5 immediately before the gate)
+            // doesn't double-route into the Archivist.
+            this._archivistFacedThisRun = !!data.archivistFacedThisRun;
             // Keep the Challenge active flag in localStorage in sync with the
             // mode we just restored — the chip + reward bookkeeping read from
             // it, and a save loaded in a fresh tab would otherwise see the
@@ -12838,6 +12827,10 @@ async startCombat(type) {
             this.enemy.phase = 1;
             this.enemy._archivistTurn = 0;
             this.enemy._archivistMechIdx = -1; // first decideTurn picks 0
+            // Status immunity — the keeper rewinds player tactics, so
+            // bleed/poison/weak/frail/voodoo/overcharge/constrict/stun
+            // all bounce off. Read by Entity.addEffect.
+            this.enemy.isImmuneToStatuses = true;
         }
 
         // Pre-combat briefing — one-liner that frames the fight. Skipped
@@ -19061,19 +19054,35 @@ drawEffects() {
                 if (AudioMgr.duck) AudioMgr.duck(0.2, 600);
             }
             else if (intent.type === 'summon_glitch') {
+                // THE ARCHIVIST summons ARCHIVE WRAITHs instead of generic
+                // glitches — far stronger stats, gold/violet colour, distinct
+                // shape (rendered via the `_archivistWraith` flag in
+                // drawEntity's minion path). The keeper's familiars also
+                // inherit the boss's status immunity.
+                const isArchivistSummon = this.enemy && this.enemy.name === 'THE ARCHIVIST';
                 const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false, 3);
-                m.name = "Glitch";
-                m.maxHp = 100; m.currentHp = 100; m.dmg = 5;
+                if (isArchivistSummon) {
+                    m.name = "ARCHIVE WRAITH";
+                    m.maxHp = 220; m.currentHp = 220;
+                    m.dmg = 22;
+                    m._archivistWraith = true;
+                    m.isImmuneToStatuses = true;
+                } else {
+                    m.name = "Glitch";
+                    m.maxHp = 100; m.currentHp = 100; m.dmg = 5;
+                }
                 m.spawnTimer = 1.0;
                 this.enemy.minions.push(m);
-                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "GLITCH SPAWNED", "#ff00ff");
+                const summonColor = isArchivistSummon ? '#ffd76a' : '#ff00ff';
+                const summonLabel = isArchivistSummon ? 'WRAITH BOUND' : 'GLITCH SPAWNED';
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, summonLabel, summonColor);
                 // Full summon impact — rift opens at the spawn point with
                 // shockwave + sparks + materialize VFX so the new minion
                 // visibly arrives, not just appears in the line. Audio
                 // upgraded from mana sting to a layered grid_fracture +
                 // mana so the summon reads as a corrupted intrusion.
-                ParticleSys.createShockwave(m.x, m.y, '#ff00ff', 36);
-                ParticleSys.createSparks(m.x, m.y, '#ff00ff', 16);
+                ParticleSys.createShockwave(m.x, m.y, summonColor, 36);
+                ParticleSys.createSparks(m.x, m.y, summonColor, 16);
                 if (this.triggerVFX) this.triggerVFX('materialize', null, m);
                 if (this.shake) this.shake(8);
                 AudioMgr.playSound('mana');
@@ -20043,10 +20052,10 @@ drawEffects() {
                 '+500 FRAG · +1 FILE', '#ffd76a');
             await this.sleep(2200);
             this.archiveMode = false;
-            this._clearSave();
-            const btnLoad = document.getElementById('btn-load-save');
-            if (btnLoad) btnLoad.style.display = 'none';
-            this.changeState(STATE.MENU);
+            // Hand off to the post-Archivist choice overlay. The helper
+            // wires CONTINUE (Endless, gated on s_endless) and RETURN HOME
+            // (clears save + STATE.VICTORY).
+            this._archivistVictoryChoice();
             return;
         }
 
@@ -20139,6 +20148,34 @@ drawEffects() {
             // fresh run starts clean instead of inheriting the final
             // sector's theme on the menu.
             AudioMgr.clearSectorMusic && AudioMgr.clearSectorMusic();
+
+            // ── ARCHIVIST GATE. If the player owns the 1000-spark Archivist
+            // Key sanctuary upgrade and hasn't already faced the Archivist
+            // this run, route into the Sector X archive arena before either
+            // the ending cinematic OR the endless prompt fires. The
+            // Archivist's victory hook (`_archivistVictoryChoice`) presents
+            // the continue-Endless / return-home decision after the kill.
+            if (!this.challengeMode && !this._archivistFacedThisRun
+                && this.hasMetaUpgrade('s_archivist_key')) {
+                this._archivistFacedThisRun = true;
+                // Run isn't ending — restore the frag balance we just wiped.
+                this.techFragments = this._lastRunFinalFrags || 0;
+                this.archiveMode = true;
+                this.sector = 6;
+                this.bossDefeated = false;
+                this.generateMap();   // archiveMode branch builds a 1-fight map
+                const sectorDisplayArch = document.getElementById('sector-display');
+                if (sectorDisplayArch) sectorDisplayArch.innerText = 'SECTOR X';
+                if (this.playSectorIntro) {
+                    // SECTOR_CONFIG only has 1-5; sector 6 reuses the Sector 5
+                    // backdrop. Wrapped so a missing intro never blocks the
+                    // archivist arena from opening.
+                    try { this.playSectorIntro(6); } catch (_) {}
+                }
+                this.saveGame();
+                this.changeState(STATE.MAP);
+                return;
+            }
 
             // ── ENDLESS SPIRE branch. If the Sanctuary upgrade is
             // owned (and we're not inside a Challenge/Archive run,
@@ -21324,6 +21361,7 @@ drawEffects() {
         Challenge.markActive(false);
         this.challengeMode = false;
         this.archiveMode = false;
+        this._archivistFacedThisRun = false;
         this.activePacts = new Set();
         this._renderPactPills && this._renderPactPills();
         // Quitting mid-run still ends the run for currency purposes —
@@ -28542,6 +28580,82 @@ drawEntity(entity) {
                     ctx.arc(0, 0, 18, sweep, sweep + 0.5);
                     ctx.stroke();
                     ctx.restore();
+                }
+            }
+            // ARCHIVE WRAITH — bound familiar of THE ARCHIVIST. Hexagonal
+            // brass plate with a counter-rotating violet sigil and four
+            // tethering motes in the corners. Distinct from the Glitch
+            // (jagged star) so the keeper's minions read as their own
+            // class of threat at a glance.
+            else if (entity._archivistWraith) {
+                const wraithGold = '#ffd76a';
+                const wraithViolet = '#bc13fe';
+                const wraithDark = '#1c1232';
+                const breath = 1 + 0.06 * Math.sin(time * 2.4);
+
+                // Pooled brass aura beneath the wraith
+                const aur = ctx.createRadialGradient(0, 0, 0, 0, 0, 42);
+                aur.addColorStop(0,   'rgba(255, 215, 106, 0.55)');
+                aur.addColorStop(0.5, 'rgba(188, 19, 254, 0.28)');
+                aur.addColorStop(1,   'rgba(28, 18, 50, 0)');
+                ctx.fillStyle = aur;
+                ctx.beginPath(); ctx.arc(0, 0, 42, 0, Math.PI * 2); ctx.fill();
+
+                // Outer hexagonal plate — slowly rotating, brass-edged.
+                ctx.save();
+                ctx.scale(breath, breath);
+                ctx.rotate(time * 0.35);
+                ctx.fillStyle = wraithDark;
+                ctx.strokeStyle = wraithGold;
+                ctx.lineWidth = 2.2;
+                ctx.shadowColor = wraithGold;
+                ctx.shadowBlur = 14;
+                ctx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const a = (Math.PI / 3) * i - Math.PI / 2;
+                    const px = Math.cos(a) * 22, py = Math.sin(a) * 22;
+                    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+
+                // Inner violet sigil — counter-rotating six-point star
+                ctx.save();
+                ctx.rotate(-time * 0.65);
+                ctx.strokeStyle = wraithViolet;
+                ctx.shadowColor = wraithViolet;
+                ctx.shadowBlur = 12;
+                ctx.lineWidth = 1.8;
+                ctx.beginPath();
+                for (let i = 0; i < 12; i++) {
+                    const a = (Math.PI / 6) * i;
+                    const r = (i % 2 === 0) ? 14 : 5;
+                    const px = Math.cos(a) * r, py = Math.sin(a) * r;
+                    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                ctx.stroke();
+                ctx.restore();
+
+                // Brass core — pulsing dot at the centre
+                const corePulse = 0.5 + 0.5 * Math.sin(time * 5);
+                ctx.fillStyle = `rgba(255, 240, 180, ${0.7 + corePulse * 0.3})`;
+                ctx.shadowColor = wraithGold;
+                ctx.shadowBlur = 10 + corePulse * 6;
+                ctx.beginPath(); ctx.arc(0, 0, 3.5 + corePulse, 0, Math.PI * 2); ctx.fill();
+
+                // Four tethering motes — orbit at fixed cardinal angles
+                // with a small bob, suggesting bound-spirit anchors.
+                ctx.shadowBlur = 8;
+                for (let m = 0; m < 4; m++) {
+                    const a = (Math.PI / 2) * m + time * 0.6;
+                    const orb = 30 + Math.sin(time * 2.2 + m) * 2.5;
+                    const mx = Math.cos(a) * orb, my = Math.sin(a) * orb;
+                    ctx.fillStyle = (m % 2 === 0) ? wraithGold : wraithViolet;
+                    ctx.shadowColor = ctx.fillStyle;
+                    ctx.beginPath(); ctx.arc(mx, my, 2.2, 0, Math.PI * 2); ctx.fill();
                 }
             }
             else if (entity.tier === 3 || entity.name.includes("Glitch") || entity.name.includes("Guardian")) {

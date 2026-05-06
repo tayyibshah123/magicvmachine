@@ -1066,6 +1066,21 @@ class Entity {
     }
 
     addEffect(id, duration, val, icon, desc, displayName = null) {
+        // Status-immune entities (currently THE ARCHIVIST — Sector X) reject
+        // every debuff outright. addEffect is only used for negative
+        // statuses (bleed, poison, weak, frail, voodoo, overcharge,
+        // constrict, stun) — buffs go through dedicated paths
+        // (lifesteal_buff, addRelic, etc.), so a blanket bail here is
+        // safe. Floats a quick "IMMUNE" tag so the player sees their
+        // debuff was rejected rather than silently dropped.
+        if (this.isImmuneToStatuses) {
+            const tagName = displayName || id.toUpperCase();
+            if (typeof ParticleSys !== 'undefined' && ParticleSys.createFloatingText) {
+                ParticleSys.createFloatingText(this.x, this.y - 100,
+                    `IMMUNE · ${tagName}`, '#ffd76a');
+            }
+            return;
+        }
         const existing = this.effects.find(e => e.id === id);
         const name = displayName || id.toUpperCase();
 

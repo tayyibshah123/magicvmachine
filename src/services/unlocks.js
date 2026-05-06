@@ -64,8 +64,7 @@ export const Unlocks = {
             daily:     'btn-challenge',
             intel:     'btn-intel',
             sanctuary: 'btn-upgrades',
-            saves:     'btn-save-slots',
-            ascension: 'btn-archive'
+            saves:     'btn-save-slots'
         };
         for (const [key, id] of Object.entries(map)) {
             const el = document.getElementById(id);
