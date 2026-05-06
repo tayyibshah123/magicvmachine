@@ -38,6 +38,7 @@ const COPY_FILES = [
     'mockup-menu-a1.html',
     'mockup-menu-a2.html',
     'mockup-menu-a3.html',
+    'mockup-menu-a4.html',
 ];
 
 const COPY_DIRS = [
