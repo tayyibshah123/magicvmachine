@@ -157,20 +157,22 @@ describe('addEffect — debuff math', () => {
         expect(enemy.getEffectiveDamage()).toBe(10);
     });
 
-    it('constrict stacks multiplicatively', async () => {
+    it('constrict re-apply stacks duration cumulatively (val unchanged)', async () => {
         const { Enemy } = await import('../entities/enemy.js');
         const enemy = new Enemy(
             { name: 'TEST_DUMMY', hp: 50, dmg: 20, sector: 1, actionsPerTurn: 1 },
             0
         );
-        // 0.5 + 0.5 = 0.25 multiplier (multiplicative stack)
+        // Refactor (status-effect rework): val NEVER stacks. Duration
+        // adds: 3 + 3 = 6 turns remaining. val stays at 0.5 (max-of).
         enemy.addEffect('constrict', 3, 0.5, '🔗', 'Atk reduced.', 'CONSTRICT');
         enemy.addEffect('constrict', 3, 0.5, '🔗', 'Atk reduced.', 'CONSTRICT');
         const fx = enemy.hasEffect('constrict');
-        expect(fx.val).toBe(0.25);
+        expect(fx.val).toBe(0.5);
+        expect(fx.duration).toBe(6);
     });
 
-    it('bleed stacks cap at 3', async () => {
+    it('bleed re-apply stays at 1 stack — duration adds instead', async () => {
         const { Enemy } = await import('../entities/enemy.js');
         const enemy = new Enemy(
             { name: 'TEST_DUMMY', hp: 50, dmg: 5, sector: 1, actionsPerTurn: 1 },
@@ -180,6 +182,11 @@ describe('addEffect — debuff math', () => {
             enemy.addEffect('bleed', 3, 2, '🩸', '2 DMG/turn', 'BLEED');
         }
         const bleed = enemy.hasEffect('bleed');
-        expect(bleed.stacks).toBe(3);
+        // Stacks remain 1 — DoT magnitude no longer multi-stacks.
+        expect(bleed.stacks).toBe(1);
+        // Duration is the cumulative sum: 10 applies × 3 turns each.
+        expect(bleed.duration).toBe(30);
+        // Tick value tracks the highest source — applies were all val=2.
+        expect(bleed.val).toBe(2);
     });
 });

@@ -1084,36 +1084,29 @@ class Entity {
         const fxColor = FX_COLOR[id] || '#ff00ff';
 
         if (existing) {
-            existing.duration = Math.max(existing.duration, duration);
-
-            if (displayName) {
-                existing.name = displayName;
-            }
-
-            if (id === 'constrict') {
-                existing.val = existing.val * val;
-                ParticleSys.createFloatingText(this.x, this.y - 120, "EFFECT STACKED", fxColor);
-                ParticleSys.createSparks(this.x, this.y, fxColor, 8);
-            }
-            else if (id === 'weak') {
-                 if (val < existing.val) existing.val = val;
-            }
-            else if (id === 'bleed' || id === 'poison') {
-                // DoT stacks up to 3. Per-stack value tracks the highest single
-                // application so a stronger source elevates the floor; total
-                // tick damage = val * stacks.
-                const cap = 3;
-                existing.stacks = Math.min(cap, (existing.stacks || 1) + 1);
+            // ── Duration now stacks CUMULATIVELY across every effect type
+            // (bleed, poison, constrict / digital rot, weak, frail,
+            // overcharge, voodoo, etc.). Re-applying the same status
+            // adds its turns on top of the remaining ones instead of
+            // taking the max. Effect STRENGTH never stacks — `val`
+            // takes the maximum so a stronger source still raises the
+            // floor, but a weaker re-apply doesn't drop the bar.
+            existing.duration = (existing.duration || 0) + (duration || 0);
+            if (displayName) existing.name = displayName;
+            // weak's val is "incoming-damage multiplier" (lower = harsher),
+            // so the inverse rule applies — keep the SMALLER value.
+            if (id === 'weak') {
+                if (val < existing.val) existing.val = val;
+            } else {
                 if (val > existing.val) existing.val = val;
-                ParticleSys.createFloatingText(this.x, this.y - 120, `${name} x${existing.stacks}`, fxColor);
-                // Stack-up burst — louder visual the more stacks land so a
-                // 3-stack bleed reads as a real threat, not a small tick.
-                ParticleSys.createShockwave(this.x, this.y, fxColor, 18 + existing.stacks * 4);
-                ParticleSys.createSparks(this.x, this.y, fxColor, 6 + existing.stacks * 2);
             }
-            else {
-                 if (val > existing.val) existing.val = val;
-            }
+            // DoTs no longer multi-stack — tick damage is plain `val`.
+            // Force stacks to 1 so legacy saves with stacks > 1 don't
+            // keep multiplying ticks indefinitely after this rewrite.
+            if (id === 'bleed' || id === 'poison') existing.stacks = 1;
+            ParticleSys.createFloatingText(this.x, this.y - 120, `${name} +${duration}T`, fxColor);
+            ParticleSys.createShockwave(this.x, this.y, fxColor, 22);
+            ParticleSys.createSparks(this.x, this.y, fxColor, 10);
         } else {
             const eff = { id, duration, val, icon, desc, name: name };
             if (id === 'bleed' || id === 'poison') eff.stacks = 1;
@@ -1145,12 +1138,12 @@ class Entity {
             const e = this.effects[i];
             e.duration--;
 
-            // Damage-over-time ticks. Bleed/poison deal `val * stacks` damage
-            // at end of turn for each remaining duration unit. Skip if the
-            // entity is already dead from a prior tick this loop.
+            // Damage-over-time ticks. DoTs no longer multi-stack — tick
+            // damage is plain `val`. Re-applying bleed/poison extends
+            // duration instead of multiplying tick magnitude. Kindling
+            // still adds its flat per-stack bonus on top.
             if ((e.id === 'bleed' || e.id === 'poison') && this.currentHp > 0 && e.val > 0) {
-                const stacks = e.stacks || 1;
-                let tickDmg = e.val * stacks;
+                let tickDmg = e.val;
                 // Module: KINDLING — DoT ticks gain +1 damage per stack of
                 // Kindling the player owns. Stacks the relic by relic count
                 // rather than DoT count, so two Kindlings = +2 per tick on

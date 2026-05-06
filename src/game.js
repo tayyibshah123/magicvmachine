@@ -8085,24 +8085,18 @@ triggerSystemCrash() {
                 break;
             case 'constrict': {
                 const pct = Math.max(0, Math.round((1 - (eff.val || 0.5)) * 100));
-                body = `Attack and healing reduced by <strong>${pct}%</strong>. Stacks multiplicatively on reapply.`;
+                body = `Attack and healing reduced by <strong>${pct}%</strong>. Re-applying extends the duration instead of stacking magnitude.`;
                 break;
             }
             case 'voodoo':
                 body = `When the timer hits 0, detonates for <strong>${eff.val || 150}+ damage</strong> (50% chance to crit for <strong>500</strong>).`;
                 break;
-            case 'bleed': {
-                const s = eff.stacks || 1;
-                const stacksLine = s > 1 ? ` <span style="color:#ff8888;">(${s}× stacks)</span>` : '';
-                body = `Takes <strong>${eff.val * s} damage</strong> at the end of each turn.${stacksLine} Stacks up to <strong>3×</strong>.`;
+            case 'bleed':
+                body = `Takes <strong>${eff.val} damage</strong> at the end of each turn. Re-applying extends the duration instead of stacking magnitude.`;
                 break;
-            }
-            case 'poison': {
-                const s = eff.stacks || 1;
-                const stacksLine = s > 1 ? ` <span style="color:#aaff66;">(${s}× stacks)</span>` : '';
-                body = `Takes <strong>${eff.val * s} poison damage</strong> at the end of each turn.${stacksLine} Stacks up to <strong>3×</strong>.`;
+            case 'poison':
+                body = `Takes <strong>${eff.val} poison damage</strong> at the end of each turn. Re-applying extends the duration instead of stacking magnitude.`;
                 break;
-            }
             // --- Synthesized player/enemy status entries from _collectStatusDisplay.
             // These don't live on entity.effects so they have no `desc` — describe
             // them here so hovering the icon actually tells the player what it means.
