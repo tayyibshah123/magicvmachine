@@ -727,7 +727,10 @@
 #modal-glossary .modal-content.modal-glossary {
     width: 100%;
     max-width: 520px;
-    max-height: calc(100vh - var(--ui-space-12));
+    /* dvh + safe-area insets — vh ignores the iOS URL bar shrink so
+       the modal overflowed the visible viewport on phones. dvh
+       reflects the live viewport height. */
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - var(--ui-space-8));
     margin: 0;
     padding: var(--ui-space-5);
     background: var(--ui-glass-3);

@@ -4717,7 +4717,11 @@ body.reduced-motion .intel-crawl-scanlines {
    ========================================= */
 .codex-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    /* `min(140px, 100%)` keeps the grid responsive — at 432px container
+       width, 180px*2 + gap exceeded the container and pushed the second
+       column off-screen. Now drops cleanly to a single column when
+       there's no room for two. */
+    grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
     gap: 10px;
     width: 100%;
     max-width: 720px;
@@ -7816,8 +7820,11 @@ body.reduced-motion .hack-title { animation: none; }
 /* UPDATED: Discount Badge Styling */
 .discount-badge {
     position: absolute;
-    top: -8px;  /* Move to top edge */
-    right: -8px; /* Move to right edge */
+    /* Anchor INSIDE the parent at 2px from the corner — the prior
+       -8px offset clipped against the 432px container edge on phones
+       (the parent's overflow:hidden chopped the badge in half). */
+    top: 2px;
+    right: 2px;
     background: var(--neon-green);
     color: #000;
     font-weight: 900;
@@ -9200,7 +9207,7 @@ body.reduced-motion .reward-rarity.rarity-fusion             { animation: none; 
 .event-option-card {
     --card-color: var(--event-accent);
     display: grid;
-    grid-template-columns: 56px 1fr auto;
+    grid-template-columns: 44px 1fr auto;
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
@@ -11036,63 +11043,69 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
     }
 
     .reward-card {
-        /* Aggressive metrics — fits 4-5 cards on a phone-portrait
-           screen instead of the prior ~3. The mobile-shape rules
-           below run via @media all so they apply on PC too (the
-           game container is the same size everywhere). */
-        padding: 5px 10px 6px !important;
-        gap: 1px !important;
+        /* User feedback (image #28 markup): cards should hug just the
+           title + description, not the title + icon + desc + padding.
+           Icon hidden via display:none below; padding cut to the bone
+           so a card is ~60px tall. The rarity badge sits inline
+           top-left as a thin pill instead of taking its own row. */
+        padding: 6px 12px 8px !important;
+        gap: 0 !important;
         width: 100% !important;
         margin: 0 auto !important;
         min-height: 0 !important;
         max-height: none !important;
-        flex: 0 0 auto !important; /* size to content, don't stretch */
+        flex: 0 0 auto !important;
         border-radius: 8px !important;
+        align-items: stretch !important;
+        text-align: left !important;
     }
+
+    /* Hide the standalone icon row on reward cards — the rarity
+       badge plus the colored card border already classify the
+       module visually. The icon was the biggest source of empty
+       vertical space the user called out. */
+    .reward-icon { display: none !important; }
 
     .reward-rarity {
-        font-size: 0.6rem !important;
+        align-self: flex-start !important;
+        font-size: 0.58rem !important;
         padding: 1px 6px !important;
-        margin-bottom: 2px !important;
-    }
-
-    .reward-icon {
-        font-size: 1.15rem !important;
-        margin: 0 0 1px !important;
-        line-height: 1 !important;
+        margin: 0 0 3px !important;
+        letter-spacing: 0.14em !important;
     }
 
     .reward-name {
-        font-size: 0.88rem !important;
-        margin: 0 0 1px !important;
-        line-height: 1.1 !important;
+        font-size: 0.95rem !important;
+        margin: 0 0 2px !important;
+        line-height: 1.15 !important;
         letter-spacing: 0.04em !important;
+        text-align: left !important;
     }
 
     .reward-desc {
-        font-size: 0.68rem !important;
-        line-height: 1.2 !important;
+        font-size: 0.72rem !important;
+        line-height: 1.3 !important;
         opacity: 0.85;
-        /* Two-line clamp keeps card height predictable when the desc
-           grows long. Anything past two lines truncates with ellipsis
-           — the player sees the full text on the relic strip later. */
+        text-align: left !important;
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
         overflow: hidden;
     }
 
-    /* Synergy / stack hints chained under the desc — drop both to a
-       single tight line so they don't add 30-40px per card. */
+    /* Synergy / stack hints chained under the desc — single tight
+       line, left-aligned so they hug the description. */
     .reward-synergy-hint {
-        margin-top: 2px !important;
+        align-self: flex-start !important;
+        margin: 3px 0 0 !important;
         padding: 1px 6px !important;
-        font-size: 0.56rem !important;
+        font-size: 0.55rem !important;
         letter-spacing: 0.08em !important;
         line-height: 1.1 !important;
     }
     .reward-stack-hint {
-        margin-top: 1px !important;
+        align-self: flex-start !important;
+        margin: 2px 0 0 !important;
         font-size: 0.56rem !important;
         line-height: 1.1 !important;
     }
@@ -11441,7 +11454,17 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
 #screen-victory {
     background: radial-gradient(circle at center, rgba(30, 20, 0, 0.95) 0%, rgba(0, 0, 0, 0.98) 70%) !important;
     z-index: 4000;
-    gap: 16px;
+    gap: 12px;
+    /* Recap card has 11 stat tiles + grade ring + title + share-hint
+       row + actions — at 432×768 the stack goes well past one
+       viewport. Scroll vertically instead of letting the bottom
+       actions overflow off-screen (where the buttons squeezed to
+       single-character width and looked rotated). */
+    justify-content: flex-start;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding: 18px 14px max(28px, env(safe-area-inset-bottom, 0px));
 }
 .victory-title {
     font-size: clamp(1.8rem, 7cqw, 3rem) !important;
@@ -11509,14 +11532,23 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
     font-weight: 700;
 }
 .victory-actions {
+    /* Stack vertically — the prior horizontal flex squeezed both
+       buttons to ~50px each on a 432px screen, breaking labels into
+       one-character-per-line. Vertical stack guarantees the full
+       label is readable on every container size. */
     display: flex;
-    gap: 12px;
-    margin-top: 10px;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 6px;
     width: 100%;
-    max-width: 400px;
-    padding: 0 14px;
+    max-width: 360px;
+    padding: 0 6px;
+    flex-shrink: 0;
 }
-.victory-actions .btn { flex: 1; }
+.victory-actions .btn {
+    width: 100%;
+    padding: 12px 16px !important;
+}
 
 /* Run summary card (GAMEOVER + VICTORY) */
 .run-summary {
@@ -14644,14 +14676,20 @@ body.reduced-motion #screen-map[data-sector="5"]::after { animation: none; }
 }
 
 /* Promote content above the ambient layers (pseudo-elements can't be targeted,
-   but real children need to sit above the z:0 decorations). */
+   but real children need to sit above the z:0 decorations).
+   `#screen-ending` was previously missing from this list — its blue
+   vfx-host preset rendered AT z:0 and the cinematic text defaulted to
+   z:auto (also 0), so the cyan particles/runes painted on top of the
+   FATAL EXCEPTION copy and made the ending unreadable. Adding it here
+   pushes #ending-content + the PROCEED button above the vfx layer. */
 #screen-start > *,
 #screen-map > *,
 #screen-meta > *,
 #screen-intel > *,
 #screen-shop > *,
 #screen-rest > *,
-#screen-event > * {
+#screen-event > *,
+#screen-ending > * {
     position: relative;
     z-index: 2;
 }
@@ -16798,26 +16836,33 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   Ending screen — readable mode. The original .story-crawl uses an
-   80-100s vertical scroll animation that sometimes failed to re-
-   trigger between runs, leaving the player on a blank screen with
-   only the PROCEED button visible. This rule pins the ending text
-   in place at full opacity so the cinematic is always legible. The
-   PROCEED button now appears immediately, letting the player skip
-   to the Victory card whenever they're ready.
+   Ending screen — auto-scrolling cinematic. Text crawls upward over
+   ~38s like a Star Wars opener; the player can tap PROCEED at any
+   point to skip. Skipped entirely on Challenge / Archive runs (those
+   route directly to STATE.VICTORY in game.js).
+   The screen container itself does NOT scroll — the text wrapper
+   translates inside a clipped frame so the auto-crawl looks pinned
+   regardless of touch input. Reduced-motion swaps in a static fade-
+   in so the canonical narrative still lands.
    ───────────────────────────────────────────────────────────────── */
 #screen-ending {
     justify-content: flex-start;
-    padding-top: 24px;
+    padding-top: 18px;
     padding-bottom: 100px; /* room above the absolute-positioned PROCEED */
-    overflow-y: auto;
-    overscroll-behavior: contain;
+    overflow: hidden;
 }
-#ending-content.story-crawl .ending-readable,
-#ending-content .ending-readable {
-    opacity: 1 !important;
-    transform: none !important;
+#ending-content {
+    /* Override the legacy .story-crawl translateY animation — the
+       .ending-readable wrapper drives the crawl now. */
     animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+    width: 100%;
+    flex: 1 1 auto;
+    overflow: hidden;
+    position: relative;
+}
+#ending-content .ending-readable {
     text-align: center;
     max-width: 760px;
     width: 92%;
@@ -16825,6 +16870,35 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     color: #e0e0e0;
     font-family: 'Rajdhani', sans-serif;
     line-height: 1.55;
+    /* Auto-crawl: start below the visible frame, glide up past the
+       top over 38s. Steady linear pace mirrors a closing-credits
+       reading speed. The crawl loops via animation-iteration: 1 with
+       fill-mode forwards, so the final state is "scrolled past the
+       top" — the player can hit PROCEED to skip at any time. */
+    transform: translateY(60%);
+    opacity: 0;
+    animation: ending-crawl 38s linear 600ms 1 forwards;
+    will-change: transform, opacity;
+}
+@keyframes ending-crawl {
+    0%   { transform: translateY(60%);   opacity: 0; }
+    3%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { transform: translateY(-110%); opacity: 0; }
+}
+body.reduced-motion #ending-content .ending-readable {
+    /* Reduced-motion: cancel the crawl, fade in once and let the
+       player read at their own pace via the screen's overflow. */
+    animation: ending-fade-in 600ms ease-out forwards;
+    transform: none;
+}
+@keyframes ending-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+body.reduced-motion #screen-ending {
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 /* =================================================================

@@ -8946,13 +8946,14 @@ triggerSystemCrash() {
                 <div class="ach-rows">
                     ${byCat[cat].map(a => {
                         const lit = unlocked.has(a.id);
+                        const award = a.sparks || 0;
                         return `<div class="ach-row ${lit ? 'unlocked' : 'locked'}">
                             <div class="ach-row-dot">${lit ? '◆' : '◇'}</div>
                             <div class="ach-row-body">
                                 <div class="ach-row-name">${a.name}</div>
                                 <div class="ach-row-desc">${lit ? a.desc : '???'}</div>
                             </div>
-                            <div class="ach-row-frag">+${a.frag}</div>
+                            <div class="ach-row-frag">+${award} ✦</div>
                         </div>`;
                     }).join('')}
                 </div>
@@ -20152,6 +20153,16 @@ drawEffects() {
                 // the run isn't actually ending if the player continues.
                 this.techFragments = this._lastRunFinalFrags || 0;
                 this._endlessAwaitContinue();
+                return;
+            }
+
+            // Challenge / Archive runs skip the canonical FATAL EXCEPTION
+            // ending cinematic. Those modes have their own end-condition
+            // beats (Daily clear / Archivist Slain banner) and the canon
+            // ending only makes narrative sense for a standard run. Route
+            // straight to the Victory recap card instead.
+            if (this.challengeMode || this.archiveMode) {
+                this.changeState(STATE.VICTORY);
                 return;
             }
 
