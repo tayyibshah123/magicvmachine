@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Menu Mockups — Concept A</title>
+<link rel="stylesheet" href="src/styles/tokens.css">
+<style>
+  html, body { margin: 0; padding: 0; min-height: 100vh; background: var(--ui-bg-base, #060912); color: rgba(255,255,255,0.92); font-family: 'Rajdhani', system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; padding: 24px 16px; gap: 16px; }
+  h1 { font-family: 'Saira', 'Orbitron', sans-serif; font-weight: 900; font-style: italic; font-size: 1.6rem; margin: 0; letter-spacing: 0.02em; }
+  p  { margin: 0; color: rgba(255,255,255,0.66); font-size: 0.9rem; }
+  .pick {
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 16px; border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 10px; background: #0a0f1c;
+    color: rgba(255,255,255,0.92); text-decoration: none;
+  }
+  .pick b { font-family: 'Saira', sans-serif; font-weight: 800; font-style: italic; font-size: 1.1rem; letter-spacing: 0.02em; }
+  .pick small { color: rgba(255,255,255,0.55); font-size: 0.78rem; line-height: 1.5; }
+  .pick.a1 { border-color: rgba(74,216,255,0.55); }
+  .pick.a2 { border-color: rgba(255,215,106,0.55); }
+  .pick.a3 { border-color: rgba(255,93,122,0.55); }
+  .tag { display: inline-block; font-family: 'Audiowide', monospace; font-size: 0.62rem; letter-spacing: 0.16em; opacity: 0.75; text-transform: uppercase; }
+  .a1 .tag { color: #4ad8ff; }
+  .a2 .tag { color: #ffd76a; }
+  .a3 .tag { color: #ff5d7a; }
+</style>
+</head>
+<body>
+  <h1>MENU CONCEPT · A · MOCKUPS</h1>
+  <p>Three flavors of the cockpit/HUD direction. Tap to preview each.</p>
+
+  <a class="pick a1" href="mockup-menu-a1.html">
+    <span class="tag">// VARIANT A1</span>
+    <b>DROP BAY</b>
+    <small>Vertical, portrait-centric. The class portrait dominates the screen; ops readout strip + massive DEPLOY button below; angled instrument tabs at the bottom.</small>
+  </a>
+
+  <a class="pick a2" href="mockup-menu-a2.html">
+    <span class="tag">// VARIANT A2</span>
+    <b>BRIDGE</b>
+    <small>Split-panel dashboard. Portrait on the left, operator stats on the right (sparks / files / best / streak). Deployment console below; 5-icon dock at the foot.</small>
+  </a>
+
+  <a class="pick a3" href="mockup-menu-a3.html">
+    <span class="tag">// VARIANT A3</span>
+    <b>WAR ROOM</b>
+    <small>Most cinematic / fictional. Scrolling status bar up top, intel feed beside the portrait, tactical readout strip, angled INITIATE DROP banner. Each instrument tab carries a status pip.</small>
+  </a>
+</body>
+</html>

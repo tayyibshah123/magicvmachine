@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Menu A3 — War Room</title>
+<link rel="stylesheet" href="src/styles/tokens.css">
+<style>
+/* ─────────────────────────────────────────────────────────────
+   MENU MOCKUP A3 — WAR ROOM
+   The most cinematic / fictional take. Scrolling status bar,
+   intel feed beside the portrait, tactical readout, status pips.
+   ─────────────────────────────────────────────────────────── */
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; min-height: 100vh; min-height: 100dvh;
+  background: #060912; color: rgba(255,255,255,0.92);
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Ambient backdrop — alert-red tint to feel "active operation" */
+.bg {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(255,93,122,0.10) 0%, transparent 55%),
+    radial-gradient(ellipse at 50% 100%, rgba(74,216,255,0.06) 0%, transparent 60%),
+    #060912;
+}
+.bg-grid {
+  position: absolute; inset: 0; opacity: 0.10;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.20) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.20) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(to bottom, transparent 0%, black 25%, black 75%, transparent 100%);
+}
+/* faint perspective lines */
+.bg-perspective {
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(180deg, transparent 60%, rgba(255,93,122,0.05) 100%);
+}
+
+.shell {
+  position: relative; z-index: 1;
+  min-height: 100vh; min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto auto auto;
+  padding: max(6px, env(safe-area-inset-top)) 12px max(8px, env(safe-area-inset-bottom));
+  gap: 8px;
+}
+
+/* ─── SCROLLING STATUS TICKER ───────────────── */
+.ticker {
+  position: relative;
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 8px;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,93,122,0.30);
+  border-radius: 4px;
+  font-family: 'Audiowide', monospace; font-size: 0.55rem;
+  letter-spacing: 0.16em; color: rgba(255,255,255,0.65); text-transform: uppercase;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ticker .led {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #ff5d7a; box-shadow: 0 0 8px #ff5d7a;
+  flex: 0 0 7px;
+  animation: led-blink 1.4s ease-in-out infinite;
+}
+@keyframes led-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+.ticker .stamp { color: #ff5d7a; }
+.ticker .scroll-host { flex: 1; min-width: 0; overflow: hidden; mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent); }
+.ticker .scroll {
+  display: inline-block;
+  padding-left: 100%;
+  animation: ticker-scroll 28s linear infinite;
+}
+@keyframes ticker-scroll { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+.ticker .scroll span { margin: 0 24px; }
+
+/* ─── TITLE STRIP ───────────────────────────── */
+.title-strip {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
+}
+.tb-title {
+  font-family: 'Saira', sans-serif; font-weight: 900; font-style: italic;
+  font-size: clamp(1.1rem, 4.8vw, 1.6rem);
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 12px rgba(74,216,255,0.30);
+  line-height: 1;
+}
+.tb-title .v { color: #ff5d7a; margin: 0 0.16em; }
+.tb-meta { display: flex; gap: 6px; align-items: center; }
+.chip {
+  display: inline-flex; align-items: center;
+  padding: 4px 8px; border-radius: 4px;
+  font-family: 'Audiowide', monospace; font-size: 0.55rem;
+  letter-spacing: 0.16em; text-transform: uppercase; line-height: 1;
+}
+.chip-cy { background: rgba(74,216,255,0.06); border: 1px solid rgba(74,216,255,0.45); color: #4ad8ff; }
+.chip-rd { background: rgba(255,93,122,0.08); border: 1px solid rgba(255,93,122,0.45); color: #ff5d7a; }
+.chip-go { background: rgba(255,215,106,0.06); border: 1px solid rgba(255,215,106,0.45); color: #ffd76a; }
+.gear {
+  width: 28px; height: 28px; border-radius: 4px;
+  display: grid; place-items: center;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.66);
+}
+
+/* ─── HERO ROW: portrait + intel feed ───────── */
+.hero-row {
+  display: grid;
+  grid-template-columns: 1fr 1.05fr;
+  gap: 8px;
+}
+
+/* portrait card */
+.portrait-card {
+  position: relative;
+  padding: 8px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+  border: 1px solid rgba(255,93,122,0.30);
+  border-radius: 4px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.portrait-card::before {
+  content: '// SUBJECT'; position: absolute; top: -7px; left: 8px;
+  font-family: 'Audiowide', monospace; font-size: 0.5rem;
+  letter-spacing: 0.18em; color: #ff5d7a; background: #060912; padding: 0 6px;
+}
+.pframe {
+  position: relative;
+  width: 100%; aspect-ratio: 1;
+  background: linear-gradient(135deg, #0a0f1c 0%, #181f36 100%);
+  border-radius: 2px;
+  overflow: hidden;
+}
+/* corner brackets */
+.pframe::before, .pframe::after {
+  content: ''; position: absolute;
+  width: 12px; height: 12px;
+  border: 1px solid #ff5d7a;
+}
+.pframe::before { top: 4px; left: 4px; border-right: none; border-bottom: none; }
+.pframe::after  { bottom: 4px; right: 4px; border-left: none;  border-top: none; }
+.psigil {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-family: 'Audiowide', monospace; color: #fff; font-size: 1.1rem;
+  letter-spacing: 0.32em;
+  text-shadow: 0 0 12px rgba(74,216,255,0.55);
+}
+.pscan {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, transparent, rgba(74,216,255,0.18), transparent);
+  height: 14%;
+  animation: pscan-move 3.4s ease-in-out infinite;
+}
+@keyframes pscan-move {
+  0%,100% { transform: translateY(0); }
+  50%     { transform: translateY(700%); }
+}
+.pcrosshair {
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(transparent calc(50% - 1px), rgba(255,93,122,0.30) 50%, transparent calc(50% + 1px)),
+    linear-gradient(90deg, transparent calc(50% - 1px), rgba(255,93,122,0.30) 50%, transparent calc(50% + 1px));
+}
+.pmeta {
+  font-family: 'Audiowide', monospace; font-size: 0.55rem;
+  letter-spacing: 0.18em; color: rgba(255,255,255,0.55); text-transform: uppercase;
+  text-align: center; line-height: 1.3;
+}
+.pmeta b { color: #fff; font-family: 'Saira', sans-serif; font-weight: 800; font-style: italic; font-size: 0.85rem; letter-spacing: 0.04em; display: block; }
+
+/* intel feed card */
+.intel-card {
+  position: relative;
+  padding: 8px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+  border: 1px solid rgba(74,216,255,0.30);
+  border-radius: 4px;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.intel-card::before {
+  content: '// FEED'; position: absolute; top: -7px; left: 8px;
+  font-family: 'Audiowide', monospace; font-size: 0.5rem;
+  letter-spacing: 0.18em; color: #4ad8ff; background: #060912; padding: 0 6px;
+}
+.feed-row {
+  display: grid; grid-template-columns: 8px 1fr;
+  gap: 6px; align-items: start;
+}
+.feed-row .pip {
+  width: 5px; height: 5px; border-radius: 50%; margin-top: 5px;
+  background: #4ad8ff; box-shadow: 0 0 6px #4ad8ff;
+}
+.feed-row.go .pip { background: #ffd76a; box-shadow: 0 0 6px #ffd76a; }
+.feed-row.rd .pip { background: #ff5d7a; box-shadow: 0 0 6px #ff5d7a; }
+.feed-row .body { font-size: 0.74rem; line-height: 1.32; color: rgba(255,255,255,0.86); }
+.feed-row .ts {
+  display: block;
+  font-family: 'Audiowide', monospace; font-size: 0.52rem;
+  letter-spacing: 0.16em; color: rgba(255,255,255,0.40); text-transform: uppercase;
+  margin-top: 1px;
+}
+
+/* ─── TACTICAL READOUT STRIP ────────────────── */
+.tactical {
+  display: grid; grid-template-columns: auto 1fr auto;
+  align-items: center; gap: 10px;
+  padding: 7px 10px;
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,93,122,0.25);
+  border-left: 3px solid #ff5d7a;
+  border-radius: 2px;
+  font-family: 'Audiowide', monospace; font-size: 0.6rem;
+  letter-spacing: 0.16em; text-transform: uppercase;
+}
+.tactical .lbl { color: #ff5d7a; }
+.tactical .body { color: rgba(255,255,255,0.92); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tactical .threat { display: flex; gap: 2px; }
+.tactical .threat span {
+  width: 4px; height: 12px; background: rgba(255,255,255,0.12);
+}
+.tactical .threat span.on { background: #ff5d7a; box-shadow: 0 0 6px #ff5d7a; }
+
+/* ─── DEPLOY BANNER + INLINE ACTIONS ────────── */
+.deploy {
+  position: relative;
+  display: grid; grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: linear-gradient(95deg, rgba(255,93,122,0.18) 0%, rgba(74,216,255,0.18) 100%);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 4px;
+  cursor: pointer;
+  /* angled banner */
+  clip-path: polygon(0% 0%, 100% 0%, 96% 100%, 4% 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15);
+  overflow: hidden;
+}
+.deploy::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.20) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: shimmer 3.6s ease-in-out infinite;
+}
+@keyframes shimmer { 0% { transform: translateX(-100%); } 60%, 100% { transform: translateX(100%); } }
+.deploy .ey {
+  font-family: 'Audiowide', monospace; font-size: 0.6rem;
+  letter-spacing: 0.20em; color: #ff5d7a; text-transform: uppercase;
+}
+.deploy .label {
+  font-family: 'Saira', sans-serif; font-weight: 900; font-style: italic;
+  font-size: 1.5rem; letter-spacing: 0.02em;
+  text-shadow: 0 0 14px rgba(255,93,122,0.45);
+}
+.deploy .arrow {
+  font-family: 'Audiowide', monospace; color: #fff; font-size: 1.4rem;
+  text-shadow: 0 0 12px rgba(255,93,122,0.55);
+}
+
+.inline-actions {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.iaction {
+  position: relative;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 2px;
+  text-align: left;
+  cursor: pointer;
+  /* small angled corner */
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 6% 100%, 0 calc(100% - 8px));
+}
+.iaction .ey { font-family: 'Audiowide', monospace; font-size: 0.52rem; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,0.55); }
+.iaction .lab { font-family: 'Saira', sans-serif; font-weight: 800; font-style: italic; font-size: 0.85rem; letter-spacing: 0.02em; }
+.iaction.go { border-color: rgba(255,215,106,0.45); }
+.iaction.go .ey { color: #ffd76a; }
+
+/* ─── INSTRUMENT TABS — bottom row with status pips */
+.instr {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+.itab {
+  position: relative;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 8px 8px 6px;
+  background: rgba(0,0,0,0.40);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-top: 2px solid currentColor;
+  border-radius: 2px;
+  color: rgba(255,255,255,0.86);
+  cursor: pointer;
+}
+.itab .pip {
+  position: absolute; top: 4px; right: 4px;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+}
+.itab .pip.on  { background: #5eead4; box-shadow: 0 0 6px #5eead4; }
+.itab .pip.new { background: #ffd76a; box-shadow: 0 0 6px #ffd76a; animation: led-blink 1.4s ease-in-out infinite; }
+.itab .pip.alert { background: #ff5d7a; box-shadow: 0 0 6px #ff5d7a; }
+.itab .ey { font-family: 'Audiowide', monospace; font-size: 0.48rem; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.6; }
+.itab .ttl { font-family: 'Saira', sans-serif; font-weight: 800; font-style: italic; font-size: 0.68rem; letter-spacing: 0.04em; line-height: 1; }
+.itab.cy { color: #4ad8ff; }
+.itab.go { color: #ffd76a; }
+.itab.gr { color: #5eead4; }
+.itab.rd { color: #ff5d7a; }
+.itab.gy { color: rgba(255,255,255,0.86); }
+
+/* footer crumb */
+.foot {
+  display: flex; justify-content: space-between; align-items: center;
+  font-family: 'Audiowide', monospace; font-size: 0.55rem;
+  color: rgba(255,255,255,0.30); letter-spacing: 0.16em; text-transform: uppercase;
+  padding-top: 2px;
+}
+.back { color: rgba(255,255,255,0.55); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="bg">
+  <div class="bg-grid"></div>
+  <div class="bg-perspective"></div>
+</div>
+
+<div class="shell">
+
+  <!-- TICKER -->
+  <div class="ticker">
+    <span class="led"></span>
+    <span class="stamp">UPLINK ACTIVE · 00:57</span>
+    <span class="scroll-host"><span class="scroll">
+      <span>// SECTOR 3 BREACH ATTEMPTED · 3D AGO</span>
+      <span>// ARCHIVE LOCATED · KEY UNCLAIMED</span>
+      <span>// TESSERACT PRIME LOG · S5 CLEAR</span>
+      <span>// 12 ENCRYPTED FILES IN BUFFER</span>
+    </span></span>
+  </div>
+
+  <!-- TITLE STRIP -->
+  <div class="title-strip">
+    <div class="tb-title">MAGIC<span class="v">v</span>MACHINE</div>
+    <div class="tb-meta">
+      <span class="chip chip-cy">TAZ</span>
+      <span class="chip chip-rd">A2</span>
+      <span class="chip chip-go">✦1240</span>
+      <span class="gear">⚙</span>
+    </div>
+  </div>
+
+  <!-- HERO ROW: portrait + intel feed -->
+  <div class="hero-row">
+    <div class="portrait-card">
+      <div class="pframe">
+        <div class="pcrosshair"></div>
+        <div class="psigil">◆ TAC</div>
+        <div class="pscan"></div>
+      </div>
+      <div class="pmeta">
+        <b>TACTICIAN</b>
+        SIG TIER 2 · COMMAND PIPS
+      </div>
+    </div>
+
+    <div class="intel-card">
+      <div class="feed-row">
+        <div class="pip"></div>
+        <div class="body">
+          ARCHIVIST KEY — <b>UNCLAIMED</b>. 1000✦ at Sanctuary.
+          <span class="ts">// PRIORITY · ALPHA</span>
+        </div>
+      </div>
+      <div class="feed-row go">
+        <div class="pip"></div>
+        <div class="body">
+          12 ENCRYPTED FILES decrypted. Intel buffer at <b>capacity</b>.
+          <span class="ts">// 14H AGO</span>
+        </div>
+      </div>
+      <div class="feed-row rd">
+        <div class="pip"></div>
+        <div class="body">
+          Last drop · <b>SECTOR 3</b> · 47% HP — extraction pending.
+          <span class="ts">// 22H AGO</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TACTICAL READOUT -->
+  <div class="tactical">
+    <span class="lbl">// FORECAST</span>
+    <span class="body">NEXT DROP · SECTOR 1 · OPTIMAL</span>
+    <span class="threat">
+      <span class="on"></span><span class="on"></span><span></span><span></span><span></span>
+    </span>
+  </div>
+
+  <!-- DEPLOY -->
+  <div class="deploy">
+    <div>
+      <div class="ey">// DROP READY</div>
+      <div class="label">INITIATE RUN</div>
+    </div>
+    <div class="arrow">▶▶</div>
+  </div>
+
+  <!-- Inline secondary actions (RESUME + CHALLENGE quickslots) -->
+  <div class="inline-actions">
+    <div class="iaction go">
+      <div class="ey">CONTINUE</div>
+      <div class="lab">RESUME · S3</div>
+    </div>
+    <div class="iaction">
+      <div class="ey">DAILY</div>
+      <div class="lab">CHALLENGE</div>
+    </div>
+  </div>
+
+  <!-- INSTRUMENT TABS -->
+  <div class="instr">
+    <div class="itab go">  <span class="pip on"></span>   <span class="ey">MODE</span>     <span class="ttl">CHAL</span></div>
+    <div class="itab gr">  <span class="pip new"></span>  <span class="ey">HUB</span>      <span class="ttl">SANC</span></div>
+    <div class="itab cy">  <span class="pip alert"></span><span class="ey">FILES</span>    <span class="ttl">INTEL</span></div>
+    <div class="itab gy">  <span class="pip"></span>      <span class="ey">SLOTS</span>    <span class="ttl">SAVES</span></div>
+    <div class="itab rd">  <span class="pip"></span>      <span class="ey">PRACTICE</span> <span class="ttl">TUTOR</span></div>
+  </div>
+
+  <div class="foot">
+    <a class="back" href="mockup-menu.html">← BACK TO PICKER</a>
+    <span>VARIANT A3 · WAR ROOM</span>
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -32,6 +32,12 @@ const COPY_FILES = [
     'icon.svg',
     'icon-maskable.svg',
     'intro.png',
+    // Standalone design mockups for menu redesign review. Static HTML,
+    // no JS dependencies; reachable at /mockup-menu.html. Cheap to ship.
+    'mockup-menu.html',
+    'mockup-menu-a1.html',
+    'mockup-menu-a2.html',
+    'mockup-menu-a3.html',
 ];
 
 const COPY_DIRS = [
