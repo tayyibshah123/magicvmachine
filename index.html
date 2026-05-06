@@ -262,26 +262,22 @@
                 <!-- DROP BAY shell — header / title / hero / console / tabs / footer -->
                 <div class="db-shell">
 
-                    <!-- HEADER -->
+                    <!-- HEADER — minimal status strip. Operator chip
+                         left, Sparks + gear right. Ascension chip rolls
+                         INTO the operator chip block when level > 0
+                         (no red call-out — fits the sleeker palette).
+                         All chips inherit the class accent via the
+                         --db-accent CSS variable. -->
                     <div class="db-hdr">
                         <div class="db-hdr-left">
-                            <!-- Operator chip. JS still writes into the
-                                 .subtitle node ("OPERATOR TAZ" /
-                                 "ASCENSION LEVEL N") — we just restyle
-                                 the chip via .db-chip. -->
-                            <div class="subtitle db-chip db-chip-cy mv2-operator-chip" aria-label="Operator callsign"></div>
-                            <!-- Ascension chip — clickable, opens the
-                                 Ascension picker (keeps #btn-ascension
-                                 alive for the existing handler). LED
-                                 only blinks when level > 0; chip text
-                                 set by JS via #ascension-status-line. -->
-                            <button id="btn-ascension" class="db-chip db-chip-rd db-asc-chip feature-locked-hidden" title="Pick a difficulty tier" aria-label="Ascension">
+                            <div class="subtitle db-chip mv2-operator-chip" aria-label="Operator callsign"></div>
+                            <button id="btn-ascension" class="db-chip db-asc-chip feature-locked-hidden" data-level="0" title="Pick a difficulty tier" aria-label="Ascension">
                                 <span class="led" aria-hidden="true"></span>
                                 <span id="ascension-status-line">A0</span>
                             </button>
                         </div>
                         <div class="db-hdr-right">
-                            <div id="menu-sparks-pill" class="db-chip db-chip-go feature-locked-hidden" aria-label="Sparks">
+                            <div id="menu-sparks-pill" class="db-chip db-sparks-chip feature-locked-hidden" aria-label="Sparks">
                                 <span class="meta-sparks-glyph" aria-hidden="true">✦</span>
                                 <span id="menu-sparks">0</span>
                             </div>
@@ -291,11 +287,27 @@
                         </div>
                     </div>
 
-                    <!-- TITLE — wordmark + subtitle. Archivist Slain
-                         cosmetic frame still wraps the title; corner
-                         brackets sit behind the wordmark and reveal
-                         once `mvm_archivist_slain` is set. -->
+                    <!-- TITLE — emblazoned hero block. The .db-emblem
+                         is a layered animated emblem (rotating ring +
+                         counter-segments + halo + crosshair) that fills
+                         the upper third behind the wordmark. The
+                         Archivist Slain cosmetic frame still sits inside
+                         the row for the post-archive-kill reveal. -->
                     <div class="db-title-row">
+                        <div class="db-emblem" aria-hidden="true">
+                            <div class="db-emblem-halo"></div>
+                            <div class="db-emblem-ring-outer"></div>
+                            <div class="db-emblem-ring-mid"></div>
+                            <div class="db-emblem-ring-inner"></div>
+                            <div class="db-emblem-crosshair">
+                                <span class="cl"></span><span class="cr"></span>
+                                <span class="ct"></span><span class="cb"></span>
+                            </div>
+                            <span class="db-emblem-corner tl"></span>
+                            <span class="db-emblem-corner tr"></span>
+                            <span class="db-emblem-corner bl"></span>
+                            <span class="db-emblem-corner br"></span>
+                        </div>
                         <div class="title-frame mv2-title-frame db-title-frame" id="title-frame" data-archivist-tier="0" aria-hidden="true">
                             <span class="title-frame-corner tl"></span>
                             <span class="title-frame-corner tr"></span>
@@ -339,9 +351,9 @@
                         </div>
 
                         <div class="db-ops">
-                            <div class="db-ops-cell"><div class="lbl">// LAST</div><div class="val" id="menu-ops-last">—</div></div>
-                            <div class="db-ops-cell gold"><div class="lbl">// SPARKS</div><div class="val" id="menu-ops-sparks">0</div></div>
-                            <div class="db-ops-cell alert"><div class="lbl">// FILES</div><div class="val" id="menu-ops-files">0</div></div>
+                            <div class="db-ops-cell"><div class="lbl">LAST</div><div class="val" id="menu-ops-last">—</div></div>
+                            <div class="db-ops-cell"><div class="lbl">SPARKS</div><div class="val" id="menu-ops-sparks">0</div></div>
+                            <div class="db-ops-cell"><div class="lbl">FILES</div><div class="val" id="menu-ops-files">0</div></div>
                         </div>
                     </div>
 
@@ -370,48 +382,48 @@
                         </button>
                     </div>
 
-                    <!-- INSTRUMENT TABS — 5-across, each carries an
-                         accent strip + status pip. CHAL is always shown;
-                         SANC/INTEL/SAVES gated by the Unlocks system
-                         (feature-locked-hidden). -->
+                    <!-- INSTRUMENT DOCK — 5 minimal icon+label tabs.
+                         All inherit the run accent from --db-accent so
+                         the dock feels like a single instrument cluster
+                         instead of a rainbow palette. CHAL is always
+                         shown; SANC/INTEL/SAVES gated by the Unlocks
+                         system. The optional .pip carries status (new /
+                         alert / on); the legacy challenge-status-line
+                         + intel count survive as hidden / count-slot
+                         children so the existing JS stays compatible. -->
                     <div class="db-cluster">
-                        <button id="btn-challenge" class="db-tab go">
+                        <button id="btn-challenge" class="db-tab">
                             <span class="pip" id="db-pip-challenge" aria-hidden="true"></span>
                             <span class="icon" aria-hidden="true">⚔</span>
-                            <span class="ey">MODE</span>
-                            <span class="ttl">CHAL</span>
+                            <span class="ttl">CHALLENGE</span>
                             <span id="challenge-status-line" class="db-tab-status hidden"></span>
                         </button>
-                        <button id="btn-upgrades" class="db-tab gr feature-locked-hidden">
+                        <button id="btn-upgrades" class="db-tab feature-locked-hidden">
                             <span class="pip" id="db-pip-sanctuary" aria-hidden="true"></span>
                             <span class="icon" aria-hidden="true">✦</span>
-                            <span class="ey">HUB</span>
-                            <span class="ttl">SANC</span>
+                            <span class="ttl">SANCTUARY</span>
                         </button>
-                        <button id="btn-intel" class="db-tab cy feature-locked-hidden">
+                        <button id="btn-intel" class="db-tab feature-locked-hidden">
                             <span class="pip" id="db-pip-intel" aria-hidden="true"></span>
                             <span class="icon" aria-hidden="true">▤</span>
-                            <span class="ey">FILES</span>
-                            <span class="ttl">INTEL</span>
+                            <span class="ttl">INTEL<span id="btn-intel-count" class="db-tab-count"></span></span>
                         </button>
-                        <button id="btn-save-slots" class="db-tab gy feature-locked-hidden">
+                        <button id="btn-save-slots" class="db-tab feature-locked-hidden">
                             <span class="pip" aria-hidden="true"></span>
                             <span class="icon" aria-hidden="true">⊟</span>
-                            <span class="ey">SLOTS</span>
                             <span class="ttl">SAVES</span>
                         </button>
-                        <button id="btn-menu-tutorial" class="db-tab rd">
+                        <button id="btn-menu-tutorial" class="db-tab">
                             <span class="pip" aria-hidden="true"></span>
                             <span class="icon" aria-hidden="true">▶</span>
-                            <span class="ey">PRACTICE</span>
-                            <span class="ttl">TUTOR</span>
+                            <span class="ttl">TUTORIAL</span>
                         </button>
                     </div>
 
                     <!-- FOOTER — streak chip + version stamp. -->
                     <div class="db-footer">
                         <div id="login-streak" class="login-streak db-streak hidden"></div>
-                        <span class="db-version">ALPHA V1.7</span>
+                        <span class="db-version">ALPHA V1.7.1</span>
                     </div>
                 </div>
 

@@ -1,46 +1,74 @@
 /* ──────────────────────────────────────────────────────────────────
- * UI v2 — Phase 3.1: Main Menu (Drop Bay)
+ * UI v2 — Phase 3.2: Main Menu (Drop Bay · class-themed)
  *
- * Cockpit / HUD layout. The class portrait is the centerpiece;
- * INITIATE RUN is the dominant CTA; secondary destinations sit in
- * a 5-across instrument cluster at the bottom.
+ * Sleek single-accent menu. Every interactive surface, glow, ring
+ * and pulse reads from a single CSS custom property — `--db-accent`
+ * (and its RGB twin `--db-accent-rgb` for rgba() composites). JS
+ * sets the variable on `#screen-start.dropbay` based on the
+ * last-played class colour, so the menu RECOLOURS to match the run
+ * the player will resume / start with.
+ *
+ * Visual hierarchy:
+ *   1. Top third  — title block sitting inside an animated emblem
+ *                   (rotating dashed ring + counter-segments + halo
+ *                    + crosshair + corner brackets). Wordmark is the
+ *                    obvious centerpiece; the emblem is the badge.
+ *   2. Mid third  — class portrait + identity + 3-cell ops readout.
+ *                   Smaller portrait than v1.6 to give the title
+ *                   block its rightful real estate.
+ *   3. Lower third — RESUME bar (when save) + DEPLOY mega button +
+ *                    instrument dock (5 minimal icon+label tabs).
  *
  * STRUCTURE
  *   #screen-start.menu-v2.dropbay
  *     .db-bg                ambient backdrop (radials / floor / particles / scan)
  *     .db-shell
- *       .db-hdr             operator chip · ascension chip · sparks chip · gear
- *       .db-title-row       title-frame (cosmetic) · wordmark · subtitle
- *       .db-hero            portrait (hex) · class identity · 3-cell ops readout
- *       .db-console         RESUME (when save) · DEPLOY mega button
- *       .db-cluster         5-across instrument tabs (CHAL/SANC/INTEL/SAVES/TUTOR)
- *       .db-footer          streak chip · version
- *     #save-slot-modal      kept as full-frame overlay
+ *       .db-hdr             operator + ascension + sparks + gear
+ *       .db-title-row       .db-emblem behind  +  cosmetic title-frame
+ *                           +  .db-wordmark  +  .db-subtitle
+ *       .db-hero            portrait · identity · ops readout
+ *       .db-console         RESUME · DEPLOY
+ *       .db-cluster         5 instrument tabs
+ *       .db-footer          streak · version
  *
  * SIZING
- *   Everything inside #game-container reads against its 432×768
- *   container-query box (container-type: size). All units are cqw /
- *   cqh / cqmin so the layout is pixel-equivalent on PC and phone.
+ *   All measurements in cqh / cqw — read against #game-container's
+ *   container-type: size box (432×768 max). PC and phone render
+ *   identically.
  *
  * MOTION
- *   Pure CSS — no JS animations. Twelve <i> elements drive a particle
- *   layer; the perspective floor scrolls via background-position; the
- *   DEPLOY button gets both a shimmer pass and a conic traveling-light
- *   border. Every animation is transform / opacity / background-position
- *   only so the compositor handles every frame.
+ *   Pure CSS. transform / opacity / background-position only —
+ *   compositor handles every frame. Reduced-motion class disables
+ *   the heavy layers.
  * ────────────────────────────────────────────────────────────────── */
 
 
 /* ──────────────────────────────────────────────────────────
- * 1. SCREEN CONTAINER
+ * 1. THEME — single-accent system
  *
- * Override the legacy .screen { flexbox } with a CSS grid layout.
- * grid-template-rows lets the hero block flex while the header /
- * console / cluster / footer stay the height they need.
+ * Default = brand cyan. JS overrides per-class:
+ *   tactician    → #00f3ff
+ *   arcanist     → #bc13fe
+ *   bloodstalker → #ff0000
+ *   annihilator  → #ff8800
+ *   sentinel     → #e6fbff   (tinted from #ffffff)
+ *   summoner     → #00ff99
+ * Classes derive --db-accent and --db-accent-rgb in tandem; CSS
+ * uses rgba(var(--db-accent-rgb), α) for translucent composites.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2.dropbay {
+    --db-accent:        #4ad8ff;
+    --db-accent-rgb:    74, 216, 255;
+    --db-warn-rgb:      255, 93, 122;   /* used sparingly — pact / alert pip */
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 2. SCREEN CONTAINER
  * ────────────────────────────────────────────────────────── */
 .menu-v2.dropbay.screen,
 .screen.menu-v2.dropbay {
-    display: block;          /* shell handles layout via its own grid */
+    display: block;
     padding: 0;
     overflow: hidden;
     background: var(--ui-bg-base, #060912);
@@ -50,15 +78,7 @@
 
 
 /* ──────────────────────────────────────────────────────────
- * 2. BACKDROP LAYERS (z=0)
- *
- * Sub-layers in document order so painting order matches.
- *   db-bg-radial-a  — top cyan wash, slow drift
- *   db-bg-radial-b  — bottom red wash, slow counter-drift (screen blend)
- *   db-bg-floor     — perspective grid floor scrolling toward the camera
- *   db-bg-scan      — slow vertical scan-line sweep (every 9s)
- *   db-bg-particles — 12 dust motes drifting upward
- *   db-bg-vignette  — soft corner fade so chrome reads cleanly
+ * 3. BACKDROP LAYERS
  * ────────────────────────────────────────────────────────── */
 .menu-v2.dropbay .db-bg {
     position: absolute; inset: 0; z-index: 0;
@@ -70,13 +90,13 @@
     pointer-events: none;
 }
 .menu-v2.dropbay .db-bg-radial-a {
-    background: radial-gradient(ellipse 50% 40% at 50% 24%,
-        rgba(74,216,255,0.18) 0%, transparent 60%);
+    background: radial-gradient(ellipse 50% 40% at 50% 22%,
+        rgba(var(--db-accent-rgb), 0.18) 0%, transparent 60%);
     animation: db-radial-a 28s ease-in-out infinite;
 }
 .menu-v2.dropbay .db-bg-radial-b {
     background: radial-gradient(ellipse 70% 30% at 50% 92%,
-        rgba(255,93,122,0.14) 0%, transparent 65%);
+        rgba(var(--db-accent-rgb), 0.10) 0%, transparent 65%);
     animation: db-radial-b 36s ease-in-out infinite;
     mix-blend-mode: screen;
 }
@@ -89,33 +109,34 @@
     50%     { transform: translate(-2%, 1%); opacity: 1; }
 }
 
-/* Perspective floor grid */
+/* Perspective floor */
 .menu-v2.dropbay .db-bg-floor {
     position: absolute; left: -10%; right: -10%; bottom: -8%;
     height: 70%;
     transform-origin: 50% 0%;
     transform: perspective(420px) rotateX(58deg);
     background-image:
-        linear-gradient(rgba(74,216,255,0.30) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(74,216,255,0.20) 1px, transparent 1px);
+        linear-gradient(rgba(var(--db-accent-rgb), 0.22) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(var(--db-accent-rgb), 0.16) 1px, transparent 1px);
     background-size: 30px 30px;
     animation: db-floor-roll 6s linear infinite;
     -webkit-mask-image: linear-gradient(to bottom, black 0%, black 60%, transparent 100%);
             mask-image: linear-gradient(to bottom, black 0%, black 60%, transparent 100%);
+    opacity: 0.7;
 }
 @keyframes db-floor-roll {
     from { background-position: 0 0; }
     to   { background-position: 0 30px; }
 }
 
-/* Scan line sweep */
+/* Vertical scan-line sweep */
 .menu-v2.dropbay .db-bg-scan {
     position: absolute; left: 0; right: 0; top: -10%; height: 28%;
     background: linear-gradient(to bottom,
         transparent 0%,
-        rgba(74,216,255,0.06) 40%,
-        rgba(74,216,255,0.10) 50%,
-        rgba(74,216,255,0.06) 60%,
+        rgba(var(--db-accent-rgb), 0.05) 40%,
+        rgba(var(--db-accent-rgb), 0.10) 50%,
+        rgba(var(--db-accent-rgb), 0.05) 60%,
         transparent 100%);
     animation: db-scan-move 9s linear infinite;
     mix-blend-mode: screen;
@@ -125,26 +146,26 @@
     100% { transform: translateY(450%); }
 }
 
-/* Drifting dust motes — 12 particles, varied palette + cadence */
+/* Drifting dust motes — single class accent, varied cadences */
 .menu-v2.dropbay .db-bg-particles { position: absolute; inset: 0; pointer-events: none; }
 .menu-v2.dropbay .db-bg-particles i {
     position: absolute;
     width: 2px; height: 2px; border-radius: 50%;
-    background: #4ad8ff;
-    box-shadow: 0 0 6px rgba(74,216,255,0.6);
+    background: var(--db-accent);
+    box-shadow: 0 0 6px rgba(var(--db-accent-rgb), 0.55);
     opacity: 0;
     animation: db-dust-rise 14s linear infinite;
 }
 .menu-v2.dropbay .db-bg-particles i:nth-child(1)  { left:  8%; animation-delay:  -1s; animation-duration: 13s; }
 .menu-v2.dropbay .db-bg-particles i:nth-child(2)  { left: 18%; animation-delay:  -3s; animation-duration: 16s; }
-.menu-v2.dropbay .db-bg-particles i:nth-child(3)  { left: 27%; animation-delay:  -7s; animation-duration: 14s; background: #ffd76a; box-shadow: 0 0 6px rgba(255,215,106,0.6); }
+.menu-v2.dropbay .db-bg-particles i:nth-child(3)  { left: 27%; animation-delay:  -7s; animation-duration: 14s; }
 .menu-v2.dropbay .db-bg-particles i:nth-child(4)  { left: 36%; animation-delay:  -2s; animation-duration: 15s; }
 .menu-v2.dropbay .db-bg-particles i:nth-child(5)  { left: 44%; animation-delay:  -9s; animation-duration: 18s; }
-.menu-v2.dropbay .db-bg-particles i:nth-child(6)  { left: 52%; animation-delay:  -5s; animation-duration: 12s; background: #ff5d7a; box-shadow: 0 0 6px rgba(255,93,122,0.6); }
+.menu-v2.dropbay .db-bg-particles i:nth-child(6)  { left: 52%; animation-delay:  -5s; animation-duration: 12s; opacity: 0; background: rgba(255,255,255,0.85); box-shadow: 0 0 6px rgba(255,255,255,0.6); }
 .menu-v2.dropbay .db-bg-particles i:nth-child(7)  { left: 60%; animation-delay:  -8s; animation-duration: 17s; }
 .menu-v2.dropbay .db-bg-particles i:nth-child(8)  { left: 68%; animation-delay:  -4s; animation-duration: 13s; }
-.menu-v2.dropbay .db-bg-particles i:nth-child(9)  { left: 75%; animation-delay: -10s; animation-duration: 19s; background: #ffd76a; box-shadow: 0 0 6px rgba(255,215,106,0.6); }
-.menu-v2.dropbay .db-bg-particles i:nth-child(10) { left: 83%; animation-delay:  -6s; animation-duration: 14s; }
+.menu-v2.dropbay .db-bg-particles i:nth-child(9)  { left: 75%; animation-delay: -10s; animation-duration: 19s; }
+.menu-v2.dropbay .db-bg-particles i:nth-child(10) { left: 83%; animation-delay:  -6s; animation-duration: 14s; opacity: 0; background: rgba(255,255,255,0.85); box-shadow: 0 0 6px rgba(255,255,255,0.6); }
 .menu-v2.dropbay .db-bg-particles i:nth-child(11) { left: 90%; animation-delay: -11s; animation-duration: 16s; }
 .menu-v2.dropbay .db-bg-particles i:nth-child(12) { left: 96%; animation-delay:  -2s; animation-duration: 15s; }
 @keyframes db-dust-rise {
@@ -161,9 +182,7 @@
         transparent 55%, rgba(0,0,0,0.55) 100%);
 }
 
-/* Reduced motion — kill the heavy animation layers, keep static
-   composition. Dust + scan + radial drifts pause; floor freezes;
-   shimmer + arrow nudge stop. */
+/* Reduced motion */
 .reduced-motion .menu-v2.dropbay .db-bg-radial-a,
 .reduced-motion .menu-v2.dropbay .db-bg-radial-b,
 .reduced-motion .menu-v2.dropbay .db-bg-floor,
@@ -174,156 +193,310 @@
 
 
 /* ──────────────────────────────────────────────────────────
- * 3. SHELL — grid layout above the backdrop
+ * 4. SHELL — vertical rhythm
+ *
+ * grid-template-rows lets the title block flex into the upper
+ * third; the hero block sits in the middle; console + cluster +
+ * footer stack at the bottom.
  * ────────────────────────────────────────────────────────── */
 .menu-v2.dropbay .db-shell {
     position: relative; z-index: 1;
     height: 100%;
     display: grid;
-    grid-template-rows: auto auto 1fr auto auto auto;
-    padding: 3.2cqh 3.5cqw 1.2cqh;
+    grid-template-rows: auto auto auto auto auto auto;
+    padding: 2.4cqh 4cqw 1.2cqh;
     gap: 1.4cqh;
     align-content: start;
 }
 
 
 /* ──────────────────────────────────────────────────────────
- * 4. HEADER — chips + gear
+ * 5. HEADER — chips + gear
  * ────────────────────────────────────────────────────────── */
 .menu-v2.dropbay .db-hdr {
     display: flex; align-items: center; justify-content: space-between;
     gap: 1.5cqw;
+    height: 4.2cqh;
 }
 .menu-v2.dropbay .db-hdr-left,
-.menu-v2.dropbay .db-hdr-right { display: flex; align-items: center; gap: 1cqw; }
+.menu-v2.dropbay .db-hdr-right { display: flex; align-items: center; gap: 1.2cqw; }
 
+/* Chip — neutral base, all variants share the same skeleton.
+   Class accent only on hover / interactive variants below. */
 .menu-v2.dropbay .db-chip {
     display: inline-flex; align-items: center; gap: 0.8cqw;
-    padding: 0.7cqh 2cqw; border-radius: 9999px;
+    padding: 0.7cqh 1.8cqw;
+    border-radius: 9999px;
     font-family: var(--ui-font-tech, 'Audiowide', monospace);
-    font-size: 1.55cqh; letter-spacing: 0.16em;
-    text-transform: uppercase; line-height: 1;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.18);
-    color: rgba(255,255,255,0.86);
+    font-size: 1.45cqh; letter-spacing: 0.16em;
+    text-transform: uppercase;
+    line-height: 1;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: rgba(255, 255, 255, 0.78);
     cursor: default;
 }
-.menu-v2.dropbay .db-chip-cy { background: rgba(74,216,255,0.06); border-color: rgba(74,216,255,0.45); color: #4ad8ff; }
-.menu-v2.dropbay .db-chip-go {
-    background: rgba(255,215,106,0.06); border-color: rgba(255,215,106,0.45); color: #ffd76a;
-    position: relative;
+.menu-v2.dropbay .db-sparks-chip {
+    color: var(--db-accent);
+    border-color: rgba(var(--db-accent-rgb), 0.40);
+    background: rgba(var(--db-accent-rgb), 0.06);
 }
-.menu-v2.dropbay .db-chip-go::before {
-    content: ''; position: absolute; inset: -1px;
-    border-radius: inherit;
-    box-shadow: 0 0 8px rgba(255,215,106,0.35);
-    pointer-events: none;
+.menu-v2.dropbay .db-sparks-chip .meta-sparks-glyph {
+    font-size: 1.6cqh; line-height: 1;
 }
-.menu-v2.dropbay .db-chip-rd { background: rgba(255,93,122,0.08); border-color: rgba(255,93,122,0.45); color: #ff5d7a; }
 
-/* Ascension chip — clickable button. LED only animates when level > 0. */
+/* Ascension chip — clickable. data-level="0" = dim/static; >0 lights up */
 .menu-v2.dropbay .db-asc-chip {
     cursor: pointer;
-    padding: 0.7cqh 1.6cqw;
-    transition: background 0.2s ease, border-color 0.2s ease;
+    padding: 0.7cqh 1.4cqw;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
-.menu-v2.dropbay .db-asc-chip:hover {
-    background: rgba(255,93,122,0.16);
-    border-color: rgba(255,93,122,0.7);
-}
-.menu-v2.dropbay .db-asc-chip .led {
-    width: 5px; height: 5px; border-radius: 50%;
-    background: #ff5d7a; box-shadow: 0 0 6px #ff5d7a;
-    animation: db-led-blink 1.5s ease-in-out infinite;
-    flex: 0 0 5px;
-}
-/* When level is 0 the chip dims and the LED stops blinking. */
 .menu-v2.dropbay .db-asc-chip[data-level="0"] {
-    opacity: 0.55;
-    border-color: rgba(255,255,255,0.18);
-    color: rgba(255,255,255,0.55);
-    background: rgba(255,255,255,0.03);
+    color: rgba(255, 255, 255, 0.42);
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.03);
 }
 .menu-v2.dropbay .db-asc-chip[data-level="0"] .led {
-    background: rgba(255,255,255,0.22);
+    background: rgba(255, 255, 255, 0.22);
     box-shadow: none;
     animation: none;
 }
+.menu-v2.dropbay .db-asc-chip:not([data-level="0"]) {
+    color: var(--db-accent);
+    border-color: rgba(var(--db-accent-rgb), 0.45);
+    background: rgba(var(--db-accent-rgb), 0.06);
+}
+.menu-v2.dropbay .db-asc-chip:not([data-level="0"]):hover {
+    background: rgba(var(--db-accent-rgb), 0.12);
+}
+.menu-v2.dropbay .db-asc-chip .led {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--db-accent);
+    box-shadow: 0 0 6px rgba(var(--db-accent-rgb), 0.85);
+    animation: db-led-blink 1.8s ease-in-out infinite;
+    flex: 0 0 5px;
+}
 @keyframes db-led-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
 
-/* Operator chip — JS sets the textContent on .subtitle (existing
-   path). The legacy `#screen-start .subtitle` rule from style.css
-   wins on ID specificity, so we re-bind here with the ID + class
-   combo to match it and tighten the visual to the chip pill. */
+/* Operator chip — JS writes textContent to .subtitle. Beats the
+   legacy `#screen-start .subtitle` ID rule by matching its specificity. */
 #screen-start.dropbay .mv2-operator-chip.subtitle {
     margin: 0;
-    padding-left: 2cqw;
-    padding-right: 2cqw;
+    padding: 0.7cqh 1.8cqw;
     font-family: var(--ui-font-tech, 'Audiowide', monospace);
-    font-size: 1.55cqh;
+    font-size: 1.45cqh;
     letter-spacing: 0.16em;
     line-height: 1;
-    color: #4ad8ff;
+    color: rgba(255, 255, 255, 0.78);
     text-shadow: none;
     height: auto;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 9999px;
 }
-/* Suppress the legacy `// ` ::before from style.css — the chip
-   reads cleanly as "OPERATOR TAZ" without the terminal prefix. */
 #screen-start.dropbay .mv2-operator-chip.subtitle::before {
     content: none;
     display: none;
 }
 
-/* Gear button */
+/* Settings gear */
 .menu-v2.dropbay .db-gear {
-    width: 4.6cqh; height: 4.6cqh; border-radius: 50%;
+    width: 4.2cqh; height: 4.2cqh; border-radius: 50%;
     display: grid; place-items: center;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.18);
-    color: rgba(255,255,255,0.66);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: rgba(255, 255, 255, 0.66);
     transition: transform 0.6s ease, color 0.3s ease, border-color 0.3s ease;
     cursor: pointer;
     padding: 0;
 }
 .menu-v2.dropbay .db-gear:hover {
     transform: rotate(90deg);
-    color: #4ad8ff;
-    border-color: rgba(74,216,255,0.55);
+    color: var(--db-accent);
+    border-color: rgba(var(--db-accent-rgb), 0.55);
 }
 .menu-v2.dropbay .db-gear .game-icon {
     width: 2.4cqh; height: 2.4cqh;
 }
 
-/* Sparks chip — uses .db-chip + .db-chip-go */
-.menu-v2.dropbay #menu-sparks-pill { /* selectors specific to keep parity with non-dropbay markup */ }
-.menu-v2.dropbay #menu-sparks-pill .meta-sparks-glyph { display: inline; font-size: 1.7cqh; }
-.menu-v2.dropbay #menu-sparks-pill .meta-sparks-label { display: none; }
-
 
 /* ──────────────────────────────────────────────────────────
- * 5. TITLE — frame + wordmark + subtitle
+ * 6. TITLE BLOCK + EMBLEM (top third hero)
+ *
+ * The title row is sized to fill the upper third. The .db-emblem
+ * sits behind the wordmark as a layered animated badge:
+ *   .db-emblem-halo         soft class-color radial bloom
+ *   .db-emblem-ring-outer   thick conic-mask ring with rotating
+ *                           segments  (slowest)
+ *   .db-emblem-ring-mid     thin counter-rotating dashed ring
+ *   .db-emblem-ring-inner   solid pulsing ring closest to text
+ *   .db-emblem-crosshair    4 short accent lines (top/bot/left/right)
+ *   .db-emblem-corner       4 L-bracket corner accents (static)
  * ────────────────────────────────────────────────────────── */
 .menu-v2.dropbay .db-title-row {
-    display: flex; flex-direction: column; align-items: center;
-    gap: 0.4cqh;
     position: relative;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center;
+    gap: 0.6cqh;
+    min-height: 22cqh;
+    padding: 1cqh 0;
 }
-.menu-v2.dropbay .db-title-frame.title-frame {
-    /* Keep the cosmetic frame BEHIND the wordmark, sized to wrap it. */
-    position: absolute;
-    top: 0; left: 50%;
-    transform: translateX(-50%);
-    width: min(86%, 360px);
-    height: 120%;
+
+/* Emblem container */
+.menu-v2.dropbay .db-emblem {
+    position: absolute; inset: 0;
     pointer-events: none;
+    display: grid; place-items: center;
     z-index: 0;
 }
+/* Soft halo */
+.menu-v2.dropbay .db-emblem-halo {
+    position: absolute;
+    width: 38cqh; height: 38cqh;
+    max-width: 92cqw;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 50%,
+        rgba(var(--db-accent-rgb), 0.28) 0%,
+        rgba(var(--db-accent-rgb), 0.10) 40%,
+        transparent 70%);
+    filter: blur(4px);
+    animation: db-emblem-halo 6s ease-in-out infinite;
+}
+@keyframes db-emblem-halo {
+    0%,100% { opacity: 0.55; transform: scale(1); }
+    50%     { opacity: 1;    transform: scale(1.06); }
+}
+
+/* Outer ring — segmented via conic mask */
+.menu-v2.dropbay .db-emblem-ring-outer {
+    position: absolute;
+    width: 30cqh; height: 30cqh;
+    max-width: 78cqw;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    border: 1px solid rgba(var(--db-accent-rgb), 0.35);
+}
+.menu-v2.dropbay .db-emblem-ring-outer::after {
+    content: ''; position: absolute; inset: -1px;
+    border-radius: inherit;
+    background: conic-gradient(from 0deg,
+        rgba(var(--db-accent-rgb), 0)    0deg,
+        rgba(var(--db-accent-rgb), 0.85) 18deg,
+        rgba(var(--db-accent-rgb), 0)    50deg,
+        rgba(var(--db-accent-rgb), 0)    180deg,
+        rgba(var(--db-accent-rgb), 0.55) 200deg,
+        rgba(var(--db-accent-rgb), 0)    230deg,
+        rgba(var(--db-accent-rgb), 0)    360deg);
+    -webkit-mask:
+        radial-gradient(circle, transparent 49%, black 50%, black 51%, transparent 52%);
+            mask:
+        radial-gradient(circle, transparent 49%, black 50%, black 51%, transparent 52%);
+    animation: db-emblem-spin 14s linear infinite;
+}
+@keyframes db-emblem-spin { to { transform: rotate(360deg); } }
+
+/* Mid ring — counter-rotating dashed */
+.menu-v2.dropbay .db-emblem-ring-mid {
+    position: absolute;
+    width: 23cqh; height: 23cqh;
+    max-width: 60cqw;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    border: 1px dashed rgba(var(--db-accent-rgb), 0.30);
+    animation: db-emblem-spin 24s linear infinite reverse;
+}
+
+/* Inner ring — solid pulsing */
+.menu-v2.dropbay .db-emblem-ring-inner {
+    position: absolute;
+    width: 18cqh; height: 18cqh;
+    max-width: 48cqw;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    border: 1px solid rgba(var(--db-accent-rgb), 0.45);
+    box-shadow:
+        0 0 16px rgba(var(--db-accent-rgb), 0.30),
+        inset 0 0 16px rgba(var(--db-accent-rgb), 0.20);
+    animation: db-emblem-pulse 4.4s ease-in-out infinite;
+}
+@keyframes db-emblem-pulse {
+    0%,100% {
+        box-shadow:
+            0 0 12px rgba(var(--db-accent-rgb), 0.20),
+            inset 0 0 12px rgba(var(--db-accent-rgb), 0.12);
+    }
+    50% {
+        box-shadow:
+            0 0 24px rgba(var(--db-accent-rgb), 0.55),
+            inset 0 0 22px rgba(var(--db-accent-rgb), 0.30);
+    }
+}
+
+/* Crosshair — 4 short accent strokes piercing the rings */
+.menu-v2.dropbay .db-emblem-crosshair {
+    position: absolute;
+    width: 32cqh; height: 32cqh;
+    max-width: 82cqw;
+    aspect-ratio: 1;
+    pointer-events: none;
+}
+.menu-v2.dropbay .db-emblem-crosshair span {
+    position: absolute;
+    background: linear-gradient(to right,
+        transparent 0%,
+        rgba(var(--db-accent-rgb), 0.85) 50%,
+        transparent 100%);
+    box-shadow: 0 0 6px rgba(var(--db-accent-rgb), 0.65);
+}
+.menu-v2.dropbay .db-emblem-crosshair .cl,
+.menu-v2.dropbay .db-emblem-crosshair .cr {
+    top: 50%; height: 1px; width: 8%;
+    transform: translateY(-50%);
+}
+.menu-v2.dropbay .db-emblem-crosshair .cl { left: 0; }
+.menu-v2.dropbay .db-emblem-crosshair .cr { right: 0; }
+.menu-v2.dropbay .db-emblem-crosshair .ct,
+.menu-v2.dropbay .db-emblem-crosshair .cb {
+    left: 50%; width: 1px; height: 8%;
+    transform: translateX(-50%);
+    background: linear-gradient(to bottom,
+        transparent 0%,
+        rgba(var(--db-accent-rgb), 0.85) 50%,
+        transparent 100%);
+}
+.menu-v2.dropbay .db-emblem-crosshair .ct { top: 0; }
+.menu-v2.dropbay .db-emblem-crosshair .cb { bottom: 0; }
+
+/* Corner brackets — frame the entire emblem */
+.menu-v2.dropbay .db-emblem-corner {
+    position: absolute;
+    width: 3.6cqh; height: 3.6cqh;
+    border: 1px solid rgba(var(--db-accent-rgb), 0.55);
+}
+.menu-v2.dropbay .db-emblem-corner.tl { top: 4%;    left: 6%;    border-right: none; border-bottom: none; }
+.menu-v2.dropbay .db-emblem-corner.tr { top: 4%;    right: 6%;   border-left: none;  border-bottom: none; }
+.menu-v2.dropbay .db-emblem-corner.bl { bottom: 4%; left: 6%;    border-right: none; border-top: none; }
+.menu-v2.dropbay .db-emblem-corner.br { bottom: 4%; right: 6%;   border-left: none;  border-top: none; }
+
+/* Cosmetic frame (Archivist Slain) */
+.menu-v2.dropbay .db-title-frame.title-frame {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(80%, 360px);
+    height: 80%;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Wordmark — soft class-accent glow */
 .menu-v2.dropbay .db-wordmark.title {
-    position: relative; z-index: 1;
+    position: relative; z-index: 2;
     margin: 0;
     font-family: var(--ui-font-impact, 'Saira', 'Orbitron', sans-serif);
     font-weight: 900; font-style: italic;
-    font-size: 5.2cqh;
+    font-size: 5.6cqh;
     letter-spacing: 0.01em;
     line-height: 1;
     color: #fff;
@@ -332,8 +505,8 @@
     background-clip: initial;
     -webkit-text-fill-color: #fff;
     text-shadow:
-        0 0 18px rgba(74,216,255,0.35),
-        0 0 36px rgba(74,216,255,0.18);
+        0 0 18px rgba(var(--db-accent-rgb), 0.45),
+        0 0 36px rgba(var(--db-accent-rgb), 0.22);
     animation: db-word-breathe 5.4s ease-in-out infinite;
     text-align: center;
     text-transform: uppercase;
@@ -342,111 +515,115 @@
 .menu-v2.dropbay .db-wordmark.title::before,
 .menu-v2.dropbay .db-wordmark.title::after { content: none !important; display: none !important; }
 .menu-v2.dropbay .db-wordmark .vs {
-    color: #ff5d7a;
-    font-style: normal;
+    color: #fff;
+    font-style: italic;
     font-weight: 900;
-    text-shadow: 0 0 14px rgba(255,93,122,0.55);
+    text-shadow:
+        0 0 14px rgba(var(--db-accent-rgb), 0.85),
+        0 0 28px rgba(var(--db-accent-rgb), 0.45);
     margin: 0 0.16em;
 }
 @keyframes db-word-breathe {
     0%,100% {
-        text-shadow: 0 0 16px rgba(74,216,255,0.30), 0 0 32px rgba(74,216,255,0.14);
+        text-shadow:
+            0 0 16px rgba(var(--db-accent-rgb), 0.40),
+            0 0 32px rgba(var(--db-accent-rgb), 0.18);
         filter: brightness(1);
     }
     50% {
-        text-shadow: 0 0 28px rgba(74,216,255,0.55), 0 0 56px rgba(74,216,255,0.22);
+        text-shadow:
+            0 0 28px rgba(var(--db-accent-rgb), 0.65),
+            0 0 56px rgba(var(--db-accent-rgb), 0.30);
         filter: brightness(1.08);
     }
 }
+
 .menu-v2.dropbay .db-subtitle {
-    position: relative; z-index: 1;
+    position: relative; z-index: 2;
     font-family: var(--ui-font-tech, 'Audiowide', monospace);
-    font-size: 1.4cqh; letter-spacing: 0.20em;
-    color: rgba(255,255,255,0.38); text-transform: uppercase;
+    font-size: 1.35cqh; letter-spacing: 0.22em;
+    color: rgba(255, 255, 255, 0.45);
+    text-transform: uppercase;
 }
 .menu-v2.dropbay .db-subtitle .pip {
     display: inline-block; width: 5px; height: 5px;
-    border-radius: 50%; background: #4ad8ff;
-    box-shadow: 0 0 6px #4ad8ff;
+    border-radius: 50%;
+    background: var(--db-accent);
+    box-shadow: 0 0 6px rgba(var(--db-accent-rgb), 0.85);
     margin-right: 6px; vertical-align: middle;
     animation: db-led-blink 2.4s ease-in-out infinite;
 }
 
 
 /* ──────────────────────────────────────────────────────────
- * 6. HERO — portrait + class identity + ops readout
+ * 7. HERO — portrait + class identity + ops readout (mid third)
  * ────────────────────────────────────────────────────────── */
 .menu-v2.dropbay .db-hero {
     display: flex; flex-direction: column; align-items: center;
-    gap: 0.8cqh;
+    gap: 0.7cqh;
     position: relative;
 }
 
-/* Hex portrait — the centerpiece. Multiple stacked layers create
-   the "alive" feel: gradient edge + radar floor + sweep cone +
-   counter-rotating dashed ring + 4 orbiting motes + scan pass. */
+/* Hex portrait — single class-accent edge (down from triple
+   gradient so it reads as a clean stamp). */
 .menu-v2.dropbay .db-portrait {
     position: relative;
-    /* Width AND height set together so the hex stays square at every
-       aspect — max caps clamp to the available track. The portrait
-       caps at 30cqh tall (~230px in the 432×768 frame) so the rest
-       of the menu has room to breathe. */
-    width: 30cqh; height: 30cqh;
-    max-width: 84cqw;
+    width: 24cqh; height: 24cqh;
+    max-width: 64cqw;
     aspect-ratio: 1;
-    margin-top: 0.5cqh;
 }
 .menu-v2.dropbay .db-hex {
     position: absolute; inset: 0;
     background: linear-gradient(155deg, #0a0f1c 0%, #181f36 60%, #0a0f1c 100%);
     clip-path: polygon(50% 0%, 95% 25%, 95% 75%, 50% 100%, 5% 75%, 5% 25%);
-    box-shadow: inset 0 0 30px rgba(0,0,0,0.55);
+    box-shadow: inset 0 0 26px rgba(0,0,0,0.55);
 }
 .menu-v2.dropbay .db-hex-edge {
     position: absolute; inset: 0;
-    background: linear-gradient(155deg, #4ad8ff 0%, #ffd76a 50%, #ff5d7a 100%);
+    background: var(--db-accent);
     clip-path: polygon(
         50% 0%, 95% 25%, 95% 75%, 50% 100%, 5% 75%, 5% 25%, 50% 0%,
         50% 3%, 8% 27%, 8% 73%, 50% 97%, 92% 73%, 92% 27%, 50% 3%
     );
-    filter: drop-shadow(0 0 8px rgba(74,216,255,0.50));
+    filter: drop-shadow(0 0 6px rgba(var(--db-accent-rgb), 0.55));
     animation: db-hex-edge-pulse 4.2s ease-in-out infinite;
 }
 @keyframes db-hex-edge-pulse {
-    0%,100% { filter: drop-shadow(0 0 6px rgba(74,216,255,0.35)); }
-    50%     { filter: drop-shadow(0 0 16px rgba(74,216,255,0.65)); }
+    0%,100% { filter: drop-shadow(0 0 6px rgba(var(--db-accent-rgb), 0.40)); }
+    50%     { filter: drop-shadow(0 0 16px rgba(var(--db-accent-rgb), 0.75)); }
 }
 .menu-v2.dropbay .db-floor-ring {
     position: absolute; inset: 12%;
     border-radius: 50%;
     background:
-        radial-gradient(circle at 50% 50%, rgba(74,216,255,0.06) 0%, transparent 70%),
-        repeating-radial-gradient(circle at 50% 50%, transparent 0 12px, rgba(74,216,255,0.10) 12px 13px);
+        radial-gradient(circle at 50% 50%, rgba(var(--db-accent-rgb), 0.06) 0%, transparent 70%),
+        repeating-radial-gradient(circle at 50% 50%, transparent 0 12px, rgba(var(--db-accent-rgb), 0.10) 12px 13px);
 }
 .menu-v2.dropbay .db-radar {
     position: absolute; inset: 12%; border-radius: 50%;
     background: conic-gradient(from 0deg,
-        rgba(74,216,255,0)    0deg,
-        rgba(74,216,255,0.30) 14deg,
-        rgba(74,216,255,0.55) 22deg,
-        rgba(74,216,255,0.18) 36deg,
-        rgba(74,216,255,0)    70deg,
-        rgba(74,216,255,0)    360deg);
+        rgba(var(--db-accent-rgb), 0)    0deg,
+        rgba(var(--db-accent-rgb), 0.30) 14deg,
+        rgba(var(--db-accent-rgb), 0.55) 22deg,
+        rgba(var(--db-accent-rgb), 0.18) 36deg,
+        rgba(var(--db-accent-rgb), 0)    70deg,
+        rgba(var(--db-accent-rgb), 0)    360deg);
     animation: db-radar-spin 4.6s linear infinite;
     mix-blend-mode: screen;
 }
 @keyframes db-radar-spin { to { transform: rotate(360deg); } }
 .menu-v2.dropbay .db-ring {
     position: absolute; inset: 18%; border-radius: 50%;
-    border: 1px dashed rgba(74,216,255,0.30);
+    border: 1px dashed rgba(var(--db-accent-rgb), 0.30);
     animation: db-ring-spin 22s linear infinite reverse;
 }
 .menu-v2.dropbay .db-ring-2 {
     position: absolute; inset: 26%; border-radius: 50%;
-    border: 1px solid rgba(255,215,106,0.18);
+    border: 1px solid rgba(255, 255, 255, 0.10);
 }
 @keyframes db-ring-spin { to { transform: rotate(360deg); } }
 
+/* Orbit motes — 2 class-accent + 2 white. Sleek, not rainbow. */
 .menu-v2.dropbay .db-orbit {
     position: absolute; inset: 8%;
     animation: db-orbit-spin 9s linear infinite;
@@ -455,22 +632,22 @@
 .menu-v2.dropbay .db-orbit i {
     position: absolute;
     width: 5px; height: 5px; border-radius: 50%;
-    background: #4ad8ff;
-    box-shadow: 0 0 8px rgba(74,216,255,0.85);
+    background: var(--db-accent);
+    box-shadow: 0 0 8px rgba(var(--db-accent-rgb), 0.85);
 }
 .menu-v2.dropbay .db-orbit i:nth-child(1) { top: 0;     left: 50%;  transform: translateX(-50%); }
-.menu-v2.dropbay .db-orbit i:nth-child(2) { right: 0;   top: 50%;   transform: translateY(-50%); background: #ffd76a; box-shadow: 0 0 8px rgba(255,215,106,0.85); }
+.menu-v2.dropbay .db-orbit i:nth-child(2) { right: 0;   top: 50%;   transform: translateY(-50%); background: rgba(255,255,255,0.85); box-shadow: 0 0 8px rgba(255,255,255,0.8); }
 .menu-v2.dropbay .db-orbit i:nth-child(3) { bottom: 0;  left: 50%;  transform: translateX(-50%); }
-.menu-v2.dropbay .db-orbit i:nth-child(4) { left: 0;    top: 50%;   transform: translateY(-50%); background: #ff5d7a; box-shadow: 0 0 8px rgba(255,93,122,0.85); }
+.menu-v2.dropbay .db-orbit i:nth-child(4) { left: 0;    top: 50%;   transform: translateY(-50%); background: rgba(255,255,255,0.85); box-shadow: 0 0 8px rgba(255,255,255,0.8); }
 @keyframes db-orbit-spin { to { transform: rotate(360deg); } }
 
 .menu-v2.dropbay .db-scanline {
     position: absolute; left: 8%; right: 8%; top: 8%; height: 8%;
     background: linear-gradient(to bottom,
         transparent 0%,
-        rgba(74,216,255,0.12) 40%,
-        rgba(255,255,255,0.55) 50%,
-        rgba(74,216,255,0.12) 60%,
+        rgba(var(--db-accent-rgb), 0.12) 40%,
+        rgba(255, 255, 255, 0.55) 50%,
+        rgba(var(--db-accent-rgb), 0.12) 60%,
         transparent 100%);
     mix-blend-mode: screen;
     animation: db-scanline-pass 3.6s ease-in-out infinite;
@@ -483,8 +660,7 @@
     100%    { transform: translateY(950%); opacity: 0; }
 }
 
-/* Centre core — class portrait canvas (when JS paints) overlaid
-   with the spinning glyph diamond + sigil text fallback. */
+/* Center core — class portrait canvas + spinning glyph + sigil text */
 .menu-v2.dropbay .db-core {
     position: absolute; inset: 0;
     display: grid; place-items: center;
@@ -495,7 +671,6 @@
     width: 64%; height: 64%;
     object-fit: contain;
     image-rendering: optimizeQuality;
-    /* Hidden until JS paints a class into it (sets data-painted="1"). */
     opacity: 0;
     transition: opacity 0.4s ease-out;
 }
@@ -503,29 +678,29 @@
 
 .menu-v2.dropbay .db-glyph {
     position: absolute;
-    width: 5cqh; height: 5cqh;
-    margin-top: -7cqh;
-    border: 2px solid #4ad8ff;
+    width: 4cqh; height: 4cqh;
+    margin-top: -5.5cqh;
+    border: 2px solid var(--db-accent);
     transform: rotate(45deg);
-    box-shadow: 0 0 14px rgba(74,216,255,0.55), inset 0 0 14px rgba(74,216,255,0.30);
+    box-shadow:
+        0 0 12px rgba(var(--db-accent-rgb), 0.55),
+        inset 0 0 12px rgba(var(--db-accent-rgb), 0.30);
     animation: db-glyph-spin 6s linear infinite;
 }
 .menu-v2.dropbay .db-glyph::after {
     content: ''; position: absolute; inset: 25%;
-    background: #4ad8ff;
-    box-shadow: 0 0 10px #4ad8ff;
+    background: var(--db-accent);
+    box-shadow: 0 0 8px rgba(var(--db-accent-rgb), 0.85);
 }
 @keyframes db-glyph-spin { to { transform: rotate(405deg); } }
 
 .menu-v2.dropbay .db-sigil {
     font-family: var(--ui-font-tech, 'Audiowide', monospace);
-    color: #4ad8ff; font-size: 3.4cqh;
-    letter-spacing: 0.4em;
-    text-shadow: 0 0 14px rgba(74,216,255,0.7);
+    color: var(--db-accent); font-size: 2.8cqh;
+    letter-spacing: 0.35em;
+    text-shadow: 0 0 12px rgba(var(--db-accent-rgb), 0.7);
     animation: db-sigil-pulse 3.2s ease-in-out infinite;
 }
-/* When the canvas has a painted class, dim the fallback sigil so
-   it reads as a stamp instead of competing with the portrait. */
 .menu-v2.dropbay .db-portrait-canvas[data-painted="1"] ~ .db-sigil {
     opacity: 0.0;
 }
@@ -534,186 +709,192 @@
     50%     { opacity: 1;    transform: scale(1.05); }
 }
 
+/* Tier + code badges — sized down, single accent */
 .menu-v2.dropbay .db-tier,
 .menu-v2.dropbay .db-codebadge {
     position: absolute;
-    padding: 0.5cqh 1.4cqw;
+    padding: 0.45cqh 1.1cqw;
     font-family: var(--ui-font-tech, 'Audiowide', monospace);
-    font-size: 1.2cqh; letter-spacing: 0.18em;
-    background: rgba(0,0,0,0.7);
+    font-size: 1.05cqh; letter-spacing: 0.16em;
+    background: rgba(0, 0, 0, 0.7);
     text-transform: uppercase;
     border-radius: 3px;
     z-index: 2;
     line-height: 1;
 }
 .menu-v2.dropbay .db-tier {
-    top: 4%; right: -2%;
-    border: 1px solid rgba(255,215,106,0.55);
-    color: #ffd76a;
+    top: 4%; right: 0%;
+    border: 1px solid rgba(255, 255, 255, 0.30);
+    color: rgba(255, 255, 255, 0.78);
 }
 .menu-v2.dropbay .db-codebadge {
-    bottom: 5%; left: -1%;
-    border: 1px solid rgba(74,216,255,0.45);
-    color: #4ad8ff;
+    bottom: 5%; left: 0%;
+    border: 1px solid rgba(var(--db-accent-rgb), 0.45);
+    color: var(--db-accent);
 }
 
-/* Class identity below portrait */
+/* Class identity */
 .menu-v2.dropbay .db-id-block {
     display: flex; flex-direction: column; align-items: center; gap: 0.2cqh;
 }
 .menu-v2.dropbay .db-id-class {
     font-family: var(--ui-font-impact, 'Saira', sans-serif);
     font-weight: 800; font-style: italic;
-    font-size: 2.6cqh; letter-spacing: 0.04em;
+    font-size: 2.4cqh; letter-spacing: 0.04em;
     color: #fff;
     line-height: 1;
 }
 .menu-v2.dropbay .db-id-sig {
     font-family: var(--ui-font-tech, 'Audiowide', monospace);
-    font-size: 1.4cqh; letter-spacing: 0.18em;
-    color: rgba(255,255,255,0.55);
+    font-size: 1.2cqh; letter-spacing: 0.18em;
+    color: rgba(255, 255, 255, 0.55);
     text-transform: uppercase;
     line-height: 1;
 }
 
-/* Ops readout — 3-cell strip with breathing left-edge accent */
+/* Ops readout — 3 cells, single class accent (no per-cell rainbow) */
 .menu-v2.dropbay .db-ops {
     display: grid; grid-template-columns: repeat(3, 1fr);
-    gap: 1.5cqw;
+    gap: 1.2cqw;
     width: 100%;
     margin-top: 0.4cqh;
 }
 .menu-v2.dropbay .db-ops-cell {
     position: relative;
-    padding: 0.8cqh 1.4cqw;
-    background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
-    border-left: 2px solid rgba(74,216,255,0.6);
+    padding: 0.7cqh 1.4cqw;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 2px solid rgba(var(--db-accent-rgb), 0.55);
     border-radius: 4px;
     text-align: left;
-    color: rgba(255,255,255,0.86);
+    color: rgba(255, 255, 255, 0.86);
     overflow: hidden;
+    min-width: 0;
 }
 .menu-v2.dropbay .db-ops-cell::before {
     content: ''; position: absolute; left: 0; top: 0; height: 100%; width: 2px;
-    background: linear-gradient(to bottom, transparent, currentColor, transparent);
+    background: linear-gradient(to bottom, transparent, var(--db-accent), transparent);
     opacity: 0.5;
     animation: db-cell-pulse 3.6s ease-in-out infinite;
-    color: rgba(74,216,255,0.85);
 }
 .menu-v2.dropbay .db-ops-cell:nth-child(2)::before { animation-delay: 1.2s; }
 .menu-v2.dropbay .db-ops-cell:nth-child(3)::before { animation-delay: 2.4s; }
 @keyframes db-cell-pulse { 0%,100% { opacity: 0.20; } 50% { opacity: 0.85; } }
 .menu-v2.dropbay .db-ops-cell .lbl {
     font-family: var(--ui-font-tech, 'Audiowide', monospace);
-    font-size: 1.05cqh; letter-spacing: 0.18em;
-    color: rgba(255,255,255,0.45); text-transform: uppercase;
+    font-size: 0.95cqh; letter-spacing: 0.18em;
+    color: rgba(255, 255, 255, 0.45); text-transform: uppercase;
     line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .menu-v2.dropbay .db-ops-cell .val {
     font-family: var(--ui-font-impact, 'Saira', sans-serif);
     font-weight: 800; font-style: italic;
-    font-size: 1.9cqh; letter-spacing: 0.02em; color: #fff;
+    font-size: 1.7cqh; letter-spacing: 0.02em; color: #fff;
     margin-top: 0.4cqh;
     line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
-.menu-v2.dropbay .db-ops-cell.gold { border-left-color: rgba(255,215,106,0.7); }
-.menu-v2.dropbay .db-ops-cell.gold::before { color: rgba(255,215,106,0.85); }
-.menu-v2.dropbay .db-ops-cell.gold .val { color: #ffd76a; }
-.menu-v2.dropbay .db-ops-cell.alert { border-left-color: rgba(255,93,122,0.7); }
-.menu-v2.dropbay .db-ops-cell.alert::before { color: rgba(255,93,122,0.85); }
-.menu-v2.dropbay .db-ops-cell.alert .val { color: #ff5d7a; }
 
 
 /* ──────────────────────────────────────────────────────────
- * 7. DEPLOY CONSOLE — RESUME (slim) + INITIATE RUN (dominant)
- *
- * RESUME stacks ABOVE deploy (mockup had it below, but mobile
- * thumb reach favours the dominant action being lowest). RESUME
- * collapses out via .hidden when no save exists.
+ * 8. CONSOLE — RESUME + DEPLOY
  * ────────────────────────────────────────────────────────── */
 .menu-v2.dropbay .db-console {
     display: flex; flex-direction: column;
-    gap: 0.8cqh;
+    gap: 0.7cqh;
     margin-top: 0.4cqh;
 }
 
-/* RESUME bar */
 .menu-v2.dropbay .db-resume {
     display: grid; grid-template-columns: 1fr auto auto;
     align-items: center;
     gap: 2cqw;
-    padding: 1.1cqh 3cqw;
-    background: rgba(255,215,106,0.05);
-    border: 1px solid rgba(255,215,106,0.38);
+    padding: 1cqh 3cqw;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 6px;
     cursor: pointer;
     position: relative;
-    color: rgba(255,255,255,0.92);
+    color: rgba(255, 255, 255, 0.92);
     text-align: left;
     overflow: hidden;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+.menu-v2.dropbay .db-resume:hover {
+    border-color: rgba(var(--db-accent-rgb), 0.55);
+    background: rgba(var(--db-accent-rgb), 0.05);
 }
 .menu-v2.dropbay .db-resume::before {
     content: ''; position: absolute; left: 0; top: 0; height: 100%; width: 3px;
-    background: linear-gradient(to bottom, transparent, #ffd76a, transparent);
+    background: linear-gradient(to bottom, transparent, var(--db-accent), transparent);
     border-radius: inherit;
     animation: db-cell-pulse 2.6s ease-in-out infinite;
 }
-.menu-v2.dropbay .db-resume-meta-block { line-height: 1; }
+.menu-v2.dropbay .db-resume-meta-block { line-height: 1; min-width: 0; }
 .menu-v2.dropbay .db-resume .ey {
     font-family: var(--ui-font-tech, 'Audiowide', monospace);
-    font-size: 1.2cqh; letter-spacing: 0.18em;
-    color: #ffd76a; text-transform: uppercase;
+    font-size: 1.05cqh; letter-spacing: 0.18em;
+    color: var(--db-accent); text-transform: uppercase;
     line-height: 1;
 }
 .menu-v2.dropbay .db-resume .meta {
     font-family: var(--ui-font-impact, 'Saira', sans-serif);
-    font-weight: 700; font-size: 1.7cqh; letter-spacing: 0.02em;
+    font-weight: 700; font-size: 1.6cqh; letter-spacing: 0.02em;
     color: #fff;
     margin-top: 0.4cqh;
     line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .menu-v2.dropbay .db-resume .icn {
     font-family: var(--ui-font-tech, 'Audiowide', monospace);
-    color: #ffd76a; font-size: 2cqh;
+    color: var(--db-accent); font-size: 1.8cqh;
     line-height: 1;
 }
-.menu-v2.dropbay .db-resume .progress {
-    display: flex; gap: 3px;
-}
+.menu-v2.dropbay .db-resume .progress { display: flex; gap: 3px; }
 .menu-v2.dropbay .db-resume .progress span {
     width: 6px; height: 6px; border-radius: 50%;
-    background: rgba(255,255,255,0.12);
+    background: rgba(255, 255, 255, 0.12);
 }
 .menu-v2.dropbay .db-resume .progress span.on {
-    background: #ffd76a; box-shadow: 0 0 4px #ffd76a;
+    background: var(--db-accent);
+    box-shadow: 0 0 4px rgba(var(--db-accent-rgb), 0.85);
 }
 
-/* DEPLOY mega button */
+/* DEPLOY — primary CTA */
 .menu-v2.dropbay .db-deploy {
     position: relative;
     display: flex; flex-direction: column; gap: 0.2cqh;
-    padding: 1.5cqh 4cqw;
+    padding: 1.4cqh 4cqw;
     background:
-        linear-gradient(180deg, rgba(74,216,255,0.20), rgba(74,216,255,0.05)),
-        radial-gradient(ellipse at 0% 50%, rgba(74,216,255,0.10), transparent 60%);
-    border: 1px solid rgba(74,216,255,0.65);
+        linear-gradient(180deg,
+            rgba(var(--db-accent-rgb), 0.20),
+            rgba(var(--db-accent-rgb), 0.05)),
+        radial-gradient(ellipse at 0% 50%,
+            rgba(var(--db-accent-rgb), 0.10), transparent 60%);
+    border: 1px solid rgba(var(--db-accent-rgb), 0.65);
     border-radius: 8px;
     cursor: pointer;
     box-shadow:
-        0 0 28px rgba(74,216,255,0.22),
-        inset 0 1px 0 rgba(255,255,255,0.10),
-        inset 0 0 22px rgba(74,216,255,0.10);
+        0 0 28px rgba(var(--db-accent-rgb), 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.10),
+        inset 0 0 22px rgba(var(--db-accent-rgb), 0.10);
     overflow: hidden;
     isolation: isolate;
     text-align: left;
     color: #fff;
 }
-/* Shimmer pass */
 .menu-v2.dropbay .db-deploy::before {
     content: ''; position: absolute; inset: 0;
     background: linear-gradient(120deg,
         transparent 30%,
-        rgba(255,255,255,0.20) 50%,
+        rgba(255, 255, 255, 0.20) 50%,
         transparent 70%);
     transform: translateX(-100%);
     animation: db-shimmer 3.6s ease-in-out infinite;
@@ -723,18 +904,17 @@
     0%   { transform: translateX(-100%); }
     60%, 100% { transform: translateX(100%); }
 }
-/* Traveling-light conic border */
 .menu-v2.dropbay .db-deploy::after {
     content: ''; position: absolute; inset: 0; border-radius: inherit;
     padding: 1px;
     background:
         conic-gradient(from 0deg,
-            rgba(74,216,255,0) 0deg,
-            rgba(74,216,255,0.85) 30deg,
-            rgba(255,255,255,1) 50deg,
-            rgba(74,216,255,0.85) 70deg,
-            rgba(74,216,255,0) 110deg,
-            rgba(74,216,255,0) 360deg);
+            rgba(var(--db-accent-rgb), 0)    0deg,
+            rgba(var(--db-accent-rgb), 0.85) 30deg,
+            rgba(255, 255, 255, 1)           50deg,
+            rgba(var(--db-accent-rgb), 0.85) 70deg,
+            rgba(var(--db-accent-rgb), 0)    110deg,
+            rgba(var(--db-accent-rgb), 0)    360deg);
     -webkit-mask:
         linear-gradient(#000 0 0) content-box,
         linear-gradient(#000 0 0);
@@ -748,16 +928,16 @@
 .menu-v2.dropbay .db-deploy > * { position: relative; z-index: 2; }
 .menu-v2.dropbay .db-deploy .eyebrow {
     font-family: var(--ui-font-tech, 'Audiowide', monospace);
-    font-size: 1.3cqh; letter-spacing: 0.20em;
-    color: #4ad8ff; text-transform: uppercase;
+    font-size: 1.15cqh; letter-spacing: 0.20em;
+    color: var(--db-accent); text-transform: uppercase;
     line-height: 1;
 }
 .menu-v2.dropbay .db-deploy .label {
     font-family: var(--ui-font-impact, 'Saira', sans-serif);
     font-weight: 900; font-style: italic;
-    font-size: 2.9cqh; letter-spacing: 0.02em;
+    font-size: 2.7cqh; letter-spacing: 0.02em;
     color: #fff;
-    text-shadow: 0 0 14px rgba(74,216,255,0.45);
+    text-shadow: 0 0 14px rgba(var(--db-accent-rgb), 0.45);
     line-height: 1;
     margin-top: 0.3cqh;
 }
@@ -765,8 +945,8 @@
     position: absolute; right: 4cqw; top: 50%;
     transform: translateY(-50%);
     font-family: var(--ui-font-tech, 'Audiowide', monospace);
-    color: #4ad8ff; font-size: 2.8cqh;
-    text-shadow: 0 0 12px rgba(74,216,255,0.65);
+    color: var(--db-accent); font-size: 2.6cqh;
+    text-shadow: 0 0 12px rgba(var(--db-accent-rgb), 0.65);
     animation: db-arrow-nudge 1.8s ease-in-out infinite;
     z-index: 2;
     line-height: 1;
@@ -775,7 +955,15 @@
     0%,100% { transform: translateY(-50%) translateX(0); }
     50%     { transform: translateY(-50%) translateX(4px); }
 }
-/* Reduced motion — calm everything down */
+.menu-v2.dropbay .db-deploy .btn-start-warn {
+    display: none;
+    font-size: 1.05cqh;
+    color: rgba(255, 255, 255, 0.55);
+    letter-spacing: 0.14em;
+    margin-top: 2px;
+    line-height: 1;
+}
+.menu-v2.dropbay .db-deploy .btn-start-warn:not(.hidden) { display: inline-block; }
 .reduced-motion .menu-v2.dropbay .db-deploy::before,
 .reduced-motion .menu-v2.dropbay .db-deploy::after,
 .reduced-motion .menu-v2.dropbay .db-deploy .arrow,
@@ -789,112 +977,104 @@
 .reduced-motion .menu-v2.dropbay .db-wordmark.title,
 .reduced-motion .menu-v2.dropbay .db-asc-chip .led,
 .reduced-motion .menu-v2.dropbay .db-tab::before,
-.reduced-motion .menu-v2.dropbay .db-tab .pip {
+.reduced-motion .menu-v2.dropbay .db-tab .pip,
+.reduced-motion .menu-v2.dropbay .db-emblem-halo,
+.reduced-motion .menu-v2.dropbay .db-emblem-ring-outer::after,
+.reduced-motion .menu-v2.dropbay .db-emblem-ring-mid,
+.reduced-motion .menu-v2.dropbay .db-emblem-ring-inner {
     animation: none !important;
 }
 
-/* DEPLOY warning text — appears when start would discard a save */
-.menu-v2.dropbay .db-deploy .btn-start-warn {
-    display: none;
-    font-size: 1.1cqh;
-    font-weight: var(--ui-weight-medium, 500);
-    color: rgba(255,255,255,0.55);
-    letter-spacing: 0.14em;
-    margin-top: 2px;
-    line-height: 1;
-}
-.menu-v2.dropbay .db-deploy .btn-start-warn:not(.hidden) { display: inline-block; }
-
 
 /* ──────────────────────────────────────────────────────────
- * 8. INSTRUMENT CLUSTER — 5-across tabs
+ * 9. INSTRUMENT DOCK — 5 minimal tabs
  *
- * Each tab carries a colored top accent strip with a staggered
- * breathing pulse + a corner status pip (ready / new / alert).
+ * Sleek single-accent layout. Drops the per-tab rainbow + the
+ * harsh top-left clip-path that was clipping label text. Each
+ * tab has icon + label + status pip; the pulsing top accent bar
+ * is class-coloured. Plenty of vertical padding so labels never
+ * wrap or clip.
  * ────────────────────────────────────────────────────────── */
 .menu-v2.dropbay .db-cluster {
     display: grid; grid-template-columns: repeat(5, 1fr);
-    gap: 1.2cqw;
+    gap: 1cqw;
     padding-top: 0.2cqh;
 }
 .menu-v2.dropbay .db-tab {
     position: relative;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 0.3cqh;
-    padding: 1cqh 0.5cqw;
-    background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
-    border: 1px solid rgba(255,255,255,0.14);
+    gap: 0.4cqh;
+    padding: 1.2cqh 0.5cqw;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 6px;
-    color: rgba(255,255,255,0.86);
+    color: var(--db-accent);
     text-align: center;
     cursor: pointer;
-    /* angled top-left edge for a "shard" feel */
-    clip-path: polygon(10% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 14%);
     overflow: hidden;
-    transition: transform 0.2s ease, border-color 0.2s ease;
+    transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 .menu-v2.dropbay .db-tab:hover {
     transform: translateY(-1px);
+    border-color: rgba(var(--db-accent-rgb), 0.55);
+    background: rgba(var(--db-accent-rgb), 0.06);
 }
 .menu-v2.dropbay .db-tab::before {
     content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px;
-    background: linear-gradient(90deg, transparent, currentColor, transparent);
-    opacity: 0.6;
+    background: linear-gradient(90deg, transparent, var(--db-accent), transparent);
+    opacity: 0.5;
     animation: db-tab-glow 3.6s ease-in-out infinite;
 }
 .menu-v2.dropbay .db-tab:nth-child(2)::before { animation-delay: 0.6s; }
 .menu-v2.dropbay .db-tab:nth-child(3)::before { animation-delay: 1.2s; }
 .menu-v2.dropbay .db-tab:nth-child(4)::before { animation-delay: 1.8s; }
 .menu-v2.dropbay .db-tab:nth-child(5)::before { animation-delay: 2.4s; }
-@keyframes db-tab-glow { 0%,100% { opacity: 0.30; } 50% { opacity: 0.95; } }
+@keyframes db-tab-glow { 0%,100% { opacity: 0.25; } 50% { opacity: 0.85; } }
 
 .menu-v2.dropbay .db-tab .icon {
     font-size: 2.2cqh; line-height: 1;
-    filter: drop-shadow(0 0 6px currentColor);
-}
-.menu-v2.dropbay .db-tab .ey {
-    font-family: var(--ui-font-tech, 'Audiowide', monospace);
-    font-size: 1cqh; letter-spacing: 0.18em;
-    opacity: 0.55; text-transform: uppercase;
-    line-height: 1;
+    filter: drop-shadow(0 0 6px rgba(var(--db-accent-rgb), 0.65));
 }
 .menu-v2.dropbay .db-tab .ttl {
     font-family: var(--ui-font-impact, 'Saira', sans-serif);
     font-weight: 800; font-style: italic;
-    font-size: 1.4cqh; letter-spacing: 0.04em;
-    color: #fff;
+    font-size: 1.25cqh; letter-spacing: 0.06em;
+    color: rgba(255, 255, 255, 0.92);
     line-height: 1;
+    white-space: nowrap;
+    text-transform: uppercase;
+}
+.menu-v2.dropbay .db-tab .db-tab-status { display: none; }
+.menu-v2.dropbay .db-tab .db-tab-count {
+    color: var(--db-accent);
+    margin-left: 0.3em;
+    font-size: 0.92em;
 }
 
-/* Hidden status sub-line for legacy JS (#challenge-status-line). It
-   continues to receive text mutations from the existing menu refresh
-   path — we just don't display it; the pip carries the signal. */
-.menu-v2.dropbay .db-tab .db-tab-status {
-    display: none;
-}
-
+/* Status pip (corner) */
 .menu-v2.dropbay .db-tab .pip {
     position: absolute; top: 5px; right: 5px;
     width: 5px; height: 5px; border-radius: 50%;
-    background: rgba(255,255,255,0.15);
+    background: rgba(255, 255, 255, 0.15);
 }
-.menu-v2.dropbay .db-tab .pip.new   { background: #ffd76a; box-shadow: 0 0 6px #ffd76a; animation: db-led-blink 1.4s ease-in-out infinite; }
-.menu-v2.dropbay .db-tab .pip.alert { background: #ff5d7a; box-shadow: 0 0 6px #ff5d7a; animation: db-led-blink 1.0s ease-in-out infinite; }
-.menu-v2.dropbay .db-tab .pip.on    { background: #5eead4; box-shadow: 0 0 6px #5eead4; }
-
-/* Per-tab accent — colours the icon glow + top strip + label glow */
-.menu-v2.dropbay .db-tab.cy { color: #4ad8ff; }
-.menu-v2.dropbay .db-tab.go { color: #ffd76a; }
-.menu-v2.dropbay .db-tab.gr { color: #5eead4; }
-.menu-v2.dropbay .db-tab.gy { color: rgba(255,255,255,0.86); }
-.menu-v2.dropbay .db-tab.rd { color: #ff5d7a; }
+.menu-v2.dropbay .db-tab .pip.new {
+    background: var(--db-accent);
+    box-shadow: 0 0 6px rgba(var(--db-accent-rgb), 0.85);
+    animation: db-led-blink 1.4s ease-in-out infinite;
+}
+.menu-v2.dropbay .db-tab .pip.alert {
+    background: rgb(var(--db-warn-rgb));
+    box-shadow: 0 0 6px rgba(var(--db-warn-rgb), 0.85);
+    animation: db-led-blink 1.0s ease-in-out infinite;
+}
+.menu-v2.dropbay .db-tab .pip.on {
+    background: var(--db-accent);
+    box-shadow: 0 0 4px rgba(var(--db-accent-rgb), 0.55);
+}
 
 
 /* ──────────────────────────────────────────────────────────
- * 9. FEATURE LOCKED HIDDEN
- *
- * The Unlocks system continues to drive visibility. Hide cleanly
- * so the cluster grid collapses without a dead column.
+ * 10. FEATURE LOCKED HIDDEN
  * ────────────────────────────────────────────────────────── */
 .menu-v2.dropbay .feature-locked-hidden {
     display: none !important;
@@ -902,42 +1082,37 @@
 
 
 /* ──────────────────────────────────────────────────────────
- * 10. FOOTER — streak chip + version
+ * 11. FOOTER — streak chip + version
  * ────────────────────────────────────────────────────────── */
 .menu-v2.dropbay .db-footer {
     display: flex; align-items: center; justify-content: space-between;
     gap: 1.5cqw;
     padding-top: 0.4cqh;
-    min-height: 2.6cqh;
+    min-height: 2.4cqh;
 }
 .menu-v2.dropbay .db-streak.login-streak {
     margin: 0;
-    padding: 0.6cqh 2cqw;
-    background: rgba(255,215,106,0.06);
-    border: 1px solid rgba(255,215,106,0.45);
+    padding: 0.5cqh 1.6cqw;
+    background: rgba(var(--db-accent-rgb), 0.06);
+    border: 1px solid rgba(var(--db-accent-rgb), 0.40);
     border-radius: 9999px;
-    color: #ffd76a;
+    color: var(--db-accent);
     font-family: var(--ui-font-tech, 'Audiowide', monospace);
-    font-size: 1.2cqh; font-weight: 600;
+    font-size: 1.1cqh; font-weight: 600;
     letter-spacing: 0.16em;
     text-transform: uppercase;
     line-height: 1;
 }
 .menu-v2.dropbay .db-version {
     font-family: var(--ui-font-mono, 'Consolas', monospace);
-    font-size: 1.1cqh; letter-spacing: 0.16em;
-    color: rgba(255,255,255,0.30);
+    font-size: 1cqh; letter-spacing: 0.16em;
+    color: rgba(255, 255, 255, 0.30);
     text-transform: uppercase;
 }
 
 
 /* ──────────────────────────────────────────────────────────
- * 11. SCREEN ENTRY STAGGER
- *
- * Hooks into the global .screen.active stagger system. Stagger the
- * header / title / hero / console / cluster / footer in sequence
- * on screen activation so the menu lands as a sequence rather than
- * a single flash.
+ * 12. SCREEN ENTRY STAGGER
  * ────────────────────────────────────────────────────────── */
 .menu-v2.dropbay.screen.active .db-hdr,
 .menu-v2.dropbay.screen.active .db-title-row,
@@ -949,18 +1124,18 @@
 }
 .menu-v2.dropbay.screen.active .db-hdr        { animation-delay: 0ms;   }
 .menu-v2.dropbay.screen.active .db-title-row  { animation-delay: 80ms;  }
-.menu-v2.dropbay.screen.active .db-hero       { animation-delay: 180ms; }
-.menu-v2.dropbay.screen.active .db-console    { animation-delay: 320ms; }
-.menu-v2.dropbay.screen.active .db-cluster    { animation-delay: 420ms; }
-.menu-v2.dropbay.screen.active .db-footer     { animation-delay: 520ms; }
+.menu-v2.dropbay.screen.active .db-hero       { animation-delay: 200ms; }
+.menu-v2.dropbay.screen.active .db-console    { animation-delay: 340ms; }
+.menu-v2.dropbay.screen.active .db-cluster    { animation-delay: 440ms; }
+.menu-v2.dropbay.screen.active .db-footer     { animation-delay: 540ms; }
 .menu-v2.dropbay.screen.active .db-cluster .db-tab {
     animation: db-stagger-in 520ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
-.menu-v2.dropbay.screen.active .db-cluster .db-tab:nth-child(1) { animation-delay: 460ms; }
-.menu-v2.dropbay.screen.active .db-cluster .db-tab:nth-child(2) { animation-delay: 520ms; }
-.menu-v2.dropbay.screen.active .db-cluster .db-tab:nth-child(3) { animation-delay: 580ms; }
-.menu-v2.dropbay.screen.active .db-cluster .db-tab:nth-child(4) { animation-delay: 640ms; }
-.menu-v2.dropbay.screen.active .db-cluster .db-tab:nth-child(5) { animation-delay: 700ms; }
+.menu-v2.dropbay.screen.active .db-cluster .db-tab:nth-child(1) { animation-delay: 480ms; }
+.menu-v2.dropbay.screen.active .db-cluster .db-tab:nth-child(2) { animation-delay: 540ms; }
+.menu-v2.dropbay.screen.active .db-cluster .db-tab:nth-child(3) { animation-delay: 600ms; }
+.menu-v2.dropbay.screen.active .db-cluster .db-tab:nth-child(4) { animation-delay: 660ms; }
+.menu-v2.dropbay.screen.active .db-cluster .db-tab:nth-child(5) { animation-delay: 720ms; }
 
 @keyframes db-stagger-in {
     from { opacity: 0; transform: translateY(18px); filter: blur(2px); }

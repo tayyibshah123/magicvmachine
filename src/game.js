@@ -3674,10 +3674,18 @@ startQTE(type, x, y, callback, opts) {
                 if (btnIntel) {
                     if (this.encryptedFiles > 0) {
                         btnIntel.classList.add('intel-alert');
-                        btnIntel.innerText = `INTEL [${this.encryptedFiles}]`;
                     } else {
                         btnIntel.classList.remove('intel-alert');
-                        btnIntel.innerText = "INTEL";
+                    }
+                    // Drop Bay menu owns the count rendering via the
+                    // .db-tab-count child below — never overwrite the
+                    // button's whole innerText (it would wipe the tab's
+                    // pip / icon / label spans). The legacy menu had a
+                    // single-text button so the wipe was harmless there.
+                    const countEl = document.getElementById('btn-intel-count');
+                    if (countEl) {
+                        countEl.textContent = this.encryptedFiles > 0
+                            ? `[${this.encryptedFiles}]` : '';
                     }
                 }
                 if (this.corruptionLevel > 0) {
@@ -9140,6 +9148,19 @@ triggerSystemCrash() {
         }
         const cls = (lastClassId && typeof PLAYER_CLASSES !== 'undefined')
             ? PLAYER_CLASSES.find(c => c.id === lastClassId) : null;
+
+        // ── Class accent — drives the entire menu palette via
+        // --db-accent + --db-accent-rgb CSS vars. Sentinel's pure
+        // white (#ffffff) is replaced with a slightly tinted
+        // off-white so chrome backgrounds still read against it.
+        const rawColor = (cls && cls.color) || '#4ad8ff';
+        const accent = (rawColor.toLowerCase() === '#ffffff') ? '#e6fbff' : rawColor;
+        const hex = accent.replace('#', '');
+        const r = parseInt(hex.length === 3 ? hex[0] + hex[0] : hex.substr(0, 2), 16) || 74;
+        const g = parseInt(hex.length === 3 ? hex[1] + hex[1] : hex.substr(2, 2), 16) || 216;
+        const b = parseInt(hex.length === 3 ? hex[2] + hex[2] : hex.substr(4, 2), 16) || 255;
+        root.style.setProperty('--db-accent', accent);
+        root.style.setProperty('--db-accent-rgb', `${r}, ${g}, ${b}`);
 
         // ── Portrait canvas. _paintCharPreview reads data-class-id
         // and pulls the cached entity sprite. Sets data-painted="1"
