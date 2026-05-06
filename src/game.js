@@ -7620,20 +7620,10 @@ triggerPhaseGlitch() {
                 enemy.phaseTelegraphColor = '#7fff00';
                 this.triggerScreenFlash && this.triggerScreenFlash('rgba(127, 255, 0, 0.32)', 400);
                 ParticleSys.createShockwave(enemy.x, enemy.y, '#7fff00', 42);
-                // Shared HP mode — spawn 2 extra drone minions that absorb damage.
-                if (enemy.minions && enemy.minions.length < 4) {
-                    try {
-                        const Minion = Game._MinionClass || null;
-                        if (Minion) {
-                            for (let i = 0; i < 2; i++) {
-                                const m = new Minion(enemy.x + (i === 0 ? -160 : 160), enemy.y, enemy.minions.length + 1, false, 2);
-                                m.name = 'Hive Drone';
-                                m.maxHp = 60; m.currentHp = 60; m.dmg = 6;
-                                enemy.minions.push(m);
-                            }
-                        }
-                    } catch (e) { /* swallow */ }
-                }
+                // (Drone spawn removed — the boss now starts combat with
+                // a full 5-drone swarm via the setupCombat hook, so the
+                // phase-2 drip-spawn would push the count over the
+                // intended cap and stack overlapping sprites.)
             } else if (phase === 3) {
                 // Assimilate — 20% chance each turn to convert a player minion.
                 enemy.assimilateActive = true;
@@ -13044,6 +13034,36 @@ async startCombat(type) {
             this.enemy.voidPullCount = 0;
             this.enemy.voidCrushTriggered = false;
             this.enemy.voidCrushTurns = 0;
+        }
+
+        // --- HIVE PROTOCOL — drone swarm escort ---
+        // Five lime "Hive Drones" spawn at combat start and arc around
+        // the boss. Distributed lethality fantasy intact; the prior
+        // phase-2 drip of 2 drones is replaced by a full swarm at
+        // turn 1 so the player sees the threat immediately and can
+        // plan AoE accordingly. Stat block stays in line with the
+        // legacy phase-2 spawns (60 HP / 6 DMG each).
+        if (this.enemy.name === "HIVE PROTOCOL") {
+            const HIVE_COUNT = 5;
+            for (let i = 0; i < HIVE_COUNT; i++) {
+                // Arc the drones around the boss in a fan, alternating
+                // sides so they read as a coordinated swarm.
+                const offset = (i - (HIVE_COUNT - 1) / 2) * 110;
+                const m = new Minion(
+                    this.enemy.x + offset,
+                    this.enemy.y + 90 + Math.abs(offset) * 0.15,
+                    this.enemy.minions.length + 1,
+                    /*isPlayerSide*/ false,
+                    /*tier*/ 2
+                );
+                m.name = "Hive Drone";
+                m.maxHp = 60;
+                m.currentHp = 60;
+                m.dmg = 6;
+                m._isHiveDrone = true;
+                m.spawnTimer = 1.0;
+                this.enemy.minions.push(m);
+            }
         }
 
         // --- NEW: THE COMPILER LOGIC (Armor Plated) ---
@@ -22576,133 +22596,62 @@ drawEffects() {
         }
 
         if (sector === 4) {
-            // --- HIVE PROTOCOL: THE HIVE CATHEDRAL ---
-            // Tier-aware density: hex tower had ~84 cells × per-frame
-            // Math.sin pulse, neural web does O(n²) distance checks on
-            // 18 nodes (153 pairs/frame), and 24 patrol drones do per-
-            // frame trig. Mid: 10 rows / 12 nodes / 12 drones. Low: 6
-            // rows / no neural web / no drones / no shadowBlur — keep
-            // the tower silhouette but strip animated cosmetics.
-            const _tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
-            const _isLow  = _tier === 'low';
-            const _isMid  = _tier === 'mid';
-            const _hexRows = _isLow ? 6 : (_isMid ? 10 : 14);
-            const _nodeN   = _isLow ? 0 : (_isMid ? 12 : 18);
-            const _droneN  = _isLow ? 0 : (_isMid ? 12 : 24);
+            // --- HIVE PROTOCOL: PULSING GREEN GRID ---
+            // PERF OVERHAUL: the prior backdrop was the heaviest scene
+            // in the game. ~84 hex cells with per-frame Math.sin alpha,
+            // O(n²) neural web scan over 18 nodes, 24 patrol drones
+            // doing per-frame trig, plus shadowBlur — Sector 4 boss
+            // dropped frames hard once 5 minions + the boss + their
+            // intent VFX layered on top. Replaced with a single
+            // pulsing green grid: cached gradient sky + a static
+            // line lattice tinted by one global alpha. Frees the
+            // GPU/CPU budget for the boss + 5-minion swarm to read
+            // clean. Visual identity preserved (hive green, lattice
+            // motif, slow ambient pulse).
             ctx.save();
-            // Acid-green sky wash
+            // Sky wash — cached gradient, drawn once per frame.
             ctx.fillStyle = this._cachedGradient('s4_sky', () => {
                 const g = ctx.createLinearGradient(0, 0, 0, horizon);
                 g.addColorStop(0, 'rgba(10, 40, 10, 0.55)');
-                g.addColorStop(1, 'rgba(0, 80, 20, 0.2)');
+                g.addColorStop(1, 'rgba(0, 80, 20, 0.20)');
                 return g;
             });
             ctx.fillRect(0, 0, w, horizon);
 
-            // Monolithic hive tower at the horizon — stacked hexagonal cells
-            const towerX = w * 0.5;
-            const towerBase = horizon;
-            const towerTop = horizon * 0.1;
-            const towerWidth = 320;
-            ctx.fillStyle = '#061a06';
+            // Pulsing hive grid — one breathing alpha drives every
+            // grid line so the lattice feels alive without per-cell
+            // trig. ~30 verticals + ~14 horizontals = 44 line draws
+            // per frame, beatable by mid-tier hardware easily.
+            const pulse = 0.35 + 0.25 * Math.sin(time * 1.6);
+            ctx.globalAlpha = pulse;
             ctx.strokeStyle = '#7fff00';
-            ctx.lineWidth = 2;
-            if (!_isLow) { ctx.shadowColor = '#32cd32'; ctx.shadowBlur = 12; }
-            // Body
+            ctx.lineWidth = 1;
+            const cellSize = 42;
             ctx.beginPath();
-            ctx.moveTo(towerX - towerWidth * 0.5, towerBase);
-            ctx.lineTo(towerX - towerWidth * 0.4, towerTop + 20);
-            ctx.lineTo(towerX, towerTop);
-            ctx.lineTo(towerX + towerWidth * 0.4, towerTop + 20);
-            ctx.lineTo(towerX + towerWidth * 0.5, towerBase);
-            ctx.closePath();
-            ctx.fill(); ctx.stroke();
-            // Honeycomb cells on the tower — perf P6: hex shape baked once,
-            // drawn ~84 times per frame via drawImage with per-cell alpha
-            // modulation. Replaces ~500 trig calls + 84 unique paths
-            // per frame with one cached bitmap blit per cell.
-            ctx.shadowBlur = 0;
-            const cellR = 22;
-            const hexSpr = this._cachedGradient('s4_hexCell', () => {
-                // Hex sprite — path baked into an offscreen 64×64 canvas at
-                // full opacity green. Note: _cachedGradient is being reused
-                // here as a generic per-key offscreen-canvas memo since the
-                // cache only stores objects (CanvasGradient OR HTMLCanvas).
-                const SZ = 64;
-                let off;
-                if (typeof OffscreenCanvas === 'function') {
-                    try { off = new OffscreenCanvas(SZ, SZ); } catch (_) { off = null; }
-                }
-                if (!off) { off = document.createElement('canvas'); off.width = SZ; off.height = SZ; }
-                const oc = off.getContext('2d');
-                oc.fillStyle = 'rgba(127, 255, 0, 1)';
-                oc.beginPath();
-                const r = cellR * 0.9;
-                const halfSZ = SZ / 2;
-                for (let k = 0; k < 6; k++) {
-                    const a = (Math.PI / 3) * k + Math.PI / 6;
-                    const px = halfSZ + Math.cos(a) * r;
-                    const py = halfSZ + Math.sin(a) * r;
-                    if (k === 0) oc.moveTo(px, py); else oc.lineTo(px, py);
-                }
-                oc.closePath();
-                oc.fill();
-                return off;
-            });
-            for (let row = 0; row < _hexRows; row++) {
-                const y = towerBase - 60 - row * (cellR * 1.7);
-                if (y < towerTop + 40) break;
-                const rowWidth = (towerWidth * (1 - row * 0.04)) * 0.5;
-                const cells = Math.max(3, Math.floor(rowWidth / (cellR * 1.8)) * 2);
-                for (let c = 0; c < cells; c++) {
-                    const cx = towerX - rowWidth + (c + 0.5) * (rowWidth * 2 / cells);
-                    const pulse = 0.35 + 0.5 * Math.abs(Math.sin(time * 2 + row * 0.3 + c * 0.7));
-                    ctx.globalAlpha = pulse;
-                    ctx.drawImage(hexSpr, cx - 32, y - 32);
-                }
+            for (let x = 0; x <= w; x += cellSize) {
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, horizon);
             }
+            for (let y = 0; y <= horizon; y += cellSize) {
+                ctx.moveTo(0, y);
+                ctx.lineTo(w, y);
+            }
+            ctx.stroke();
+            // Brighter highlight pass on every 4th line for depth — same
+            // path-batching technique, single stroke call.
+            ctx.globalAlpha = pulse * 1.4;
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            for (let x = 0; x <= w; x += cellSize * 4) {
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, horizon);
+            }
+            for (let y = 0; y <= horizon; y += cellSize * 4) {
+                ctx.moveTo(0, y);
+                ctx.lineTo(w, y);
+            }
+            ctx.stroke();
             ctx.globalAlpha = 1;
-
-            // Neural network web across the sky — O(n²) connection scan
-            // is the hot path on this scene. Skip on low entirely.
-            if (_nodeN > 0) {
-                ctx.strokeStyle = 'rgba(127, 255, 0, 0.35)';
-                ctx.lineWidth = 1;
-                const nodes = [];
-                for (let i = 0; i < _nodeN; i++) {
-                    nodes.push([
-                        (i * 173 % w),
-                        (i * 97 % (horizon * 0.7))
-                    ]);
-                }
-                for (let i = 0; i < nodes.length; i++) {
-                    for (let j = i + 1; j < nodes.length; j++) {
-                        const dx = nodes[i][0] - nodes[j][0];
-                        const dy = nodes[i][1] - nodes[j][1];
-                        if (dx * dx + dy * dy < 220 * 220) {
-                            ctx.beginPath(); ctx.moveTo(nodes[i][0], nodes[i][1]); ctx.lineTo(nodes[j][0], nodes[j][1]); ctx.stroke();
-                        }
-                    }
-                }
-                ctx.fillStyle = '#7fff00';
-                if (!_isMid) { ctx.shadowColor = '#32cd32'; ctx.shadowBlur = 8; }
-                for (const [nx, ny] of nodes) {
-                    const pulse = 1 + Math.sin(time * 3 + nx) * 0.4;
-                    ctx.beginPath(); ctx.arc(nx, ny, 3 * pulse, 0, Math.PI * 2); ctx.fill();
-                }
-                ctx.shadowBlur = 0;
-            }
-
-            // Swarm of tiny drones buzzing in formations
-            if (_droneN > 0) {
-                ctx.fillStyle = '#7fff00';
-                for (let i = 0; i < _droneN; i++) {
-                    const orbit = time * (0.3 + (i % 4) * 0.1) + i;
-                    const dx = towerX + Math.cos(orbit) * (180 + (i % 5) * 30);
-                    const dy = horizon * 0.35 + Math.sin(orbit * 1.3) * 120 + (i % 3) * 20;
-                    ctx.fillRect(dx - 2, dy - 1, 4, 2);
-                }
-            }
             ctx.restore();
             return;
         }
