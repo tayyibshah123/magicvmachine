@@ -2014,6 +2014,62 @@ body[data-transition-dir="up"]    .screen { transform: translateY(50px) scale(0.
     letter-spacing: 0.12em;
 }
 
+/* ── Sector 3 HEAT TILES — AoE flame scorch overlay. Fires on every
+   turn-end heat tick when the player+minions take environmental
+   damage. Sits over the bottom half of the game container (the
+   player's side) and animates an orange/red gradient with a brief
+   flicker before fading out. Pointer-events:none so the overlay never
+   intercepts taps. Reduced-motion drops the flicker keyframes but
+   keeps the brief tint so the damage moment still reads. */
+.heat-scorch {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 55%;
+    pointer-events: none;
+    z-index: 6;
+    background:
+        radial-gradient(ellipse at 50% 100%, rgba(255, 140, 0, 0.55) 0%, rgba(255, 80, 0, 0.32) 30%, rgba(180, 40, 0, 0.0) 70%),
+        linear-gradient(to top, rgba(255, 80, 0, 0.45) 0%, rgba(255, 80, 0, 0.18) 25%, rgba(255, 80, 0, 0) 60%);
+    mix-blend-mode: screen;
+    animation: heat-scorch-anim 900ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+    will-change: opacity, filter, transform;
+}
+.heat-scorch::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        repeating-linear-gradient(95deg,
+            rgba(255, 200, 60, 0.0) 0px,
+            rgba(255, 200, 60, 0.18) 6px,
+            rgba(255, 100, 0, 0.0) 14px);
+    mix-blend-mode: overlay;
+    animation: heat-scorch-flicker 110ms steps(2, end) infinite;
+}
+@keyframes heat-scorch-anim {
+    0%   { opacity: 0; filter: brightness(0.6); transform: translateY(8px); }
+    14%  { opacity: 1; filter: brightness(1.4); transform: translateY(0); }
+    55%  { opacity: 1; filter: brightness(1.1); transform: translateY(0); }
+    100% { opacity: 0; filter: brightness(0.4); transform: translateY(-4px); }
+}
+@keyframes heat-scorch-flicker {
+    0%   { opacity: 0.7; }
+    50%  { opacity: 1; }
+    100% { opacity: 0.5; }
+}
+.heat-scorch.reduced {
+    animation: heat-scorch-reduced 320ms ease-out both;
+    mix-blend-mode: screen;
+}
+.heat-scorch.reduced::before { animation: none; opacity: 0.5; }
+@keyframes heat-scorch-reduced {
+    0%   { opacity: 0; }
+    20%  { opacity: 0.7; }
+    100% { opacity: 0; }
+}
+
 /* Card Content */
 .upgrade-icon {
     font-size: 2.2rem;

@@ -6708,6 +6708,29 @@ triggerPhaseGlitch() {
         this.screenFlashDuration = durationMs;
     },
 
+    // Sector 3 HEAT TILES — flame scorch overlay on the player's half
+    // of the screen. Fires once per turn-end heat tick. Layered above
+    // the canvas so the orange wash + flicker is unmistakable; auto-
+    // removes ~900ms after add. Reduced-motion skips the flicker
+    // animation but still tints briefly so the damage read survives.
+    _triggerHeatScorch() {
+        if (typeof document === 'undefined') return;
+        const host = document.getElementById('game-container') || document.body;
+        if (!host) return;
+        // Single instance — re-trigger restarts the animation so back-
+        // to-back heat ticks don't stack overlapping divs.
+        let el = document.getElementById('heat-scorch');
+        if (el) el.remove();
+        el = document.createElement('div');
+        el.id = 'heat-scorch';
+        el.className = 'heat-scorch';
+        if (this._isReducedMotion && this._isReducedMotion()) {
+            el.classList.add('reduced');
+        }
+        host.appendChild(el);
+        setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 950);
+    },
+
     /* Increment combat momentum from a triggering event. Reasons accepted
      * by the system: 'combo' (combo set fully consumed), 'parry' (perfect
      * parry resolved), 'kill' (enemy died on player turn), 'apex_consume'
@@ -18361,12 +18384,16 @@ drawEffects() {
                 });
                 this.player.minions = this.player.minions.filter(m => m && m.currentHp > 0);
             }
-            // Heat tile tick gets a tiny shake + audio so the chip
-            // erosion has event-quality, not ambient. Same upgrade as
-            // the boss-phase chip ticks below — keeps every "the world
-            // is hurting you" moment legible at the same fidelity.
-            if (this.shake) this.shake(3);
-            try { AudioMgr.playSound('zap'); } catch (_) {}
+            // Heat tile tick — full AoE flame scorch on the player side
+            // of the screen + sizzling audio so the environmental damage
+            // reads as the world burning the player, not a quiet chip
+            // tick. Implemented as a temporary CSS overlay (see
+            // _triggerHeatScorch) layered above the canvas; auto-cleans
+            // ~900ms after firing.
+            if (this._triggerHeatScorch) this._triggerHeatScorch();
+            if (this.shake) this.shake(4);
+            try { AudioMgr.playSound('zap', { playbackRate: 0.55, volume: 0.7 }); } catch (_) {}
+            try { AudioMgr.playSound('glitch_attack', { playbackRate: 0.7, volume: 0.4 }); } catch (_) {}
         }
         // Boss phase chip-damage ticks (§5.3.1). These fire at end-of-player-
         // turn so the player sees the damage before the enemy phase banner
