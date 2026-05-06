@@ -1,5 +1,7 @@
 # Weekly Roadmap — Mobile-First, 60fps, Neon Cyberpunk
 
+> ⚠️ **SUPERSEDED FOR EVERYTHING POST 2026-05-04.** This file is preserved as the Week 1 + Week 2 record (v1.3.5 → v1.5.0). The **41 commits shipped after** that, plus the v1.6.0 architectural contracts and recommended next steps, live in **`SESSION_NOTES_2026-05.md`**. New sessions should read SESSION_NOTES_2026-05.md first, then back-reference this file's §9 ledger for the v1.5.0 closed-parts list.
+
 > Snapshot: 2026-05-04. Audited against `PRODUCTION_ROADMAP.md` Parts 2, 4, 6, 7, 11, 23, 24, 25, 26, 27, 28, 29, 30, 31 via three parallel code audits.
 > One-week scope. All work must respect: (1) target 360–414px portrait phone, (2) 60fps in combat on a mid-spec Android (~Snapdragon 7-gen-1 / A13-class), (3) neon cyberpunk aesthetic — cyan / magenta / gold on near-black, glass-edged panels, no flat material design.
 
