@@ -624,6 +624,57 @@ const MODULE_FUSIONS = [
         desc: "+2 Mana at start of turn. Each Mana gained heals 2 HP (max 8/turn).",
         icon: '⟁',
         rarity: 'red'
+    },
+    // ── Second wave of fusions (6 more pairings). Mix of universally-
+    // available combos and class-flavoured ones; each one's effect is
+    // wired in src/game.js where the source relics' hooks live.
+    {
+        id: 'fusion_aegis_field',
+        ids: ['nano_shield', 'warden_protocol'], // warden_protocol is sentinel-locked
+        name: "Aegis Field",
+        desc: "Start combat with 18 Shield. Minions gain +6 Shield at start of every turn.",
+        icon: '◇',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_pulse_hammer',
+        ids: ['crit_lens', 'volt_primer'],
+        name: "Pulse Hammer",
+        desc: "First attack each turn deals +12 flat DMG and is a guaranteed crit.",
+        icon: '⚒',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_tyrant_engine',
+        ids: ['relentless', 'titan_module'],
+        name: "Tyrant Engine",
+        desc: "All attacks deal +35% damage. Your 3rd attack each turn TRIPLES (was 3rd-tier Relentless).",
+        icon: '☗',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_bramble_cycle',
+        ids: ['thorn_mail', 'coolant_loop'],
+        name: "Bramble Cycle",
+        desc: "Gain 4 Block on every damage you deal. Heal 5 HP whenever your shield breaks.",
+        icon: '✺',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_wisp_engine',
+        ids: ['minion_core', 'wisp_hp'],
+        name: "Wisp Engine",
+        desc: "Start combat with 2 Wisps at +10 HP each AND 5 starting Shield.",
+        icon: '✧',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_wounded_beast',
+        ids: ['last_stand', 'retaliator'],
+        name: "Wounded Beast",
+        desc: "Below 33% HP: +30% damage, +1 Reroll/turn, AND every reflect deals 3× damage.",
+        icon: '⚔',
+        rarity: 'red'
     }
 ];
 

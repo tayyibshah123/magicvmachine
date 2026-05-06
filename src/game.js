@@ -13041,6 +13041,17 @@ async startCombat(type) {
             m.addShield(5);
             this.player.minions.push(m);
         }
+        // FUSION: WISP ENGINE (minion_core × wisp_hp). Start combat
+        // with 2 wisps, each at +10 HP, with 5 starting shield.
+        if (this.player.hasRelic('fusion_wisp_engine')) {
+            for (let i = 0; i < 2; i++) {
+                const m = new Minion(0, 0, this.player.minions.length + 1, true);
+                m.maxHp += 10;
+                m.currentHp = m.maxHp;
+                m.addShield(5);
+                this.player.minions.push(m);
+            }
+        }
 
         // Relic: BAIT DRONE — decoy whose HP scales with sector so it stays
         // viable past Sector 1. Stacks add flat HP per drone deployed.
@@ -13190,6 +13201,7 @@ async startTurn() {
         // Relic: VOLT PRIMER resets each turn so the first attack gets the
         // +5 flat DMG bonus.
         this._voltPrimerUsedThisTurn = false;
+        this._pulseHammerUsedThisTurn = false;
 
         await this.showPhaseBanner("PLAYER PHASE", "COMMAND LINK ESTABLISHED", 'player');
 
@@ -13453,6 +13465,20 @@ async startTurn() {
             this.player.addShield(5 * shieldStacks);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `NANO +${5 * shieldStacks}`, COLORS.SHIELD);
         }
+        // FUSION: AEGIS FIELD (nano_shield × warden_protocol). Combat-
+        // start +18 shield + +6 minion shield every turn. Sentinel-
+        // locked because warden_protocol is sentinel-only, so only
+        // sentinels can ever own it.
+        if (this.player.hasRelic('fusion_aegis_field')) {
+            if (this.turnCount === 1) {
+                this.player.addShield(18);
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "AEGIS FIELD +18", COLORS.SHIELD);
+            }
+            if (this.player.minions.length > 0) {
+                this.player.minions.forEach(m => m.addShield(6));
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 80, "AEGIS +6 MINIONS", COLORS.SHIELD);
+            }
+        }
 
         const shieldGen = this.stackCount('shield_gen');
         if(shieldGen > 0) {
@@ -13617,6 +13643,19 @@ async startTurn() {
             ParticleSys.createFloatingText(this.player.x, this.player.y - 90, "LAST STAND", '#ff5577');
         } else {
             this.player._lastStandActive = false;
+        }
+        // FUSION: WOUNDED BEAST (last_stand × retaliator). Same sub-33%
+        // gate but reads as both _lastStandActive (carries the +30%
+        // damage flag) AND _woundedBeastActive (read by entity.js
+        // retaliator path to triple the reflect amount).
+        if (this.player.hasRelic('fusion_wounded_beast') && this.player.maxHp > 0
+            && this.player.currentHp <= Math.ceil(this.player.maxHp / 3)) {
+            this.rerolls = (this.rerolls || 0) + 1;
+            this.player._lastStandActive = true;
+            this.player._woundedBeastActive = true;
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 90, "WOUNDED BEAST", '#ff0044');
+        } else {
+            this.player._woundedBeastActive = false;
         }
         // Relic: DERVISH MODE — track attacks this turn (uses existing attacksThisTurn).
 
@@ -13839,6 +13878,18 @@ async startTurn() {
                 ParticleSys.createFloatingText(this.player.x, this.player.y - 160, `TITAN ×${stacks}`, COLORS.GOLD);
             }
         }
+        // FUSION: TYRANT ENGINE (relentless × titan_module). Flat +35%
+        // outgoing damage on every hit. Relentless triple-crit moves
+        // to "every 3rd attack" (the existing rStacks branch reads
+        // hasRelic('fusion_tyrant_engine') as a stand-in for the
+        // legacy 1-stack relentless behaviour below).
+        if (this.player.hasRelic('fusion_tyrant_engine')) {
+            dmg = Math.floor(dmg * 1.35);
+            if (!peek && !this._tyrantPopThisCombat) {
+                this._tyrantPopThisCombat = true;
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 160, "TYRANT ×1.35", COLORS.GOLD);
+            }
+        }
         
         if ((this._dieSlot(type) === 'attack' || type === 'METEOR') && this.player.nextAttackMult > 1) {
             dmg = Math.floor(dmg * this.player.nextAttackMult);
@@ -13871,6 +13922,18 @@ async startTurn() {
                 && !this._voltPrimerUsedThisTurn) {
             dmg += 5;
             if (!peek) this._voltPrimerUsedThisTurn = true;
+        }
+        // FUSION: PULSE HAMMER (crit_lens × volt_primer). First attack
+        // each turn deals +12 flat AND auto-crits (×2). The auto-crit
+        // is applied later by setting the player's _pulseHammerCrit
+        // flag for the in-flight die; the dmg block reads it.
+        if (this._dieSlot(type) === 'attack' && this.player.hasRelic('fusion_pulse_hammer')
+                && !this._pulseHammerUsedThisTurn) {
+            dmg += 12;
+            if (!peek) {
+                this._pulseHammerUsedThisTurn = true;
+                this._pulseHammerCritThisHit = true;
+            }
         }
         
         // --- GOD MODE: 10x DAMAGE ---
@@ -15442,6 +15505,11 @@ async startTurn() {
                     if (rStacks === 1 && this.attacksThisTurn === 3) triggerRelentless = true;
                     else if (rStacks === 2 && this.attacksThisTurn === 2) triggerRelentless = true;
                     else if (rStacks >= 3 && this.attacksThisTurn === 1) triggerRelentless = true;
+                    // FUSION: TYRANT ENGINE — replaces relentless 1-stack
+                    // behaviour. 3rd attack each turn triples damage.
+                    if (this.player.hasRelic('fusion_tyrant_engine') && this.attacksThisTurn === 3) {
+                        triggerRelentless = true;
+                    }
 
                     if (triggerRelentless) {
                         qteMultiplier *= 3.0;
@@ -15533,6 +15601,13 @@ async startTurn() {
                     this.player.addShield(2);
                     ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "THORN MAIL", COLORS.SHIELD);
                 }
+                // FUSION: BRAMBLE CYCLE — +4 Block on damage dealt (was
+                // +2 from thorn_mail). Heal-on-shield-break is wired in
+                // entity.js where coolant_loop lives.
+                if (this.player.hasRelic('fusion_bramble_cycle')) {
+                    this.player.addShield(4);
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "BRAMBLE +4", COLORS.SHIELD);
+                }
 
                 if(this.player.hasRelic('crit_lens')) {
                     const stacks = this.stackCount('crit_lens');
@@ -15547,6 +15622,15 @@ async startTurn() {
                         dmg *= 2;
                         ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 80, "TESLA CRIT!", '#ffd76a');
                     }
+                }
+                // FUSION: PULSE HAMMER — first attack each turn auto-crits
+                // (in addition to the +12 flat applied earlier in calculateCardDamage).
+                // Flag is consumed here so the auto-crit is one-shot per turn.
+                if (this._pulseHammerCritThisHit) {
+                    dmg *= 2;
+                    this._pulseHammerCritThisHit = false;
+                    ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 80, "PULSE HAMMER CRIT!", '#ff8800');
+                    if (this.triggerScreenFlash) this.triggerScreenFlash('rgba(255, 136, 0, 0.45)', 240);
                 }
 
                 // Base crit — independent of QTE timing and Crit Lens. Gives
@@ -20307,6 +20391,7 @@ drawEffects() {
         // optionally take. Picking it consumes both source modules and
         // installs the fusion (handled in the card.onclick below).
         this.firedFusions = this.firedFusions || new Set();
+        let _fusionOnThisScreen = null;
         if (typeof MODULE_FUSIONS !== 'undefined') {
             const ownedSet = new Set((this.player.relics || []).map(r => r.id));
             for (const fusion of MODULE_FUSIONS) {
@@ -20315,8 +20400,31 @@ drawEffects() {
                 // Already installed? Skip — the player already took it.
                 if (ownedSet.has(fusion.id)) continue;
                 options.push({ ...fusion, _isFusion: true });
+                _fusionOnThisScreen = fusion;
                 break; // one fusion offer per reward screen so UX stays focused
             }
+        }
+        // FUSION DETECTED banner — flashes once at the top of the reward
+        // screen so the unique offer doesn't get lost in the regular
+        // three. Includes the source pair names for context.
+        if (_fusionOnThisScreen) {
+            const banner = document.createElement('div');
+            banner.className = 'fusion-detected-banner';
+            const pool = (typeof UPGRADES_POOL !== 'undefined') ? UPGRADES_POOL : [];
+            const sourceName = (id) => {
+                const r = pool.find(rr => rr.id === id);
+                return r ? r.name.toUpperCase() : id;
+            };
+            const pair = _fusionOnThisScreen.ids.map(sourceName).join(' × ');
+            banner.innerHTML = `
+                <div class="fusion-detected-tag">// MODULE FUSION DETECTED</div>
+                <div class="fusion-detected-name">${_fusionOnThisScreen.name.toUpperCase()}</div>
+                <div class="fusion-detected-pair">${pair}</div>
+            `;
+            container.appendChild(banner);
+            // Remove banner if the screen re-renders (player taps a non-
+            // fusion card and re-enters reward state). Cleanup handled
+            // by container.innerHTML='' at the top of generateRewards.
         }
 
         // Hard fallback — the pool was filtered down to nothing (every
@@ -20354,16 +20462,19 @@ drawEffects() {
             const card = document.createElement('div');
             const isGold = item.rarity === 'gold';
             const isRed = item.rarity === 'red';
-            const isCorrupted = item.rarity === 'corrupted'; 
-            
+            const isCorrupted = item.rarity === 'corrupted';
+            const isFusion = !!item._isFusion;
+
             let borderClass = '';
             if (isGold) borderClass = 'gold-border';
             if (isRed) borderClass = 'red-border';
             if (isCorrupted) borderClass = 'red-border'; // Re-use red border for now or add specific style
+            if (isFusion) borderClass = 'fusion-border';
 
             // Apply sector theme so rewards feel tied to the zone you cleared.
             card.className = `reward-card ${borderClass} reward-sector-${this.sector}`;
-            
+            if (isFusion) card.classList.add('reward-fusion-card');
+
             // Special styling for Corrupted items
             if (isCorrupted) {
                 card.style.borderColor = "#ff00ff";
@@ -20381,7 +20492,8 @@ drawEffects() {
 
             // Rarity label (Phase 4g) — color-blind-safe text label + icon.
             let rarityLabel = 'COMMON', rarityIcon = '◆', rarityClass = 'rarity-common';
-            if (isCorrupted) { rarityLabel = 'CORRUPTED'; rarityIcon = '☣'; rarityClass = 'rarity-corrupted'; }
+            if (isFusion)     { rarityLabel = 'FUSION';    rarityIcon = '⟁'; rarityClass = 'rarity-fusion'; }
+            else if (isCorrupted) { rarityLabel = 'CORRUPTED'; rarityIcon = '☣'; rarityClass = 'rarity-corrupted'; }
             else if (isGold)  { rarityLabel = 'RARE';      rarityIcon = '★'; rarityClass = 'rarity-gold'; }
             else if (isRed)   { rarityLabel = 'EPIC';      rarityIcon = '✦'; rarityClass = 'rarity-red'; }
 

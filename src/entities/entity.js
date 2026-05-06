@@ -245,6 +245,13 @@ class Entity {
                 this.heal(2 * stacks);
                 ParticleSys.createFloatingText(this.x, this.y - 100, "COOLANT +" + (2 * stacks), COLORS.SHIELD);
             }
+            // FUSION: BRAMBLE CYCLE — +5 heal on shield break (was +2
+            // from coolant_loop). thorn_mail half lives in game.js
+            // damage-dealt path; this is the coolant half.
+            if (this instanceof Player && shieldWas > 0 && this.shield === 0 && this.hasRelic('fusion_bramble_cycle')) {
+                this.heal(5);
+                ParticleSys.createFloatingText(this.x, this.y - 100, "BRAMBLE +5", '#0f0');
+            }
             // Sentinel trait: shield-break counterattack retaliates against
             // the attacker. Damage scales with sector so Sector 5 bosses
             // don't trivialise the trait — a base 4 dmg ping vs a 1000-HP
@@ -673,6 +680,19 @@ class Entity {
                     const stacks = Game.stackCount('retaliator');
                     ParticleSys.createFloatingText(this.x, this.y - 130, `RETALIATE ${10 * stacks}`, "#ff3333");
                     if (target.takeDamage(10 * stacks)) _resolveEnemyKill(target);
+                }
+            }
+            // FUSION: WOUNDED BEAST (last_stand × retaliator). Below 33%
+            // HP, the retaliator hit triples (10 → 30) AND the gate
+            // drops to any 10+ damage hit instead of 20+. Last-stand
+            // damage bonus still rides on _lastStandActive (set in
+            // startTurn alongside _woundedBeastActive).
+            if (this.hasRelic('fusion_wounded_beast') && this instanceof Player
+                && this._woundedBeastActive && actualDmg >= 10) {
+                const target = source || Game.enemy;
+                if (target && target.currentHp > 0 && target !== this) {
+                    ParticleSys.createFloatingText(this.x, this.y - 130, `WOUNDED 30`, '#ff0044');
+                    if (target.takeDamage(30)) _resolveEnemyKill(target);
                 }
             }
 
