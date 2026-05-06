@@ -54,6 +54,7 @@ function ensureHost() {
             <div class="combat-recap-chips" data-bind="chips"></div>
             <div class="combat-recap-tally" data-bind="tally"></div>
             <div class="combat-recap-spark" data-bind="spark"></div>
+            <div class="combat-recap-file" data-bind="file"></div>
             <button class="combat-recap-skip" type="button" data-action="skip">CONTINUE</button>
         </div>
     `;
@@ -132,6 +133,22 @@ function renderSpark(opts) {
     `;
 }
 
+// Encrypted-file pill — fires when the kill dropped an intel file.
+// Mirrors the spark pill so file drops feel like an event of equal
+// weight (they unlock lore + sparks via Hex Breach). Magenta palette
+// to read distinctly from the gold spark pill.
+function renderEncryptedFile(opts) {
+    if (!opts || !opts.droppedFile) return '';
+    const reason = (opts.droppedFileReason || 'LUCKY DROP').toUpperCase();
+    return `
+        <div class="combat-recap-file-inner">
+            <span class="recap-file-icon">⌬</span>
+            <span class="recap-file-amt">+1 ENCRYPTED FILE</span>
+            <span class="recap-file-reason">${reason}</span>
+        </div>
+    `;
+}
+
 export const CombatRecap = {
     show(snap, opts) {
         if (!snap) return Promise.resolve();
@@ -169,6 +186,12 @@ export const CombatRecap = {
             const sparkHtml = renderSpark(opts);
             sparkEl.innerHTML = sparkHtml;
             sparkEl.classList.toggle('hidden', !sparkHtml);
+        }
+        const fileEl = el.querySelector('[data-bind="file"]');
+        if (fileEl) {
+            const fileHtml = renderEncryptedFile(opts);
+            fileEl.innerHTML = fileHtml;
+            fileEl.classList.toggle('hidden', !fileHtml);
         }
 
         // Tier-aware glow class — bosses get the gold treatment, elites

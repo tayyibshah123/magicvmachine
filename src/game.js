@@ -20318,6 +20318,12 @@ drawEffects() {
             totalFrag: frags,
             bonusSparks: _bonusSparks,
             sparkReason: _sparkReason,
+            // droppedFile + reason flow into a new pulsing pill on the
+            // recap card so encrypted-file pickups don't disappear into
+            // a single line of body copy. Reason mirrors the Spark pill
+            // pattern (BOSS KILL / ELITE DROP / etc).
+            droppedFile,
+            droppedFileReason: wasBoss ? 'BOSS KILL' : (wasElite ? 'ELITE DROP' : 'LUCKY DROP'),
             killName,
             tier: wasBoss ? 'boss' : (wasElite ? 'elite' : 'normal')
         };
@@ -20430,7 +20436,9 @@ drawEffects() {
                         totalFrag: _payload.totalFrag || 0,
                         bonuses: _payload.bonuses || [],
                         bonusSparks: _payload.bonusSparks || 0,
-                        sparkReason: _payload.sparkReason || ''
+                        sparkReason: _payload.sparkReason || '',
+                        droppedFile: !!_payload.droppedFile,
+                        droppedFileReason: _payload.droppedFileReason || ''
                     });
                     this._recapPayload = null;
                 } catch (_) { /* never block reward on recap failure */ }
@@ -20565,28 +20573,10 @@ drawEffects() {
                 break; // one fusion offer per reward screen so UX stays focused
             }
         }
-        // FUSION DETECTED banner — flashes once at the top of the reward
-        // screen so the unique offer doesn't get lost in the regular
-        // three. Includes the source pair names for context.
-        if (_fusionOnThisScreen) {
-            const banner = document.createElement('div');
-            banner.className = 'fusion-detected-banner';
-            const pool = (typeof UPGRADES_POOL !== 'undefined') ? UPGRADES_POOL : [];
-            const sourceName = (id) => {
-                const r = pool.find(rr => rr.id === id);
-                return r ? r.name.toUpperCase() : id;
-            };
-            const pair = _fusionOnThisScreen.ids.map(sourceName).join(' × ');
-            banner.innerHTML = `
-                <div class="fusion-detected-tag">// MODULE FUSION DETECTED</div>
-                <div class="fusion-detected-name">${_fusionOnThisScreen.name.toUpperCase()}</div>
-                <div class="fusion-detected-pair">${pair}</div>
-            `;
-            container.appendChild(banner);
-            // Remove banner if the screen re-renders (player taps a non-
-            // fusion card and re-enters reward state). Cleanup handled
-            // by container.innerHTML='' at the top of generateRewards.
-        }
+        // (FUSION DETECTED banner removed — the unique fusion card is
+        // its own visual cue. _fusionOnThisScreen still tracks whether
+        // the screen contains a fusion offer for analytics / tests, but
+        // the banner DOM is no longer mounted.)
 
         // Hard fallback — the pool was filtered down to nothing (every
         // stackable cap hit, every unique already owned). Without this the
