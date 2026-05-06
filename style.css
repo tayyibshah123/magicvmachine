@@ -1861,12 +1861,12 @@ body[data-transition-dir="up"]    .screen { transform: translateY(50px) scale(0.
     grid-template-columns: repeat(1, minmax(0, 1fr));
     gap: 6px;
 }
-@media (min-width: 540px) {
-    .sanctuary-section-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (min-width: 900px) {
-    .sanctuary-section-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
+/* Sanctuary stays single-column at every size — the game container is
+   locked to a 432×768 mobile shape (#game-container at 9/16 aspect),
+   so the prior viewport-width breakpoints fired on desktop's WINDOW
+   width and forced 2-3 columns into a phone-shaped frame. Removed.
+   If a wider container ever ships, switch to @container (cqw) instead
+   of @media to keep the layout container-relative. */
 /* Horizontal compact card — overrides the column-flex base so the
    icon, info block, and cost pill share one row. Icon stays left,
    info expands, cost pill snaps right. Roughly 50px tall. */
@@ -2012,6 +2012,172 @@ body[data-transition-dir="up"]    .screen { transform: translateY(50px) scale(0.
     padding: 12px 14px;
     font-size: 0.95rem;
     letter-spacing: 0.12em;
+}
+
+/* ── LORE UNLOCK POPUP — surfaces after a successful Hex Breach. The
+   prior result panel was a small toast; this is a full-screen glass
+   card that quotes the unlocked database entry verbatim plus the
+   spark reward, so each decryption feels like a payoff event instead
+   of a pass-through. */
+.lore-unlock-popup {
+    position: fixed;
+    inset: 0;
+    z-index: 9950;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: radial-gradient(ellipse at center, rgba(20, 0, 30, 0.92) 0%, rgba(0, 0, 0, 0.96) 100%);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    animation: lore-unlock-bg-in 320ms ease-out both;
+}
+@keyframes lore-unlock-bg-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+.lore-unlock-popup.lore-unlock-fade-out {
+    animation: lore-unlock-bg-out 280ms ease-in forwards;
+}
+@keyframes lore-unlock-bg-out {
+    to { opacity: 0; }
+}
+.lore-unlock-card {
+    width: 100%;
+    max-width: 460px;
+    padding: 26px 24px 22px;
+    border: 1px solid rgba(0, 243, 255, 0.55);
+    border-radius: 14px;
+    background:
+        radial-gradient(ellipse at 50% 0%, rgba(0, 243, 255, 0.18) 0%, transparent 65%),
+        radial-gradient(ellipse at 50% 100%, rgba(255, 215, 106, 0.14) 0%, transparent 60%),
+        linear-gradient(150deg, rgba(8, 18, 40, 0.96) 0%, rgba(4, 6, 18, 0.96) 100%);
+    box-shadow:
+        0 0 44px rgba(0, 243, 255, 0.32),
+        0 0 18px rgba(255, 215, 106, 0.18),
+        inset 0 0 28px rgba(0, 243, 255, 0.10);
+    text-align: center;
+    color: #fff;
+    animation: lore-unlock-card-in 480ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+    position: relative;
+    overflow: hidden;
+}
+@keyframes lore-unlock-card-in {
+    from { opacity: 0; transform: translateY(18px) scale(0.94); filter: blur(4px); }
+    to   { opacity: 1; transform: translateY(0)    scale(1);    filter: blur(0); }
+}
+/* Sweeping accent line behind the card body — purely decorative, sells
+   the "data unspooling" feel. */
+.lore-unlock-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+        100deg,
+        transparent 0 36px,
+        rgba(0, 243, 255, 0.04) 36px 38px,
+        transparent 38px 80px);
+    animation: lore-unlock-scan 6s linear infinite;
+    mix-blend-mode: screen;
+}
+@keyframes lore-unlock-scan {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-80px); }
+}
+.lore-unlock-tag {
+    font-family: var(--font-cyber, 'Orbitron', sans-serif);
+    font-size: 0.72rem;
+    letter-spacing: 0.36em;
+    color: #00f3ff;
+    text-shadow: 0 0 10px rgba(0, 243, 255, 0.65);
+    position: relative;
+    z-index: 1;
+}
+.lore-unlock-rule {
+    height: 1px;
+    margin: 12px auto;
+    width: 78%;
+    background: linear-gradient(90deg, transparent, rgba(0, 243, 255, 0.55), transparent);
+    box-shadow: 0 0 6px rgba(0, 243, 255, 0.6);
+    position: relative;
+    z-index: 1;
+}
+.lore-unlock-glyph {
+    font-size: 2.4rem;
+    color: #ffd76a;
+    text-shadow: 0 0 16px rgba(255, 215, 106, 0.7);
+    margin: 6px 0 10px;
+    animation: lore-unlock-glyph-pulse 1.6s ease-in-out infinite;
+    position: relative;
+    z-index: 1;
+}
+@keyframes lore-unlock-glyph-pulse {
+    0%,100% { transform: scale(1);    opacity: 0.9; }
+    50%     { transform: scale(1.12); opacity: 1; }
+}
+.lore-unlock-text {
+    font-family: var(--font-mono, 'Share Tech Mono', monospace);
+    font-size: 1.02rem;
+    line-height: 1.55;
+    color: #eaeaff;
+    text-shadow: 0 0 8px rgba(0, 243, 255, 0.18);
+    padding: 0 6px;
+    margin: 4px 0 6px;
+    position: relative;
+    z-index: 1;
+    /* Type-on flicker: the text fades in over ~600ms with a slight
+       monitor-warmup feel. */
+    animation: lore-unlock-text-warm 700ms ease-out both;
+}
+@keyframes lore-unlock-text-warm {
+    0%   { opacity: 0; filter: blur(2px) brightness(0.4); }
+    40%  { opacity: 0.6; filter: blur(1px) brightness(1.4); }
+    100% { opacity: 1; filter: blur(0) brightness(1); }
+}
+.lore-unlock-rewards {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 14px 0 6px;
+    font-family: var(--font-cyber, 'Orbitron', sans-serif);
+    letter-spacing: 0.18em;
+    position: relative;
+    z-index: 1;
+}
+.lore-unlock-spark {
+    color: #ffd76a;
+    font-size: 1.6rem;
+    text-shadow: 0 0 14px rgba(255, 215, 106, 0.8);
+    animation: lore-unlock-glyph-pulse 1.4s ease-in-out infinite;
+}
+.lore-unlock-spark-num {
+    font-size: 1.8rem;
+    color: #ffd76a;
+    font-weight: 900;
+    text-shadow: 0 0 12px rgba(255, 215, 106, 0.7);
+}
+.lore-unlock-spark-label {
+    font-size: 0.78rem;
+    color: rgba(255, 215, 106, 0.85);
+    letter-spacing: 0.32em;
+}
+.lore-unlock-continue {
+    margin-top: 14px;
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 0.95rem;
+    letter-spacing: 0.18em;
+    position: relative;
+    z-index: 1;
+}
+body.reduced-motion .lore-unlock-card,
+body.reduced-motion .lore-unlock-card::before,
+body.reduced-motion .lore-unlock-glyph,
+body.reduced-motion .lore-unlock-spark,
+body.reduced-motion .lore-unlock-text {
+    animation: none !important;
 }
 
 /* ── Sector 3 HEAT TILES — AoE flame scorch overlay. Fires on every
@@ -14302,13 +14468,42 @@ body.reduced-motion #screen-map[data-sector="5"]::after { animation: none; }
 }
 /* Intel content can grow tall (5 cipher chapters + dozens of dossier
    cards). Override the centered-flex layout so the content stacks from
-   the top and the screen scrolls vertically instead of clipping. */
+   the top and the screen scrolls vertically instead of clipping. The
+   RETURN button is pinned to the bottom (sticky) so the player can
+   always exit without scrolling all the way to the end. */
 #screen-intel {
     justify-content: flex-start;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 40px;
+    padding-bottom: 88px; /* leaves room beneath content for the sticky RETURN */
+}
+/* Inactive panes get an aggressive hide override — eliminates any
+   chance of chronicle/dossier leaking visually behind cipher's
+   chapter grid (the user reported chronicle bleed). */
+#screen-intel .intel-pane:not(.active) {
+    display: none !important;
+}
+/* Sticky RETURN — pinned to the bottom of the intel screen, visible
+   no matter how far the player has scrolled into the cipher chapters
+   or chronicle list. Sits above all pane content, dodges the safe-
+   area inset on mobile. */
+#screen-intel #btn-back-intel {
+    position: sticky;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    align-self: center;
+    margin-top: auto;
+    z-index: 5;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    background: rgba(8, 5, 20, 0.78);
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55), 0 0 14px rgba(0, 243, 255, 0.18);
+}
+#screen-intel .spacer {
+    /* Spacer was the legacy way to push the return down. Sticky button
+       handles its own positioning now, but the spacer still helps the
+       content not feel cramped right above the button. */
+    flex: 0 0 12px !important;
 }
 #screen-intel::before,
 #screen-shop::before,

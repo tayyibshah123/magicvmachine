@@ -12361,23 +12361,88 @@ updateHexBreach(dt) {
         const breachSparks = 8;
         this.grantSparks(breachSparks, 'hex_breach', { silent: true });
 
-        const rewards = [`+${breachSparks} ✦ Sparks`];
-        // Custom Run: Silent Chronicle — no lore unlocks this run.
-        if (this._customDisableLore) {
-            rewards.push('Database access denied (Silent Chronicle)');
-        } else {
-            const available = LORE_DATABASE.map((_, i) => i).filter(i => !this.unlockedLore.includes(i));
-            if (available.length > 0) {
-                const unlockId = available[Math.floor(Math.random() * available.length)];
-                this.unlockedLore.push(unlockId);
-                rewards.push('New database entry unlocked');
-            } else {
-                rewards.push('Database complete');
+        // Sequential lore unlock — find the lowest-indexed locked entry
+        // and unlock it. Replaces the prior random pick so the database
+        // reads top-to-bottom like a real chronicle. Custom Run: Silent
+        // Chronicle still vetoes any lore drop.
+        let unlockedEntry = null;
+        let unlockedIdx = null;
+        if (!this._customDisableLore) {
+            for (let i = 0; i < LORE_DATABASE.length; i++) {
+                if (!this.unlockedLore.includes(i)) {
+                    unlockedIdx = i;
+                    unlockedEntry = LORE_DATABASE[i];
+                    this.unlockedLore.push(i);
+                    break;
+                }
             }
         }
 
+        const rewards = [`+${breachSparks} ✦ Sparks`];
+        if (this._customDisableLore) {
+            rewards.push('Database access denied (Silent Chronicle)');
+        } else if (unlockedEntry) {
+            rewards.push('New database entry unlocked');
+        } else {
+            rewards.push('Database complete');
+        }
+
         this.saveData();
-        this._showHexResult({ kind: 'win', title: 'DECRYPTION SUCCESSFUL', rewards });
+        // New striking unlock popup — large glass panel quoting the lore
+        // entry verbatim plus the spark payout. Falls back to the legacy
+        // _showHexResult panel when no entry was unlocked (database
+        // complete or Silent Chronicle).
+        if (unlockedEntry) {
+            this._showLoreUnlockPopup({ index: unlockedIdx, text: unlockedEntry, sparks: breachSparks });
+        } else {
+            this._showHexResult({ kind: 'win', title: 'DECRYPTION SUCCESSFUL', rewards });
+        }
+    },
+
+    // Visually-striking lore-unlock popup. Fired only on a successful
+    // decryption that yielded a new database entry; quotes the lore
+    // text verbatim above the spark payout. Tap CONTINUE (or wait 8s)
+    // to dismiss and return to Intel.
+    _showLoreUnlockPopup(opts) {
+        const { index, text, sparks } = opts || {};
+        // Single-instance — strip any leftover popup before mounting.
+        const prior = document.getElementById('lore-unlock-popup');
+        if (prior) prior.remove();
+        const overlay = document.createElement('div');
+        overlay.id = 'lore-unlock-popup';
+        overlay.className = 'lore-unlock-popup';
+        const fileNum = String((typeof index === 'number' ? index : 0) + 1).padStart(2, '0');
+        overlay.innerHTML = `
+            <div class="lore-unlock-card">
+                <div class="lore-unlock-tag">// FILE ${fileNum} DECRYPTED</div>
+                <div class="lore-unlock-rule"></div>
+                <div class="lore-unlock-glyph">⌬</div>
+                <div class="lore-unlock-text">${text || ''}</div>
+                <div class="lore-unlock-rule"></div>
+                <div class="lore-unlock-rewards">
+                    <span class="lore-unlock-spark">✦</span>
+                    <span class="lore-unlock-spark-num">+${sparks || 0}</span>
+                    <span class="lore-unlock-spark-label">SPARKS</span>
+                </div>
+                <button id="btn-lore-unlock-continue" class="btn primary lore-unlock-continue">CONTINUE</button>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        const dismiss = () => {
+            if (!overlay.parentNode) return;
+            overlay.classList.add('lore-unlock-fade-out');
+            setTimeout(() => {
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                this.changeState(STATE.INTEL);
+            }, 280);
+        };
+        const btn = document.getElementById('btn-lore-unlock-continue');
+        if (btn) btn.onclick = dismiss;
+        // Tap-anywhere fallback so a player can dismiss the popup
+        // without aiming for the small button on a phone.
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) dismiss(); });
+        // Auto-dismiss safety net.
+        setTimeout(() => { if (overlay.parentNode) dismiss(); }, 12000);
     },
 
     failHexBreach(el) {
