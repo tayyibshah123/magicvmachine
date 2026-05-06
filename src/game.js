@@ -10772,12 +10772,13 @@ triggerSystemCrash() {
             const dpadBtns = Array.from(overlay.querySelectorAll('.hack-dpad[data-dir]'));
 
             // Maze dimensions (odd numbers so carved cells + walls alternate).
-            // Hard mode: shortest path on an 11×11 maze is ~20-26 moves; the
-            // 35-second timer leaves headroom for mistakes vs the original
-            // 15×15 grid which was effectively unsolvable without luck.
+            // Timers halved (was 25/35s) so the minigame actually pressures
+            // the player — the prior values left huge headroom and the
+            // distraction VFX added in this pass are designed around the
+            // tighter window. Hard-mode keeps a slight bonus on top.
             const cols = hard ? 11 : 9;
             const rows = hard ? 11 : 9;
-            const timeMs = hard ? 35000 : 25000;
+            const timeMs = hard ? 17500 : 12500;
 
             // Reset UI
             overlay.classList.toggle('is-hard', !!hard);
@@ -10829,28 +10830,90 @@ triggerSystemCrash() {
 
             // Player state
             const player = { r: startR, c: startC };
+            const trail = []; // recent player positions for fading neon trail
             let deadline = performance.now() + timeMs;
             let rafId = 0;
             let cancelled = false;
+            // Floating data particles — decorative drifters layered on the
+            // maze so the panel reads as live and chaotic. Reset each
+            // minigame run.
+            const particles = [];
+            for (let i = 0; i < 18; i++) {
+                particles.push({
+                    x: Math.random() * cols * cellPx,
+                    y: Math.random() * rows * cellPx,
+                    vx: (Math.random() - 0.5) * 0.6,
+                    vy: (Math.random() - 0.5) * 0.6,
+                    a: 0.15 + Math.random() * 0.5,
+                    r: 0.6 + Math.random() * 1.2,
+                    color: Math.random() < 0.5 ? '#00f3ff' : '#ff3377'
+                });
+            }
 
             const draw = () => {
+                const now = performance.now();
+                const remainingMs = Math.max(0, deadline - now);
+                const danger = remainingMs < 5000;
+                const W = canvas.width, H = canvas.height;
                 ctx.fillStyle = '#08060f';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                // Walls
-                ctx.fillStyle = 'rgba(255, 0, 85, 0.85)';
-                ctx.shadowColor = 'rgba(255, 0, 85, 0.55)';
-                ctx.shadowBlur = 4;
+                ctx.fillRect(0, 0, W, H);
+
+                // Background data static — vertical scanlines drifting up
+                // for a tense "data feed" feel beneath the maze. Spread
+                // tier-gated only by remaining time so it doesn't tax low
+                // devices when the player can read calmly.
+                ctx.save();
+                ctx.globalAlpha = 0.18 + (danger ? 0.18 : 0);
+                ctx.fillStyle = '#ff0055';
+                const scanOffset = (now * 0.12) % 8;
+                for (let y = -scanOffset; y < H; y += 8) {
+                    ctx.fillRect(0, y, W, 1);
+                }
+                ctx.restore();
+
+                // Walls — pulsing neon pink with rolling glow intensity.
+                const wallPulse = 0.7 + Math.sin(now / 220) * 0.25;
+                ctx.fillStyle = `rgba(255, 0, 85, ${0.78 + 0.18 * wallPulse})`;
+                ctx.shadowColor = 'rgba(255, 0, 85, 0.7)';
+                ctx.shadowBlur = 6 + 6 * wallPulse;
                 for (let r = 0; r < rows; r++) {
                     for (let c = 0; c < cols; c++) {
                         if (grid[r][c] === 0) ctx.fillRect(c * cellPx, r * cellPx, cellPx, cellPx);
                     }
                 }
                 ctx.shadowBlur = 0;
+
+                // Walking interference band — sweeps top→bottom over the
+                // maze adding a horizontal flicker line. Pure decoration,
+                // brighter when the timer's in danger mode.
+                const bandY = (now * 0.18) % (H + 60) - 30;
+                ctx.save();
+                ctx.globalAlpha = danger ? 0.55 : 0.32;
+                ctx.fillStyle = '#00f3ff';
+                ctx.fillRect(0, bandY, W, 2);
+                ctx.fillStyle = 'rgba(0, 243, 255, 0.18)';
+                ctx.fillRect(0, bandY - 6, W, 12);
+                ctx.restore();
+
+                // Floating data particles — drift and wrap edges.
+                ctx.save();
+                ctx.globalCompositeOperation = 'screen';
+                particles.forEach(p => {
+                    p.x += p.vx; p.y += p.vy;
+                    if (p.x < 0) p.x = W; else if (p.x > W) p.x = 0;
+                    if (p.y < 0) p.y = H; else if (p.y > H) p.y = 0;
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = p.a * (0.5 + 0.5 * Math.sin(now / 400 + p.x));
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                ctx.restore();
+
                 // Exit marker — pulsing green square
-                const now = performance.now();
                 const pulse = 0.55 + Math.sin(now / 180) * 0.35;
                 ctx.fillStyle = `rgba(0, 255, 153, ${pulse})`;
-                ctx.shadowColor = '#00ff99'; ctx.shadowBlur = 12;
+                ctx.shadowColor = '#00ff99'; ctx.shadowBlur = 12 + 6 * pulse;
                 ctx.fillRect(endC * cellPx + 2, endR * cellPx + 2, cellPx - 4, cellPx - 4);
                 // Exit glyph
                 ctx.fillStyle = '#fff';
@@ -10858,11 +10921,30 @@ triggerSystemCrash() {
                 ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
                 ctx.fillText('E', endC * cellPx + cellPx / 2, endR * cellPx + cellPx / 2);
                 ctx.shadowBlur = 0;
-                // Player — neon-gold dot with glow
+
+                // Player trail — last few positions painted with a fade.
+                trail.forEach((t, i) => {
+                    const fade = (i + 1) / (trail.length + 1);
+                    const tx = t.c * cellPx + cellPx / 2;
+                    const ty = t.r * cellPx + cellPx / 2;
+                    ctx.fillStyle = `rgba(0, 243, 255, ${0.25 * fade})`;
+                    ctx.shadowColor = '#00f3ff'; ctx.shadowBlur = 8 * fade;
+                    ctx.beginPath();
+                    ctx.arc(tx, ty, cellPx * 0.18 * fade, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                ctx.shadowBlur = 0;
+
+                // Player — neon-cyan dot with glow + outer halo
                 const px = player.c * cellPx + cellPx / 2;
                 const py = player.r * cellPx + cellPx / 2;
+                ctx.fillStyle = 'rgba(0, 243, 255, 0.22)';
+                ctx.shadowColor = '#00f3ff'; ctx.shadowBlur = 22;
+                ctx.beginPath();
+                ctx.arc(px, py, cellPx * 0.45, 0, Math.PI * 2);
+                ctx.fill();
                 ctx.fillStyle = '#00f3ff';
-                ctx.shadowColor = '#00f3ff'; ctx.shadowBlur = 14;
+                ctx.shadowBlur = 14;
                 ctx.beginPath();
                 ctx.arc(px, py, cellPx * 0.32, 0, Math.PI * 2);
                 ctx.fill();
@@ -10872,6 +10954,21 @@ triggerSystemCrash() {
                 ctx.arc(px, py, cellPx * 0.15, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.shadowBlur = 0;
+
+                // Random noise blocks under danger — staccato red sparks
+                // across the maze for the final 5 seconds so the player
+                // FEELS the pressure even while standing still.
+                if (danger) {
+                    ctx.save();
+                    ctx.globalAlpha = 0.45;
+                    for (let i = 0; i < 4; i++) {
+                        const nx = Math.random() * W;
+                        const ny = Math.random() * H;
+                        ctx.fillStyle = '#ff0055';
+                        ctx.fillRect(nx, ny, 6, 1.5);
+                    }
+                    ctx.restore();
+                }
             };
 
             const cleanup = (result) => {
@@ -10914,6 +11011,11 @@ triggerSystemCrash() {
                     cleanup(false);
                     return;
                 }
+                // Trail capture before the move so the fading neon stays
+                // behind the player. Cap at 6 entries so it doesn't grow
+                // unbounded on long paths.
+                trail.unshift({ r: player.r, c: player.c });
+                if (trail.length > 6) trail.length = 6;
                 player.r = nr; player.c = nc;
                 AudioMgr.playSound && AudioMgr.playSound('click');
                 if (nr === endR && nc === endC) cleanup(true);
