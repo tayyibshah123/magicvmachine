@@ -233,7 +233,7 @@
 </div>
 
             <!-- Main Menu -->
-            <div id="screen-start" class="screen active menu-v2">
+            <div id="screen-start" class="screen active menu-v2 dropbay">
                 <!-- Ambient backdrop — single full-bleed canvas-grade
                      parallax. Replaces the legacy 7-element chrome
                      (lattice / scans / radar / glyphs / hud-tags) which
@@ -242,64 +242,181 @@
                      three very-low-opacity gradient sub-layers that
                      drift on transform-only animations.
                      Compositor handles every frame; CPU paint is zero. -->
-                <div class="mv2-bg" aria-hidden="true">
-                    <div class="mv2-bg-grad mv2-bg-grad--a"></div>
-                    <div class="mv2-bg-grad mv2-bg-grad--b"></div>
-                    <div class="mv2-bg-grid"></div>
-                    <div class="mv2-bg-particles">
-                        <!-- Six dust motes drifting upward. CSS-only,
-                             non-deterministic delays seeded inline. -->
-                        <span style="--mx: 8%;  --md: 0s;  --ms: 22s;"></span>
-                        <span style="--mx: 22%; --md: 5s;  --ms: 26s;"></span>
-                        <span style="--mx: 38%; --md: 11s; --ms: 24s;"></span>
-                        <span style="--mx: 56%; --md: 3s;  --ms: 28s;"></span>
-                        <span style="--mx: 71%; --md: 14s; --ms: 25s;"></span>
-                        <span style="--mx: 86%; --md: 7s;  --ms: 21s;"></span>
+                <!-- DROP BAY backdrop — radials + perspective floor +
+                     drifting dust motes + scan sweep + vignette. Pure
+                     CSS, transform-only animations, zero CPU paint per
+                     frame. Twelve <i> elements drive the particle
+                     layer. -->
+                <div class="db-bg" aria-hidden="true">
+                    <div class="db-bg-radial-a"></div>
+                    <div class="db-bg-radial-b"></div>
+                    <div class="db-bg-floor"></div>
+                    <div class="db-bg-scan"></div>
+                    <div class="db-bg-particles">
+                        <i></i><i></i><i></i><i></i><i></i><i></i>
+                        <i></i><i></i><i></i><i></i><i></i><i></i>
                     </div>
+                    <div class="db-bg-vignette"></div>
                 </div>
 
-                <!-- HEADER — operator chip on the left, settings icon on
-                     the right. Slim, top-of-frame. -->
-                <div class="mv2-header">
-                    <div class="mv2-header-left">
-                        <!-- Operator chip — filled by JS via existing
-                             `.subtitle` querySelector at line ~3192 of
-                             game.js. Kept as `.subtitle` so the JS
-                             continues to write into it. The visual is
-                             the v2 chip class layered on top. -->
-                        <div class="subtitle ui-chip ui-chip--brand mv2-operator-chip" aria-label="Operator callsign"></div>
-                    </div>
-                    <div class="mv2-header-right">
-                        <!-- Sparks chip (kept) + INTEL chip (badged when files exist).
-                             Plus the settings icon. -->
-                        <div id="menu-sparks-pill" class="ui-chip ui-chip--gold mv2-sparks-chip feature-locked-hidden" aria-label="Sparks">
-                            <span class="meta-sparks-glyph" aria-hidden="true">✦</span>
-                            <span id="menu-sparks">0</span>
-                            <span class="meta-sparks-label">SPARKS</span>
+                <!-- DROP BAY shell — header / title / hero / console / tabs / footer -->
+                <div class="db-shell">
+
+                    <!-- HEADER -->
+                    <div class="db-hdr">
+                        <div class="db-hdr-left">
+                            <!-- Operator chip. JS still writes into the
+                                 .subtitle node ("OPERATOR TAZ" /
+                                 "ASCENSION LEVEL N") — we just restyle
+                                 the chip via .db-chip. -->
+                            <div class="subtitle db-chip db-chip-cy mv2-operator-chip" aria-label="Operator callsign"></div>
+                            <!-- Ascension chip — clickable, opens the
+                                 Ascension picker (keeps #btn-ascension
+                                 alive for the existing handler). LED
+                                 only blinks when level > 0; chip text
+                                 set by JS via #ascension-status-line. -->
+                            <button id="btn-ascension" class="db-chip db-chip-rd db-asc-chip feature-locked-hidden" title="Pick a difficulty tier" aria-label="Ascension">
+                                <span class="led" aria-hidden="true"></span>
+                                <span id="ascension-status-line">A0</span>
+                            </button>
                         </div>
-                        <button id="btn-settings-main" class="ui-btn ui-btn--icon ui-btn--round ui-btn--ghost mv2-settings" aria-label="Settings">
-                            <svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2 L12 5 M12 19 L12 22 M2 12 L5 12 M19 12 L22 12 M4.6 4.6 L6.7 6.7 M17.3 17.3 L19.4 19.4 M19.4 4.6 L17.3 6.7 M4.6 19.4 L6.7 17.3"/></svg>
+                        <div class="db-hdr-right">
+                            <div id="menu-sparks-pill" class="db-chip db-chip-go feature-locked-hidden" aria-label="Sparks">
+                                <span class="meta-sparks-glyph" aria-hidden="true">✦</span>
+                                <span id="menu-sparks">0</span>
+                            </div>
+                            <button id="btn-settings-main" class="db-gear" aria-label="Settings">
+                                <svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2 L12 5 M12 19 L12 22 M2 12 L5 12 M19 12 L22 12 M4.6 4.6 L6.7 6.7 M17.3 17.3 L19.4 19.4 M19.4 4.6 L17.3 6.7 M4.6 19.4 L6.7 17.3"/></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- TITLE — wordmark + subtitle. Archivist Slain
+                         cosmetic frame still wraps the title; corner
+                         brackets sit behind the wordmark and reveal
+                         once `mvm_archivist_slain` is set. -->
+                    <div class="db-title-row">
+                        <div class="title-frame mv2-title-frame db-title-frame" id="title-frame" data-archivist-tier="0" aria-hidden="true">
+                            <span class="title-frame-corner tl"></span>
+                            <span class="title-frame-corner tr"></span>
+                            <span class="title-frame-corner bl"></span>
+                            <span class="title-frame-corner br"></span>
+                            <span class="title-frame-badge" id="title-frame-badge">ARCHIVIST SLAIN</span>
+                        </div>
+                        <h1 class="title mv2-wordmark db-wordmark">MAGIC <span class="vs">v</span> MACHINE</h1>
+                        <div class="db-subtitle"><span class="pip" aria-hidden="true"></span>// CYBERPUNK ROGUELITE · ALPHA</div>
+                    </div>
+
+                    <!-- HERO — class portrait (hex with radar / rings /
+                         orbit motes / scan), class identity, and the
+                         3-cell ops readout strip. -->
+                    <div class="db-hero">
+                        <div class="db-portrait" id="menu-portrait">
+                            <div class="db-hex"></div>
+                            <div class="db-hex-edge"></div>
+                            <div class="db-floor-ring"></div>
+                            <div class="db-ring-2"></div>
+                            <div class="db-radar"></div>
+                            <div class="db-ring"></div>
+                            <div class="db-orbit"><i></i><i></i><i></i><i></i></div>
+                            <div class="db-scanline"></div>
+                            <div class="db-core">
+                                <span class="db-glyph" aria-hidden="true"></span>
+                                <!-- Class portrait canvas — JS paints
+                                     last-played class via _paintCharPreview.
+                                     Falls back to the sigil text when no
+                                     class history exists. -->
+                                <canvas id="menu-portrait-canvas" class="db-portrait-canvas" width="200" height="200" data-class-id="" aria-hidden="true"></canvas>
+                                <span class="db-sigil" id="menu-portrait-sigil" aria-hidden="true">◆ TAC</span>
+                            </div>
+                            <span class="db-tier" id="menu-portrait-tier">TIER 1</span>
+                            <span class="db-codebadge" id="menu-portrait-code">// OPERATOR</span>
+                        </div>
+
+                        <div class="db-id-block">
+                            <div class="db-id-class" id="menu-id-class">OPERATOR</div>
+                            <div class="db-id-sig" id="menu-id-sig">SIG · UNCHOSEN</div>
+                        </div>
+
+                        <div class="db-ops">
+                            <div class="db-ops-cell"><div class="lbl">// LAST</div><div class="val" id="menu-ops-last">—</div></div>
+                            <div class="db-ops-cell gold"><div class="lbl">// SPARKS</div><div class="val" id="menu-ops-sparks">0</div></div>
+                            <div class="db-ops-cell alert"><div class="lbl">// FILES</div><div class="val" id="menu-ops-files">0</div></div>
+                        </div>
+                    </div>
+
+                    <!-- DEPLOY console — RESUME (only when save exists)
+                         layered above INITIATE RUN. The mockup placed
+                         RESUME below; promoting it above keeps the
+                         expected "primary action lowest, fingers reach
+                         it first" mobile pattern. -->
+                    <div class="db-console">
+                        <button id="btn-load-save" class="db-resume hidden">
+                            <div class="db-resume-meta-block">
+                                <div class="ey">CONTINUE</div>
+                                <div class="meta" id="db-resume-meta">RESUME RUN</div>
+                            </div>
+                            <div class="progress" id="db-resume-progress" aria-hidden="true">
+                                <span></span><span></span><span></span><span></span><span></span>
+                            </div>
+                            <span class="icn" aria-hidden="true">↻</span>
+                        </button>
+
+                        <button id="btn-start" class="db-deploy">
+                            <span class="eyebrow">// READY TO DROP</span>
+                            <span id="btn-start-label" class="label">INITIATE RUN</span>
+                            <span id="btn-start-warn" class="btn-start-warn hidden">DISCARDS CURRENT RUN</span>
+                            <span class="arrow" aria-hidden="true">▶</span>
                         </button>
                     </div>
-                </div>
 
-                <!-- HERO — wordmark + tagline. Operator portrait hex
-                     removed; the title block is the star here. Frame
-                     badge (Archivist Slain cosmetic) sits behind the
-                     wordmark for the post-archive-kill reveal. -->
-                <div class="mv2-hero">
-                    <div class="title-frame mv2-title-frame" id="title-frame" data-archivist-tier="0" aria-hidden="true">
-                        <span class="title-frame-corner tl"></span>
-                        <span class="title-frame-corner tr"></span>
-                        <span class="title-frame-corner bl"></span>
-                        <span class="title-frame-corner br"></span>
-                        <span class="title-frame-badge" id="title-frame-badge">ARCHIVIST SLAIN</span>
+                    <!-- INSTRUMENT TABS — 5-across, each carries an
+                         accent strip + status pip. CHAL is always shown;
+                         SANC/INTEL/SAVES gated by the Unlocks system
+                         (feature-locked-hidden). -->
+                    <div class="db-cluster">
+                        <button id="btn-challenge" class="db-tab go">
+                            <span class="pip" id="db-pip-challenge" aria-hidden="true"></span>
+                            <span class="icon" aria-hidden="true">⚔</span>
+                            <span class="ey">MODE</span>
+                            <span class="ttl">CHAL</span>
+                            <span id="challenge-status-line" class="db-tab-status hidden"></span>
+                        </button>
+                        <button id="btn-upgrades" class="db-tab gr feature-locked-hidden">
+                            <span class="pip" id="db-pip-sanctuary" aria-hidden="true"></span>
+                            <span class="icon" aria-hidden="true">✦</span>
+                            <span class="ey">HUB</span>
+                            <span class="ttl">SANC</span>
+                        </button>
+                        <button id="btn-intel" class="db-tab cy feature-locked-hidden">
+                            <span class="pip" id="db-pip-intel" aria-hidden="true"></span>
+                            <span class="icon" aria-hidden="true">▤</span>
+                            <span class="ey">FILES</span>
+                            <span class="ttl">INTEL</span>
+                        </button>
+                        <button id="btn-save-slots" class="db-tab gy feature-locked-hidden">
+                            <span class="pip" aria-hidden="true"></span>
+                            <span class="icon" aria-hidden="true">⊟</span>
+                            <span class="ey">SLOTS</span>
+                            <span class="ttl">SAVES</span>
+                        </button>
+                        <button id="btn-menu-tutorial" class="db-tab rd">
+                            <span class="pip" aria-hidden="true"></span>
+                            <span class="icon" aria-hidden="true">▶</span>
+                            <span class="ey">PRACTICE</span>
+                            <span class="ttl">TUTOR</span>
+                        </button>
                     </div>
-                    <h1 class="title mv2-wordmark">MAGIC <span class="vs">v</span> MACHINE</h1>
+
+                    <!-- FOOTER — streak chip + version stamp. -->
+                    <div class="db-footer">
+                        <div id="login-streak" class="login-streak db-streak hidden"></div>
+                        <span class="db-version">ALPHA V1.7</span>
+                    </div>
                 </div>
 
-                <!-- Save Slot picker — modal (kept). Will be migrated to
-                     ui-modal in Phase 4; styling stays legacy for now. -->
+                <!-- Save Slot picker — modal (kept). Lives outside the
+                     db-shell because it's a full-frame overlay. -->
                 <div id="save-slot-modal" class="save-slot-modal hidden" role="dialog" aria-modal="true" aria-labelledby="save-slot-title-h">
                     <div class="save-slot-panel glass-panel">
                         <h3 id="save-slot-title-h" class="save-slot-title neon-text-gold">SAVE SLOTS</h3>
@@ -309,80 +426,6 @@
                             <button id="btn-save-slot-close" class="btn primary">DONE</button>
                         </div>
                     </div>
-                </div>
-
-                <!-- SHARD GRID — Daily Twist card removed entirely.
-                     Hero row: full-width INITIATE RUN (or RESUME). Below
-                     it a row of unique-shape glass shards for secondary
-                     destinations, each clipped to its own crystalline
-                     silhouette (parallelogram / pentagon / kite / wedge)
-                     so no two tiles read as "the same shape duplicated".
-                     feature-locked-hidden continues to drive visibility. -->
-                <div class="mv2-bento" aria-label="Run launcher">
-                    <!-- Hero row — single full-width CTA. Resume layers
-                         on top when a save exists. -->
-                    <div class="mv2-bento-row mv2-bento-row--hero">
-                        <button id="btn-load-save" class="ui-shard ui-shard--gold ui-shard--lg ui-shard--shape-banner mv2-cta mv2-cta-resume hidden">
-                            <span class="mv2-cta-eyebrow">CONTINUE</span>
-                            <span class="mv2-cta-label">RESUME RUN</span>
-                        </button>
-                        <button id="btn-start" class="ui-shard ui-shard--brand ui-shard--lg ui-shard--shape-banner mv2-cta mv2-cta-primary">
-                            <span class="mv2-cta-eyebrow">DEPLOY</span>
-                            <span id="btn-start-label" class="mv2-cta-label">INITIATE RUN</span>
-                            <span id="btn-start-warn" class="btn-start-warn hidden">DISCARDS CURRENT RUN</span>
-                        </button>
-                    </div>
-
-                    <!-- Shard row — varied silhouettes per slot. Each
-                         tile uses a distinct clip-path so the row
-                         reads as a row of crystalline glass shards
-                         rather than a grid of identical buttons. -->
-                    <div class="mv2-bento-row mv2-bento-row--tiles">
-                        <button id="btn-challenge" class="ui-shard ui-shard--shape-parallelogram-r mv2-tile mv2-tile--challenge">
-                            <div class="mv2-tile-eyebrow">MODE</div>
-                            <div class="mv2-tile-label">CHALLENGE</div>
-                            <div id="challenge-status-line" class="mv2-tile-status">READY</div>
-                        </button>
-                        <button id="btn-upgrades" class="ui-shard ui-shard--shape-pentagon mv2-tile mv2-tile--sanctuary feature-locked-hidden">
-                            <div class="mv2-tile-eyebrow">HUB</div>
-                            <div class="mv2-tile-label">SANCTUARY</div>
-                            <div class="mv2-tile-status">UPGRADES</div>
-                        </button>
-                        <button id="btn-intel" class="ui-shard ui-shard--shape-kite mv2-tile mv2-tile--intel feature-locked-hidden">
-                            <div class="mv2-tile-eyebrow">FILES</div>
-                            <div class="mv2-tile-label">INTEL</div>
-                            <div class="mv2-tile-status">DECRYPT</div>
-                        </button>
-                        <button id="btn-ascension" class="ui-shard ui-shard--shape-tab-l mv2-tile mv2-tile--ascension feature-locked-hidden" title="Pick a difficulty tier">
-                            <div class="mv2-tile-eyebrow">DIFFICULTY</div>
-                            <div class="mv2-tile-label">ASCENSION</div>
-                            <div id="ascension-status-line" class="mv2-tile-status">A0</div>
-                        </button>
-                        <button id="btn-save-slots" class="ui-shard ui-shard--shape-tab-r mv2-tile mv2-tile--saves feature-locked-hidden">
-                            <div class="mv2-tile-eyebrow">SLOTS</div>
-                            <div class="mv2-tile-label">SAVES</div>
-                            <div class="mv2-tile-status">A · B · C</div>
-                        </button>
-                        <!-- TUTORIAL — practice flow. Plays the scripted
-                             tutorial enemy fight, then returns to the
-                             main menu instead of starting a real run.
-                             Always visible; useful for veterans who want
-                             to refresh on a class change without
-                             committing to a run. -->
-                        <button id="btn-menu-tutorial" class="ui-shard ui-shard--shape-tab-l mv2-tile mv2-tile--tutorial">
-                            <div class="mv2-tile-eyebrow">PRACTICE</div>
-                            <div class="mv2-tile-label">TUTORIAL</div>
-                            <div class="mv2-tile-status">RETURNS HERE</div>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- FOOTER — slim status bar with streak chip + version
-                     stamp. Streak chip is filled by JS into #login-streak
-                     (kept as the same id for compatibility). -->
-                <div class="mv2-footer">
-                    <div id="login-streak" class="login-streak ui-chip ui-chip--gold mv2-streak hidden"></div>
-                    <span class="mv2-version">ALPHA V1</span>
                 </div>
             </div>
 

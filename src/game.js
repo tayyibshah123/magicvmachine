@@ -5471,6 +5471,9 @@ startQTE(type, x, y, callback, opts) {
         this.player.classId = cls.id;
         this.sector = 1;
         this.bossDefeated = false;
+        // Persist last-played class so the Drop Bay menu portrait paints
+        // the right sprite next time the player visits the menu.
+        try { localStorage.setItem('mvm_last_class', cls.id); } catch (_) {}
         // Reset the Archivist gate flag so a fresh run can route into the
         // Sector X arena after Sector 5 even if the prior run already did.
         this._archivistFacedThisRun = false;
@@ -9103,6 +9106,170 @@ triggerSystemCrash() {
         }
         // Login streak chip
         if (typeof this._renderLoginStreak === 'function') this._renderLoginStreak();
+
+        // Drop Bay menu — paint portrait, ops cells, resume bar, status pips
+        if (typeof this._renderMenuDropBay === 'function') this._renderMenuDropBay();
+    },
+
+    /* Drop Bay menu refresh (Roadmap Part 32 — main menu redesign).
+     * Paints the live data the new layout depends on: class portrait
+     * canvas (last-played class), class identity strip below the
+     * portrait, 3-cell ops readout (last sector / sparks / files),
+     * RESUME bar (only shown when a save exists, with a 5-dot sector
+     * progress strip), Ascension chip level + LED state, and the
+     * status pips on each instrument tab. Safe to call from any
+     * code path; no-ops cleanly when the dropbay markup isn't in
+     * the DOM (e.g. older saves whose index.html predates this
+     * change). */
+    _renderMenuDropBay() {
+        const root = document.querySelector('#screen-start.dropbay');
+        if (!root) return;
+
+        // ── Last-played class lookup. Prefer mvm_last_class (written
+        // each time selectClass fires); fall back to whatever the
+        // current save blob carries; null means "no history yet".
+        let lastClassId = null;
+        try { lastClassId = localStorage.getItem('mvm_last_class') || null; } catch (_) { lastClassId = null; }
+        let saveBlob = null;
+        try {
+            const raw = this._readSaveRaw && this._readSaveRaw();
+            saveBlob = (raw && raw !== 'null') ? JSON.parse(raw) : null;
+        } catch (_) { saveBlob = null; }
+        if (!lastClassId && saveBlob && saveBlob.player && saveBlob.player.classId) {
+            lastClassId = saveBlob.player.classId;
+        }
+        const cls = (lastClassId && typeof PLAYER_CLASSES !== 'undefined')
+            ? PLAYER_CLASSES.find(c => c.id === lastClassId) : null;
+
+        // ── Portrait canvas. _paintCharPreview reads data-class-id
+        // and pulls the cached entity sprite. Sets data-painted="1"
+        // so CSS can fade in the canvas + dim the fallback sigil.
+        const canvas = document.getElementById('menu-portrait-canvas');
+        if (canvas) {
+            if (cls) {
+                canvas.dataset.classId = cls.id;
+                try {
+                    if (typeof this._paintCharPreview === 'function') {
+                        this._paintCharPreview(canvas);
+                        canvas.dataset.painted = '1';
+                    }
+                } catch (_) { canvas.dataset.painted = '0'; }
+            } else {
+                canvas.dataset.painted = '0';
+            }
+        }
+
+        // ── Sigil text + tier + code badges
+        const sigilEl = document.getElementById('menu-portrait-sigil');
+        const codeEl  = document.getElementById('menu-portrait-code');
+        const tierEl  = document.getElementById('menu-portrait-tier');
+        if (sigilEl) sigilEl.textContent = cls
+            ? `◆ ${cls.id.slice(0, 3).toUpperCase()}`
+            : '◆ NEW';
+        if (codeEl)  codeEl.textContent = cls
+            ? `// ${cls.name.toUpperCase()}`
+            : '// OPERATOR';
+        if (tierEl) {
+            const sigUnlocked = (typeof this.hasMetaUpgrade === 'function')
+                && this.hasMetaUpgrade('s_signature');
+            tierEl.textContent = sigUnlocked ? 'TIER 3' : 'TIER 1';
+        }
+
+        // ── Class identity strip (name + signature die)
+        const idClassEl = document.getElementById('menu-id-class');
+        const idSigEl   = document.getElementById('menu-id-sig');
+        if (idClassEl) idClassEl.textContent = cls ? cls.name.toUpperCase() : 'OPERATOR';
+        if (idSigEl) {
+            if (cls && typeof SIGNATURE_DICE !== 'undefined' && SIGNATURE_DICE[cls.id]) {
+                const sig = SIGNATURE_DICE[cls.id][0];
+                idSigEl.textContent = sig ? `SIG · ${sig.name.toUpperCase()}` : 'SIG · UNCHOSEN';
+            } else {
+                idSigEl.textContent = 'SIG · UNCHOSEN';
+            }
+        }
+
+        // ── Ops cells: LAST · SPARKS · FILES
+        const opsLast = document.getElementById('menu-ops-last');
+        if (opsLast) {
+            if (saveBlob && saveBlob.sector && saveBlob.player
+                && typeof saveBlob.player.hp === 'number'
+                && typeof saveBlob.player.maxHp === 'number'
+                && saveBlob.player.maxHp > 0) {
+                const pct = Math.max(0, Math.round(100 * saveBlob.player.hp / saveBlob.player.maxHp));
+                opsLast.textContent = `S${saveBlob.sector} · ${pct}%`;
+            } else {
+                opsLast.textContent = '—';
+            }
+        }
+        const opsSparks = document.getElementById('menu-ops-sparks');
+        if (opsSparks) opsSparks.textContent = String(this.sparks || 0);
+        const opsFiles = document.getElementById('menu-ops-files');
+        if (opsFiles) opsFiles.textContent = String(this.encryptedFiles || 0);
+
+        // ── RESUME bar visibility + content. Hide when no save; show
+        // sector + class + a 5-dot progress strip otherwise.
+        const resumeBtn  = document.getElementById('btn-load-save');
+        const resumeMeta = document.getElementById('db-resume-meta');
+        const resumeProg = document.getElementById('db-resume-progress');
+        if (resumeBtn) {
+            if (saveBlob && saveBlob.player && saveBlob.player.classId) {
+                const sector = saveBlob.sector || 1;
+                const saveCls = (typeof PLAYER_CLASSES !== 'undefined')
+                    ? PLAYER_CLASSES.find(c => c.id === saveBlob.player.classId) : null;
+                const className = saveCls ? saveCls.name.toUpperCase()
+                    : String(saveBlob.player.classId || '').toUpperCase();
+                if (resumeMeta) resumeMeta.textContent = `SECTOR ${sector} · ${className}`;
+                if (resumeProg) {
+                    const dots = resumeProg.querySelectorAll('span');
+                    const lit  = Math.min(5, Math.max(0, sector));
+                    dots.forEach((dot, i) => dot.classList.toggle('on', i < lit));
+                }
+                resumeBtn.classList.remove('hidden');
+                resumeBtn.style.display = '';
+            } else {
+                resumeBtn.classList.add('hidden');
+            }
+        }
+
+        // ── Tab status pips
+        // Sanctuary: gold "new" pip if any unspent sparks
+        const sancPip = document.getElementById('db-pip-sanctuary');
+        if (sancPip) {
+            sancPip.classList.remove('on', 'new', 'alert');
+            if ((this.sparks || 0) > 0) sancPip.classList.add('new');
+        }
+        // Intel: red "alert" pip if encrypted files present
+        const intelPip = document.getElementById('db-pip-intel');
+        if (intelPip) {
+            intelPip.classList.remove('on', 'new', 'alert');
+            if ((this.encryptedFiles || 0) > 0) intelPip.classList.add('alert');
+        }
+        // Challenge: gold "new" pip if today's twist hasn't been played;
+        // mint "on" once it has. History entries stamp `date` per
+        // todayString() in services/dailies.js.
+        const chalPip = document.getElementById('db-pip-challenge');
+        if (chalPip) {
+            chalPip.classList.remove('on', 'new', 'alert');
+            try {
+                const history = (typeof Challenge !== 'undefined' && Challenge.getHistory)
+                    ? Challenge.getHistory() : [];
+                const today = new Date().toISOString().slice(0, 10);
+                const playedToday = Array.isArray(history)
+                    && history.some(h => h && h.date === today);
+                chalPip.classList.add(playedToday ? 'on' : 'new');
+            } catch (_) { /* no pip if anything throws */ }
+        }
+
+        // ── Ascension chip — text + data-level (CSS gates LED blink
+        // on level > 0 via [data-level="0"] selector).
+        const ascChip  = document.getElementById('btn-ascension');
+        const ascLabel = document.getElementById('ascension-status-line');
+        if (ascChip && ascLabel) {
+            const lvl = (typeof Ascension !== 'undefined' && Ascension.getSelected)
+                ? Ascension.getSelected() : 0;
+            ascLabel.textContent = `A${lvl}`;
+            ascChip.dataset.level = String(lvl);
+        }
     },
 
     _renderAscensionPicker() {
