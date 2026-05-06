@@ -621,12 +621,12 @@ class Entity {
                 const stacks = Game.stackCount('spike_armor');
                 const reflectPct = 0.3 * stacks; // 30% per stack
                 const reflectDmg = Math.max(1, Math.floor(actualDmg * reflectPct));
-                
+
                 const target = source || Game.enemy;
-                
+
                 if (target && target.currentHp > 0) {
                     ParticleSys.createFloatingText(this.x, this.y - 120, `REFLECT ${reflectDmg}`, COLORS.GOLD);
-                    
+
                     if(target.takeDamage(reflectDmg)) {
                         if (target === Game.enemy) {
                             Game.winCombat();
@@ -635,6 +635,32 @@ class Entity {
                             if(Game.player.hasRelic('brutalize') && !target.isPlayerSide) {
                                 Game.triggerBrutalize(target);
                             }
+                        }
+                    }
+                }
+            }
+            // FUSION: REFLECTIVE PLATING (shield_gen × spike_armor) — same
+            // reflect-on-hit behaviour at 30% but ALSO splashes 30% of
+            // the reflected damage to a random secondary enemy. Source
+            // spike_armor is spliced out at fusion pickup so this is
+            // the only reflect path for fused players.
+            if (this.hasRelic('fusion_reflective_plating')) {
+                const reflectDmg = Math.max(1, Math.floor(actualDmg * 0.3));
+                const target = source || Game.enemy;
+                if (target && target.currentHp > 0) {
+                    ParticleSys.createFloatingText(this.x, this.y - 120, `REFLECT ${reflectDmg}`, COLORS.GOLD);
+                    target.takeDamage(reflectDmg);
+                    if (target === Game.enemy && Game.enemy && Game.enemy.currentHp <= 0) {
+                        Game.winCombat();
+                    }
+                    // Splash — pick another enemy and chip them too.
+                    if (Game.enemy && Game._enemyMinions) {
+                        const pool = [Game.enemy, ...Game._enemyMinions()].filter(e => e && e !== target && e.currentHp > 0);
+                        if (pool.length > 0) {
+                            const splashTarget = pool[Math.floor(Math.random() * pool.length)];
+                            const splashDmg = Math.max(1, Math.floor(reflectDmg * 0.3));
+                            ParticleSys.createFloatingText(splashTarget.x, splashTarget.y - 90, `SPLASH ${splashDmg}`, '#ffd76a');
+                            splashTarget.takeDamage(splashDmg);
                         }
                     }
                 }

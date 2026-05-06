@@ -1,4 +1,4 @@
-import { CONFIG, COLORS, IMPACT_COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, SPARKS_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS } from './constants.js';
+import { CONFIG, COLORS, IMPACT_COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, SPARKS_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, MODULE_FUSIONS, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS } from './constants.js';
 import { AudioMgr } from './audio.js';
 import { Entity, registerEntityClasses } from './entities/entity.js';
 import { Player } from './entities/player.js';
@@ -13129,6 +13129,7 @@ async startTurn() {
       try {
         this.inputLocked = true;
         this.recycleBinCount = 0;
+        this._fluxCyclerHeal = 0;
         // Custom Run: reset the per-turn flag for the Hot Hands modifier
         // (first die played each turn costs HP).
         this._hotHandsUsedThisTurn = false;
@@ -13376,11 +13377,25 @@ async startTurn() {
             this.player.addShield(5 * shieldGen);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `SHIELD GEN +${5 * shieldGen}`, COLORS.SHIELD);
         }
+        // FUSION: REFLECTIVE PLATING (shield_gen × spike_armor) — bumped
+        // shield tick to 8/turn, and the fused thorn behaviour is wired
+        // in entity.js takeDamage where spike_armor reflect math lives.
+        if (this.player.hasRelic('fusion_reflective_plating')) {
+            this.player.addShield(8);
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "REFLECTIVE +8", COLORS.SHIELD);
+        }
 
         const manaStacks = this.stackCount('mana_syphon');
         if(manaStacks > 0) {
             const got = this.gainMana(manaStacks, { silent: true });
             if (got > 0) ParticleSys.createFloatingText(this.player.x, this.player.y - 120, `SYPHON +${got}`, COLORS.MANA);
+        }
+        // FUSION: FLUX CYCLER (mana_syphon × recycle_bin) — +2 Mana at
+        // start of turn (was +1 from syphon). Heal-on-mana behaviour
+        // is wired into the gainMana path where recycle_bin lives.
+        if (this.player.hasRelic('fusion_flux_cycler')) {
+            const got = this.gainMana(2, { silent: true });
+            if (got > 0) ParticleSys.createFloatingText(this.player.x, this.player.y - 120, `FLUX CYCLER +${got}`, COLORS.MANA);
         }
 
         // Relic: STATIC CAPACITOR — zap random enemy for 10 DMG if holding 3+ Mana.
@@ -13392,6 +13407,21 @@ async startTurn() {
                 const dmg = 10 * stacks;
                 ParticleSys.createFloatingText(t.x, t.y - 80, `CAPACITOR ${dmg}`, "#00f3ff");
                 if (t.takeDamage(dmg)) {
+                    if (t === this.enemy) { this.winCombat(); return; }
+                    else if (this.enemy) this.enemy.minions = this.enemy.minions.filter(m => m !== t);
+                }
+            }
+        }
+        // FUSION: TESLA LENS (static_capacitor × crit_lens). Same trigger
+        // gate (3+ mana, start of turn) but the zap deals 25 DMG and
+        // counts as a guaranteed crit (visual: golden flash).
+        if (this.player.hasRelic('fusion_tesla_lens') && this.player.mana >= 3 && this.enemy) {
+            const pool = [this.enemy, ...this._enemyMinions()].filter(e => e && e.currentHp > 0);
+            if (pool.length > 0) {
+                const t = pool[Math.floor(Math.random() * pool.length)];
+                ParticleSys.createFloatingText(t.x, t.y - 80, `TESLA CRIT 25`, '#ffd76a');
+                if (this.triggerScreenFlash) this.triggerScreenFlash('rgba(255, 215, 106, 0.35)', 240);
+                if (t.takeDamage(25)) {
                     if (t === this.enemy) { this.winCombat(); return; }
                     else if (this.enemy) this.enemy.minions = this.enemy.minions.filter(m => m !== t);
                 }
@@ -13421,10 +13451,27 @@ async startTurn() {
                  const isDead = t.takeDamage(15);
                  ParticleSys.createFloatingText(t.x, t.y - 80, "STATIC", "#00f3ff");
                  if (isDead) {
-                     if (t === this.enemy) { this.winCombat(); return; } 
+                     if (t === this.enemy) { this.winCombat(); return; }
                      else if (this.enemy) { this.enemy.minions = this.enemy.minions.filter(m => m !== t); }
                  }
              }
+        }
+        // FUSION: TOXIC COIL (static_field × venom_edge). Same start-of-
+        // turn random zap, but bumped to 18 DMG and applies 2 Poison
+        // stacks on land. Source relics were spliced out at fusion
+        // pickup so neither static_field nor venom_edge fire normally.
+        if (this.player.hasRelic('fusion_toxic_coil') && this.enemy) {
+            const targets = [this.enemy, ...this._enemyMinions()].filter(e => e && e.currentHp > 0);
+            const t = targets[Math.floor(Math.random() * targets.length)];
+            if (t) {
+                const isDead = t.takeDamage(18);
+                if (t.addEffect) t.addEffect('poison', 3, 2, '☣', 'Poison ticks 2 DMG/turn for 3 turns', 'POISON');
+                ParticleSys.createFloatingText(t.x, t.y - 80, "TOXIC COIL", '#7fff00');
+                if (isDead) {
+                    if (t === this.enemy) { this.winCombat(); return; }
+                    else if (this.enemy) { this.enemy.minions = this.enemy.minions.filter(m => m !== t); }
+                }
+            }
         }
 
         // Relic: AEGIS CYCLER — at start of turn, convert 5 Shield → +3 DMG next attack.
@@ -14980,14 +15027,28 @@ async startTurn() {
             // At-cap feedback so the player knows the gain just no-op'd.
             ParticleSys.createFloatingText(this.player.x, this.player.y - 80, `MANA FULL`, '#aa00ff');
         }
-        return actual;
-        if (this.player.hasRelic('recycle_bin')) {
+        // ── On-mana-gain heal hooks. Order matters: the recycle_bin
+        // path was previously dead code (after the return statement);
+        // this rewrite fires it for any non-zero gain, and adds the
+        // FUSION: FLUX CYCLER variant which heals 2 HP per gain (capped
+        // higher at 8/turn since the fusion's premise is sustain).
+        if (actual > 0 && this.player.hasRelic('recycle_bin')) {
+            this.recycleBinCount = this.recycleBinCount || 0;
             if (this.recycleBinCount < 5) {
                 this.player.heal(1);
                 this.recycleBinCount++;
                 ParticleSys.createFloatingText(this.player.x, this.player.y - 60, "RECYCLE", "#0f0");
             }
         }
+        if (actual > 0 && this.player.hasRelic('fusion_flux_cycler')) {
+            this._fluxCyclerHeal = this._fluxCyclerHeal || 0;
+            if (this._fluxCyclerHeal < 8) {
+                this.player.heal(2);
+                this._fluxCyclerHeal += 2;
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 60, "FLUX +2 HP", '#0f0');
+            }
+        }
+        return actual;
     },
 
     /* SPARKS — persistent meta-currency. Awarded ONLY at significant
@@ -15398,6 +15459,13 @@ async startTurn() {
                         ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 80, "LENS CRIT!", COLORS.ORANGE);
                     }
                 }
+                // FUSION: TESLA LENS — flat +25% crit roll on every attack.
+                if(this.player.hasRelic('fusion_tesla_lens')) {
+                    if(Math.random() < 0.25) {
+                        dmg *= 2;
+                        ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 80, "TESLA CRIT!", '#ffd76a');
+                    }
+                }
 
                 // Base crit — independent of QTE timing and Crit Lens. Gives
                 // every attack a background chance to spike, so there's always
@@ -15596,6 +15664,18 @@ async startTurn() {
                     shieldAmt += 5;
                     this.firstDefendUsedThisTurn = true;
                     ParticleSys.createFloatingText(finalSelf.x, finalSelf.y - 140, "IRON LUNG +5", COLORS.SHIELD);
+                }
+                // FUSION: VOLTAIC BULWARK (iron_lung × kinetic_battery).
+                // First defend each turn: +8 shield + 2 rerolls. Replaces
+                // both source relics' individual effects (they're spliced
+                // out at fusion pickup so neither hasRelic check above
+                // fires for a fused player).
+                if (!this.firstDefendUsedThisTurn && this.player.hasRelic('fusion_voltaic_bulwark')) {
+                    shieldAmt += 8;
+                    this.firstDefendUsedThisTurn = true;
+                    this.rerolls = (this.rerolls || 0) + 2;
+                    ParticleSys.createFloatingText(finalSelf.x, finalSelf.y - 140, "VOLTAIC +8 SH +2 RR", '#ffd76a');
+                    if (this.updateHUD) this.updateHUD();
                 }
                 // Bloodstalker: Blood Ward — heal instead of shielding
                 if (defendClassId !== 'bloodstalker') {
@@ -20114,9 +20194,28 @@ drawEffects() {
             const j = Math.floor(Math.random() * (i + 1));
             [pool[i], pool[j]] = [pool[j], pool[i]];
         }
-        
+
         // Select Options
         const options = pool.slice(0, choices);
+
+        // ── MODULE FUSIONS (Hades-style Duos). When the player owns BOTH
+        // source modules of any unfired fusion, surface the fusion as
+        // an EXTRA option on top of the normal three. The player keeps
+        // their normal pick path; fusion is a bonus offer they can
+        // optionally take. Picking it consumes both source modules and
+        // installs the fusion (handled in the card.onclick below).
+        this.firedFusions = this.firedFusions || new Set();
+        if (typeof MODULE_FUSIONS !== 'undefined') {
+            const ownedSet = new Set((this.player.relics || []).map(r => r.id));
+            for (const fusion of MODULE_FUSIONS) {
+                if (this.firedFusions.has(fusion.id)) continue;
+                if (!fusion.ids.every(id => ownedSet.has(id))) continue;
+                // Already installed? Skip — the player already took it.
+                if (ownedSet.has(fusion.id)) continue;
+                options.push({ ...fusion, _isFusion: true });
+                break; // one fusion offer per reward screen so UX stays focused
+            }
+        }
 
         // Hard fallback — the pool was filtered down to nothing (every
         // stackable cap hit, every unique already owned). Without this the
@@ -20250,6 +20349,27 @@ drawEffects() {
                     if(item.id === 'hull_plating') { this.player.maxHp += 10; this.player.currentHp += 10; }
                     if(item.id === 'reinforced_shell') { this.player.maxHp += 20; this.player.currentHp += 20; }
                     if(item.id === 'mana_battery') this.player.baseMana += 1;
+                } else if (item._isFusion) {
+                    // FUSION pick — consume both source modules, install
+                    // the fusion as a single new relic, mark fired so it
+                    // doesn't surface again. Synergy memory cleared too
+                    // because the fusion replaces synergy parts.
+                    this.firedFusions = this.firedFusions || new Set();
+                    this.firedFusions.add(item.id);
+                    if (Array.isArray(item.ids)) {
+                        for (const consumeId of item.ids) {
+                            const idx = this.player.relics.findIndex(r => r.id === consumeId);
+                            if (idx !== -1) this.player.relics.splice(idx, 1);
+                        }
+                    }
+                    this.player.addRelic({
+                        id: item.id, name: item.name, desc: item.desc,
+                        icon: item.icon, rarity: item.rarity || 'red'
+                    });
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 200,
+                        `FUSION → ${item.name.toUpperCase()}`, '#ff5577');
+                    if (ParticleSys.createShockwave) ParticleSys.createShockwave(this.player.x, this.player.y, '#ff5577', 56);
+                    if (this.shake) this.shake(14);
                 } else {
                     this.player.addRelic(item);
                 }
@@ -20368,11 +20488,33 @@ drawEffects() {
         });
         ClassAbility.endCombat();
         if (typeof Achievements !== 'undefined') Achievements.unlock('GAMEOVER_FIRST');
+        // FUSION: PHOENIX PROTOCOL (second_life × emergency_kit). Revives
+        // at full HP, clears every active debuff/effect, and refunds the
+        // emergency-kit charge counter so the heal-on-low-HP affordance
+        // is available again. Checked BEFORE plain second_life so the
+        // fused player gets the upgraded revive even though they no
+        // longer own second_life proper (the source was spliced out).
+        const phoenixIdx = this.player.relics.findIndex(r => r.id === 'fusion_phoenix_protocol');
+        if (phoenixIdx !== -1) {
+            this.player.relics.splice(phoenixIdx, 1);
+            this.player.currentHp = this.player.maxHp;
+            this.player.effects = [];
+            this._emergencyKitCharges = (this._emergencyKitCharges || 0) + 1;
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 150, "PHOENIX PROTOCOL", '#ff5577');
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 110, "FULL HP · DEBUFFS CLEARED", COLORS.GOLD);
+            if (ParticleSys.createShockwave) ParticleSys.createShockwave(this.player.x, this.player.y, '#ff5577', 64);
+            AudioMgr.playSound('upgrade');
+            this.player.playAnim('pulse');
+            this.renderRelics();
+            this.updateHUD();
+            setTimeout(() => { this.startTurn(); }, 1000);
+            return;
+        }
         const revive = this.player.relics.findIndex(r => r.id === 'second_life');
         if(revive !== -1) {
             this.player.relics.splice(revive, 1);
             this.player.currentHp = Math.floor(this.player.maxHp * 0.5);
-            
+
             ParticleSys.createFloatingText(this.player.x, this.player.y - 150, "REVIVED!", COLORS.GOLD);
             AudioMgr.playSound('mana');
             this.player.playAnim('pulse');
@@ -20382,7 +20524,7 @@ drawEffects() {
             setTimeout(() => {
                 this.startTurn();
             }, 1000);
-            
+
             return;
         }
 

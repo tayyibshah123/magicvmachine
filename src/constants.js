@@ -414,7 +414,7 @@ const UPGRADES_POOL = [
     { id: 'mana_battery',    name: "Mana Battery",    desc: "+1 Base Mana.",                                                                      icon: ICONS.relicBattery, instant: true },
     { id: 'shield_gen',      name: "Shield Gen",      desc: "Gain 5 Block every turn.",                                                           icon: ICONS.relicShieldGen },
     { id: 'wisp_hp',         name: "Wisp Vitality",   desc: "Minions have +5 HP.",                                                                icon: ICONS.relicWispVit },
-    { id: 'second_life',     name: "Second Life",     desc: "Revive with 50% HP once.",                                                           icon: ICONS.relicSecondLife },
+    { id: 'second_life',     name: "Second Life",     desc: "Revive with 50% HP once.",                                                           icon: ICONS.relicSecondLife, rarity: 'red' },
     { id: 'voodoo_doll',     name: "Voodoo Doll",     desc: "Unlock 'Voodoo Curse' Dice.",                                                        icon: ICONS.relicVoodoo,  rarity: 'red' },
     { id: 'overcharge_chip', name: "Overcharge Chip", desc: "Unlock 'Overcharge' Dice.",                                                          icon: ICONS.overcharge,   rarity: 'red' },
     { id: 'manifestor',      name: "Manifestor",      desc: "+1 Reward Choice. (Unique)",                                                         icon: ICONS.relicManifest, rarity: 'gold' },
@@ -436,7 +436,7 @@ const UPGRADES_POOL = [
 
     // --- V1.1 relic expansion ---
     { id: 'aegis_cycler',    name: "Aegis Cycler",    desc: "At start of turn, convert 5 Shield into +3 DMG next attack.",                        icon: ICONS.relicShield, classLocked: 'sentinel' },
-    { id: 'static_capacitor',name: "Static Capacitor",desc: "At start of turn, zap a random enemy for 10 DMG if you hold 3+ Mana.",              icon: ICONS.overcharge },
+    { id: 'static_capacitor',name: "Static Capacitor",desc: "At start of turn, zap a random enemy for 10 DMG if you hold 3+ Mana.",              icon: ICONS.overcharge, rarity: 'gold' },
     { id: 'shard_reactor',   name: "Shard Reactor",   desc: "Gain +1 Mana whenever a minion dies (yours or enemy's).",                            icon: ICONS.relicBattery },
     { id: 'swarm_beacon',    name: "Swarm Beacon",    desc: "Your minions deal +1 DMG for each minion alive.",                                   icon: ICONS.minion, classLocked: 'summoner' },
     { id: 'leyline_cache',   name: "Leyline Cache",   desc: "Gain +50% Fragments from combat rewards.",                                           icon: ICONS.relicManifest },
@@ -564,6 +564,67 @@ const SYNERGIES = [
     { id: 'skill_caster',  name: "SKILL CASTER",   ids: ['hex_fragment', 'echo_chamber', 'munitions_belt', 'overcharge_vent'], desc: "Skills are your weapon." },
     { id: 'dot_stalker',   name: "DOT STALKER",    ids: ['venom_edge', 'kindling', 'siphon_blade', 'last_stand'],              desc: "Bleed them dry." },
     { id: 'shield_engine', name: "SHIELD ENGINE",  ids: ['iron_vault', 'tidal_recycler', 'iron_lung', 'kinetic_battery'],      desc: "The wall pays you back." }
+];
+
+// Module FUSIONS — Hades-style "Duo" pairings. When a player owns BOTH
+// source ids, the next reward screen surfaces the fusion as a single
+// rare option. Picking it consumes both source modules and replaces
+// them with the fusion (more powerful than the sum). Each fusion has
+// its own id so game.js can wire bespoke effects; fired fusions are
+// tracked in `firedFusions` so a fusion can't be re-rolled forever.
+//
+// Pairs are chosen so neither source is class-locked to a class the
+// other source is incompatible with — every pair below uses general-
+// pool relics or explicitly-matched class-locked combinations.
+const MODULE_FUSIONS = [
+    {
+        id: 'fusion_voltaic_bulwark',
+        ids: ['kinetic_battery', 'iron_lung'],
+        name: "Voltaic Bulwark",
+        desc: "First Defend each turn: +8 Shield AND +2 Rerolls. Every 5 Shield gained still rolls Kinetic.",
+        icon: '⚡',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_toxic_coil',
+        ids: ['static_field', 'venom_edge'],
+        name: "Toxic Coil",
+        desc: "Static Field strikes apply 2 stacks of Poison. Attacks also chain a 5 DMG static spark to a random other enemy.",
+        icon: '☣',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_phoenix_protocol',
+        ids: ['second_life', 'emergency_kit'],
+        name: "Phoenix Protocol",
+        desc: "Revive at 100% HP and clear all debuffs. Emergency Kit charges restored on revive.",
+        icon: '🜂',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_tesla_lens',
+        ids: ['static_capacitor', 'crit_lens'],
+        name: "Tesla Lens",
+        desc: "Static Capacitor zaps for 25 DMG and counts as a guaranteed Crit. Crit Lens chance +10%.",
+        icon: '✦',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_reflective_plating',
+        ids: ['shield_gen', 'spike_armor'],
+        name: "Reflective Plating",
+        desc: "Shield Gen is +8/turn (was 5) and refunds 30% reflected damage as DPS to a random enemy.",
+        icon: '◈',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_flux_cycler',
+        ids: ['mana_syphon', 'recycle_bin'],
+        name: "Flux Cycler",
+        desc: "+2 Mana at start of turn. Each Mana gained heals 2 HP (max 8/turn).",
+        icon: '⟁',
+        rarity: 'red'
+    }
 ];
 
 const GLITCH_MODIFIERS = [
@@ -1548,4 +1609,4 @@ const CUSTOM_RUN_MODIFIERS = [
    modifier needs wiring, disable temporarily here while the handler lands. */
 const FEATURE_CUSTOM_RUNS = true;
 
-export { CONFIG, COLORS, IMPACT_COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, SPARKS_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS };
+export { CONFIG, COLORS, IMPACT_COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, SPARKS_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, MODULE_FUSIONS, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS };
