@@ -116,6 +116,67 @@ For every cell, mark ✅ pass / ⚠️ partial / ❌ fail. Add a one-line note w
 
 ---
 
+## Audit 2026-05 verification scenarios
+
+New scenarios from `AUDIT_2026-05.md` — verify on a real device (iPhone + Android) once. Pass criteria are written for the post-fix state (v1.8.0).
+
+### Combat HUD
+
+| Check | 360 | 390 | 414 |
+|-------|-----|-----|-----|
+| Reroll + end-turn buttons render at 56×56 with translucent panel ring | ☐ | ☐ | ☐ |
+| Tapping the leftmost / rightmost die does NOT trigger reroll/end-turn | ☐ | ☐ | ☐ |
+| Buttons sit ≥4px clear of the dice crescent at all dice counts (4, 5, 6) | ☐ | ☐ | ☐ |
+
+### Audio + state transitions
+
+| Check | iPhone | Android |
+|-------|--------|---------|
+| Quitting mid-combat to MENU during a music fade kills audio cleanly (no lingering volume drift) | ☐ | ☐ |
+| Boss kill + sector advance does not stack overlapping fades | ☐ | ☐ |
+
+### Particles
+
+| Check | Pass |
+|-------|------|
+| Boss-dissolve cascade + reward floating text + screen flash at full pool — no visible stutter on mid-tier device | ☐ |
+
+### Save quota
+
+| Check | Pass |
+|-------|------|
+| Filling localStorage to near quota and saving the run shows "STORAGE FULL" toast | ☐ |
+| The smallest non-active slot is auto-pruned on first quota fail and the run continues | ☐ |
+
+### Module Fusion sting
+
+| Check | Pass |
+|-------|------|
+| First reward screen with both source modules of a fusion fires the FUSION AVAILABLE banner + shockwave + dual SFX | ☐ |
+| `first_fusion` Hint fires once and is suppressed on subsequent fusion encounters | ☐ |
+
+### Achievement progress
+
+| Check | Pass |
+|-------|------|
+| KILLS_50 / 250 / 1000, DAILY_*, STREAK_*, INTEL_10, EVENT_10, SYNERGY_5, SPEC_* show "N / M" beneath the locked "???" line | ☐ |
+
+### Difficulty ramp
+
+| Check | Pass |
+|-------|------|
+| S2→S3 transition no longer feels like a wall (mean enemy HP softer by ~15%) | ☐ |
+| S4 enemy DMG is noticeably higher than S3 (no longer flat) | ☐ |
+| Hive Protocol (S4 boss) hits 3 times per turn, not 4 — Tesseract Prime is now the highest effective DPS again | ☐ |
+
+### Custom Run payout
+
+| Check | Pass |
+|-------|------|
+| Picking 4 negatives gives more sparks at run end than picking 3 (multiplier applied to boss-kill + run-win sparks) | ☐ |
+
+---
+
 ## Sign-off
 
 When every row is ✅ across all four widths, paste this block into the WEEKLY_ROADMAP.md Day 2 completion notes and move to Day 3:

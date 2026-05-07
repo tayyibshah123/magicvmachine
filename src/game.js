@@ -12586,11 +12586,25 @@ triggerSystemCrash() {
        shop pricing, boss spawn, relic add, turn start). Stat edits that
        only matter at run-start are applied here directly. */
     _applyCustomRunModifiers() {
-        if (!this.customRunModifiers || !this.customRunModifiers.size) return;
+        if (!this.customRunModifiers || !this.customRunModifiers.size) {
+            // Reset payout multiplier on a no-modifier run so a previous
+            // custom-run setting doesn't leak.
+            this._customPayoutMult = 1;
+            return;
+        }
         const active = Array.from(this.customRunModifiers)
             .map(id => CUSTOM_RUN_MODIFIERS.find(m => m.id === id))
             .filter(Boolean);
         this._customRunActive = active;
+        // Audit 2026-05 — sum each modifier's payoutBonus into a run-
+        // wide multiplier so picking N negatives actually pays more
+        // than N-1. The modal already displays this number ("Net 145%")
+        // but the value was never being applied to rewards. Stored on
+        // Game and consumed at sparks-grant time (boss kill, run win).
+        let payoutDelta = 0;
+        active.forEach(m => { payoutDelta += (m.payoutBonus || 0); });
+        const netPct = Math.max(5, 100 + payoutDelta);
+        this._customPayoutMult = netPct / 100;
         if (!this.player) return;
         // Reset transient flags so replaying a run without some modifiers
         // doesn't inherit their effects from the previous attempt.
@@ -20426,17 +20440,25 @@ drawEffects() {
                 // advertised completion reward for clearing the run.
                 const isChallengeFinal = !!this.challengeMode && this.sector >= 5;
                 const challengeMult = isChallengeFinal ? 3 : 1;
+                // Audit 2026-05 — apply Custom Run payout multiplier to
+                // boss + run-win sparks. Was previously stored only in
+                // _customPayoutMult and surfaced in the modal display
+                // ("Net 145%") but never applied to actual rewards.
+                const customMult = (typeof this._customPayoutMult === 'number')
+                    ? this._customPayoutMult : 1;
                 const baseBossSparks = 3 + Math.max(0, (this.sector || 1) - 1) * 2;
-                const bossSparks = baseBossSparks * challengeMult;
+                const bossSparks = Math.max(1, Math.round(baseBossSparks * challengeMult * customMult));
                 this.grantSparks(bossSparks, 'boss_kill_s' + (this.sector || 1) + (isChallengeFinal ? '_chal3x' : ''));
                 if (this.sector >= 5) {
                     Unlocks.grant('ascension', 'sector5_cleared');
                     // Sector-5 clear = full run win → grant a heftier
                     // bonus on top of the boss reward. Ascension level
                     // adds proportional bonus. Challenge Mode multiplies
-                    // this 3× on the final boss as well.
+                    // this 3× on the final boss as well. Custom Run net%
+                    // also applies (audit 2026-05).
                     const ascLevel = (Ascension && Ascension.getSelected) ? Ascension.getSelected() : 0;
-                    const winSparks = (15 + Math.max(0, ascLevel) * 3) * challengeMult;
+                    const baseWinSparks = 15 + Math.max(0, ascLevel) * 3;
+                    const winSparks = Math.max(1, Math.round(baseWinSparks * challengeMult * customMult));
                     this.grantSparks(winSparks, 'run_win_asc' + ascLevel + (isChallengeFinal ? '_chal3x' : ''));
                     if (isChallengeFinal) {
                         // Surface the 3× banner where the player will see it —
