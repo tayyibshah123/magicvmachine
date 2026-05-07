@@ -786,12 +786,15 @@ const ENEMIES = [
     { name: "Cryo Cultivator", hp: 60, dmg: 8,  sector: 2, shape: 'tank',   kind: 'frost' },
     { name: "Data Mite",        hp: 40, dmg: 12, sector: 2, shape: 'spider', kind: 'burrow' },
     { name: "Echo",             hp: 55, dmg: 10, sector: 2, shape: 'wisp',   kind: 'clone' },
-    // Sector 3
-    { name: "Magma Construct", hp: 100, dmg: 18, sector: 3, shape: 'tank' },
-    { name: "Core Guardian", hp: 120, dmg: 12, sector: 3, shape: 'drone' },
-    { name: "Nullifier", hp: 90, dmg: 24, sector: 3, shape: 'sniper' },
+    // Sector 3 — Audit 2026-05 balance pass.
+    // S2→S3 enemy mean HP was a 2.0× spike (55→110); the steepest jump
+    // in the run. Trimmed the top tier by ~15% to soften the wall while
+    // keeping S3 visibly tougher than S2. New mean ≈93 (1.7× ratio).
+    { name: "Magma Construct", hp: 85,  dmg: 18, sector: 3, shape: 'tank' },     // 100→85
+    { name: "Core Guardian",   hp: 100, dmg: 12, sector: 3, shape: 'drone' },    // 120→100
+    { name: "Nullifier",       hp: 80,  dmg: 24, sector: 3, shape: 'sniper' },   // 90→80
     // Sector 3 — expansion (5.2.1)
-    { name: "Foundry Golem", hp: 140, dmg: 18, sector: 3, shape: 'tank',   kind: 'armored' },
+    { name: "Foundry Golem", hp: 120, dmg: 18, sector: 3, shape: 'tank',   kind: 'armored' },  // 140→120
     { name: "Slag Geyser",   hp: 80,  dmg: 0,  sector: 3, shape: 'sniper', kind: 'immolate' },
     { name: "Coolant Tech",  hp: 70,  dmg: 6,  sector: 3, shape: 'drone',  kind: 'healer' },
     // Sector 4 (High Security)
