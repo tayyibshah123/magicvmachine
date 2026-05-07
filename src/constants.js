@@ -797,13 +797,17 @@ const ENEMIES = [
     { name: "Foundry Golem", hp: 120, dmg: 18, sector: 3, shape: 'tank',   kind: 'armored' },  // 140→120
     { name: "Slag Geyser",   hp: 80,  dmg: 0,  sector: 3, shape: 'sniper', kind: 'immolate' },
     { name: "Coolant Tech",  hp: 70,  dmg: 6,  sector: 3, shape: 'drone',  kind: 'healer' },
-    // Sector 4 (High Security)
-    { name: "Praetorian", hp: 160, dmg: 15, sector: 4, shape: 'tank' },
-    { name: "Sentinel Orb", hp: 130, dmg: 20, sector: 4, shape: 'drone' },
-    { name: "Phase Stalker", hp: 110, dmg: 25, sector: 4, shape: 'spider', kind: 'phase_shift' },
+    // Sector 4 (High Security) — Audit 2026-05 balance pass.
+    // S3→S4 mean enemy DMG was flat (14→15 = 1.07×, basically no
+    // change despite the visual sector change). Bumped top-tier S4
+    // damage by ~15% so the difficulty curve actually moves at the
+    // sector boundary. New mean ≈17 (1.21× ratio S3→S4).
+    { name: "Praetorian",    hp: 160, dmg: 17, sector: 4, shape: 'tank' },                        // 15→17
+    { name: "Sentinel Orb",  hp: 130, dmg: 23, sector: 4, shape: 'drone' },                       // 20→23
+    { name: "Phase Stalker", hp: 110, dmg: 28, sector: 4, shape: 'spider', kind: 'phase_shift' }, // 25→28
     // Sector 4 — expansion (5.2.1)
     { name: "Hive Warden", hp: 130, dmg: 10, sector: 4, shape: 'tank',   kind: 'shielder' },
-    { name: "Phage Pod",   hp: 60,  dmg: 15, sector: 4, shape: 'wisp',   kind: 'detonator' },
+    { name: "Phage Pod",   hp: 60,  dmg: 17, sector: 4, shape: 'wisp',   kind: 'detonator' },     // 15→17 (detonator burst hurts more)
     { name: "Keeper",      hp: 180, dmg: 8,  sector: 4, shape: 'sniper', kind: 'buffer' },
     // Sector 5 (The Source)
     { name: "Code Fragment", hp: 180, dmg: 22, sector: 5, shape: 'wisp' },
