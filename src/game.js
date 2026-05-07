@@ -9031,23 +9031,38 @@ triggerSystemCrash() {
         this._streakBonusPending = null;
     },
 
-    // During gameplay, show a small "CHALLENGE" chip in the top-bar so the
-    // player can see at a glance their run is the boss gauntlet.
+    // During gameplay, show a small "CHALLENGE" chip stacked under the
+    // sector display. Lives inside .sector-turn-group so it never escapes
+    // the game-container on narrow phones (the previous fixed-position
+    // chip was overflowing the viewport on iOS). Tooltip on hover/touch
+    // explains what Challenge Mode is, mirroring the sector-mech-pill
+    // pattern.
     _ensureDailyChip() {
+        const group = document.querySelector('.sector-turn-group');
         if (!Challenge.isActive()) {
             const existing = document.getElementById('daily-run-chip');
             if (existing) existing.remove();
             return;
         }
+        if (!group) return;
         let chip = document.getElementById('daily-run-chip');
         if (!chip) {
             chip = document.createElement('div');
             chip.id = 'daily-run-chip';
-            chip.className = 'daily-run-chip';
-            const hud = document.getElementById('hud') || document.body;
-            hud.appendChild(chip);
+            chip.className = 'run-status-pill run-status-pill-challenge';
+            chip.setAttribute('role', 'button');
+            chip.setAttribute('tabindex', '0');
+            group.appendChild(chip);
         }
         chip.textContent = 'CHALLENGE';
+        const tipText = 'CHALLENGE MODE\nBoss gauntlet — five sector bosses back-to-back, each gated by 2 rest nodes. Final clear pays 3× sparks.';
+        chip.title = 'CHALLENGE MODE — boss gauntlet, 3× sparks on final clear.';
+        chip.onmouseenter = (e) => TooltipMgr.show(tipText, e.clientX, e.clientY);
+        chip.onmouseleave = () => TooltipMgr.hide();
+        chip.ontouchstart = (e) => {
+            const t = e.touches && e.touches[0];
+            if (t) TooltipMgr.show(tipText, t.clientX, t.clientY - 80);
+        };
     },
 
     _refreshMenuChips() {
@@ -10047,9 +10062,10 @@ triggerSystemCrash() {
 
     // Mini chip strip top-left that shows which pacts are live during combat.
     _renderPactPills() {
+        const group = document.querySelector('.sector-turn-group');
         let strip = document.getElementById('pact-pill-strip');
         const active = this.activePacts ? Array.from(this.activePacts) : [];
-        if (!active.length) {
+        if (!active.length || !group) {
             if (strip) strip.remove();
             return;
         }
@@ -10057,12 +10073,32 @@ triggerSystemCrash() {
             strip = document.createElement('div');
             strip.id = 'pact-pill-strip';
             strip.className = 'pact-pill-strip';
-            (document.getElementById('hud') || document.body).appendChild(strip);
+            group.appendChild(strip);
         }
+        // Strip text-tags from the effect blob so the tooltip stays
+        // legible — pacts ship the effect with embedded <strong>.
+        const stripTags = (s) => (s || '').replace(/<[^>]+>/g, '');
         strip.innerHTML = active.map(id => {
             const p = PACTS.find(x => x.id === id);
-            return p ? `<div class="pact-pill">${p.name}</div>` : '';
+            if (!p) return '';
+            return `<div class="pact-pill" data-pact-id="${p.id}" role="button" tabindex="0">${p.name}</div>`;
         }).join('');
+        // Wire tooltips per-pill so the player can read what each pact
+        // actually does. Mirror the sector-mech-pill UX: hover (desktop)
+        // + touchstart (mobile).
+        strip.querySelectorAll('.pact-pill').forEach(pill => {
+            const id = pill.getAttribute('data-pact-id');
+            const p = PACTS.find(x => x.id === id);
+            if (!p) return;
+            const tipText = `${p.name}\n${stripTags(p.effect)}\nCost: ${stripTags(p.cost)}`;
+            pill.title = `${p.name} — ${stripTags(p.effect)} (Cost: ${stripTags(p.cost)})`;
+            pill.onmouseenter = (e) => TooltipMgr.show(tipText, e.clientX, e.clientY);
+            pill.onmouseleave = () => TooltipMgr.hide();
+            pill.ontouchstart = (e) => {
+                const t = e.touches && e.touches[0];
+                if (t) TooltipMgr.show(tipText, t.clientX, t.clientY - 80);
+            };
+        });
     },
 
     // --- Full progress reset — wipes every mvm_ localStorage key and reloads.

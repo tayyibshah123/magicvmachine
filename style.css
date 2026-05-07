@@ -13005,23 +13005,60 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
 .turn-summary-popup .ts-shield   { color: #88eaff;           text-shadow: 0 0 6px rgba(136, 234, 255, 0.7); }
 .turn-summary-popup .ts-rerolls  { color: var(--neon-gold);  text-shadow: 0 0 6px var(--neon-gold); }
 
-/* Daily Run chip — visible during seeded runs */
-.daily-run-chip {
-    position: fixed;
-    top: 76px;
-    left: 22px;
-    z-index: 4500;
-    pointer-events: none;
-    font-family: var(--font-cyber);
-    font-size: 0.62rem;
-    letter-spacing: 0.24em;
+/* Run-status pills — CHALLENGE chip + active pacts. Stacked under the
+   sector display inside .sector-turn-group so they never escape the
+   game-container on mobile. Sized to match .sector-mech-pill so the
+   whole stack reads as one HUD column. Tooltips on hover/touch via
+   TooltipMgr (wired in _ensureDailyChip / _renderPactPills). */
+.run-status-pill {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 2px 8px;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
     color: #fff;
-    padding: 4px 10px;
-    background: linear-gradient(90deg, rgba(255, 215, 0, 0.22), rgba(255, 215, 0, 0.1));
-    border: 1px solid var(--neon-gold);
-    border-radius: 999px;
-    box-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
-    text-shadow: 0 0 6px rgba(255, 215, 0, 0.6);
+    border-radius: 3px;
+    cursor: help;
+    pointer-events: auto;
+    transition: opacity 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.run-status-pill:hover,
+.run-status-pill:focus-visible {
+    opacity: 1;
+    transform: translateY(-1px);
+    outline: none;
+}
+.run-status-pill-challenge {
+    color: #ffd76a;
+    background: rgba(255, 215, 100, 0.12);
+    border: 1px solid rgba(255, 215, 100, 0.55);
+    box-shadow: 0 0 8px rgba(255, 215, 100, 0.22);
+    text-shadow: 0 0 6px rgba(255, 215, 100, 0.45);
+}
+.run-status-pill-challenge:hover {
+    box-shadow: 0 0 14px rgba(255, 215, 100, 0.45);
+}
+/* Legacy class kept for any saves whose JS still emits .daily-run-chip
+   from a cached bundle — mirror the new inline styling so no chip can
+   escape the viewport. */
+.daily-run-chip {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 2px 8px;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #ffd76a;
+    background: rgba(255, 215, 100, 0.12);
+    border: 1px solid rgba(255, 215, 100, 0.55);
+    border-radius: 3px;
+    box-shadow: 0 0 8px rgba(255, 215, 100, 0.22);
+    text-shadow: 0 0 6px rgba(255, 215, 100, 0.45);
 }
 
 /* Achievement toast */
@@ -15918,27 +15955,40 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     font-style: italic;
     letter-spacing: 0.08em;
 }
-/* Active-pact pills under the Challenge chip in combat */
+/* Active-pact pills — stacked inside .sector-turn-group right under the
+   CHALLENGE chip. Inline (not fixed) so they always stay inside the
+   game-container on mobile. */
 .pact-pill-strip {
-    position: fixed;
-    top: calc(110px + max(0px, env(safe-area-inset-top)));
-    left: calc(22px + max(0px, env(safe-area-inset-left)));
-    z-index: 4500;
-    pointer-events: none;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
+    margin-top: 4px;
+    pointer-events: auto;
 }
 .pact-pill {
-    font-family: var(--font-cyber);
-    font-size: 0.55rem;
-    letter-spacing: 0.2em;
-    padding: 3px 9px;
-    border: 1px solid var(--neon-pink);
-    border-radius: 999px;
-    background: linear-gradient(90deg, rgba(255, 0, 85, 0.25), rgba(255, 0, 85, 0.08));
-    color: #fff;
-    box-shadow: 0 0 8px rgba(255, 0, 85, 0.4);
+    display: inline-block;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.58rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border: 1px solid rgba(255, 0, 85, 0.65);
+    border-radius: 3px;
+    background: rgba(255, 0, 85, 0.14);
+    color: #ffb3c7;
+    box-shadow: 0 0 6px rgba(255, 0, 85, 0.28);
+    text-shadow: 0 0 4px rgba(255, 0, 85, 0.4);
+    cursor: help;
+    pointer-events: auto;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.pact-pill:hover,
+.pact-pill:focus-visible {
+    box-shadow: 0 0 14px rgba(255, 0, 85, 0.55);
+    transform: translateY(-1px);
+    outline: none;
 }
 
 /* === ARCHIVIST SLAIN cosmetic frame (Roadmap Part 24.2) ==================
