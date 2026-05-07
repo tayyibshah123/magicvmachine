@@ -354,6 +354,14 @@
                          and gives the bottom controls thumb-room. -->
                     <div class="db-spacer" aria-hidden="true"></div>
 
+                    <!-- BOTTOM BLOCK — wraps ops/console/energy/cluster/
+                         footer so the cluster can be locked to the canvas
+                         bottom via `margin-top: auto` on the flex shell.
+                         Ensures the streak/version footer stays flush with
+                         the canvas bottom edge regardless of internal
+                         spacing changes. -->
+                    <div class="db-bottom-block">
+
                     <!-- OPS — 3-cell readout strip (last sector,
                          sparks, encrypted files). -->
                     <div class="db-ops">
@@ -443,8 +451,9 @@
                     <!-- FOOTER — streak chip + version stamp. -->
                     <div class="db-footer">
                         <div id="login-streak" class="login-streak db-streak hidden"></div>
-                        <span class="db-version">ALPHA V1.7.5</span>
+                        <span class="db-version">ALPHA V1.7.6</span>
                     </div>
+                    </div><!-- /db-bottom-block -->
                 </div>
 
                 <!-- Save Slot picker — modal (kept). Lives outside the

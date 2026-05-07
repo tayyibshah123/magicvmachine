@@ -184,26 +184,44 @@
 .menu-v2.dropbay .db-shell {
     position: relative; z-index: 1;
     height: 100%;
-    display: grid;
-    /* Layout now reads:
-         title (auto)  ·  SPACER (1fr)  ·  ops · console · energy · cluster · footer
-       The header strip was removed (settings gear is absolute-pinned
-       to the top-right and the operator chip moved to a subtitle
-       under the wordmark). The orb is also absolute-positioned at
-       canvas centre so it never drifts when title/bottom shrink.
-       The single 1fr spacer eats all leftover vertical space, which
-       pushes the bottom group flush with the canvas bottom — the
-       streak/version footer then sits on the bottom edge per user
-       request. padding-bottom collapses to 0 to remove the last
-       sliver of trailing space. */
-    grid-template-rows: auto 1fr auto auto auto auto auto;
+    /* Switched grid → flex-column so the bottom-block can be welded to
+       the canvas bottom edge via the wrapper's flex auto-margin. The
+       previous grid (auto 1fr auto×5) was reserving fractional space
+       between the title and the bottom rows, which under iOS' container
+       cqh resolution was leaving ~10cqh of dead space below the footer.
+       Flex with justify-content: space-between gives a hard top/bottom
+       anchor with no slack. */
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
     /* padding-top targets the title-bar position the previous
        OPERATOR chip used to occupy, per user request. The shell
        has zero padding-bottom so the streak/version footer sits
        flush against the canvas bottom edge. */
     padding: 5cqh 4cqw 0;
-    /* Tighter row gap for a denser bottom-of-screen cluster. */
+}
+
+/* Bottom-block — flex column wrapping ops/console/energy/cluster/footer.
+   margin-top: auto forces it to the bottom of .db-shell regardless of
+   how tall the title block above happens to be. The footer (last child)
+   is the streak/version row and renders flush against the canvas bottom. */
+.menu-v2.dropbay .db-bottom-block {
+    display: flex;
+    flex-direction: column;
     gap: 0.9cqh;
+    margin-top: auto;
+    padding-bottom: 0;
+}
+/* Title block is now the only flex child above the spacer; remove any
+   margin-top that crept in via legacy rules so it stays at the top. */
+.menu-v2.dropbay .db-title-row {
+    flex-shrink: 0;
+}
+/* The legacy .db-spacer is no longer needed for vertical distribution
+   (flex space-between handles it). Hide it so it can't add an extra
+   line of dead space between the title and the bottom block. */
+.menu-v2.dropbay .db-spacer {
+    display: none;
 }
 .menu-v2.dropbay .db-spacer {
     /* Single 1fr row that absorbs all leftover vertical space between
@@ -303,30 +321,28 @@
     margin-top: 0;
 }
 
-/* Floating settings gear — pinned to the top-right corner so it can't
-   collide with the title. Was previously a flex child of .db-hdr, but
-   removing the header strip required pulling it into absolute flow. */
-.menu-v2.dropbay .db-gear-floating {
-    position: absolute;
-    top: 1.4cqh;
-    right: 4cqw;
-    z-index: 5;
-    width: 4.2cqh; height: 4.2cqh; border-radius: 50%;
-    display: grid; place-items: center;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    color: rgba(255, 255, 255, 0.66);
-    transition: transform 0.6s ease, color 0.3s ease, border-color 0.3s ease;
-    cursor: pointer;
-    padding: 0;
+/* Floating settings gear — pinned to the top-right corner of the shell.
+   ID-prefixed selector + !important on position properties because
+   src/styles/polish.css has a (0,2,1) selector
+   `#screen-start.menu-v2 #btn-settings-main` that restyles the button
+   (bracket-corner background, 44×44 size) and was winning the cascade
+   for layout properties. We let polish.css keep the visual chrome but
+   pin the position from this rule. */
+#screen-start.menu-v2.dropbay #btn-settings-main.db-gear-floating {
+    position: absolute !important;
+    top: max(12px, 1.4cqh) !important;
+    right: max(12px, 4cqw) !important;
+    left: auto !important;
+    bottom: auto !important;
+    z-index: 5 !important;
+    margin: 0 !important;
 }
-.menu-v2.dropbay .db-gear-floating:hover {
+#screen-start.menu-v2.dropbay #btn-settings-main.db-gear-floating:hover {
     transform: rotate(90deg);
-    color: var(--db-accent);
-    border-color: rgba(var(--db-accent-rgb), 0.55);
 }
-.menu-v2.dropbay .db-gear-floating .game-icon {
-    width: 2.4cqh; height: 2.4cqh;
+#screen-start.menu-v2.dropbay #btn-settings-main.db-gear-floating .game-icon {
+    width: 22px;
+    height: 22px;
 }
 
 /* Operator callsign subtitle — sits directly under the wordmark inside
