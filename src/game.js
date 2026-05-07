@@ -8739,21 +8739,26 @@ triggerSystemCrash() {
         this.map.currentIdx = 'start';
     },
 
-    // Challenge Mode map — fixed linear chain. Two rest nodes guard every
+    // Challenge Mode map — fixed zig-zag chain. Two rest nodes guard every
     // boss fight: start → rest → rest → boss(s1) → rest → rest → boss(s2)
-    // → ... → rest → rest → boss(s5). One node per layer so the path is
-    // unambiguous; vertical layout mirrors the standard map's bottom-to-top
-    // flow. `nodeSector` on each boss tells `visitNode` which sector boss
-    // template to load for that fight.
+    // → ... → rest → rest → boss(s5). Rest nodes hug the LEFT side and
+    // boss nodes hug the RIGHT so the icons never stack on top of each
+    // other — the connecting lines form a clear zig-zag silhouette up
+    // the screen. `nodeSector` on each boss tells `visitNode` which
+    // sector boss template to load for that fight.
     _generateChallengeMap() {
         this.map.nodes = [];
         const SECTORS = 5;
         const RESTS_PER_BOSS = 2;
         // start + (rest+rest+boss) per sector = 1 + 5*3 = 16 layers (0..15).
         const totalLayers = SECTORS * (RESTS_PER_BOSS + 1);
-        const topY = 8;
-        const bottomY = 90;
+        const topY = 6;
+        const bottomY = 92;
         const stepY = (bottomY - topY) / totalLayers;
+        // Horizontal lanes — wide enough that rest and boss icons never
+        // visually overlap even at the densest vertical spacing.
+        const REST_X = 30;
+        const BOSS_X = 70;
         this.map.nodes.push({
             id: 'start', layer: 0, lane: 0, x: 50, y: bottomY,
             type: 'start', connections: [], status: 'completed'
@@ -8765,7 +8770,7 @@ triggerSystemCrash() {
                 const restId = `rest-${s}-${r}`;
                 const restY = bottomY - layer * stepY;
                 this.map.nodes.push({
-                    id: restId, layer, lane: 0, x: 50, y: restY,
+                    id: restId, layer, lane: -1, x: REST_X, y: restY,
                     type: 'rest', connections: [],
                     status: (layer === 1) ? 'available' : 'locked'
                 });
@@ -8777,7 +8782,7 @@ triggerSystemCrash() {
             const bossId = `boss-${s}`;
             const bossY = bottomY - layer * stepY;
             this.map.nodes.push({
-                id: bossId, layer, lane: 0, x: 50, y: bossY,
+                id: bossId, layer, lane: 1, x: BOSS_X, y: bossY,
                 type: 'boss', nodeSector: s, connections: [],
                 status: 'locked'
             });
