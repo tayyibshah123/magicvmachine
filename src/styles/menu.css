@@ -188,16 +188,21 @@
     /* Rows in order:
          hdr · title · ticker · orb · SPACER (1fr)
          · ops · console · cluster · energy · footer
-       The 1fr SPACER absorbs leftover vertical space so the
-       title/orb cluster anchors at the top and the ops →
-       footer block hugs the bottom edge of the frame. Stops
-       the orb halo from bleeding into the title and gives
-       the footer thumb-room. */
+       The 1fr SPACER absorbs leftover vertical space and has
+       its own min-height so even on a tall viewport the orb
+       is clearly separated from the ops strip. */
     grid-template-rows: auto auto auto auto 1fr auto auto auto auto auto;
     padding: 0.8cqh 4cqw 1.2cqh;
-    gap: 0.9cqh;
+    /* Bumped gap from 0.9cqh → 1.6cqh per user feedback that the
+       layout still felt cramped. Combined with the spacer min,
+       every row now reads as a distinct beat. */
+    gap: 1.6cqh;
 }
-.menu-v2.dropbay .db-spacer { min-height: 0; }
+.menu-v2.dropbay .db-spacer {
+    /* Explicit floor so even when 1fr resolves to nearly 0 the
+       gap between the orb and the ops strip stays generous. */
+    min-height: 3cqh;
+}
 
 
 /* ──────────────────────────────────────────────────────────
@@ -400,11 +405,11 @@
 }
 .menu-v2.dropbay .db-orb {
     position: relative;
-    /* Capped at 32cqh so the orb sits clearly between title
-       (above) and ops (below) without halo overlap. The
-       outer ring + corners + halo all live within this box
-       now. Wider phones get the 80cqw cap. */
-    width: min(32cqh, 78cqw);
+    /* Trimmed 32cqh → 26cqh so the orb's corner brackets sit
+       clearly INSIDE the orb's own gap budget without crowding
+       the ticker above or the ops strip below. Halo / rings /
+       corners all live within this box. */
+    width: min(26cqh, 70cqw);
     aspect-ratio: 1;
     max-width: 100%;
 }
@@ -1212,10 +1217,13 @@ body.perf-mid .menu-v2.dropbay .db-bg-glyphs i:nth-child(n+5) {
 .menu-v2.dropbay .db-ticker-stream span:nth-child(3) { animation-delay: 8s; }
 .menu-v2.dropbay .db-ticker-stream span:nth-child(4) { animation-delay: 12s; }
 @keyframes db-ticker-fade {
+    /* Each phrase visible for ~25% of the 16s cycle (4s) with a
+       small overlap into the next phrase so the ticker never
+       reads as a naked arrow ▸ between phrases. */
     0%, 100% { opacity: 0; transform: translateY(20%); }
-    3%       { opacity: 1; transform: translateY(0); }
-    22%      { opacity: 1; transform: translateY(0); }
-    25%      { opacity: 0; transform: translateY(-20%); }
+    1%       { opacity: 1; transform: translateY(0); }
+    24%      { opacity: 1; transform: translateY(0); }
+    27%      { opacity: 0; transform: translateY(-20%); }
 }
 .reduced-motion .menu-v2.dropbay .db-ticker-arrow,
 .reduced-motion .menu-v2.dropbay .db-ticker-stream span,
