@@ -185,23 +185,33 @@
     position: relative; z-index: 1;
     height: 100%;
     display: grid;
-    /* Rows in order (ticker row removed per user request):
-         hdr · title · orb · SPACER (1fr)
-         · ops · console · cluster · energy · footer
-       The 1fr SPACER absorbs leftover vertical space and has
-       its own min-height so even on a tall viewport the orb
-       is clearly separated from the ops strip. */
-    grid-template-rows: auto auto auto 1fr auto auto auto auto auto;
-    padding: 0.8cqh 4cqw 1.2cqh;
-    /* Bumped gap from 0.9cqh → 1.6cqh per user feedback that the
-       layout still felt cramped. Combined with the spacer min,
-       every row now reads as a distinct beat. */
-    gap: 1.6cqh;
+    /* Layout now reads:
+         title (auto)  ·  SPACER (1fr)  ·  ops · console · energy · cluster · footer
+       The header strip was removed (settings gear is absolute-pinned
+       to the top-right and the operator chip moved to a subtitle
+       under the wordmark). The orb is also absolute-positioned at
+       canvas centre so it never drifts when title/bottom shrink.
+       The single 1fr spacer eats all leftover vertical space, which
+       pushes the bottom group flush with the canvas bottom — the
+       streak/version footer then sits on the bottom edge per user
+       request. padding-bottom collapses to 0 to remove the last
+       sliver of trailing space. */
+    grid-template-rows: auto 1fr auto auto auto auto auto;
+    /* padding-top targets the title-bar position the previous
+       OPERATOR chip used to occupy, per user request. The shell
+       has zero padding-bottom so the streak/version footer sits
+       flush against the canvas bottom edge. */
+    padding: 5cqh 4cqw 0;
+    /* Tighter row gap for a denser bottom-of-screen cluster. */
+    gap: 0.9cqh;
 }
 .menu-v2.dropbay .db-spacer {
-    /* Explicit floor so even when 1fr resolves to nearly 0 the
-       gap between the orb and the ops strip stays generous. */
+    /* Single 1fr row that absorbs all leftover vertical space between
+       the title (top) and the bottom button cluster. Min-height kept
+       so even on very short viewports there's a visible gap below
+       the title before the bottom strip kicks in. */
     min-height: 3cqh;
+    width: 100%;
 }
 
 
@@ -284,13 +294,69 @@
     position: relative;
     display: flex; flex-direction: column; align-items: center;
     justify-content: center;
-    gap: 0.4cqh;
+    gap: 0.6cqh;
     padding: 0.4cqh 0 0.2cqh;
-    /* Anchor the title roughly 20% from the top of the screen per
-       user request. Header sits at ~5cqh, so a ~10cqh margin-top
-       lands the title centre at the 20% line. clamp keeps it sane
-       on very short and very tall viewports. */
-    margin-top: clamp(40px, 10cqh, 120px);
+    /* Title now sits at the top of the shell — the header strip was
+       removed, so no margin-top is needed. The operator subtitle sits
+       directly beneath the wordmark via the `.db-operator-subtitle`
+       child below. */
+    margin-top: 0;
+}
+
+/* Floating settings gear — pinned to the top-right corner so it can't
+   collide with the title. Was previously a flex child of .db-hdr, but
+   removing the header strip required pulling it into absolute flow. */
+.menu-v2.dropbay .db-gear-floating {
+    position: absolute;
+    top: 1.4cqh;
+    right: 4cqw;
+    z-index: 5;
+    width: 4.2cqh; height: 4.2cqh; border-radius: 50%;
+    display: grid; place-items: center;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: rgba(255, 255, 255, 0.66);
+    transition: transform 0.6s ease, color 0.3s ease, border-color 0.3s ease;
+    cursor: pointer;
+    padding: 0;
+}
+.menu-v2.dropbay .db-gear-floating:hover {
+    transform: rotate(90deg);
+    color: var(--db-accent);
+    border-color: rgba(var(--db-accent-rgb), 0.55);
+}
+.menu-v2.dropbay .db-gear-floating .game-icon {
+    width: 2.4cqh; height: 2.4cqh;
+}
+
+/* Operator callsign subtitle — sits directly under the wordmark inside
+   .db-title-row so the player's identity reads as part of the masthead
+   instead of a separate header strip. Specificity bumped past the
+   legacy .mv2-operator-chip.subtitle rules in glass.css / polish.css /
+   snap.css so the chip-pill restyle actually applies. */
+#screen-start.dropbay .db-title-row .db-operator-subtitle {
+    margin: 0;
+    padding: 0.6cqh 1.6cqw;
+    font-family: var(--ui-font-tech, 'Audiowide', monospace);
+    font-size: 1.4cqh;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    line-height: 1;
+    color: rgba(255, 255, 255, 0.78);
+    text-shadow: none;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 9999px;
+    align-self: center;
+    position: static;
+    height: auto;
+    width: auto;
+    min-width: 0;
+}
+#screen-start.dropbay .db-title-row .db-operator-subtitle::before,
+#screen-start.dropbay .db-title-row .db-operator-subtitle::after {
+    content: none;
+    display: none;
 }
 
 /* Cosmetic Archivist Slain frame — stays anchored around the
@@ -400,13 +466,22 @@
  * ────────────────────────────────────────────────────────── */
 .menu-v2.dropbay .db-orb-stage {
     display: grid; place-items: center;
-    position: relative;
-    /* Now an `auto` track. The 1fr spacer below the stage
-       absorbs leftover space, so the stage hugs the orb's
-       intrinsic size and the title sits flush above it. */
+    /* Pinned to the absolute centre of the shell so the orb stays
+       at canvas centre regardless of how the title above and the
+       button cluster below are sized. Pulled out of grid flow so
+       the bottom group can compress against the canvas bottom and
+       the title can sit at the top without dragging the orb with
+       them. z-index 1 keeps the orb above the floor / radial
+       backdrops but below the floating settings gear. */
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
     min-height: 0;
-    padding: 0.8cqh 0;
+    padding: 0;
     overflow: visible;
+    pointer-events: none;
 }
 .menu-v2.dropbay .db-orb {
     position: relative;

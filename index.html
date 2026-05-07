@@ -272,33 +272,32 @@
                     <div class="db-bg-vignette"></div>
                 </div>
 
-                <!-- DROP BAY shell — header / title / hero / console / tabs / footer -->
+                <!-- DROP BAY shell — title / hero / console / tabs / footer.
+                     Header strip removed — the operator chip now lives as a
+                     subtitle directly under the wordmark and the settings
+                     gear is absolute-positioned in the top-right corner of
+                     the shell. -->
                 <div class="db-shell">
 
-                    <!-- HEADER — minimal status strip. Operator + sparks
-                         + gear. Ascension is no longer a header chip —
-                         it appears as subtext within the RESUME button
-                         (and is implied via the Ascension picker that
-                         the operator chip routes into). -->
-                    <div class="db-hdr">
-                        <div class="db-hdr-left">
-                            <div class="subtitle db-chip mv2-operator-chip" aria-label="Operator callsign"></div>
-                        </div>
-                        <div class="db-hdr-right">
-                            <div id="menu-sparks-pill" class="db-chip db-sparks-chip feature-locked-hidden" aria-label="Sparks">
-                                <span class="meta-sparks-glyph" aria-hidden="true">✦</span>
-                                <span id="menu-sparks">0</span>
-                            </div>
-                            <button id="btn-settings-main" class="db-gear" aria-label="Settings">
-                                <svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2 L12 5 M12 19 L12 22 M2 12 L5 12 M19 12 L22 12 M4.6 4.6 L6.7 6.7 M17.3 17.3 L19.4 19.4 M19.4 4.6 L17.3 6.7 M4.6 19.4 L6.7 17.3"/></svg>
-                            </button>
-                        </div>
+                    <!-- Floating settings gear — pinned to the top-right
+                         of the shell so it stays out of the title's flow. -->
+                    <button id="btn-settings-main" class="db-gear db-gear-floating" aria-label="Settings">
+                        <svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2 L12 5 M12 19 L12 22 M2 12 L5 12 M19 12 L22 12 M4.6 4.6 L6.7 6.7 M17.3 17.3 L19.4 19.4 M19.4 4.6 L17.3 6.7 M4.6 19.4 L6.7 17.3"/></svg>
+                    </button>
+
+                    <!-- Hidden sparks pill — kept so any code path binding
+                         to #menu-sparks still resolves. Pill is no longer
+                         visually rendered in a header strip. -->
+                    <div id="menu-sparks-pill" class="db-chip db-sparks-chip feature-locked-hidden hidden" aria-hidden="true">
+                        <span class="meta-sparks-glyph" aria-hidden="true">✦</span>
+                        <span id="menu-sparks">0</span>
                     </div>
 
                     <!-- TITLE — big, dynamic wordmark. The Archivist Slain
                          cosmetic frame is mounted but rendered behind/at
                          the wordmark's level for the post-archive-kill
-                         brass reveal. Tagline removed. -->
+                         brass reveal. Operator callsign now sits as the
+                         subtitle directly under the wordmark. -->
                     <div class="db-title-row">
                         <div class="title-frame mv2-title-frame db-title-frame" id="title-frame" data-archivist-tier="0" aria-hidden="true">
                             <span class="title-frame-corner tl"></span>
@@ -308,6 +307,7 @@
                             <span class="title-frame-badge" id="title-frame-badge">ARCHIVIST SLAIN</span>
                         </div>
                         <h1 class="title mv2-wordmark db-wordmark">MAGIC <span class="vs">v</span> MACHINE</h1>
+                        <div class="subtitle db-chip mv2-operator-chip db-operator-subtitle" aria-label="Operator callsign"></div>
                     </div>
 
                     <!-- TICKER removed (was rendering as a small bar
