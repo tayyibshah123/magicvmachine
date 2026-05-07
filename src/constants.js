@@ -1615,6 +1615,50 @@ const EVENTS_DB = [
                 return "You bottle the warm vapour and trade it onward. +30 Fragments.";
             } }
         ]
+    },
+    /* Corrupted Shrine — random pact event in NORMAL runs. Skipped in
+       Challenge Mode (the dedicated pact node already covered that beat)
+       and only spawns sectors 1-3 so the run-shaping decision lands
+       early. Each option signs one of the three pacts via _signPactCore;
+       Decline pays no cost so the option exists. The condition also
+       hides the event once all pacts are signed (rare in normal runs
+       since they only have one shrine, but defensive). */
+    {
+        title: "CORRUPTED SHRINE",
+        art: 'relic-shrine',
+        desc: "A mass of black-crystal idols hums in three frequencies. Each promises power for a price. The shrine will not let you leave with empty hands more than once.",
+        condition: (g) => !g.challengeMode
+            && (g.sector || 1) <= 3
+            && (!g.activePacts || g.activePacts.size < 3),
+        options: [
+            { text: "Sign the Pact of Ruin (-30% Max HP, +50% damage)", icon: 'skull', effect: (g) => {
+                if (g.activePacts && g.activePacts.has('ruin')) {
+                    g.techFragments += 20;
+                    return "Ruin already burns in you. The shrine pays consolation. +20 Fragments.";
+                }
+                g._signPactCore('ruin');
+                return "PACT OF RUIN signed.";
+            } },
+            { text: "Sign the Pact of Silence (rerolls free, combos disabled)", icon: 'eye', effect: (g) => {
+                if (g.activePacts && g.activePacts.has('silence')) {
+                    g.techFragments += 20;
+                    return "The Silence already holds you. +20 Fragments.";
+                }
+                g._signPactCore('silence');
+                return "PACT OF SILENCE signed.";
+            } },
+            { text: "Sign the Pact of Hunger (minions ×2 dmg, die after 1 turn)", icon: 'minion', effect: (g) => {
+                if (g.activePacts && g.activePacts.has('hunger')) {
+                    g.techFragments += 20;
+                    return "Hunger already feeds on you. +20 Fragments.";
+                }
+                g._signPactCore('hunger');
+                return "PACT OF HUNGER signed.";
+            } },
+            { text: "Decline. Walk away.", icon: 'star', effect: (g) => {
+                return "The idols dim. You leave with what you brought.";
+            } }
+        ]
     }
 ];
 

@@ -901,9 +901,9 @@
                         <span class="rest-option-desc">Upgrade a random skill</span>
                     </button>
 
-                    <!-- Bottom-right: random module (always visible). When
-                         Challenge Mode is active and an unsigned pact remains,
-                         JS swaps this card with the pact one. -->
+                    <!-- Bottom-right: pick 1 of 3 modules. Default for ALL runs;
+                         tapping opens screen-module-pick which renders three
+                         random modules from the run's eligible pool. -->
                     <button id="btn-rest-module" class="rest-option rest-option--module" data-quadrant="br">
                         <div class="rest-option-glow" aria-hidden="true"></div>
                         <svg class="rest-option-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -912,19 +912,7 @@
                             <polygon points="12,3 19,9 12,9" fill="rgba(255,255,255,0.35)"/>
                         </svg>
                         <span class="rest-option-label">MODULE</span>
-                        <span class="rest-option-desc">Random module · install</span>
-                    </button>
-
-                    <!-- Challenge Mode only — JS swaps with MODULE when pacts available. -->
-                    <button id="btn-rest-pact" class="rest-option rest-option--pact hidden" data-quadrant="br">
-                        <div class="rest-option-glow" aria-hidden="true"></div>
-                        <svg class="rest-option-icon" viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M12 3 L20 8 L20 16 L12 21 L4 16 L4 8 Z" fill="currentColor" fill-opacity="0.25"/>
-                            <path d="M12 3 L20 8 L20 16 L12 21 L4 16 L4 8 Z" fill="none" stroke="currentColor" stroke-width="1.6"/>
-                            <path d="M12 7 L12 17 M8 12 L16 12" stroke="currentColor" stroke-width="1.6"/>
-                        </svg>
-                        <span class="rest-option-label">SIGN A PACT</span>
-                        <span class="rest-option-desc">Survival for power · stacks all run</span>
+                        <span class="rest-option-desc">Pick 1 of 3 · install</span>
                     </button>
 
                     <!-- Centre figure: the player's actual class entity, painted
@@ -960,12 +948,21 @@
                 </div>
             </div>
 
-            <!-- Pact pick modal (Challenge Mode) -->
+            <!-- Pact pick modal — opened by the rest-area shrine, the
+                 Challenge Mode pact node, and the Corrupted Shrine event. -->
             <div id="screen-pact" class="screen hidden">
                 <h2 class="neon-text-pink">SIGN A PACT</h2>
-                <p class="pact-subtitle">Each pact stays for the rest of the gauntlet. Pick once, live with it.</p>
+                <p class="pact-subtitle">Each pact stays for the rest of the run. Pick once, live with it.</p>
                 <div id="pact-options" class="pact-options"></div>
                 <button id="btn-pact-cancel" class="btn secondary" style="margin-top: 18px;">CANCEL. RETURN TO REST</button>
+            </div>
+
+            <!-- Module pick (rest screen, all runs) — three random modules,
+                 player picks one. Opened by handleRest('module'). -->
+            <div id="screen-module-pick" class="screen hidden">
+                <h2 class="neon-text-blue">INSTALL A MODULE</h2>
+                <p class="module-pick-subtitle">Pick one. The other two leave with the rest cycle.</p>
+                <div id="module-pick-options" class="module-pick-options"></div>
             </div>
 
             <!-- LOADOUT modal (audit F8) — full mid-run summary. Toggled via

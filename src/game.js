@@ -1086,9 +1086,10 @@ const Game = {
         attachButtonEvent('btn-rest-meditate', () => this.handleRest('meditate'));
         attachButtonEvent('btn-rest-tinker', () => this.handleRest('tinker'));
         attachButtonEvent('btn-rest-module', () => this.handleRest('module'));
-        attachButtonEvent('btn-rest-pact', () => this.openPactPicker());
         attachButtonEvent('btn-pact-cancel', () => {
-            // Back to the rest screen — same options still available.
+            // Back to the rest screen — only relevant when the pact picker
+            // was opened from a rest. Pact-node and event invocations
+            // hide the cancel button so this listener is a no-op there.
             document.getElementById('screen-pact').classList.remove('active');
             document.getElementById('screen-pact').classList.add('hidden');
             document.getElementById('screen-rest').classList.remove('hidden');
@@ -8739,32 +8740,46 @@ triggerSystemCrash() {
         this.map.currentIdx = 'start';
     },
 
-    // Challenge Mode map — fixed zig-zag chain. Two rest nodes guard every
-    // boss fight: start → rest → rest → boss(s1) → rest → rest → boss(s2)
-    // → ... → rest → rest → boss(s5). Rest nodes hug the LEFT side and
-    // boss nodes hug the RIGHT so the icons never stack on top of each
-    // other — the connecting lines form a clear zig-zag silhouette up
-    // the screen. `nodeSector` on each boss tells `visitNode` which
-    // sector boss template to load for that fight.
+    // Challenge Mode map — fixed zig-zag chain. The run opens with a
+    // single PACT node where the player must sign one of three pacts —
+    // this replaces the old rest-screen pact button so the bargain is
+    // committed up-front for the gauntlet. After the pact, two rest
+    // nodes guard every boss fight: start → pact → rest → rest →
+    // boss(s1) → rest → rest → boss(s2) → ... → rest → rest → boss(s5).
+    // Rest nodes hug the LEFT side, boss nodes hug the RIGHT, the pact
+    // sits centre so it reads as a special "gateway" beat. `nodeSector`
+    // on each boss tells `visitNode` which sector boss template to load
+    // for that fight.
     _generateChallengeMap() {
         this.map.nodes = [];
         const SECTORS = 5;
         const RESTS_PER_BOSS = 2;
-        // start + (rest+rest+boss) per sector = 1 + 5*3 = 16 layers (0..15).
-        const totalLayers = SECTORS * (RESTS_PER_BOSS + 1);
-        const topY = 6;
-        const bottomY = 92;
+        // start + pact + (rest+rest+boss) per sector = 1 + 1 + 5*3 = 17 layers.
+        const totalLayers = 1 + SECTORS * (RESTS_PER_BOSS + 1);
+        const topY = 5;
+        const bottomY = 93;
         const stepY = (bottomY - topY) / totalLayers;
         // Horizontal lanes — wide enough that rest and boss icons never
         // visually overlap even at the densest vertical spacing.
         const REST_X = 30;
         const BOSS_X = 70;
+        const PACT_X = 50;
         this.map.nodes.push({
             id: 'start', layer: 0, lane: 0, x: 50, y: bottomY,
             type: 'start', connections: [], status: 'completed'
         });
-        let prevId = 'start';
-        let layer = 1;
+        // Pact node — first stop, layer 1, centred between the rest /
+        // boss lanes so it reads as a special gateway beat. Forces a
+        // pact decision before the player ever sees a rest.
+        const pactId = 'pact-start';
+        this.map.nodes.push({
+            id: pactId, layer: 1, lane: 0, x: PACT_X, y: bottomY - stepY,
+            type: 'pact', connections: [], status: 'available'
+        });
+        const startNode = this.map.nodes.find(n => n.id === 'start');
+        if (startNode) startNode.connections.push(pactId);
+        let prevId = pactId;
+        let layer = 2;
         for (let s = 1; s <= SECTORS; s++) {
             for (let r = 1; r <= RESTS_PER_BOSS; r++) {
                 const restId = `rest-${s}-${r}`;
@@ -8772,7 +8787,7 @@ triggerSystemCrash() {
                 this.map.nodes.push({
                     id: restId, layer, lane: -1, x: REST_X, y: restY,
                     type: 'rest', connections: [],
-                    status: (layer === 1) ? 'available' : 'locked'
+                    status: 'locked'
                 });
                 const prev = this.map.nodes.find(n => n.id === prevId);
                 if (prev) prev.connections.push(restId);
@@ -9390,6 +9405,11 @@ triggerSystemCrash() {
                 <circle cx="12" cy="18" r="1.6" fill="currentColor"/>
                 <circle cx="20" cy="18" r="1.6" fill="currentColor"/>
                 <path d="M11 22 L13 21 L15 22 L17 21 L19 22 L21 21"/>
+            </svg>`,
+            pact: `<svg viewBox="0 0 32 32" width="100%" height="100%" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M16 4 L26 9 L26 19 L16 28 L6 19 L6 9 Z" fill="currentColor" fill-opacity="0.22"/>
+                <path d="M16 9 L16 23 M10 16 L22 16" stroke-width="2"/>
+                <circle cx="16" cy="16" r="2.6" fill="currentColor"/>
             </svg>`
         };
         return icons[type] || icons.combat;
@@ -9575,7 +9595,12 @@ triggerSystemCrash() {
     renderMapLegend() {
         const legend = document.getElementById('map-legend-top');
         if (!legend) return;
-        const types = ['combat', 'elite', 'event', 'shop', 'rest', 'boss'];
+        // Challenge Mode only ever shows start / pact / rest / boss, so
+        // the legend collapses to the four relevant glyphs there. Normal
+        // runs keep the full hex of node types.
+        const types = this.challengeMode
+            ? ['rest', 'boss', 'pact']
+            : ['combat', 'elite', 'event', 'shop', 'rest', 'boss'];
         legend.innerHTML = types.map(t => `
             <span class="map-legend-item" data-type="${t}">
                 <span class="map-legend-icon">${this.mapNodeSvg(t)}</span>
@@ -9696,11 +9721,16 @@ triggerSystemCrash() {
             }
             this.startCombat(node.type);
         } else if (node.type === 'shop') {
-            this.generateShop(); 
+            this.generateShop();
             this.changeState(STATE.SHOP);
         } else if (node.type === 'event') {
             // FIX: Handle event here so position is already updated
             this.startEvent();
+        } else if (node.type === 'pact') {
+            // Pact node — Challenge Mode's run-start trade. Opens the pact
+            // picker as a forced decision (no cancel). The picker calls
+            // signPact which advances the node + state on commit.
+            this.openPactPicker({ allowCancel: false });
         } else if (node.type === 'rest') {
             // Custom Run: Merciless — rest nodes do nothing. Flash a quick
             // toast and auto-complete so the player stays on the map.
@@ -9721,27 +9751,20 @@ triggerSystemCrash() {
                 btnTinker.innerHTML = "<div>🔧 TINKER</div><div style='font-size: 0.8rem; color: #aaa;'>Upgrade a Random Skill</div>";
             }
 
-            // Bottom-right slot: MODULE always visible by default; PACT
-            // takes its place ONLY when the run is in Challenge Mode AND
-            // an unsigned pact remains. Both share data-quadrant="br".
-            const btnPact = document.getElementById('btn-rest-pact');
+            // Bottom-right slot: MODULE is now the universal default for
+            // every run — tapping opens a 3-of-N picker (see
+            // _openModulePicker). Pacts are no longer offered at rest;
+            // they live on a dedicated pact node at Challenge run start
+            // and as a Corrupted Shrine event in normal runs.
             const btnModule = document.getElementById('btn-rest-module');
-            const remaining = PACTS.filter(p => !this.activePacts || !this.activePacts.has(p.id));
-            const showPact = this.challengeMode && remaining.length > 0;
-            if (btnPact)   btnPact.classList.toggle('hidden', !showPact);
-            if (btnModule) btnModule.classList.toggle('hidden', showPact);
-            // Defensive: if the build is missing the module button (e.g.
-            // an old deployed APK whose assets predate the module slot),
-            // log it so the dev console flags the deployment issue. The
-            // bottom-right would otherwise silently render empty.
-            if (!btnModule && !showPact) {
+            if (btnModule) btnModule.classList.remove('hidden');
+            // Belt-and-braces: a stale build of index.html might still
+            // ship the old btn-rest-pact element. Force-hide it so the
+            // bottom-right slot never double-renders.
+            const btnPactStale = document.getElementById('btn-rest-pact');
+            if (btnPactStale) btnPactStale.classList.add('hidden');
+            if (!btnModule) {
                 console.warn('[rest] btn-rest-module missing from DOM — Android assets likely out of sync. Run `npm run android:sync` to refresh.');
-            }
-            if (showPact) {
-                // First-time discoverability — surface a hint the moment
-                // the Pact option becomes pickable so players notice the
-                // mechanic exists before they hit a tougher boss.
-                Hints.trigger && Hints.trigger('first_pact_available');
             }
 
             // Centre figure: paint the player's CURRENT class entity into
@@ -9784,26 +9807,10 @@ triggerSystemCrash() {
             this.completeCurrentNode();
             this.renderMap();
         } else if (action === 'module') {
-            // Random module — pick from UPGRADES_POOL (excluding already-
-            // owned uniques) so rest nodes can hand out a relic in
-            // addition to the heal/meditate/tinker options. Mirrors the
-            // shop's relic pool for consistency. Class-locked modules
-            // are filtered to the matching class only.
-            document.getElementById('screen-rest').classList.remove('active');
-            document.getElementById('screen-rest').classList.add('hidden');
-            const ownedIds = new Set((this.player.relics || []).map(r => r.id));
-            const cidRest = this.player && this.player.classId;
-            const eligible = UPGRADES_POOL.filter(r => !r.classLocked || r.classLocked === cidRest);
-            const pool = eligible.filter(r => !ownedIds.has(r.id));
-            const fallback = eligible;
-            const picked = (pool.length > 0 ? pool : fallback)[Math.floor(Math.random() * (pool.length > 0 ? pool.length : fallback.length))];
-            if (picked) {
-                this.player.addRelic(picked);
-                ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH/2, CONFIG.CANVAS_HEIGHT/2, `INSTALLED: ${picked.name}`, COLORS.GOLD);
-                AudioMgr.playSound('upgrade');
-            }
-            this.completeCurrentNode();
-            this.renderMap();
+            // Pick 1 of 3 modules — default for every run. Hand off to
+            // _openModulePicker which builds the eligible pool, renders
+            // three cards, and resolves the rest node on selection.
+            this._openModulePicker();
         } else if (action === 'tinker') {
             const available = this._availableDiceUpgrades();
 
@@ -9822,13 +9829,138 @@ triggerSystemCrash() {
                 // Hide rest screen
                 document.getElementById('screen-rest').classList.remove('active');
                 document.getElementById('screen-rest').classList.add('hidden');
-                
+
                 // Go to shop
                 this.generateShop();
                 this.changeState(STATE.SHOP);
                 // Note: Node completion happens in leaveShop()
             }
         }
+    },
+
+    // ----- REST: pick 1 of 3 modules (default for every run) -------------
+    // Builds the eligible relic pool the same way generateRewards does
+    // (class-locked filter, drop owned uniques + maxed stacks) and surfaces
+    // three random options on screen-module-pick. Picking one installs it
+    // and completes the rest node. If the pool collapses to nothing
+    // (every stackable relic capped, every unique owned), fall back to a
+    // small fragment consolation so the rest never soft-locks.
+    _openModulePicker() {
+        const restScreen = document.getElementById('screen-rest');
+        const pickScreen = document.getElementById('screen-module-pick');
+        const list = document.getElementById('module-pick-options');
+        if (!pickScreen || !list || !this.player) return;
+
+        // Build the pool — mirror the post-combat reward filters so this
+        // picker plays by the same rules every offer screen does.
+        let pool = [...UPGRADES_POOL];
+        if (this.player.classId) {
+            const cid = this.player.classId;
+            pool = pool.filter(r => !r.classLocked || r.classLocked === cid);
+        }
+        // One-copy uniques + standard caps. Mirrors generateRewards.
+        const STACK_CAPS = { minion_core: 2, titan_module: 3, relentless: 3, crit_lens: 5, gamblers_chip: 3, hologram: 3, firewall: 3 };
+        const ONE_COPY = new Set([
+            'second_life','manifestor','voodoo_doll','overcharge_chip','reckless_drive',
+            'c_quantum_core','c_paradox','c_fracture','c_blood_pact','iron_lung',
+            'dawn_protocol','dusk_protocol','echo_chamber','dice_cache','volt_primer',
+            'salvage_protocol','echo_round','last_stand','ghost_cache','spark_battery'
+        ]);
+        pool = pool.filter(r => {
+            if (ONE_COPY.has(r.id) && this.player.hasRelic(r.id)) return false;
+            const cap = STACK_CAPS[r.id];
+            if (cap && this.stackCount && this.stackCount(r.id) >= cap) return false;
+            return true;
+        });
+
+        // Fisher-Yates shuffle, then slice the first three.
+        for (let i = pool.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pool[i], pool[j]] = [pool[j], pool[i]];
+        }
+        const options = pool.slice(0, 3);
+
+        // Empty pool — give a small frag consolation and resolve the
+        // rest node so the player isn't stuck on an unactionable screen.
+        if (options.length === 0) {
+            const consolation = 25;
+            this.techFragments += consolation;
+            ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
+                `RELICS MAXED. +${consolation} FRAG`, COLORS.GOLD);
+            AudioMgr.playSound && AudioMgr.playSound('mana');
+            if (restScreen) {
+                restScreen.classList.remove('active');
+                restScreen.classList.add('hidden');
+            }
+            this.completeCurrentNode();
+            this.renderMap();
+            this.changeState(STATE.MAP);
+            return;
+        }
+
+        list.innerHTML = '';
+        options.forEach(item => {
+            const card = document.createElement('button');
+            card.type = 'button';
+            const isGold = item.rarity === 'gold';
+            const isRed  = item.rarity === 'red';
+            const isCorrupted = item.rarity === 'corrupted';
+            let rarityClass = 'rarity-common';
+            if (isCorrupted) rarityClass = 'rarity-corrupted';
+            else if (isGold) rarityClass = 'rarity-gold';
+            else if (isRed)  rarityClass = 'rarity-red';
+            card.className = `module-pick-card ${rarityClass}`;
+            card.dataset.itemId = item.id;
+            const desc = (this.getRelicDescription)
+                ? this.getRelicDescription(item, (this.stackCount ? this.stackCount(item.id) : 0) + 1)
+                : item.desc;
+            card.innerHTML = `
+                <div class="module-pick-card-name">${item.name}</div>
+                <div class="module-pick-card-desc">${desc || ''}</div>
+            `;
+            card.addEventListener('click', () => this._pickModule(item));
+            list.appendChild(card);
+        });
+
+        if (restScreen) {
+            restScreen.classList.remove('active');
+            restScreen.classList.add('hidden');
+        }
+        pickScreen.classList.remove('hidden');
+        pickScreen.classList.add('active');
+    },
+
+    _pickModule(item) {
+        if (!item || !this.player) return;
+        // Hide picker first so the floating-text + relic-fly VFX read
+        // against the map backdrop, not a half-faded screen.
+        const pickScreen = document.getElementById('screen-module-pick');
+        if (pickScreen) {
+            pickScreen.classList.remove('active');
+            pickScreen.classList.add('hidden');
+        }
+        // Instant-effect items mirror the reward-screen handling so the
+        // rest picker can also drop heals / max-hp bumps / mana boosts
+        // when they show up in the pool.
+        if (item.instant) {
+            if (item.id === 'repair') {
+                const amt = Math.floor(this.player.maxHp * 0.3);
+                this.player.heal(amt);
+            }
+            if (item.id === 'hull_plating')     { this.player.maxHp += 10; this.player.currentHp += 10; }
+            if (item.id === 'reinforced_shell') { this.player.maxHp += 20; this.player.currentHp += 20; }
+            if (item.id === 'mana_battery')     { this.player.baseMana += 1; }
+        } else {
+            this.player.addRelic(item);
+        }
+        ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
+            `INSTALLED: ${item.name.toUpperCase()}`, COLORS.GOLD);
+        AudioMgr.playSound && AudioMgr.playSound('upgrade');
+        Analytics && Analytics.emit && Analytics.emit('relic_picked', { id: item.id, rarity: item.rarity || 'common', src: 'rest' });
+        Hints && Hints.trigger && Hints.trigger('first_relic');
+        this.completeCurrentNode();
+        this.renderMap();
+        this.changeState(STATE.MAP);
     },
 
     // ----- LOADOUT modal (audit F8) ---------------------------------------
@@ -9967,7 +10099,8 @@ triggerSystemCrash() {
     // Open the pick screen — renders one card per unsigned PACT. Tapping a
     // card commits the pact; cancelling returns the player to the rest
     // screen so they can still take a normal heal/upgrade instead.
-    openPactPicker() {
+    openPactPicker(opts) {
+        const allowCancel = !opts || opts.allowCancel !== false;
         const restScreen = document.getElementById('screen-rest');
         const pactScreen = document.getElementById('screen-pact');
         const list = document.getElementById('pact-options');
@@ -9990,6 +10123,11 @@ triggerSystemCrash() {
             }
             list.appendChild(card);
         });
+        // Cancel only makes sense when the picker was opened from rest.
+        // Pact-node and Corrupted Shrine event invocations are forced
+        // commits — hide the cancel button so the player has to pick.
+        const cancelBtn = document.getElementById('btn-pact-cancel');
+        if (cancelBtn) cancelBtn.classList.toggle('hidden', !allowCancel);
         if (restScreen) {
             restScreen.classList.remove('active');
             restScreen.classList.add('hidden');
@@ -9998,11 +10136,16 @@ triggerSystemCrash() {
         pactScreen.classList.add('active');
     },
 
-    signPact(id) {
+    // Apply a pact's data + VFX without any screen / state plumbing.
+    // Called by signPact (rest + pact-node path) and by the Corrupted
+    // Shrine event option (which manages its own node completion).
+    // Returns true if the pact was newly signed, false if it was already
+    // active (so callers can choose whether to advance).
+    _signPactCore(id) {
         const pact = PACTS.find(p => p.id === id);
-        if (!pact) return;
+        if (!pact) return false;
         if (!this.activePacts) this.activePacts = new Set();
-        if (this.activePacts.has(id)) return;
+        if (this.activePacts.has(id)) return false;
         this.activePacts.add(id);
         this.applyPact(pact);
         // Celebrate the bargain — Pacts are run-defining trades, so the moment
@@ -10022,6 +10165,12 @@ triggerSystemCrash() {
         if (this.shake) this.shake(22);
         if (this.haptic) this.haptic('heavy');
         if (this.triggerScreenFlash) this.triggerScreenFlash('rgba(255, 0, 85, 0.18)', 220);
+        this._renderPactPills();
+        return true;
+    },
+
+    signPact(id) {
+        if (!this._signPactCore(id)) return;
         // Pact replaces the rest's normal action, like the other rest options.
         const pactScreen = document.getElementById('screen-pact');
         if (pactScreen) {
@@ -10036,7 +10185,6 @@ triggerSystemCrash() {
         this.completeCurrentNode();
         this.renderMap();
         this.changeState(STATE.MAP);
-        this._renderPactPills();
     },
 
     // Run-side application of a pact. Idempotent — re-running the same pact
