@@ -264,6 +264,8 @@ export function drawIntentIcon(ctx, type, cx, cy, size, color) {
 
         case 'summon':
         case 'summon_glitch':
+        case 'summon_void':
+        case 'buff_voidlings':
         case 'intentSummon':
         case 'intentGlitch':
             _wrap(ctx, cx, cy, size, color, c => {

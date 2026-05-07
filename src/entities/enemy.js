@@ -330,8 +330,25 @@ class Enemy extends Entity {
                 return { type: 'attack', val: this.baseDmg, target: getTarget() };
             }
             if (roll === 'summon_void') {
-                if (this.minions.length < 2) return { type: 'summon_void', val: 0 };
-                return { type: 'shield', val: this.bossData.shieldVal || 20 };
+                const voidCount = this.minions.length;
+                // v1.8.2 — Phase 2 = "void surge". Every turn the boss
+                // tries to fill the voidling cap (count: 2 in the
+                // intent so the resolver spawns up to two). At cap,
+                // the intent flips to `buff_voidlings` which buffs
+                // every voidling with a random +1-10 HP / +1-5 DMG.
+                if (this.phase === 2) {
+                    if (voidCount >= 2) {
+                        return { type: 'buff_voidlings', val: 0 };
+                    }
+                    return { type: 'summon_void', val: 0, count: 2 };
+                }
+                // Phase 1 / 3 — single summon when below the cap. At
+                // cap on those phases, the boss falls back to a basic
+                // attack instead of the old shield-as-a-turn (removed
+                // per user request — shield was wasting turns and
+                // didn't fit the consuming-void fantasy).
+                if (voidCount < 2) return { type: 'summon_void', val: 0, count: 1 };
+                return { type: 'attack', val: this.baseDmg, target: getTarget() };
             }
             if (roll === 'reality_overwrite') return { type: 'reality_overwrite', val: 0 };
             // Analyse — telegraphs the Panopticon's nullify beat on this

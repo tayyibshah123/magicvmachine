@@ -7627,27 +7627,34 @@ triggerPhaseGlitch() {
         }
         else if (name === 'NULL_POINTER') {
             if (phase === 2) {
-                enemy.voidCrushTriggered = true;
-                enemy.voidCrushTurns = enemy.voidCrushTurns || 5;
-                // Tier 3: voidlings now share a linked HP pool — damaging
-                // one bleeds 50% of that damage into its siblings. Forces
-                // players to pick off a single target or commit to AoE.
-                enemy.voidShared = true;
-                // Magenta telegraph — matches the vortex aesthetic; all void
-                // crush charging visuals tint the screen this color.
+                // v1.8.2 — Phase 2 is the "void surge" tier. Every turn
+                // the boss either fills the voidling cap (double summon
+                // when below 2) or empowers existing voidlings with a
+                // random +1-10 HP / +1-5 DMG buff (when at cap). Void
+                // Crush, voidShared, realityShatter, and consume-minions
+                // all moved to Phase 3 per user request — Phase 2 is
+                // now strictly about board pressure, no shield turn.
+                enemy.voidPhase2 = true;
                 enemy.phaseTelegraphColor = '#ff00ff';
                 this.triggerScreenFlash && this.triggerScreenFlash('rgba(255, 0, 255, 0.32)', 400);
                 ParticleSys.createShockwave(enemy.x, enemy.y, '#ff00ff', 42);
             } else if (phase === 3) {
+                // v1.8.2 — Phase 3 is now the "everything at once"
+                // closer. Inherits voidShared (linked-HP voidlings) and
+                // Void Crush (5-turn countdown) from the old phase 2,
+                // plus the original phase-3 effects.
+                enemy.voidCrushTriggered = true;
+                enemy.voidCrushTurns = enemy.voidCrushTurns || 5;
+                // Voidlings now share a linked HP pool — damaging
+                // one bleeds 50% of that damage into its siblings.
+                enemy.voidShared = true;
                 enemy.realityShatterActive = true;
-                // Tier 3: boss consumes one own-side minion per turn, gaining
-                // +4 permanent baseDmg. If no minions, no-op. Forces the
-                // player to either kill minions fast OR let the boss scale.
+                // Boss consumes one own-side minion per turn, gaining
+                // +4 permanent baseDmg. If no minions, no-op.
                 enemy.voidConsumesMinions = true;
-                // Wire the long-dormant realityShatter mechanic: a flat
-                // chip-damage drip every player turn end. Bypasses shield
-                // (it's the world bleeding, not an attack). Read by
-                // Game.endTurn — the value scales loosely with boss damage.
+                // Wire the realityShatter mechanic: flat chip-damage
+                // drip every player turn end. Bypasses shield (it's
+                // the world bleeding, not an attack).
                 enemy.realityShatterDmg = 5;
                 // Phase 3 shifts to deep purple — relics "muting".
                 enemy.phaseTelegraphColor = '#bc13fe';
@@ -7965,7 +7972,11 @@ triggerSystemCrash() {
                 break;
             case 'summon_void':
                 label = `${ICONS.intentSummon} VOID SPAWN`;
-                body  = `Summons a Void Spawn. If you have minions, it consumes one and heals the boss for the minion's HP. Otherwise it attacks you and drains 1 Mana.`;
+                body  = `Summons a Void Spawn (28 HP / 8 DMG). Phase 2 fills both slots in one turn.`;
+                break;
+            case 'buff_voidlings':
+                label = `${ICONS.intentSummon} EMPOWER VOID`;
+                body  = `Both Void Spawns gain a random +1-10 HP and +1-5 DMG. Stacks for the fight — break them now or the empowered voidlings carry into Phase 3.`;
                 break;
             case 'dispel':
                 label = `${ICONS.intentDispel} CLEANSE`;
@@ -14027,13 +14038,12 @@ async startTurn() {
 
         // --- NULL_POINTER: Void mechanics ---
         if (this.enemy && this.enemy.name === "NULL_POINTER" && this.enemy.currentHp > 0) {
-            // 1) Arm Void Crush once when boss drops to 100 HP.
-            if (!this.enemy.voidCrushTriggered && this.enemy.currentHp <= 100) {
-                this.enemy.voidCrushTriggered = true;
-                this.enemy.voidCrushTurns = 5;
-                this.triggerSlowPan && this.triggerSlowPan(2400);
-                await this.showPhaseBanner("VOID CRUSH CHARGING", "5 TURNS UNTIL IMPACT", 'warning');
-            }
+            // v1.8.2 — Void Crush is now armed by the Phase 3 transition
+            // hook in _applyBossPhaseMechanic (was previously phase 2 +
+            // a redundant HP<=100 check here). The HP-threshold trigger
+            // was removed; Phase 3 fires at currentHp < maxHp * 0.2 =
+            // 100 HP for a 500 HP boss, so the timing is unchanged but
+            // the source-of-truth is now the phase system.
 
             // 2) Tick Void Crush countdown. Fires when it hits 0.
             if (this.enemy.voidCrushTurns > 0) {
@@ -19717,7 +19727,13 @@ drawEffects() {
                 AudioMgr.playSound('grid_fracture');
             }
             else if (intent.type === 'summon_void') {
-                if (this.enemy.minions.length < 2) {
+                // v1.8.2 — honour intent.count so Phase 2's double-summon
+                // intent spawns up to 2 voidlings in one go (filling the
+                // cap from 0). Phase 1 / 3 still pass count: 1 (single
+                // summon). Loop respects the existing 2-voidling cap.
+                const want = Math.max(1, Math.min(2, intent.count || 1));
+                let spawnedAny = false;
+                for (let i = 0; i < want && this.enemy.minions.length < 2; i++) {
                     const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false, 1);
                     m.name = "Void Spawn";
                     m.maxHp = 28; m.currentHp = 28;
@@ -19725,12 +19741,49 @@ drawEffects() {
                     m.isVoidSpawn = true;
                     m.spawnTimer = 1.0;
                     this.enemy.minions.push(m);
-                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "VOID SPAWN", "#ff00ff");
                     ParticleSys.createShockwave(m.x, m.y, '#ff00ff', 36);
                     ParticleSys.createSparks(m.x, m.y, '#ff00ff', 14);
                     if (this.triggerVFX) this.triggerVFX('materialize', null, m);
-                    if (this.shake) this.shake(6);
+                    spawnedAny = true;
+                }
+                if (spawnedAny) {
+                    const label = (want === 2) ? "VOID SURGE × 2" : "VOID SPAWN";
+                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, label, "#ff00ff");
+                    if (this.shake) this.shake(want === 2 ? 8 : 6);
                     AudioMgr.playSound('mana');
+                    AudioMgr.playSound('grid_fracture');
+                }
+            }
+            else if (intent.type === 'buff_voidlings') {
+                // v1.8.2 — Phase 2 fallback when voidlings already at
+                // cap. Each existing Void Spawn gets a random +1-10 HP
+                // (raises both maxHp and currentHp) and +1-5 DMG. Buff
+                // is permanent for the rest of the fight; if the player
+                // doesn't break the voidlings down before Phase 3, the
+                // Void Crush + reality shatter combo lands on top of
+                // an inflated minion board — the explicit ramp the
+                // user wanted.
+                const voids = (this.enemy.minions || []).filter(m => m && m.isVoidSpawn && m.currentHp > 0);
+                if (voids.length === 0) {
+                    // Defensive — shouldn't happen since the intent only
+                    // fires when voidCount >= 2. Fall back to a flavour
+                    // floater so the turn isn't silent.
+                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "VOID HOLDS", "#ff00ff");
+                } else {
+                    voids.forEach(v => {
+                        const hpBuff  = 1 + Math.floor(Math.random() * 10); // 1-10
+                        const dmgBuff = 1 + Math.floor(Math.random() * 5);  // 1-5
+                        v.maxHp     += hpBuff;
+                        v.currentHp += hpBuff;
+                        v.dmg        = (v.dmg || 0) + dmgBuff;
+                        ParticleSys.createFloatingText(v.x, v.y - 60,
+                            `+${hpBuff} HP / +${dmgBuff} DMG`, '#ff00ff');
+                        ParticleSys.createShockwave(v.x, v.y, '#ff00ff', 28);
+                        ParticleSys.createSparks(v.x, v.y, '#ff00ff', 12);
+                    });
+                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, "EMPOWER VOID", "#ff00ff");
+                    if (this.shake) this.shake(6);
+                    AudioMgr.playSound('upgrade');
                     AudioMgr.playSound('grid_fracture');
                 }
             }
@@ -29892,6 +29945,7 @@ drawEntity(entity) {
                     else if (intent.type === 'analyse')           iconColor = '#00f3ff';
                     else if (intent.type === 'summon' || intent.type === 'summon_glitch') iconColor = '#00f3ff';
                     else if (intent.type === 'summon_void')       iconColor = '#ff00ff';
+                    else if (intent.type === 'buff_voidlings')    iconColor = '#ff00ff';
                     // Expansion (5.2.1) intent types — colored per gameplay role.
                     else if (intent.type === 'aoe_sweep')         iconColor = '#ff3355';
                     else if (intent.type === 'mirror_attack')     iconColor = '#00f3ff';

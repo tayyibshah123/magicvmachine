@@ -888,14 +888,19 @@ const BOSS_DATA = {
         shieldVal: 30
     },
     2: {
+        // v1.8.2 — shieldVal removed. NULL_POINTER no longer wastes a
+        // turn on a shield action when at voidling cap; the summon_void
+        // roll now flips to `buff_voidlings` (Phase 2) or a basic
+        // attack (Phase 1 / 3) instead. Pressure comes entirely from
+        // Pull of Void + Void Spawns + (Phase 2) double summons & buffs
+        // + (Phase 3) Void Crush + reality shatter + consume-minions.
         name: "NULL_POINTER",
         subtitle: "THE CONSUMING VOID",
         hp: 500,
         dmg: 40,
         actionsPerTurn: 1,
         color: '#ff00ff',
-        moves: ['summon_void'], // Boss itself doesn't attack — pressure comes from Pull of Void + Void Spawns + Void Crush.
-        shieldVal: 20
+        moves: ['summon_void']
     },
     3: { 
         name: "THE COMPILER", 
