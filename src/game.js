@@ -582,7 +582,13 @@ const Game = {
         const attachButtonEvent = (id, callback) => {
             const btn = d.getElementById(id);
             if (!btn) return;
-            btn.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: false });
+            // Audit 2026-05 — was `passive: false`; the handler only
+            // calls e.stopPropagation() (no preventDefault), so the
+            // non-passive flag was forcing the browser to wait for JS
+            // before scrolling. passive: true lets scroll start
+            // immediately — same behaviour for the button click, no
+            // observable change in interaction.
+            btn.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: true });
             btn.onclick = (e) => {
                 e.stopPropagation(); 
                 e.preventDefault();  
@@ -1118,7 +1124,9 @@ const Game = {
 
         const relicBtn = d.getElementById('btn-relics');
         if (relicBtn) {
-            relicBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: false });
+            // passive: true — handler only stopPropagation, no preventDefault.
+            // Audit 2026-05 sweep matching attachButtonEvent behaviour.
+            relicBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
             relicBtn.onclick = (e) => {
                 e.stopPropagation();
                 relicBtn.blur();
@@ -6155,7 +6163,8 @@ triggerPhaseGlitch() {
                 this._hidePauseOverlay();
             };
             host.addEventListener('click', resume);
-            host.addEventListener('touchstart', resume, { passive: false });
+            // passive: true — handler stopPropagation only, no preventDefault.
+            host.addEventListener('touchstart', resume, { passive: true });
         }
         host.classList.remove('hidden');
         requestAnimationFrame(() => host.classList.add('active'));
@@ -9033,11 +9042,21 @@ triggerSystemCrash() {
                     ${byCat[cat].map(a => {
                         const lit = unlocked.has(a.id);
                         const award = a.sparks || 0;
+                        // Audit 2026-05 — surface progress on locked
+                        // achievements with countable criteria so
+                        // players see how close they are to the next
+                        // tier instead of just "???".
+                        const prog = !lit && Achievements.getProgress
+                            ? Achievements.getProgress(a.id) : null;
+                        const progLine = prog
+                            ? `<div class="ach-row-progress">${prog.current} / ${prog.target}</div>`
+                            : '';
                         return `<div class="ach-row ${lit ? 'unlocked' : 'locked'}">
                             <div class="ach-row-dot">${lit ? '◆' : '◇'}</div>
                             <div class="ach-row-body">
                                 <div class="ach-row-name">${a.name}</div>
                                 <div class="ach-row-desc">${lit ? a.desc : '???'}</div>
+                                ${progLine}
                             </div>
                             <div class="ach-row-frag">+${award} ✦</div>
                         </div>`;

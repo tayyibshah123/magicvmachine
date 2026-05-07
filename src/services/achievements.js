@@ -207,6 +207,53 @@ export const Achievements = {
     },
     getCounter(key) {
         return parseInt(localStorage.getItem('mvm_ach_ctr_' + key), 10) || 0;
+    },
+
+    // Audit 2026-05 — locked achievements were rendered as a flat
+    // "???" with no progress hint. Mobile players live for measurable
+    // checklists; this returns {current, target} for the trackable
+    // subset and null for binary/feat achievements that don't make
+    // sense as a fraction. Renderer uses this to surface "5 / 10"
+    // beneath locked entries' "???" line.
+    getProgress(id) {
+        const get = (k) => this.getCounter(k);
+        const safeJSON = (k, fallback) => {
+            try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? fallback : v; }
+            catch (_) { return fallback; }
+        };
+        const challengeRuns = safeJSON('mvm_challenge_history', []).length || 0;
+        const streak = parseInt(localStorage.getItem('mvm_login_streak') || '0', 10) || 0;
+        const intelDecrypted = parseInt(localStorage.getItem('mvm_intel_decrypted') || '0', 10) || 0;
+
+        switch (id) {
+            // Career kill counters
+            case 'KILLS_50':   return { current: Math.min(50,   get('kills')), target: 50 };
+            case 'KILLS_250':  return { current: Math.min(250,  get('kills')), target: 250 };
+            case 'KILLS_1000': return { current: Math.min(1000, get('kills')), target: 1000 };
+            // Boss specialist (3 kills each)
+            case 'SPEC_PANOPTICON':   return { current: Math.min(3, get('boss_panopticon')),   target: 3 };
+            case 'SPEC_NULL_POINTER': return { current: Math.min(3, get('boss_null_pointer')), target: 3 };
+            case 'SPEC_COMPILER':     return { current: Math.min(3, get('boss_compiler')),     target: 3 };
+            case 'SPEC_HIVE':         return { current: Math.min(3, get('boss_hive')),         target: 3 };
+            case 'SPEC_TESSERACT':    return { current: Math.min(3, get('boss_tesseract')),    target: 3 };
+            case 'SPEC_ARCHIVIST':    return { current: Math.min(3, get('boss_archivist')),    target: 3 };
+            // Challenge runs
+            case 'DAILY_FINISH': return { current: Math.min(1,  challengeRuns), target: 1 };
+            case 'DAILY_7':      return { current: Math.min(7,  challengeRuns), target: 7 };
+            case 'DAILY_30':     return { current: Math.min(30, challengeRuns), target: 30 };
+            // Login streak
+            case 'STREAK_3':  return { current: Math.min(3,  streak), target: 3 };
+            case 'STREAK_7':  return { current: Math.min(7,  streak), target: 7 };
+            case 'STREAK_30': return { current: Math.min(30, streak), target: 30 };
+            // Intel decrypted
+            case 'INTEL_10':  return { current: Math.min(10, intelDecrypted), target: 10 };
+            // Aggregate event resolutions
+            case 'EVENT_10':  return { current: Math.min(10, get('events_resolved')), target: 10 };
+            // Synergy spread
+            case 'SYNERGY_5': return { current: Math.min(5,  get('synergies_triggered')), target: 5 };
+            // Otherwise — binary or run-scoped, no fractional progress
+            default: return null;
+        }
     }
 };
 

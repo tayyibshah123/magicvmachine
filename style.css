@@ -13191,6 +13191,18 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
 }
 .ach-row.locked .ach-row-frag { color: rgba(255, 215, 0, 0.3); text-shadow: none; }
 
+/* Progress line on locked achievements (audit 2026-05). Shows
+   N / M for trackable countable criteria so players see how close
+   they are to the next tier instead of bare "???". */
+.ach-row-progress {
+    margin-top: 4px;
+    font-family: var(--font-cyber);
+    font-size: 0.66rem;
+    letter-spacing: 0.16em;
+    color: rgba(0, 243, 255, 0.7);
+    text-shadow: 0 0 4px rgba(0, 243, 255, 0.35);
+}
+
 /* Login streak chip on main menu */
 .login-streak {
     display: inline-flex;
