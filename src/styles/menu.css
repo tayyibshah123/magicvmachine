@@ -185,13 +185,13 @@
     position: relative; z-index: 1;
     height: 100%;
     display: grid;
-    /* Rows in order:
-         hdr · title · ticker · orb · SPACER (1fr)
+    /* Rows in order (ticker row removed per user request):
+         hdr · title · orb · SPACER (1fr)
          · ops · console · cluster · energy · footer
        The 1fr SPACER absorbs leftover vertical space and has
        its own min-height so even on a tall viewport the orb
        is clearly separated from the ops strip. */
-    grid-template-rows: auto auto auto auto 1fr auto auto auto auto auto;
+    grid-template-rows: auto auto auto 1fr auto auto auto auto auto;
     padding: 0.8cqh 4cqw 1.2cqh;
     /* Bumped gap from 0.9cqh → 1.6cqh per user feedback that the
        layout still felt cramped. Combined with the spacer min,
@@ -286,6 +286,11 @@
     justify-content: center;
     gap: 0.4cqh;
     padding: 0.4cqh 0 0.2cqh;
+    /* Anchor the title roughly 20% from the top of the screen per
+       user request. Header sits at ~5cqh, so a ~10cqh margin-top
+       lands the title centre at the 20% line. clamp keeps it sane
+       on very short and very tall viewports. */
+    margin-top: clamp(40px, 10cqh, 120px);
 }
 
 /* Cosmetic Archivist Slain frame — stays anchored around the

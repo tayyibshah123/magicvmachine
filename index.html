@@ -310,19 +310,8 @@
                         <h1 class="title mv2-wordmark db-wordmark">MAGIC <span class="vs">v</span> MACHINE</h1>
                     </div>
 
-                    <!-- TICKER — 4-phrase fade rotator carrying live
-                         operator status. Animated via CSS keyframes
-                         (each phrase fades in/out staggered) — keeps
-                         the upper third lively. -->
-                    <div class="db-ticker" aria-hidden="true">
-                        <span class="db-ticker-arrow">▸</span>
-                        <div class="db-ticker-stream">
-                            <span>// SYSTEM ONLINE · STANDBY</span>
-                            <span>// 5 SECTORS DETECTED · GRID UNSTABLE</span>
-                            <span>// AUGMENTS LOCKED · UPLINK READY</span>
-                            <span>// AWAITING DEPLOYMENT</span>
-                        </div>
-                    </div>
+                    <!-- TICKER removed (was rendering as a small bar
+                         under the wordmark that read as visual noise) -->
 
                     <!-- ORB — centerpiece. Layered animated emblem
                          (halo + rotating rings + crosshair + corner
@@ -350,11 +339,9 @@
                                 <i></i><i></i><i></i><i></i>
                             </div>
                             <div class="db-orb-core"></div>
-                            <!-- Class label — JS sets the textContent
-                                 from the active class name. Reads as
-                                 the orb's identity. -->
-                            <div class="db-orb-label" id="menu-orb-label">OPERATOR</div>
-                            <div class="db-orb-sublabel" id="menu-orb-sublabel">// READY</div>
+                            <!-- Orb class label + sublabel removed —
+                                 they were duplicating info already in
+                                 the resume bar / ops cells. -->
                         </div>
                     </div>
 
@@ -658,43 +645,9 @@
             <div id="screen-intel" class="screen hidden">
                 <h2 class="neon-text-blue">INTEL ARCHIVE</h2>
 
-                <!-- Operator profile banner — totals + best clears. Always
-                     visible; the tabs below drill into a specific surface. -->
-                <div id="intel-profile" class="intel-profile glass-panel">
-                    <div class="intel-profile-row">
-                        <div class="intel-profile-cell">
-                            <div class="intel-profile-label">OPERATOR</div>
-                            <div class="intel-profile-value" id="intel-prof-name">...</div>
-                        </div>
-                        <div class="intel-profile-cell">
-                            <div class="intel-profile-label">RUNS</div>
-                            <div class="intel-profile-value" id="intel-prof-runs">0</div>
-                            <div class="intel-profile-sub" id="intel-prof-runrate">0% wins</div>
-                        </div>
-                        <div class="intel-profile-cell">
-                            <div class="intel-profile-label">ASCENSION</div>
-                            <div class="intel-profile-value intel-prof-asc" id="intel-prof-asc">A0</div>
-                        </div>
-                        <div class="intel-profile-cell">
-                            <div class="intel-profile-label">KILLS</div>
-                            <div class="intel-profile-value" id="intel-prof-kills">0</div>
-                            <div class="intel-profile-sub" id="intel-prof-bestiary">0 logged</div>
-                        </div>
-                    </div>
-                    <div class="intel-profile-row">
-                        <div class="intel-profile-cell intel-profile-cell-wide">
-                            <div class="intel-profile-label">SIGNATURE STATUS</div>
-                            <div class="intel-profile-pills" id="intel-prof-status"></div>
-                        </div>
-                        <div class="intel-profile-cell">
-                            <div class="intel-profile-label">FILES</div>
-                            <div class="intel-profile-value intel-prof-files">
-                                <span id="intel-prof-files-count">0</span>
-                                <span class="intel-profile-files-icon" aria-hidden="true">⌬</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <!-- Operator profile banner removed — was a stale strip
+                     above every tab that read as visual noise. The
+                     tabs below carry the live data the player needs. -->
 
                 <div id="intel-tabs" class="intel-tabs" role="tablist">
                     <button class="intel-tab active" data-intel-tab="cipher" role="tab">CIPHER</button>

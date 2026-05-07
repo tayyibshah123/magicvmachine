@@ -15912,7 +15912,22 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
 
 /* === MODULE PICK (rest screen, all runs) ================================= */
 /* Reuses the .reward-card markup so cards read identically to the post-
-   combat reward screen — only the screen wrapper + subtitle live here. */
+   combat reward screen — only the screen wrapper + subtitle live here.
+   Anchored top with the same flex-start override as #screen-reward so the
+   title doesn't get clipped by the generic .screen { justify-content:
+   center; } default on tall mobile viewports. */
+#screen-module-pick {
+    justify-content: flex-start;
+    padding-top: 14px;
+    padding-bottom: 14px;
+    gap: 4px;
+}
+#screen-module-pick h2.neon-text-blue {
+    margin: 4px 0 2px !important;
+    font-size: 1.5rem !important;
+    letter-spacing: 0.18em !important;
+    flex-shrink: 0;
+}
 .module-pick-subtitle {
     text-align: center;
     color: #88eaff;
@@ -15920,20 +15935,41 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     font-family: var(--font-cyber);
     font-size: 0.85rem;
     letter-spacing: 0.18em;
-    margin: 0 0 22px 0;
+    margin: 0 0 8px 0;
     padding: 0 24px;
+    flex-shrink: 0;
 }
 #module-pick-options {
-    /* Match the reward-options column constraint so cards size and
-       scroll the same way. card-container provides the flex behaviour. */
+    /* Match the reward-options column behaviour — flex 1 with its own
+       internal scroll so a 3-card stack stays anchored under the title
+       and never pushes past the bottom edge of the screen. */
     width: min(560px, 92vw);
     margin: 0 auto;
-    max-height: calc(100vh - 220px);
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
-    padding: 4px;
+    overscroll-behavior: contain;
+    padding: 4px 6px 24px;
+    -webkit-mask-image: linear-gradient(180deg, #000 88%, transparent 100%);
+            mask-image: linear-gradient(180deg, #000 88%, transparent 100%);
 }
 
 /* === PACTS (Challenge Mode, Roadmap Part 24) ============================= */
+/* Same flex-start treatment as #screen-reward / #screen-module-pick so the
+   "SIGN A PACT" title doesn't get clipped on tall mobile viewports. The
+   pact card list lives in #pact-options and gets its own scroll region. */
+#screen-pact {
+    justify-content: flex-start;
+    padding-top: 14px;
+    padding-bottom: 14px;
+    gap: 4px;
+}
+#screen-pact h2.neon-text-pink {
+    margin: 4px 0 2px !important;
+    font-size: 1.5rem !important;
+    letter-spacing: 0.18em !important;
+    flex-shrink: 0;
+}
 .pact-subtitle {
     text-align: center;
     color: #ff77aa;
@@ -15941,8 +15977,15 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     font-family: var(--font-cyber);
     font-size: 0.85rem;
     letter-spacing: 0.18em;
-    margin: 0 0 22px 0;
+    margin: 0 0 12px 0;
     padding: 0 24px;
+    flex-shrink: 0;
+}
+#pact-options {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 .pact-options {
     display: grid;
