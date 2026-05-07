@@ -16926,17 +16926,24 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     display: grid;
     place-items: center;
 }
-/* Streams SVG fills the centre slot edge-to-edge so its 0,0 / 200,0 /
-   0,200 / 200,200 anchor points read as "the corners of this rest
-   figure zone". Sparks animate from those anchors INTO 100,100. */
+/* Streams SVG — sibling of .rest-center, anchored to the FULL
+   rest-stage so its 0,0 / 100,0 / 0,100 / 100,100 viewBox coords map
+   directly to the four option-card corners. (50,50) is the rest-
+   stage geometric centre, which is exactly where .rest-center renders
+   the class emblem — convergence is therefore pixel-aligned. The
+   previous nesting inside .rest-center + `inset: -40%` was causing
+   visible offset between the spark convergence point and the emblem
+   on mobile because the inset percentage resolved against the small
+   200px rest-center, not the full grid. */
 .rest-streams {
     position: absolute;
-    inset: -40%;        /* extend past the grid centre so the streams
-                           visibly originate at the option-card corners
-                           rather than the small figure box */
-    width: auto; height: auto;
+    inset: 0;
+    width: 100%;
+    height: 100%;
     overflow: visible;
     pointer-events: none;
+    z-index: 2;     /* below rest-center (z-index 3) so the emblem
+                       sits visually on top of the converging sparks */
 }
 /* Class emblem mount — the animated SVG glyph keyed to the player's
    current class. Replaces the legacy canvas portrait. Sits on top of
@@ -17079,33 +17086,35 @@ body.reduced-motion .class-emblem-host .ce-blood-drip {
 .rest-spark-bl { animation-name: rest-spark-bl; animation-delay: 0.8s; }
 .rest-spark-br { animation-name: rest-spark-br; animation-delay: 1.2s; }
 
-/* Each keyframe set runs corner → centre of the streams SVG, which
-   now spans the rest-center plus 40% inset, so the corner anchors
-   visibly originate near the option-card corners. Sparks land at
-   100,100 (SVG centre — the figure's torso). */
+/* Each keyframe set runs corner → centre of the streams SVG. The SVG
+   now has viewBox 0 0 100 100 (anchors are option-card corners) and
+   sparks land at (50,50) — the rest-stage geometric centre, which is
+   exactly where .rest-center anchors the class emblem. Translate
+   values are in viewBox units; SVG transforms remain consistent
+   regardless of preserveAspectRatio="none" stretching the box. */
 @keyframes rest-spark-tl {
-    0%   { transform: translate(0px, 0px);     opacity: 0; }
+    0%   { transform: translate(0,    0);    opacity: 0; }
     20%  { opacity: 1; }
     90%  { opacity: 1; }
-    100% { transform: translate(100px, 100px); opacity: 0; }
+    100% { transform: translate(50px, 50px); opacity: 0; }
 }
 @keyframes rest-spark-tr {
-    0%   { transform: translate(200px, 0px);   opacity: 0; }
+    0%   { transform: translate(100px, 0);    opacity: 0; }
     20%  { opacity: 1; }
     90%  { opacity: 1; }
-    100% { transform: translate(100px, 100px); opacity: 0; }
+    100% { transform: translate(50px,  50px); opacity: 0; }
 }
 @keyframes rest-spark-bl {
-    0%   { transform: translate(0px, 200px);   opacity: 0; }
+    0%   { transform: translate(0,    100px); opacity: 0; }
     20%  { opacity: 1; }
     90%  { opacity: 1; }
-    100% { transform: translate(100px, 100px); opacity: 0; }
+    100% { transform: translate(50px, 50px);  opacity: 0; }
 }
 @keyframes rest-spark-br {
-    0%   { transform: translate(200px, 200px); opacity: 0; }
+    0%   { transform: translate(100px, 100px); opacity: 0; }
     20%  { opacity: 1; }
     90%  { opacity: 1; }
-    100% { transform: translate(100px, 100px); opacity: 0; }
+    100% { transform: translate(50px,  50px);  opacity: 0; }
 }
 
 /* Bottom-right is always populated (MODULE by default, PACT replaces
