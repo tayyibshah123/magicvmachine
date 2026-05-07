@@ -11016,26 +11016,40 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
         padding: 10px 10px max(76px, calc(76px + env(safe-area-inset-bottom, 0px))) 10px !important;
     }
 
-    /* Dice-flanking controls on mobile */
+    /* Dice-flanking controls on mobile.
+       Audit 2026-05: bumped from 52→56px (above WCAG 44pt at 320px)
+       and added an isolating panel background + 8px standoff from the
+       canvas edge so the dice crescent's leftmost / rightmost ends
+       can't overlap the hit zone on a 360px viewport. */
     .reroll-wrapper {
-        width: 52px !important;
-        height: 52px !important;
-        left: 4px !important;
+        width: 56px !important;
+        height: 56px !important;
+        left: 8px !important;
         top: 18px !important;
         bottom: auto !important;
+        background: rgba(5, 0, 17, 0.72) !important;
+        border-radius: 50% !important;
+        box-shadow:
+            0 0 0 4px rgba(5, 0, 17, 0.55),
+            0 2px 12px rgba(0, 0, 0, 0.45) !important;
     }
     .btn-circle {
         font-size: 1.4rem !important;
     }
     .control-bar #btn-end-turn {
-        right: 4px !important;
+        right: 8px !important;
         top: 18px !important;
         bottom: auto !important;
-        width: 52px !important;
-        height: 52px !important;
+        width: 56px !important;
+        height: 56px !important;
         min-width: 0 !important;
         padding: 0 !important;
         font-size: 1.4rem !important;
+        background: rgba(5, 0, 17, 0.72) !important;
+        border-radius: 50% !important;
+        box-shadow:
+            0 0 0 4px rgba(5, 0, 17, 0.55),
+            0 2px 12px rgba(0, 0, 0, 0.45) !important;
     }
 
 /* --- MOBILE REWARD SCREEN FIX (Fit 4 Cards) --- */

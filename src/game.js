@@ -171,11 +171,18 @@ const Game = {
     },
     // Drain combat-scoped timers — safe to call from gameOver, quitRun, and
     // from changeState when the new state isn't COMBAT/REWARD/COMBAT_WIN.
+    // Also cancels any in-flight music fade so a fade started by a combat
+    // beat doesn't keep ticking volume after the state has moved on.
+    // Audit 2026-05 finding: `AudioMgr._fadeInterval` is a raw setInterval
+    // not tracked in _intervals, so it was surviving state transitions.
     clearTrackedTimers() {
         this._timers.forEach(id => clearTimeout(id));
         this._timers.clear();
         this._intervals.forEach(id => clearInterval(id));
         this._intervals.clear();
+        // Defensive — AudioMgr may not be fully initialised in early-boot
+        // states. The optional-chain keeps this safe.
+        try { AudioMgr && AudioMgr._cancelFade && AudioMgr._cancelFade(); } catch (_) {}
     },
 
     init() {

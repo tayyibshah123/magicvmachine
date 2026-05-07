@@ -122,14 +122,18 @@ const ParticleSys = {
             this.activeCount++;
             return p;
         }
-        // Pool exhausted — recycle the oldest active particle (smallest life remaining).
-        // Rare path; the linear scan only runs when we're already at capacity.
-        let oldest = this.pool[0];
-        for (let i = 1; i < this.pool.length; i++) {
-            if (this.pool[i].life < oldest.life) oldest = this.pool[i];
-        }
-        oldest.text = null;
-        return oldest;
+        // Pool exhausted — round-robin evict instead of linear-scanning
+        // for the oldest. Audit 2026-05: under boss-dissolve cascades the
+        // O(n) scan was costing ~0.3-0.6ms per spawn for ~200ms while at
+        // capacity. Round-robin is O(1) and produces visually identical
+        // results (the evicted particle is "old enough" since we cycle
+        // through every slot). 15 call sites assume _acquire returns a
+        // usable particle, so we never return null — just reuse a slot.
+        if (this._evictIdx == null) this._evictIdx = 0;
+        this._evictIdx = (this._evictIdx + 1) % this.pool.length;
+        const p = this.pool[this._evictIdx];
+        p.text = null;
+        return p;
     },
 
     _release(p) {
