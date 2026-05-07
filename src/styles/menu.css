@@ -706,6 +706,25 @@
     will-change: transform, opacity;
     animation: db-orb-core 2.2s ease-in-out infinite;
 }
+
+/* Class emblem inside the orb — sits on top of the core, scaled to
+   roughly half the orb's size so the rings, halo, corners, and orbiting
+   motes are still readable around it. The emblem's own SVG handles its
+   internal animation; we just give it a host with the right class
+   colour and a soft drop-shadow so it glows against the core. */
+.menu-v2.dropbay .db-orb-emblem {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 13cqh; height: 13cqh;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 2;
+    color: var(--db-accent);
+}
+.menu-v2.dropbay .db-orb-emblem .class-emblem-host {
+    color: var(--db-accent);
+    filter: drop-shadow(0 0 12px rgba(var(--db-accent-rgb), 0.7));
+}
 @keyframes db-orb-core {
     0%, 100% { transform: scale(1);    opacity: 0.85; }
     50%      { transform: scale(1.18); opacity: 1; }

@@ -7,6 +7,7 @@ import { Enemy } from './entities/enemy.js';
 import { ParticleSys } from './effects/particles.js';
 import { TooltipMgr } from './ui/tooltip.js';
 import { getEventArt, getOptionIcon } from './ui/event-art.js';
+import { getClassEmblemSvg } from './ui/class-emblems.js';
 import { ClassAbility } from './ui/class-ability.js';
 import { ICONS, iconImage, drawIcon, preloadCombatIcons } from './ui/icons.js';
 import { drawIntentIcon, drawEffectIcon, blitEffectIcon } from './ui/canvas-icons.js';
@@ -9200,10 +9201,23 @@ triggerSystemCrash() {
         root.style.setProperty('--db-accent', accent);
         root.style.setProperty('--db-accent-rgb', `${r}, ${g}, ${b}`);
 
-        // ── Orb label — class identity inside the centerpiece. Falls
-        // back to "OPERATOR" / "READY" before the player has ever
-        // picked a class. Sub-line carries a quick combat-readiness
-        // flavour line so the orb feels alive on first launch too.
+        // ── Orb emblem — animated class-themed SVG glyph inside the
+        // centerpiece. Falls back to the tactician emblem if no class
+        // has ever been picked. Re-rendered on every menu refresh so
+        // switching classes (debug menu / mod manager) updates it.
+        const orbEmblem = document.getElementById('menu-orb-emblem');
+        if (orbEmblem) {
+            const emblemId = (cls && cls.id) || 'tactician';
+            if (orbEmblem.dataset.classId !== emblemId) {
+                orbEmblem.dataset.classId = emblemId;
+                orbEmblem.innerHTML = getClassEmblemSvg(emblemId);
+            }
+        }
+
+        // ── Orb label — kept for backwards compat with any code that
+        // still queries these IDs. Elements were removed from the DOM
+        // but the lookups guard with `if (orbLabel)` so this is a
+        // safe no-op if they don't exist.
         const orbLabel = document.getElementById('menu-orb-label');
         const orbSub   = document.getElementById('menu-orb-sublabel');
         if (orbLabel) {
@@ -9767,17 +9781,15 @@ triggerSystemCrash() {
                 console.warn('[rest] btn-rest-module missing from DOM — Android assets likely out of sync. Run `npm run android:sync` to refresh.');
             }
 
-            // Centre figure: paint the player's CURRENT class entity into
-            // the rest screen's canvas. Reuses the char-select preview
-            // cache (_paintCharPreview reads data-class-id), so a Summoner
-            // run shows the Summoner sprite, an Arcanist run shows the
-            // Arcanist, etc. Re-set the dataset attribute on every visit
-            // so a debug class swap (or future class-mod manager) picks
-            // up the new class without needing a reload.
-            const restCanvas = document.getElementById('rest-class-canvas');
-            if (restCanvas && this.player && this.player.classId) {
-                restCanvas.dataset.classId = this.player.classId;
-                this._paintCharPreview(restCanvas);
+            // Centre figure: animated class emblem (SVG keyed to the
+            // active class). Replaces the old canvas portrait so the
+            // particle streams converge cleanly on a centered glyph
+            // regardless of class. Re-rendered on every visit so a
+            // debug class swap picks up the new emblem immediately.
+            const restEmblem = document.getElementById('rest-class-emblem');
+            if (restEmblem && this.player && this.player.classId) {
+                restEmblem.dataset.classId = this.player.classId;
+                restEmblem.innerHTML = getClassEmblemSvg(this.player.classId);
             }
 
             document.getElementById('screen-rest').classList.remove('hidden');

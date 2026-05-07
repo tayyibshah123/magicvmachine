@@ -338,10 +338,11 @@
                                 <i></i><i></i><i></i><i></i>
                                 <i></i><i></i><i></i><i></i>
                             </div>
-                            <div class="db-orb-core"></div>
-                            <!-- Orb class label + sublabel removed —
-                                 they were duplicating info already in
-                                 the resume bar / ops cells. -->
+                    <div class="db-orb-core"></div>
+                            <!-- Orb class emblem — animated SVG keyed
+                                 to the most-recently played class.
+                                 JS injects via getClassEmblemSvg. -->
+                            <div id="menu-orb-emblem" class="db-orb-emblem" data-class-id="" aria-hidden="true"></div>
                         </div>
                     </div>
 
@@ -868,14 +869,16 @@
                         <span class="rest-option-desc">Pick 1 of 3 · install</span>
                     </button>
 
-                    <!-- Centre figure: the player's actual class entity, painted
-                         by Game._paintCharPreview() into a canvas tagged with
-                         data-class-id. Inflow streams + sparks live in a
-                         separate SVG layer behind the canvas so they radiate
-                         from the four corners of the grid INTO the figure
-                         regardless of which class is shown. -->
+                    <!-- Centre figure: animated class emblem (SVG glyph
+                         keyed to the player's current class). Replaces the
+                         old canvas portrait so the centerpiece is always
+                         visually anchored where the four particle streams
+                         converge. Streams live in their own SVG layer
+                         behind the emblem; sparks animate from the four
+                         option-card corners INTO the emblem at the centre.
+                         JS populates #rest-class-emblem via getClassEmblemSvg. -->
                     <div class="rest-center" aria-hidden="true">
-                        <svg viewBox="0 0 200 200" class="rest-streams" preserveAspectRatio="none">
+                        <svg viewBox="0 0 200 200" class="rest-streams" preserveAspectRatio="xMidYMid meet">
                             <g class="rest-inflow" stroke-width="1.5" fill="none">
                                 <line x1="0"   y1="0"   x2="100" y2="100" stroke="#5ad864" class="rest-stream rest-stream-tl"/>
                                 <line x1="200" y1="0"   x2="100" y2="100" stroke="#bc13fe" class="rest-stream rest-stream-tr"/>
@@ -889,14 +892,10 @@
                                 <circle r="3" fill="#ff5b87" class="rest-spark rest-spark-br"/>
                             </g>
                         </svg>
-                        <!-- Class canvas — _paintCharPreview() reads
-                             data-class-id and paints the cached preview. We
-                             rebuild the dataset attribute each visit so a
-                             class swap (debug menu, mod manager) refreshes. -->
-                        <canvas id="rest-class-canvas"
-                                class="char-preview rest-figure-canvas"
-                                width="200" height="200"
-                                aria-hidden="true"></canvas>
+                        <!-- Class emblem mount — JS injects the SVG via
+                             getClassEmblemSvg(classId). data-class-id on
+                             the host lets CSS scope per-class tweaks. -->
+                        <div id="rest-class-emblem" class="rest-figure-emblem" data-class-id=""></div>
                     </div>
                 </div>
             </div>
