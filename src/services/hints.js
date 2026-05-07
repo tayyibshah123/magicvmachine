@@ -67,7 +67,12 @@ const HINTS = {
     first_sanctuary_spend:  { title: "SANCTUARY",        body: "Tap a node to install. Costs Sparks." },
     // Combat depth onboarding — fires once for each new mechanic.
     first_chain:            { title: "CHAIN HIT",        body: "Each wave matters. Worst tap caps the chain." },
-    first_momentum:         { title: "MOMENTUM",         body: "Combos and parries fill it. Apex auto-crits." }
+    first_momentum:         { title: "MOMENTUM",         body: "Combos and parries fill it. Apex auto-crits." },
+    // Module Fusions (Hades-style Duos). Fires on the FIRST reward
+    // screen that surfaces a fusion offer — owning both source
+    // modules unlocks a prismatic-bordered combined relic. Audit
+    // 2026-05 flagged that this system was launching silent.
+    first_fusion:           { title: "FUSION OFFERED",   body: "Combine two modules into one stronger relic." }
 };
 
 function readSeen() {

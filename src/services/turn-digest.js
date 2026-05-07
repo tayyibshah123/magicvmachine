@@ -21,6 +21,16 @@ function reducedMotion() {
         && matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
+// Audit 2026-05: gate the digest on perf-low devices. The full panel
+// build + slide-in animation costs 8-12ms per turn on Snapdragon-7
+// class hardware. On perf-low we either skip it entirely or render a
+// stripped one-line variant, depending on the OPT_LOW_BEHAVIOR flag.
+function perfLow() {
+    return typeof document !== 'undefined'
+        && document.body
+        && document.body.classList.contains('perf-low');
+}
+
 function ensureHost() {
     if (host) return host;
     const el = document.createElement('div');
@@ -44,6 +54,11 @@ function ensureHost() {
 export const TurnDigest = {
     show(stats, opts) {
         if (!stats) return;
+        // Audit 2026-05 — perf-low devices skip the turn digest entirely
+        // since the panel build + slide costs ~8-12ms/turn. Players on
+        // low tier already opted into a stripped experience via the
+        // perf-low class; consistency wins over a stat readback.
+        if (perfLow()) return;
         // Skip on the very first turn (turn === 1) — there's no "what
         // happened" worth surfacing if nothing's dealt or taken yet,
         // and the sector intro is already a competing top-centre card.

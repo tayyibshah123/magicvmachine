@@ -10539,8 +10539,77 @@ triggerSystemCrash() {
         return raw;
     },
     _writeSaveRaw(json) {
-        try { localStorage.setItem(this._saveKey(), json); } catch (e) {
+        const key = this._saveKey();
+        try {
+            localStorage.setItem(key, json);
+            // Reset the warned-flag on a successful write so the toast
+            // re-fires if quota becomes a problem again later in the run.
+            this._saveQuotaWarned = false;
+        } catch (e) {
             console.warn('[saveGame] failed:', e);
+            // Audit 2026-05 — quota / blocked-storage failures used to
+            // pass silently. On long endless runs the run-state can hit
+            // the ~5MB localStorage quota and the player would lose
+            // progress on next reload. Try to recover by pruning the
+            // oldest non-active slot once, then re-attempt the write.
+            // If it still fails, surface a toast so the player knows.
+            const isQuotaFail = e && (
+                e.name === 'QuotaExceededError' ||
+                e.code === 22 || e.code === 1014 // FF / iOS variants
+            );
+            if (isQuotaFail && !this._saveQuotaPrunedOnce) {
+                this._saveQuotaPrunedOnce = true;
+                this._pruneOldestSaveSlot(key);
+                try {
+                    localStorage.setItem(key, json);
+                    return; // recovered silently
+                } catch (_) { /* fall through to toast */ }
+            }
+            // Once-per-session toast — don't badger the player every save tick.
+            if (!this._saveQuotaWarned) {
+                this._saveQuotaWarned = true;
+                try {
+                    if (typeof ParticleSys !== 'undefined' && ParticleSys.createFloatingText) {
+                        ParticleSys.createFloatingText(
+                            CONFIG.CANVAS_WIDTH / 2, 80,
+                            'STORAGE FULL — DELETE OLD SLOTS', '#ff3355'
+                        );
+                    }
+                    if (typeof AudioMgr !== 'undefined' && AudioMgr.playSound) {
+                        AudioMgr.playSound('error');
+                    }
+                } catch (_) { /* defensive only */ }
+            }
+        }
+    },
+    // Audit 2026-05 quota recovery — drop the oldest non-active save
+    // slot so a fresh write has room. Reads the SAVE_SLOTS list, finds
+    // entries other than the active one, picks whichever has the
+    // smallest stored size as the "oldest" proxy (slots without a
+    // timestamp can't be sorted by date; size is a reasonable
+    // approximation since older saves tend to be smaller pre-endless).
+    _pruneOldestSaveSlot(activeKey) {
+        try {
+            const slots = (this.SAVE_SLOTS || ['A', 'B', 'C']).map(s => `mvm_save_v1__${s}`);
+            const candidates = slots.filter(k => k !== activeKey);
+            if (!candidates.length) return;
+            let pickKey = null;
+            let pickLen = Infinity;
+            for (const k of candidates) {
+                try {
+                    const raw = localStorage.getItem(k);
+                    if (raw && raw.length < pickLen) {
+                        pickKey = k;
+                        pickLen = raw.length;
+                    }
+                } catch (_) {}
+            }
+            if (pickKey) {
+                try { localStorage.removeItem(pickKey); } catch (_) {}
+                console.warn('[saveGame] quota recovery — pruned slot:', pickKey);
+            }
+        } catch (e) {
+            console.warn('[saveGame] prune failed:', e);
         }
     },
     _clearSave(slot) {
@@ -21129,10 +21198,28 @@ drawEffects() {
                 break; // one fusion offer per reward screen so UX stays focused
             }
         }
-        // (FUSION DETECTED banner removed — the unique fusion card is
-        // its own visual cue. _fusionOnThisScreen still tracks whether
-        // the screen contains a fusion offer for analytics / tests, but
-        // the banner DOM is no longer mounted.)
+        // Audit 2026-05 — restore a sting + first-time hint for Module
+        // Fusions so the system stops launching silent. The hint fires
+        // once per install (Hints handles dedupe). The shockwave + SFX
+        // play every time a fusion is ON-SCREEN — players need the
+        // signal that THIS particular reward screen has a fusion offer
+        // they own the parts for, regardless of whether it's their
+        // first encounter. The prismatic card border is still the
+        // primary visual cue; this is the audio/motion layer.
+        if (_fusionOnThisScreen) {
+            try { Hints && Hints.trigger && Hints.trigger('first_fusion'); } catch (_) {}
+            try {
+                const cx = CONFIG.CANVAS_WIDTH / 2;
+                const cy = 220;
+                if (ParticleSys.createShockwave) {
+                    ParticleSys.createShockwave(cx, cy, '#ff5577', 60);
+                }
+                ParticleSys.createFloatingText(cx, cy, 'FUSION AVAILABLE', '#ff5577',
+                    { fontSize: 22, vy: -0.6, life: 1.6 });
+                AudioMgr.playSound && AudioMgr.playSound('upgrade');
+                AudioMgr.playSound && AudioMgr.playSound('grid_fracture', { volume: 0.55 });
+            } catch (_) { /* defensive — don't break reward render */ }
+        }
 
         // Hard fallback — the pool was filtered down to nothing (every
         // stackable cap hit, every unique already owned). Without this the
