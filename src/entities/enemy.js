@@ -467,7 +467,18 @@ class Enemy extends Entity {
             return { type: 'attack', val: this.baseDmg, target: getTarget() };
         }
         if (this.kind === 'detonator') {
-            // Low HP, mid attack — the real threat is the death explosion handled on takeDamage.
+            // v1.8.3 — once armed (player damaged the carrier to 0 HP and
+            // the entity clamped itself to 1 HP), the next enemy turn
+            // fires a self-destruct intent. Damage = ~maxHp/3, capped at
+            // a sensible floor so the smallest detonators still threaten.
+            // Resolver in game.js handles VFX + player damage + setting
+            // currentHp to 0 + winCombat (if player survives).
+            if (this._armedDetonate) {
+                const boom = Math.max(8, Math.floor(this.maxHp / 3));
+                return { type: 'self_destruct', val: boom, target: Game.player };
+            }
+            // Pre-armed: low HP, mid attack — the real threat is the
+            // self-destruct cycle once the player breaks through.
             return { type: 'attack', val: this.baseDmg, target: getTarget() };
         }
         if (this.kind === 'buffer') {

@@ -15383,16 +15383,38 @@ body.reduced-motion.bloodstalker-critical::after {
        fragments, 3 buttons, RUN DIAGNOSTICS panel. That's taller than
        the 9:16 viewport, so the bottom (run diagnostics rows) was
        being clipped under justify-content: center. Switch to top-
-       aligned + scroll-if-overflows so every section is reachable. */
+       aligned + scroll-if-overflows so every section is reachable.
+       v1.8.3 — user reported the bottom of WHAT HAPPENED block was
+       still unreachable on mobile. Strengthened the scroll setup:
+         - touch-action: pan-y so iOS Safari recognises the swipe
+           even though .screen is position:absolute inside a
+           container-type:size game-container
+         - overscroll-behavior contain so the page itself doesn't
+           bounce while scrolling the death panel
+         - bumped padding-bottom and added safe-area-inset so the
+           last row clears the iOS home indicator
+         - position: absolute is unchanged from .screen base so the
+           screen still fills the canvas; overflow-y: auto opens the
+           scroll port for all the children. */
     justify-content: flex-start !important;
-    overflow-y: auto;
+    align-items: stretch !important;
+    overflow-y: auto !important;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
     padding-top: 24px !important;
-    padding-bottom: 32px !important;
+    padding-bottom: max(48px, calc(48px + env(safe-area-inset-bottom, 0px))) !important;
     -webkit-overflow-scrolling: touch;
     /* Day 5 — cyberpunk scanline overlay. Faint horizontal lines
        drawn via repeating gradient over the radial death-screen
        backdrop. Pointer-events none so it never eats taps. */
-    position: relative;
+    position: absolute;
+}
+/* Children must not shrink below their content height — without this,
+   flex-shrink defaults force long children to clip rather than expand
+   the scroll port. */
+#screen-gameover > * {
+    flex-shrink: 0 !important;
 }
 #screen-gameover::before {
     content: '';

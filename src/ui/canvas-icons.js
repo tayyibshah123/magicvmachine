@@ -69,6 +69,31 @@ export function drawIntentIcon(ctx, type, cx, cy, size, color) {
             });
             break;
 
+        case 'self_destruct':
+            // v1.8.3 — concentric circles with a danger-cross hatch
+            // through them. Detonator-armed enemies (Parasite Carrier
+            // etc) display this on their intent next turn.
+            _wrap(ctx, cx, cy, size, color, c => {
+                c.globalAlpha = 0.35;
+                c.beginPath(); c.arc(0, 0, 9, 0, Math.PI * 2); c.fill();
+                c.globalAlpha = 1;
+                c.lineWidth = 1.6;
+                c.beginPath(); c.arc(0, 0, 8, 0, Math.PI * 2); c.stroke();
+                c.beginPath(); c.arc(0, 0, 4, 0, Math.PI * 2); c.stroke();
+                // Danger cross + spark dots
+                c.beginPath();
+                c.moveTo(-9, -9); c.lineTo(9, 9);
+                c.moveTo(-9, 9); c.lineTo(9, -9);
+                c.stroke();
+                c.beginPath();
+                c.arc(0, -10, 1.4, 0, Math.PI * 2);
+                c.arc(0, 10, 1.4, 0, Math.PI * 2);
+                c.arc(-10, 0, 1.4, 0, Math.PI * 2);
+                c.arc(10, 0, 1.4, 0, Math.PI * 2);
+                c.fill();
+            });
+            break;
+
         case 'purge_attack':
         case 'intentPurge':
             _wrap(ctx, cx, cy, size, color, c => {

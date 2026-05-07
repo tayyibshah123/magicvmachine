@@ -7978,6 +7978,10 @@ triggerSystemCrash() {
                 label = `${ICONS.intentSummon} EMPOWER VOID`;
                 body  = `Both Void Spawns gain a random +1-10 HP and +1-5 DMG. Stacks for the fight — break them now or the empowered voidlings carry into Phase 3.`;
                 break;
+            case 'self_destruct':
+                label = `☠ SELF-DESTRUCT`;
+                body  = `This unit is primed to explode. Brace next turn — heavy damage on detonation.`;
+                break;
             case 'dispel':
                 label = `${ICONS.intentDispel} CLEANSE`;
                 body  = `Removes ALL status effects from itself (poison, weak, frail, etc).`;
@@ -11160,6 +11164,14 @@ triggerSystemCrash() {
         if(fireCount >= 3) items = items.filter(i => i.id !== 'firewall');
         const gamblerCount = this.stackCount('gamblers_chip');
         if(gamblerCount >= 3) items = items.filter(i => i.id !== 'gamblers_chip');
+        // v1.8.3 — once a relic is fused, the base module never reappears
+        // in the shop pool either (matches the reward-screen filter).
+        const fusedShopIds = new Set(
+            (this.player.relics || []).filter(r => r.fused).map(r => r.id)
+        );
+        if (fusedShopIds.size > 0) {
+            items = items.filter(i => !fusedShopIds.has(i.id));
+        }
 
         for (let i = items.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
@@ -11778,6 +11790,51 @@ triggerSystemCrash() {
         'relentless', 'venom_edge', 'dervish_mode', 'brutalize',
     ]),
 
+    // v1.8.3 — per-relic flavor blurbs shown on the FUSE shop card so each
+    // upgrade reads as a unique enhanced version (was a generic "+50%
+    // effect, frees slot" line that the user reasonably found unmotivating).
+    // The mechanical bonus is uniform — fused counts as 4 stacks (2× the
+    // effect of a single copy, up from the prior 3 = +50%) — but the
+    // marketing per-relic sells the upgrade. Falls back to a generic line
+    // if a relic isn't listed.
+    _fusedFlavors: {
+        mana_syphon:        'Banks 2× the mana per drain — a steady regen that compounds with every Mana die.',
+        crit_lens:          'Doubled crit chance per stack. The lens locks onto its target.',
+        titan_module:       'Doubled flat damage per stack. Every strike hits like a heavy.',
+        minion_core:        'Doubled minion stat boosts. Each spawn carries the load of two cores.',
+        spike_armor:        'Reflected damage doubled. Hostile attacks pay full price.',
+        retaliator:         'Counter-attack scaling doubled. Block-to-strike is the loop.',
+        reflection_glass:   'Reflection coefficient doubled. Their damage is yours.',
+        med_dispenser:      'Heal-on-trigger output doubled. Combat sustain becomes baseline.',
+        coolant_loop:       'Shield-on-break gain doubled. Every collapse is a fresh wall.',
+        firewall:           'Burn-on-attack damage doubled. The shield itself bites back.',
+        celestial_sync:     'Other relics scale 2× faster. The whole loadout sings.',
+        wisp_hp:            'Wisp HP scaling doubled. The spirits hold their ground.',
+        swarm_beacon:       'Swarm-bonus doubled per ally. Numbers truly become threat.',
+        nano_shield:        'Starting shield doubled. Open combats already armoured.',
+        shield_gen:         'Shield-per-turn doubled. The wall just keeps rising.',
+        warden_protocol:    'Sentinel scaling doubled. The aegis holds twice as long.',
+        tempo_loop:         'Tempo scaling doubled. Speed compounds.',
+        aegis_cycler:       'Cycle output doubled. The field never lapses.',
+        hex_fragment:       'Hex potency doubled. Their effects bleed harder.',
+        static_capacitor:   'Static charge doubled. Every spark carries weight.',
+        solar_battery:      'Solar regen doubled. The grid fills twice as fast.',
+        reroll_chip:        'Rerolls per turn doubled per stack.',
+        gamblers_chip:      'Gambler bonus doubled. The odds finally favour you.',
+        shard_reactor:      'Shard yield doubled. Every break pays.',
+        data_miner:         'Frag yield doubled per kill. The grind compresses.',
+        c_void_siphon:      'Siphon ratio doubled. The void feeds you twice as well.',
+        relentless:         'Relentless scaling doubled. The 3rd-attack ramp hits harder.',
+        venom_edge:         'Poison stacks doubled per strike. Bleed becomes inevitable.',
+        dervish_mode:       'Dervish bonus doubled. The whirl never stops.',
+        brutalize:          'Brutalize damage doubled. Followups reduce them to nothing.',
+        loot_bot:           'Frag-find chance doubled. Every node leaves you richer.',
+        leyline_cache:      'Cache yield doubled. Reroll tokens flow.',
+        salvage_arm:        'Salvage frags doubled per kill.',
+        stim_pack:          'Stim heal doubled per trigger. Combat sustain reset.',
+        bait_drone:         'Bait charge doubled. Decoys hold longer.',
+    },
+
     renderFusionPanel(grid) {
         if (!this.player || !this.player.relics) return;
         // Count un-fused copies per relic id.
@@ -11794,6 +11851,7 @@ triggerSystemCrash() {
         fuseable.forEach(relicId => {
             const sample = this.player.relics.find(r => r.id === relicId && !r.fused);
             if (!sample) return;
+            const flavor = this._fusedFlavors[relicId] || 'Doubled effect across every stack.';
             const div = document.createElement('div');
             div.className = 'shop-item shop-fuse neon-border-gold';
             div.innerHTML = `
@@ -11803,7 +11861,7 @@ triggerSystemCrash() {
                 </div>
                 <div class="shop-info">
                     <div class="neon-text-gold shop-title">FUSE: ${sample.name}</div>
-                    <div class="shop-desc">Trade 2 copies for 1 fused version that counts as 3 stacks. Net +50% effect, frees 1 module slot.</div>
+                    <div class="shop-desc">Trades 2 copies for 1 enhanced version. ${flavor} The base module won't be offered again this run.</div>
                     <div class="cost-tag">${cost} Frags</div>
                 </div>`;
             div.onclick = () => {
@@ -11831,13 +11889,16 @@ triggerSystemCrash() {
         });
     },
 
-    // A fused relic counts as 3 effective stacks (a buff over owning 2 normal copies)
-    // for multiplicative relic math (titan, crit_lens, stim_pack, loot_bot).
+    // v1.8.3 — fused relic counts as 4 stacks (was 3). 2× the effect of
+    // a single copy, up from +50% — the user reasonably called the prior
+    // bump "no benefit" since slot capacity is unlimited. The base
+    // module is also now filtered out of future reward / shop offers
+    // for the rest of the run (see generateRewards reward-pool filter).
     stackCount(relicId) {
         if (!this.player || !this.player.relics) return 0;
         return this.player.relics
             .filter(r => r.id === relicId)
-            .reduce((sum, r) => sum + (r.fused ? 3 : 1), 0);
+            .reduce((sum, r) => sum + (r.fused ? 4 : 1), 0);
     },
 
     leaveShop() {
@@ -14508,6 +14569,9 @@ async startTurn() {
                      ParticleSys.createFloatingText(this.enemy.x, this.enemy.y, "SHIELD REGEN", COLORS.SHIELD);
                  }
              }
+             // v1.8.3 — sweep up any 0-HP enemy minions before the boss
+             // picks intents, so corpses can't be targeted as if alive.
+             this._cullEnemyMinions();
              this.enemy.decideTurn();
         }
         // Sector 0 Breakout — enemy phase resolved, new turn beginning.
@@ -14852,6 +14916,23 @@ async startTurn() {
         }
         if (removed > 0) this.player.minions = survivors;
         return removed;
+    },
+
+    /* v1.8.3 — Cull dead enemy minions in-place. Counterpart to
+       _cullPlayerMinions. The codebase has ~15 sites that filter
+       enemy.minions ad-hoc after damage; some paths (notably the
+       voidShared splash and any future direct-mutation hooks) can
+       leave 0-HP minions in the array. This helper is the safety
+       net: call from start-of-enemy-turn AND start-of-player-turn
+       so corpses can never linger more than one game tick.
+       Returns the number of minions removed. */
+    _cullEnemyMinions() {
+        if (!this.enemy || !Array.isArray(this.enemy.minions)) return 0;
+        const before = this.enemy.minions.length;
+        this.enemy.minions = this.enemy.minions.filter(
+            m => m && m.currentHp > 0
+        );
+        return before - this.enemy.minions.length;
     },
 
     /* Class-fantasy summon VFX dispatcher (Roadmap Part 26.2). Call this
@@ -19792,6 +19873,38 @@ drawEffects() {
             // Some kinds resolve fully here (self-buffs, helper actions, silent turns);
             // others mutate into a standard 'attack' so the shared attack block handles
             // damage, VFX, hit-stop, and QTEs uniformly.
+            else if (intent.type === 'self_destruct') {
+                // v1.8.3 — Parasite Carrier-style detonator self-destruct.
+                // Armed when the player drops the enemy to 0 HP; the
+                // takeDamage clamp set HP to 1 and fired a "WARNING —
+                // DETONATION IMMINENT" banner last turn. This intent is
+                // the explosion: small explosion VFX, player takes the
+                // intent.val (~maxHp/3, 30 for Parasite Carrier), then
+                // the enemy dies and combat ends if the player survived.
+                const boom = (intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val) || 30;
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, "DETONATING", "#7fff00");
+                ParticleSys.createShockwave(this.enemy.x, this.enemy.y, "#7fff00", 60);
+                AudioMgr.playSound('siren');
+                await this.sleep(450);
+                ParticleSys.createExplosion(this.enemy.x, this.enemy.y, 80, "#7fff00");
+                ParticleSys.createExplosion(this.player.x, this.player.y, 60, "#7fff00");
+                ParticleSys.createShockwave(this.player.x, this.player.y, "#7fff00", 70);
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 140, `DETONATE -${boom}`, "#7fff00");
+                AudioMgr.playSound('explosion');
+                AudioMgr.playSound('grid_fracture');
+                if (this.shake) this.shake(20);
+                if (this.triggerScreenFlash) this.triggerScreenFlash('rgba(127, 255, 0, 0.30)', 260);
+                // Player damage — bypasses shield (it's a self-destruct
+                // burst, not a directed attack). gameOver if it kills.
+                const playerDied = this.player.takeDamage(boom, this.enemy, false, /*bypassShield*/ true);
+                // Carrier dies regardless (self-destruct consumes it).
+                this.enemy.currentHp = 0;
+                this.enemy._armedDetonate = false;
+                this.enemy._detonated = true;
+                if (playerDied && this.player.currentHp <= 0) { this.gameOver(); return; }
+                this.winCombat();
+                return;
+            }
             else if (intent.type === 'aoe_sweep') {
                 // Riot Suppressor: single QTE then damage everyone player-side.
                 // The sweep arc telegraphs as a fast wind-up; accelerate
@@ -21318,6 +21431,19 @@ drawEffects() {
         ];
         for (const id of ONE_COPY_MAX) {
             if (this.player.hasRelic(id)) pool = pool.filter(i => i.id !== id);
+        }
+
+        // v1.8.3 — once a relic has been ★-fused at the shop, the base
+        // module shouldn't be offered again this run. Owner already has
+        // a stronger version (4-stack fused vs 1-stack base) and rolling
+        // the source would either accumulate dead weight or invite a
+        // re-fuse loop. Same gate also runs in the shop (see
+        // generateShop) so consistency holds across both offer surfaces.
+        const fusedSourceIds = new Set(
+            (this.player.relics || []).filter(r => r.fused).map(r => r.id)
+        );
+        if (fusedSourceIds.size > 0) {
+            pool = pool.filter(i => !fusedSourceIds.has(i.id));
         }
 
         // Shuffle pool
@@ -29946,6 +30072,7 @@ drawEntity(entity) {
                     else if (intent.type === 'summon' || intent.type === 'summon_glitch') iconColor = '#00f3ff';
                     else if (intent.type === 'summon_void')       iconColor = '#ff00ff';
                     else if (intent.type === 'buff_voidlings')    iconColor = '#ff00ff';
+                    else if (intent.type === 'self_destruct')     iconColor = '#7fff00';
                     // Expansion (5.2.1) intent types — colored per gameplay role.
                     else if (intent.type === 'aoe_sweep')         iconColor = '#ff3355';
                     else if (intent.type === 'mirror_attack')     iconColor = '#00f3ff';
