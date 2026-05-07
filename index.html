@@ -958,11 +958,13 @@
             </div>
 
             <!-- Module pick (rest screen, all runs) — three random modules,
-                 player picks one. Opened by handleRest('module'). -->
+                 player picks one. Opened by handleRest('module'). Reuses
+                 the reward-card markup so cards read identically to the
+                 post-combat reward screen. -->
             <div id="screen-module-pick" class="screen hidden">
                 <h2 class="neon-text-blue">INSTALL A MODULE</h2>
                 <p class="module-pick-subtitle">Pick one. The other two leave with the rest cycle.</p>
-                <div id="module-pick-options" class="module-pick-options"></div>
+                <div id="module-pick-options" class="card-container"></div>
             </div>
 
             <!-- LOADOUT modal (audit F8) — full mid-run summary. Toggled via

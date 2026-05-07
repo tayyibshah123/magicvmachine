@@ -490,7 +490,7 @@ body {
 }
 
 /* Smooth scroll wherever scrollable content appears (sanctuary, intel, settings) */
-.scroll-area, #upgrade-list, #lore-grid, #shop-grid, #char-grid, #reward-options {
+.scroll-area, #upgrade-list, #lore-grid, #shop-grid, #char-grid, #reward-options, #module-pick-options {
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
@@ -500,12 +500,14 @@ body {
 #upgrade-list::-webkit-scrollbar,
 #lore-grid::-webkit-scrollbar,
 #shop-grid::-webkit-scrollbar,
-#reward-options::-webkit-scrollbar { width: 6px; }
+#reward-options::-webkit-scrollbar,
+#module-pick-options::-webkit-scrollbar { width: 6px; }
 .scroll-area::-webkit-scrollbar-thumb,
 #upgrade-list::-webkit-scrollbar-thumb,
 #lore-grid::-webkit-scrollbar-thumb,
 #shop-grid::-webkit-scrollbar-thumb,
-#reward-options::-webkit-scrollbar-thumb {
+#reward-options::-webkit-scrollbar-thumb,
+#module-pick-options::-webkit-scrollbar-thumb {
     background: rgba(0, 243, 255, 0.35);
     border-radius: 3px;
 }
@@ -15909,9 +15911,8 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
 }
 
 /* === MODULE PICK (rest screen, all runs) ================================= */
-/* Three module cards offered when the player taps MODULE at a rest. Mirrors
-   the pact-card grid styling but tinted cyan-gold so it reads as a friendly
-   choice rather than a dangerous bargain. */
+/* Reuses the .reward-card markup so cards read identically to the post-
+   combat reward screen — only the screen wrapper + subtitle live here. */
 .module-pick-subtitle {
     text-align: center;
     color: #88eaff;
@@ -15922,67 +15923,14 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     margin: 0 0 22px 0;
     padding: 0 24px;
 }
-.module-pick-options {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
+#module-pick-options {
+    /* Match the reward-options column constraint so cards size and
+       scroll the same way. card-container provides the flex behaviour. */
     width: min(560px, 92vw);
     margin: 0 auto;
-}
-.module-pick-card {
-    position: relative;
-    text-align: left;
-    padding: 16px 18px 14px 22px;
-    border: 1.5px solid rgba(0, 243, 255, 0.5);
-    border-radius: 12px;
-    background: linear-gradient(135deg, rgba(0, 30, 50, 0.85), rgba(0, 12, 26, 0.92));
-    color: #fff;
-    cursor: pointer;
-    transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
-    box-shadow: 0 0 12px rgba(0, 243, 255, 0.16), inset 0 0 12px rgba(0, 243, 255, 0.06);
-}
-.module-pick-card:hover,
-.module-pick-card:focus-visible {
-    transform: translateY(-2px);
-    border-color: var(--neon-blue);
-    box-shadow: 0 0 22px rgba(0, 243, 255, 0.4), inset 0 0 18px rgba(0, 243, 255, 0.18);
-    outline: none;
-}
-.module-pick-card.rarity-gold {
-    border-color: rgba(255, 215, 0, 0.6);
-    box-shadow: 0 0 14px rgba(255, 215, 0, 0.22), inset 0 0 12px rgba(255, 215, 0, 0.08);
-}
-.module-pick-card.rarity-gold:hover {
-    border-color: var(--neon-gold);
-    box-shadow: 0 0 24px rgba(255, 215, 0, 0.5), inset 0 0 18px rgba(255, 215, 0, 0.2);
-}
-.module-pick-card.rarity-red {
-    border-color: rgba(255, 60, 90, 0.6);
-    box-shadow: 0 0 14px rgba(255, 60, 90, 0.22), inset 0 0 12px rgba(255, 60, 90, 0.08);
-}
-.module-pick-card.rarity-red:hover {
-    border-color: #ff3c5a;
-    box-shadow: 0 0 24px rgba(255, 60, 90, 0.5), inset 0 0 18px rgba(255, 60, 90, 0.2);
-}
-.module-pick-card.rarity-corrupted {
-    border-color: rgba(255, 0, 255, 0.6);
-    box-shadow: 0 0 14px rgba(255, 0, 255, 0.28), inset 0 0 12px rgba(255, 0, 255, 0.1);
-}
-.module-pick-card-name {
-    font-family: 'Orbitron', var(--font-cyber);
-    font-size: 1.05rem;
-    letter-spacing: 0.16em;
-    color: #ffd76a;
-    text-shadow: 0 0 6px rgba(255, 215, 100, 0.5);
-    margin-bottom: 6px;
-}
-.module-pick-card-desc {
-    font-family: var(--font-cyber);
-    font-size: 0.78rem;
-    line-height: 1.4;
-    letter-spacing: 0.04em;
-    color: #cfeaff;
-    opacity: 0.9;
+    max-height: calc(100vh - 220px);
+    overflow-y: auto;
+    padding: 4px;
 }
 
 /* === PACTS (Challenge Mode, Roadmap Part 24) ============================= */

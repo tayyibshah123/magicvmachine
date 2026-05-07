@@ -9841,10 +9841,10 @@ triggerSystemCrash() {
     // ----- REST: pick 1 of 3 modules (default for every run) -------------
     // Builds the eligible relic pool the same way generateRewards does
     // (class-locked filter, drop owned uniques + maxed stacks) and surfaces
-    // three random options on screen-module-pick. Picking one installs it
-    // and completes the rest node. If the pool collapses to nothing
-    // (every stackable relic capped, every unique owned), fall back to a
-    // small fragment consolation so the rest never soft-locks.
+    // three random options on screen-module-pick. Cards reuse the post-
+    // combat reward-card markup so the rest pick reads identically to the
+    // sector-clear reward screen — same rarity tag, icon, name, desc,
+    // stack/synergy hints. Picking one installs it and resolves the rest.
     _openModulePicker() {
         const restScreen = document.getElementById('screen-rest');
         const pickScreen = document.getElementById('screen-module-pick');
@@ -9860,8 +9860,9 @@ triggerSystemCrash() {
         }
         // One-copy uniques + standard caps. Mirrors generateRewards.
         const STACK_CAPS = { minion_core: 2, titan_module: 3, relentless: 3, crit_lens: 5, gamblers_chip: 3, hologram: 3, firewall: 3 };
+        const UNIQUE_IDS = new Set(['second_life', 'manifestor', 'voodoo_doll', 'overcharge_chip', 'reckless_drive']);
         const ONE_COPY = new Set([
-            'second_life','manifestor','voodoo_doll','overcharge_chip','reckless_drive',
+            ...UNIQUE_IDS,
             'c_quantum_core','c_paradox','c_fracture','c_blood_pact','iron_lung',
             'dawn_protocol','dusk_protocol','echo_chamber','dice_cache','volt_primer',
             'salvage_protocol','echo_round','last_stand','ghost_cache','spark_battery'
@@ -9900,25 +9901,74 @@ triggerSystemCrash() {
 
         list.innerHTML = '';
         options.forEach(item => {
-            const card = document.createElement('button');
-            card.type = 'button';
+            const card = document.createElement('div');
             const isGold = item.rarity === 'gold';
             const isRed  = item.rarity === 'red';
             const isCorrupted = item.rarity === 'corrupted';
-            let rarityClass = 'rarity-common';
-            if (isCorrupted) rarityClass = 'rarity-corrupted';
-            else if (isGold) rarityClass = 'rarity-gold';
-            else if (isRed)  rarityClass = 'rarity-red';
-            card.className = `module-pick-card ${rarityClass}`;
-            card.dataset.itemId = item.id;
-            const desc = (this.getRelicDescription)
-                ? this.getRelicDescription(item, (this.stackCount ? this.stackCount(item.id) : 0) + 1)
-                : item.desc;
+
+            let borderClass = '';
+            if (isGold) borderClass = 'gold-border';
+            if (isRed) borderClass = 'red-border';
+            if (isCorrupted) borderClass = 'red-border';
+
+            card.className = `reward-card ${borderClass} reward-sector-${this.sector || 1}`;
+            if (isCorrupted) {
+                card.style.borderColor = '#ff00ff';
+                card.style.boxShadow = '0 0 15px #ff00ff';
+                card.style.background = 'linear-gradient(135deg, rgba(50,0,50,0.8), rgba(20,0,20,0.9))';
+            }
+
+            const currentCount = this.player.relics.filter(r => r.id === item.id).length;
+            let nextDesc = item.desc;
+            if (this.getRelicDescription) {
+                nextDesc = this.getRelicDescription(item, currentCount + 1);
+            }
+
+            // Rarity label — mirror generateRewards.
+            let rarityLabel = 'COMMON', rarityIcon = '◆', rarityClass = 'rarity-common';
+            if (isCorrupted) { rarityLabel = 'CORRUPTED'; rarityIcon = '☣'; rarityClass = 'rarity-corrupted'; }
+            else if (isGold) { rarityLabel = 'RARE';      rarityIcon = '★'; rarityClass = 'rarity-gold'; }
+            else if (isRed)  { rarityLabel = 'EPIC';      rarityIcon = '✦'; rarityClass = 'rarity-red'; }
+
+            // Synergy / stack hint — mirror generateRewards.
+            let synergyHint = '';
+            if (UNIQUE_IDS.has(item.id)) {
+                synergyHint += `<div class="reward-stack-hint">◇ Unique</div>`;
+            } else if (STACK_CAPS[item.id]) {
+                synergyHint += `<div class="reward-stack-hint">⎘ ${currentCount}/${STACK_CAPS[item.id]} stacks</div>`;
+            } else if (currentCount > 0) {
+                synergyHint += `<div class="reward-stack-hint">⎘ Owned: ${currentCount}</div>`;
+            }
+            if (typeof SYNERGIES !== 'undefined' && this.player && this.player.relics) {
+                const ownedIds = new Set(this.player.relics.map(r => r.id));
+                const withPick = new Set(ownedIds);
+                withPick.add(item.id);
+                const completed = SYNERGIES.find(s => s.ids.includes(item.id)
+                    && s.ids.every(id => withPick.has(id))
+                    && !(this.synergiesTriggered && this.synergiesTriggered.has(s.id)));
+                if (completed) {
+                    synergyHint += `<div class="reward-synergy-hint">⚡ SYNERGY: ${completed.name}</div>`;
+                    card.classList.add('synergy-ready');
+                } else {
+                    const progress = SYNERGIES.find(s => s.ids.includes(item.id)
+                        && !(this.synergiesTriggered && this.synergiesTriggered.has(s.id)));
+                    if (progress) {
+                        const missing = progress.ids.filter(id => !withPick.has(id)).length;
+                        if (missing > 0) {
+                            synergyHint += `<div class="reward-synergy-hint" style="opacity:0.7">◇ ${progress.name}, needs ${missing} more</div>`;
+                        }
+                    }
+                }
+            }
+
             card.innerHTML = `
-                <div class="module-pick-card-name">${item.name}</div>
-                <div class="module-pick-card-desc">${desc || ''}</div>
+                <div class="reward-rarity ${rarityClass}">${rarityIcon} ${rarityLabel}</div>
+                <div class="reward-icon">${item.icon || ''}</div>
+                <div class="reward-name ${isGold ? 'gold-text' : ''} ${isRed ? 'red-text' : ''}">${item.name}</div>
+                <div class="reward-desc">${nextDesc || ''}</div>
+                ${synergyHint}
             `;
-            card.addEventListener('click', () => this._pickModule(item));
+            card.onclick = () => this._pickModule(item, card);
             list.appendChild(card);
         });
 
@@ -9930,10 +9980,17 @@ triggerSystemCrash() {
         pickScreen.classList.add('active');
     },
 
-    _pickModule(item) {
+    _pickModule(item, card) {
         if (!item || !this.player) return;
-        // Hide picker first so the floating-text + relic-fly VFX read
-        // against the map backdrop, not a half-faded screen.
+        AudioMgr.playSound('click');
+        AudioMgr.playSound('upgrade', { volume: 0.75 });
+        // Optimistic UI — fly the picked card toward the relic strip,
+        // matching the post-combat reward screen pickup animation.
+        if (card && this.flyRewardToStrip) {
+            try { this.flyRewardToStrip(card, item); } catch (_) {}
+        }
+        // Hide picker after the fly-to-strip kicks off so the animation
+        // reads against the map backdrop, not a half-faded screen.
         const pickScreen = document.getElementById('screen-module-pick');
         if (pickScreen) {
             pickScreen.classList.remove('active');
@@ -9953,9 +10010,12 @@ triggerSystemCrash() {
         } else {
             this.player.addRelic(item);
         }
-        ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
-            `INSTALLED: ${item.name.toUpperCase()}`, COLORS.GOLD);
-        AudioMgr.playSound && AudioMgr.playSound('upgrade');
+        // Ascension 11 — Hungry Relics tax. Mirror reward-screen.
+        if (this._ascEffects && this._ascEffects.relicHpCost > 0 && this.player) {
+            const cost = this._ascEffects.relicHpCost;
+            this.player.takeDamage(cost, null, false, /*bypassShield*/ true);
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 130, `HUNGRY RELIC -${cost} HP`, '#ff0055');
+        }
         Analytics && Analytics.emit && Analytics.emit('relic_picked', { id: item.id, rarity: item.rarity || 'common', src: 'rest' });
         Hints && Hints.trigger && Hints.trigger('first_relic');
         this.completeCurrentNode();
