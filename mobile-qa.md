@@ -169,6 +169,17 @@ New scenarios from `AUDIT_2026-05.md` — verify on a real device (iPhone + Andr
 | S4 enemy DMG is noticeably higher than S3 (no longer flat) | ☐ |
 | Hive Protocol (S4 boss) hits 3 times per turn, not 4 — Tesseract Prime is now the highest effective DPS again | ☐ |
 
+### Sector chip (v1.8.1)
+
+| Check | Pass |
+|-------|------|
+| Sector display reads `SECTOR N` at all widths and turn counts; never "S1SECTOR 1" or "S{N}" alone | ☐ |
+| Tapping the SECTOR pill does nothing (no compact toggle, no hover lift) | ☐ |
+| Tapping the mech pill (e.g. FROST FIELD on S2, HEAT TILES on S3) shows a tooltip with label + description | ☐ |
+| Tapping the mech pill again dismisses the tooltip | ☐ |
+| Tooltip auto-dismisses after ~4s if untapped | ☐ |
+| Desktop hover on mech pill still surfaces tooltip; mouse leave hides it | ☐ |
+
 ### Custom Run payout
 
 | Check | Pass |

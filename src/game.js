@@ -13480,15 +13480,78 @@ async startCombat(type) {
                 if (hasRealMech && sectorMech.desc) {
                     const tipText = `${sectorMech.label}\n${sectorMech.desc}`;
                     mechPill.title = `${sectorMech.label}: ${sectorMech.desc}`;
-                    mechPill.onmouseenter = (e) => TooltipMgr.show(tipText, e.clientX, e.clientY);
-                    mechPill.onmouseleave = () => TooltipMgr.hide();
-                    mechPill.ontouchstart = (e) => {
-                        const t = e.touches && e.touches[0];
-                        if (t) TooltipMgr.show(tipText, t.clientX, t.clientY - 80);
+                    // v1.8.1 — unified click toggle (works on desktop AND
+                    // mobile). Previously: mouseenter/leave for desktop +
+                    // touchstart-only for mobile (which surfaced the
+                    // tooltip but never dismissed it; tooltip camped until
+                    // a button tap elsewhere fired TooltipMgr.hide).
+                    // Now: tap once → show; tap again → hide; auto-
+                    // dismisses after 4s if untapped. Keyboard activation
+                    // (Enter / Space) supported via the same toggle for
+                    // a11y. Desktop hover preview kept on top so the
+                    // tooltip surfaces without a deliberate tap.
+                    mechPill.setAttribute('role', 'button');
+                    mechPill.setAttribute('tabindex', '0');
+                    mechPill.setAttribute('aria-label',
+                        `${sectorMech.label}. Tap for description.`);
+                    if (this._mechPillDismissTimer) {
+                        clearTimeout(this._mechPillDismissTimer);
+                        this._mechPillDismissTimer = null;
+                    }
+                    this._mechPillTipShown = false;
+                    const showTip = (x, y) => {
+                        TooltipMgr.show(tipText, x, y);
+                        this._mechPillTipShown = true;
+                        if (this._mechPillDismissTimer) clearTimeout(this._mechPillDismissTimer);
+                        this._mechPillDismissTimer = setTimeout(() => {
+                            TooltipMgr.hide();
+                            this._mechPillTipShown = false;
+                            this._mechPillDismissTimer = null;
+                        }, 4000);
                     };
+                    const hideTip = () => {
+                        TooltipMgr.hide();
+                        this._mechPillTipShown = false;
+                        if (this._mechPillDismissTimer) {
+                            clearTimeout(this._mechPillDismissTimer);
+                            this._mechPillDismissTimer = null;
+                        }
+                    };
+                    mechPill.onclick = (e) => {
+                        e.stopPropagation();
+                        if (this._mechPillTipShown) hideTip();
+                        else {
+                            const r = mechPill.getBoundingClientRect();
+                            showTip(r.left + r.width / 2, r.top);
+                        }
+                    };
+                    mechPill.onkeydown = (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            mechPill.onclick(e);
+                        }
+                    };
+                    // Desktop hover affordance — keeps the no-tap preview
+                    // mouse users expect. Doesn't compete with the
+                    // click toggle; mouseleave just hides without
+                    // mutating the click-state flag.
+                    mechPill.onmouseenter = (e) => showTip(e.clientX, e.clientY);
+                    mechPill.onmouseleave = () => hideTip();
+                    // Drop the legacy touchstart wiring — onclick now
+                    // covers mobile via the synthesized click event.
+                    mechPill.ontouchstart = null;
                 } else {
                     mechPill.removeAttribute('title');
+                    mechPill.removeAttribute('role');
+                    mechPill.removeAttribute('tabindex');
+                    mechPill.removeAttribute('aria-label');
+                    mechPill.onclick = mechPill.onkeydown = null;
                     mechPill.onmouseenter = mechPill.onmouseleave = mechPill.ontouchstart = null;
+                    if (this._mechPillDismissTimer) {
+                        clearTimeout(this._mechPillDismissTimer);
+                        this._mechPillDismissTimer = null;
+                    }
+                    this._mechPillTipShown = false;
                 }
             }
             if (sectorMech.enemyShieldBonus && !this.enemy.isBoss) {
@@ -14173,16 +14236,10 @@ async startTurn() {
         // for the digest at the end of the enemy phase, so resetting now
         // is safe and keeps the digest aligned to the player's window.
         try { CombatStats.startTurn(this.turnCount); } catch (_) {}
-        // Sector/turn chip (Day 3 — mobile densification): collapse to a
-        // compact single-line pill once the player has had a few turns to
-        // read SECTOR and the mech blurb. Tap re-expands. We only auto-
-        // apply from turn 4 onward — turn 1-3 keeps the full label so a
-        // returning-from-shop player sees the full context again first.
+        // Sync the sector display + mech pill. v1.8.1 dropped the
+        // tap-to-compact toggle (no purpose; glitched to "S1SECTOR 1"
+        // on mobile per audit follow-up). The chip is now static.
         this._syncSectorChip();
-        if (this.turnCount >= 4) {
-            const grp = document.querySelector('#hud .sector-turn-group');
-            if (grp && !grp.dataset.userExpanded) grp.classList.add('compact');
-        }
         this.player.incomingDamageMult = 1;
         this.freeRerollUsedThisTurn = false;
 
@@ -22164,34 +22221,13 @@ drawEffects() {
         }
     },
 
-    // Day 3 — keeps the sector-turn chip's data-num attribute in sync
-    // (the .compact CSS rule reads data-num to render "S·1" instead of
-    // "SECTOR 1") and lazily binds the tap-to-expand handler. Idempotent:
-    // safe to call from every turn, every sector change.
+    // v1.8.1 — sector-turn chip is now static (no tap-to-compact toggle).
+    // Kept as a no-op stub since `startTurn` calls it every turn and a
+    // future content addition (e.g. a per-sector readiness pip) might
+    // want to repaint here. Previously bound a click/keydown toggle and
+    // wrote a data-num attr for the .compact CSS rule; both are gone.
     _syncSectorChip() {
-        const grp = document.querySelector('#hud .sector-turn-group');
-        if (!grp) return;
-        const sec = document.getElementById('sector-display');
-        if (sec) sec.setAttribute('data-num', String(this.sector || 1));
-        if (grp.dataset.tapBound) return;
-        grp.dataset.tapBound = '1';
-        // Make it focusable + keyboard-toggleable for accessibility — the
-        // chip is interactive (tap to read full sector blurb) and would
-        // otherwise be invisible to screen readers / keyboard users.
-        grp.setAttribute('role', 'button');
-        grp.setAttribute('tabindex', '0');
-        grp.setAttribute('aria-label', 'Sector and turn — tap to expand or collapse');
-        const _toggle = () => {
-            const expanded = grp.classList.toggle('compact');
-            // Track the player's last manual choice so the auto-collapse
-            // at turn 4+ doesn't override an explicit expand.
-            if (!expanded) grp.dataset.userExpanded = '1';
-            else delete grp.dataset.userExpanded;
-        };
-        grp.addEventListener('click', _toggle);
-        grp.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); _toggle(); }
-        });
+        /* intentional no-op — see comment above */
     },
 
     updateMinionPositions() {
