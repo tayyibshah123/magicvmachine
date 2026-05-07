@@ -9165,6 +9165,26 @@ triggerSystemCrash() {
         root.style.setProperty('--db-accent', accent);
         root.style.setProperty('--db-accent-rgb', `${r}, ${g}, ${b}`);
 
+        // ── Orb label — class identity inside the centerpiece. Falls
+        // back to "OPERATOR" / "READY" before the player has ever
+        // picked a class. Sub-line carries a quick combat-readiness
+        // flavour line so the orb feels alive on first launch too.
+        const orbLabel = document.getElementById('menu-orb-label');
+        const orbSub   = document.getElementById('menu-orb-sublabel');
+        if (orbLabel) {
+            orbLabel.textContent = cls ? cls.name.toUpperCase() : 'OPERATOR';
+        }
+        if (orbSub) {
+            if (saveBlob && saveBlob.player && saveBlob.player.classId) {
+                const sec = saveBlob.sector || 1;
+                orbSub.textContent = `// SECTOR ${sec} ACTIVE`;
+            } else if (cls) {
+                orbSub.textContent = '// READY TO DEPLOY';
+            } else {
+                orbSub.textContent = '// AWAITING SELECTION';
+            }
+        }
+
         // ── Ops cells: LAST · SPARKS · FILES
         const opsLast = document.getElementById('menu-ops-last');
         if (opsLast) {

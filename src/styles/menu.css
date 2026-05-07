@@ -185,9 +185,14 @@
     position: relative; z-index: 1;
     height: 100%;
     display: grid;
-    grid-template-rows: auto auto 1fr auto auto auto auto;
-    padding: 2.4cqh 4cqw 1.2cqh;
-    gap: 1.4cqh;
+    /* Rows in order:
+         hdr · title · ticker · orb (1fr) · ops · console
+         · cluster · energy · footer
+       The 1fr track on the orb absorbs leftover space, so all
+       other rows hug their content. */
+    grid-template-rows: auto auto auto 1fr auto auto auto auto auto;
+    padding: 2cqh 4cqw 1.2cqh;
+    gap: 1.2cqh;
 }
 
 
@@ -297,7 +302,9 @@
     margin: 0;
     font-family: var(--ui-font-impact, 'Saira', 'Orbitron', sans-serif);
     font-weight: 900; font-style: italic;
-    font-size: clamp(2.4rem, 7.4cqh, 3.4rem);
+    /* Bumped from 7.4cqh — more masthead presence to anchor the
+       upper third now that the layout has the orb pushed down. */
+    font-size: clamp(2.7rem, 8.6cqh, 3.8rem);
     letter-spacing: 0.005em;
     line-height: 0.95;
     color: #fff;
@@ -388,12 +395,15 @@
 }
 .menu-v2.dropbay .db-orb {
     position: relative;
-    /* Orb sized to fit the available track without crowding the
-       ops strip below. cqmin keeps it square at all aspect
-       ratios; min(...) caps so it never blows out wide phones. */
-    width: min(38cqh, 78cqw);
-    height: min(38cqh, 78cqw);
+    /* Bumped from 38cqh → 40cqh so the centerpiece earns more
+       presence. max-width/max-height: 100% clamp it to the 1fr
+       track when the surrounding rows squeeze the cell on
+       shorter viewports — prevents the orb from overflowing
+       into the ops strip. aspect-ratio: 1 + width drives height. */
+    width: min(40cqh, 80cqw);
     aspect-ratio: 1;
+    max-width: 100%;
+    max-height: 100%;
 }
 
 /* Halo — soft bloom. The blur is cheaper as a static rasterized
@@ -992,20 +1002,24 @@
  * ────────────────────────────────────────────────────────── */
 .menu-v2.dropbay.screen.active .db-hdr,
 .menu-v2.dropbay.screen.active .db-title-row,
+.menu-v2.dropbay.screen.active .db-ticker,
 .menu-v2.dropbay.screen.active .db-orb-stage,
 .menu-v2.dropbay.screen.active .db-ops,
 .menu-v2.dropbay.screen.active .db-console,
 .menu-v2.dropbay.screen.active .db-cluster,
+.menu-v2.dropbay.screen.active .db-energy,
 .menu-v2.dropbay.screen.active .db-footer {
     animation: db-stagger-in 520ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 .menu-v2.dropbay.screen.active .db-hdr        { animation-delay: 0ms;   }
 .menu-v2.dropbay.screen.active .db-title-row  { animation-delay: 80ms;  }
-.menu-v2.dropbay.screen.active .db-orb-stage  { animation-delay: 200ms; }
-.menu-v2.dropbay.screen.active .db-ops        { animation-delay: 320ms; }
-.menu-v2.dropbay.screen.active .db-console    { animation-delay: 420ms; }
-.menu-v2.dropbay.screen.active .db-cluster    { animation-delay: 520ms; }
-.menu-v2.dropbay.screen.active .db-footer     { animation-delay: 620ms; }
+.menu-v2.dropbay.screen.active .db-ticker     { animation-delay: 160ms; }
+.menu-v2.dropbay.screen.active .db-orb-stage  { animation-delay: 240ms; }
+.menu-v2.dropbay.screen.active .db-ops        { animation-delay: 360ms; }
+.menu-v2.dropbay.screen.active .db-console    { animation-delay: 460ms; }
+.menu-v2.dropbay.screen.active .db-cluster    { animation-delay: 560ms; }
+.menu-v2.dropbay.screen.active .db-energy     { animation-delay: 720ms; }
+.menu-v2.dropbay.screen.active .db-footer     { animation-delay: 780ms; }
 .menu-v2.dropbay.screen.active .db-cluster .db-tab {
     animation: db-stagger-in 520ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
@@ -1021,11 +1035,13 @@
 }
 .reduced-motion .menu-v2.dropbay.screen.active .db-hdr,
 .reduced-motion .menu-v2.dropbay.screen.active .db-title-row,
+.reduced-motion .menu-v2.dropbay.screen.active .db-ticker,
 .reduced-motion .menu-v2.dropbay.screen.active .db-orb-stage,
 .reduced-motion .menu-v2.dropbay.screen.active .db-ops,
 .reduced-motion .menu-v2.dropbay.screen.active .db-console,
 .reduced-motion .menu-v2.dropbay.screen.active .db-cluster,
 .reduced-motion .menu-v2.dropbay.screen.active .db-cluster .db-tab,
+.reduced-motion .menu-v2.dropbay.screen.active .db-energy,
 .reduced-motion .menu-v2.dropbay.screen.active .db-footer {
     animation: none;
 }
@@ -1089,3 +1105,236 @@ body.perf-mid .menu-v2.dropbay .db-deploy::after {
 .reduced-motion .menu-v2.dropbay .db-subtitle .pip {
     animation: none !important;
 }
+
+
+/* ──────────────────────────────────────────────────────────
+ * 15. AMBIENT GLYPHS — drifting cyber symbols
+ *
+ * 8 abstract symbols rising through the empty edges of the
+ * screen at varied speeds + opacities. Each carries inline
+ * --gd (delay) and --gs (duration) custom properties for
+ * per-glyph cadence without duplicating @keyframes.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2.dropbay .db-bg-glyphs {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+.menu-v2.dropbay .db-bg-glyphs i {
+    position: absolute;
+    bottom: -8%;
+    font-style: normal;
+    font-family: var(--ui-font-tech, 'Audiowide', monospace);
+    font-size: 2.4cqh;
+    color: rgba(var(--db-accent-rgb), 0.42);
+    text-shadow: 0 0 8px rgba(var(--db-accent-rgb), 0.55);
+    opacity: 0;
+    animation: db-glyph-drift var(--gs, 24s) linear infinite;
+    animation-delay: var(--gd, 0s);
+}
+@keyframes db-glyph-drift {
+    0%   { transform: translateY(0)         rotate(0deg);   opacity: 0; }
+    10%  { opacity: 0.55; }
+    50%  { transform: translateY(-60vh)     rotate(180deg); opacity: 0.55; }
+    90%  { opacity: 0.55; }
+    100% { transform: translateY(-120vh)    rotate(360deg); opacity: 0; }
+}
+.reduced-motion .menu-v2.dropbay .db-bg-glyphs i,
+body.perf-low .menu-v2.dropbay .db-bg-glyphs i {
+    animation: none !important;
+    display: none;
+}
+body.perf-mid .menu-v2.dropbay .db-bg-glyphs i:nth-child(n+5) {
+    display: none;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 16. TICKER — system status fade rotator
+ *
+ * 4-phrase fade rotator below the title. Each <span> animates
+ * opacity 0→1→0 over a 16s cycle, staggered 4s apart, so one
+ * phrase is always visible. No marquee scroll — fade-in/out
+ * reads cleaner on mobile.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2.dropbay .db-ticker {
+    position: relative;
+    display: flex; align-items: center; gap: 1.5cqw;
+    padding: 0.6cqh 2cqw;
+    margin: 0 auto;
+    max-width: 88%;
+    background: rgba(var(--db-accent-rgb), 0.04);
+    border: 1px solid rgba(var(--db-accent-rgb), 0.20);
+    border-left: 2px solid var(--db-accent);
+    border-radius: 4px;
+    overflow: hidden;
+    line-height: 1;
+}
+.menu-v2.dropbay .db-ticker-arrow {
+    font-family: var(--ui-font-tech, 'Audiowide', monospace);
+    color: var(--db-accent);
+    font-size: 1.5cqh;
+    text-shadow: 0 0 6px rgba(var(--db-accent-rgb), 0.85);
+    flex: 0 0 auto;
+    animation: db-ticker-arrow-pulse 1.4s ease-in-out infinite;
+}
+@keyframes db-ticker-arrow-pulse {
+    0%, 100% { opacity: 0.55; transform: translateX(0); }
+    50%      { opacity: 1.00; transform: translateX(2px); }
+}
+.menu-v2.dropbay .db-ticker-stream {
+    position: relative;
+    flex: 1;
+    height: 1.7cqh;
+    overflow: hidden;
+}
+.menu-v2.dropbay .db-ticker-stream span {
+    position: absolute; inset: 0;
+    font-family: var(--ui-font-tech, 'Audiowide', monospace);
+    font-size: 1.25cqh;
+    letter-spacing: 0.16em;
+    color: rgba(255, 255, 255, 0.78);
+    text-transform: uppercase;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0;
+    animation: db-ticker-fade 16s linear infinite;
+}
+.menu-v2.dropbay .db-ticker-stream span:nth-child(1) { animation-delay: 0s; }
+.menu-v2.dropbay .db-ticker-stream span:nth-child(2) { animation-delay: 4s; }
+.menu-v2.dropbay .db-ticker-stream span:nth-child(3) { animation-delay: 8s; }
+.menu-v2.dropbay .db-ticker-stream span:nth-child(4) { animation-delay: 12s; }
+@keyframes db-ticker-fade {
+    0%, 100% { opacity: 0; transform: translateY(20%); }
+    3%       { opacity: 1; transform: translateY(0); }
+    22%      { opacity: 1; transform: translateY(0); }
+    25%      { opacity: 0; transform: translateY(-20%); }
+}
+.reduced-motion .menu-v2.dropbay .db-ticker-arrow,
+.reduced-motion .menu-v2.dropbay .db-ticker-stream span,
+body.perf-low .menu-v2.dropbay .db-ticker-stream span,
+body.perf-low .menu-v2.dropbay .db-ticker-arrow {
+    animation: none !important;
+}
+body.perf-low .menu-v2.dropbay .db-ticker-stream span:not(:first-child) { display: none; }
+body.perf-low .menu-v2.dropbay .db-ticker-stream span:first-child { opacity: 0.85; }
+.reduced-motion .menu-v2.dropbay .db-ticker-stream span:not(:first-child) { display: none; }
+.reduced-motion .menu-v2.dropbay .db-ticker-stream span:first-child { opacity: 0.85; }
+
+
+/* ──────────────────────────────────────────────────────────
+ * 17. ORB LABEL — class identity inside the orb
+ * ────────────────────────────────────────────────────────── */
+.menu-v2.dropbay .db-orb-label {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, calc(-50% + 4cqh));
+    font-family: var(--ui-font-impact, 'Saira', sans-serif);
+    font-weight: 900; font-style: italic;
+    font-size: 2.4cqh;
+    letter-spacing: 0.10em;
+    color: rgba(255, 255, 255, 0.92);
+    text-shadow:
+        0 0 12px rgba(var(--db-accent-rgb), 0.85),
+        0 0 24px rgba(var(--db-accent-rgb), 0.45);
+    text-transform: uppercase;
+    z-index: 3;
+    pointer-events: none;
+    line-height: 1;
+    animation: db-orb-label-breath 4.6s ease-in-out infinite;
+}
+.menu-v2.dropbay .db-orb-sublabel {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, calc(-50% + 6.6cqh));
+    font-family: var(--ui-font-tech, 'Audiowide', monospace);
+    font-size: 1.05cqh;
+    letter-spacing: 0.20em;
+    color: var(--db-accent);
+    text-shadow: 0 0 8px rgba(var(--db-accent-rgb), 0.75);
+    text-transform: uppercase;
+    z-index: 3;
+    pointer-events: none;
+    line-height: 1;
+    opacity: 0.75;
+}
+@keyframes db-orb-label-breath {
+    0%, 100% { letter-spacing: 0.10em; }
+    50%      { letter-spacing: 0.14em; }
+}
+.reduced-motion .menu-v2.dropbay .db-orb-label,
+body.perf-low .menu-v2.dropbay .db-orb-label {
+    animation: none !important;
+}
+
+
+/* ──────────────────────────────────────────────────────────
+ * 18. ENERGY STRIP — class-color pulse above the footer
+ *
+ * 3 short tick marks on the left + a sweeping bar that
+ * traverses the strip every 3.4s. Adds horizontal motion to
+ * the lower third without crowding the tabs.
+ * ────────────────────────────────────────────────────────── */
+.menu-v2.dropbay .db-energy {
+    position: relative;
+    display: flex; align-items: center; gap: 1cqw;
+    height: 1.6cqh;
+    padding: 0 1cqw;
+    overflow: hidden;
+}
+.menu-v2.dropbay .db-energy::before {
+    content: ''; position: absolute; left: 0; right: 0; top: 50%;
+    height: 1px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(var(--db-accent-rgb), 0.45) 20%,
+        rgba(var(--db-accent-rgb), 0.45) 80%,
+        transparent 100%);
+    transform: translateY(-50%);
+}
+.menu-v2.dropbay .db-energy-tick {
+    position: relative;
+    width: 2px; height: 50%;
+    background: var(--db-accent);
+    box-shadow: 0 0 6px rgba(var(--db-accent-rgb), 0.85);
+    flex: 0 0 2px;
+    opacity: 0.45;
+    animation: db-energy-tick 2.6s ease-in-out infinite;
+}
+.menu-v2.dropbay .db-energy-tick:nth-child(2) { animation-delay: 0.3s; }
+.menu-v2.dropbay .db-energy-tick:nth-child(3) { animation-delay: 0.6s; }
+@keyframes db-energy-tick {
+    0%, 100% { opacity: 0.30; transform: scaleY(0.6); }
+    50%      { opacity: 1.00; transform: scaleY(1); }
+}
+.menu-v2.dropbay .db-energy-sweep {
+    position: absolute;
+    left: 0; right: 0; top: 50%;
+    height: 2px;
+    transform: translateY(-50%);
+    pointer-events: none;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        transparent 35%,
+        rgba(255, 255, 255, 0.95) 50%,
+        rgba(var(--db-accent-rgb), 0.85) 60%,
+        transparent 80%,
+        transparent 100%);
+    background-size: 200% 100%;
+    background-position: -100% 0;
+    animation: db-energy-sweep 3.4s ease-in-out infinite;
+    filter: drop-shadow(0 0 4px rgba(var(--db-accent-rgb), 0.65));
+}
+@keyframes db-energy-sweep {
+    0%   { background-position: -100% 0; }
+    100% { background-position:  100% 0; }
+}
+.reduced-motion .menu-v2.dropbay .db-energy-tick,
+.reduced-motion .menu-v2.dropbay .db-energy-sweep,
+body.perf-low .menu-v2.dropbay .db-energy-tick,
+body.perf-low .menu-v2.dropbay .db-energy-sweep {
+    animation: none !important;
+}
+body.perf-low .menu-v2.dropbay .db-energy-sweep { display: none; }

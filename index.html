@@ -243,10 +243,9 @@
                      drift on transform-only animations.
                      Compositor handles every frame; CPU paint is zero. -->
                 <!-- DROP BAY backdrop — radials + perspective floor +
-                     drifting dust motes + scan sweep + vignette. Pure
-                     CSS, transform-only animations, zero CPU paint per
-                     frame. Twelve <i> elements drive the particle
-                     layer. -->
+                     drifting dust motes + scan sweep + drifting cyber
+                     glyphs + vignette. Pure CSS, transform-only
+                     animations, zero CPU paint per frame. -->
                 <div class="db-bg" aria-hidden="true">
                     <div class="db-bg-radial-a"></div>
                     <div class="db-bg-radial-b"></div>
@@ -255,6 +254,20 @@
                     <div class="db-bg-particles">
                         <i></i><i></i><i></i><i></i><i></i><i></i>
                         <i></i><i></i><i></i><i></i><i></i><i></i>
+                    </div>
+                    <!-- Drifting glyphs — 8 abstract symbols rising
+                         through the empty edges of the screen at
+                         varied speeds + opacities. Adds living motion
+                         to the upper third where the chrome is sparse. -->
+                    <div class="db-bg-glyphs">
+                        <i style="left: 4%;  --gd: 0s;  --gs: 22s;">⬡</i>
+                        <i style="left: 12%; --gd: -7s; --gs: 18s;">◇</i>
+                        <i style="left: 22%; --gd: -3s; --gs: 26s;">⬢</i>
+                        <i style="left: 88%; --gd: -12s;--gs: 24s;">▲</i>
+                        <i style="left: 78%; --gd: -5s; --gs: 19s;">◆</i>
+                        <i style="left: 92%; --gd: -16s;--gs: 28s;">⬡</i>
+                        <i style="left: 8%;  --gd: -10s;--gs: 30s;">⬣</i>
+                        <i style="left: 94%; --gd: -2s; --gs: 21s;">◈</i>
                     </div>
                     <div class="db-bg-vignette"></div>
                 </div>
@@ -285,8 +298,7 @@
                     <!-- TITLE — big, dynamic wordmark. The Archivist Slain
                          cosmetic frame is mounted but rendered behind/at
                          the wordmark's level for the post-archive-kill
-                         brass reveal. Tagline removed (the game shouldn't
-                         read like a tech demo). -->
+                         brass reveal. Tagline removed. -->
                     <div class="db-title-row">
                         <div class="title-frame mv2-title-frame db-title-frame" id="title-frame" data-archivist-tier="0" aria-hidden="true">
                             <span class="title-frame-corner tl"></span>
@@ -298,11 +310,24 @@
                         <h1 class="title mv2-wordmark db-wordmark">MAGIC <span class="vs">v</span> MACHINE</h1>
                     </div>
 
-                    <!-- ORB — centerpiece. Layered animated emblem (halo +
-                         rotating rings + crosshair + corner brackets +
-                         orbiting particles + radial sparkle bursts). The
-                         hex portrait is gone; this orb IS the visual
-                         anchor of the menu. -->
+                    <!-- TICKER — 4-phrase fade rotator carrying live
+                         operator status. Animated via CSS keyframes
+                         (each phrase fades in/out staggered) — keeps
+                         the upper third lively. -->
+                    <div class="db-ticker" aria-hidden="true">
+                        <span class="db-ticker-arrow">▸</span>
+                        <div class="db-ticker-stream">
+                            <span>// SYSTEM ONLINE · STANDBY</span>
+                            <span>// 5 SECTORS DETECTED · GRID UNSTABLE</span>
+                            <span>// AUGMENTS LOCKED · UPLINK READY</span>
+                            <span>// AWAITING DEPLOYMENT</span>
+                        </div>
+                    </div>
+
+                    <!-- ORB — centerpiece. Layered animated emblem
+                         (halo + rotating rings + crosshair + corner
+                         brackets + orbiting motes + radial spark
+                         bursts + centre core + class label). -->
                     <div class="db-orb-stage">
                         <div class="db-orb" aria-hidden="true">
                             <div class="db-orb-halo"></div>
@@ -317,22 +342,19 @@
                             <span class="db-orb-corner tr"></span>
                             <span class="db-orb-corner bl"></span>
                             <span class="db-orb-corner br"></span>
-                            <!-- Orbiting motes — 6 around the orb axis,
-                                 each with its own delay so they trail
-                                 in sequence rather than as a fixed
-                                 rosette. -->
                             <div class="db-orb-orbit">
                                 <i></i><i></i><i></i><i></i><i></i><i></i>
                             </div>
-                            <!-- Radial spark burst — 8 strokes radiating
-                                 outward, individually animated for the
-                                 "energy field" feel. -->
                             <div class="db-orb-sparks">
                                 <i></i><i></i><i></i><i></i>
                                 <i></i><i></i><i></i><i></i>
                             </div>
-                            <!-- Centre core — bright pulsing dot. -->
                             <div class="db-orb-core"></div>
+                            <!-- Class label — JS sets the textContent
+                                 from the active class name. Reads as
+                                 the orb's identity. -->
+                            <div class="db-orb-label" id="menu-orb-label">OPERATOR</div>
+                            <div class="db-orb-sublabel" id="menu-orb-sublabel">// READY</div>
                         </div>
                     </div>
 
@@ -367,10 +389,19 @@
                         </button>
                     </div>
 
+                    <!-- ENERGY BAR — class-color pulse sweep above the
+                         footer. Adds movement to the lower third
+                         without crowding the tabs. -->
+                    <div class="db-energy" aria-hidden="true">
+                        <span class="db-energy-tick"></span>
+                        <span class="db-energy-tick"></span>
+                        <span class="db-energy-tick"></span>
+                        <span class="db-energy-sweep"></span>
+                    </div>
+
                     <!-- Hidden ascension button — kept alive so the
                          existing click handler (which opens the picker)
-                         can still be invoked programmatically if needed.
-                         Surface stays in char-select / settings flow. -->
+                         can still be invoked programmatically if needed. -->
                     <button id="btn-ascension" class="hidden feature-locked-hidden" aria-hidden="true" title="Pick a difficulty tier">
                         <span id="ascension-status-line">A0</span>
                     </button>
@@ -416,7 +447,7 @@
                     <!-- FOOTER — streak chip + version stamp. -->
                     <div class="db-footer">
                         <div id="login-streak" class="login-streak db-streak hidden"></div>
-                        <span class="db-version">ALPHA V1.7.2</span>
+                        <span class="db-version">ALPHA V1.7.3</span>
                     </div>
                 </div>
 
