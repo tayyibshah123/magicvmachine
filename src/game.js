@@ -8739,52 +8739,52 @@ triggerSystemCrash() {
         this.map.currentIdx = 'start';
     },
 
-    // Challenge Mode map — fixed linear chain: start → boss(s1) → rest →
-    // boss(s2) → rest → ... → boss(s5). One node per layer so the path is
+    // Challenge Mode map — fixed linear chain. Two rest nodes guard every
+    // boss fight: start → rest → rest → boss(s1) → rest → rest → boss(s2)
+    // → ... → rest → rest → boss(s5). One node per layer so the path is
     // unambiguous; vertical layout mirrors the standard map's bottom-to-top
     // flow. `nodeSector` on each boss tells `visitNode` which sector boss
     // template to load for that fight.
     _generateChallengeMap() {
         this.map.nodes = [];
-        // 5 bosses + 4 rests + start = 10 layers. Place start at the bottom,
-        // final boss at the top, and space everything evenly.
+        const SECTORS = 5;
+        const RESTS_PER_BOSS = 2;
+        // start + (rest+rest+boss) per sector = 1 + 5*3 = 16 layers (0..15).
+        const totalLayers = SECTORS * (RESTS_PER_BOSS + 1);
+        const topY = 8;
+        const bottomY = 90;
+        const stepY = (bottomY - topY) / totalLayers;
         this.map.nodes.push({
-            id: 'start', layer: 0, lane: 0, x: 50, y: 92,
+            id: 'start', layer: 0, lane: 0, x: 50, y: bottomY,
             type: 'start', connections: [], status: 'completed'
         });
-        const SECTORS = 5;
-        const totalLayers = SECTORS * 2 - 1; // 9 nodes after start (5 bosses + 4 rests)
-        const topY = 10;
-        const bottomY = 84;
-        const stepY = (bottomY - topY) / totalLayers;
         let prevId = 'start';
+        let layer = 1;
         for (let s = 1; s <= SECTORS; s++) {
-            // Boss layer for sector s: 1, 3, 5, 7, 9
-            const bossLayer = (s - 1) * 2 + 1;
+            for (let r = 1; r <= RESTS_PER_BOSS; r++) {
+                const restId = `rest-${s}-${r}`;
+                const restY = bottomY - layer * stepY;
+                this.map.nodes.push({
+                    id: restId, layer, lane: 0, x: 50, y: restY,
+                    type: 'rest', connections: [],
+                    status: (layer === 1) ? 'available' : 'locked'
+                });
+                const prev = this.map.nodes.find(n => n.id === prevId);
+                if (prev) prev.connections.push(restId);
+                prevId = restId;
+                layer++;
+            }
             const bossId = `boss-${s}`;
-            const bossY = bottomY - bossLayer * stepY;
+            const bossY = bottomY - layer * stepY;
             this.map.nodes.push({
-                id: bossId, layer: bossLayer, lane: 0, x: 50, y: bossY,
+                id: bossId, layer, lane: 0, x: 50, y: bossY,
                 type: 'boss', nodeSector: s, connections: [],
-                status: (bossLayer === 1) ? 'available' : 'locked'
+                status: 'locked'
             });
             const prev = this.map.nodes.find(n => n.id === prevId);
             if (prev) prev.connections.push(bossId);
             prevId = bossId;
-            // Rest layer follows every boss except the last (s=5 is the
-            // run-ending boss; no rest after it).
-            if (s < SECTORS) {
-                const restLayer = bossLayer + 1;
-                const restId = `rest-${s}`;
-                const restY = bottomY - restLayer * stepY;
-                this.map.nodes.push({
-                    id: restId, layer: restLayer, lane: 0, x: 50, y: restY,
-                    type: 'rest', connections: [], status: 'locked'
-                });
-                const bossNode = this.map.nodes.find(n => n.id === bossId);
-                if (bossNode) bossNode.connections.push(restId);
-                prevId = restId;
-            }
+            layer++;
         }
         this.map.currentIdx = 'start';
         // Per-sector map mechanics (Roadmap Part 30.4) — applied once at
@@ -9377,13 +9377,32 @@ triggerSystemCrash() {
 
     renderMap() {
         const titleEl = document.getElementById('map-sector-display');
-        if (titleEl) titleEl.innerText = `// SECTOR ${this.sector}`;
+        const titleTextEl = document.getElementById('map-title-text');
+        // Challenge Mode rebrands the whole title so the player can never
+        // confuse a Boss Gauntlet run with a normal sector. Subtitle reads
+        // BOSS SECTOR <n> to keep progress legible without leaning on the
+        // story-mode "// SECTOR n" wording.
+        if (this.challengeMode) {
+            if (titleTextEl) titleTextEl.innerText = 'CHALLENGE MAP';
+            if (titleEl) titleEl.innerText = `// BOSS SECTOR ${this.sector || 1}`;
+        } else if (this.archiveMode) {
+            if (titleTextEl) titleTextEl.innerText = 'SECTOR MAP';
+            if (titleEl) titleEl.innerText = `// SECTOR ${this.sector}`;
+        } else {
+            if (titleTextEl) titleTextEl.innerText = 'SECTOR MAP';
+            if (titleEl) titleEl.innerText = `// SECTOR ${this.sector}`;
+        }
 
         // Tag the map screen with the active sector so CSS can layer in
         // sector-specific animated backdrops (city / ice / forge / hive / source).
         const screen = document.getElementById('screen-map');
         if (screen) {
             screen.dataset.sector = String(this.sector);
+            // Flag Challenge Mode for CSS so the backdrop and chrome can
+            // shift to the ominous gauntlet theme regardless of which
+            // sector boss is currently in play.
+            if (this.challengeMode) screen.dataset.challenge = 'true';
+            else delete screen.dataset.challenge;
             this._injectSectorMapBackdrop(screen, this.sector);
         }
 
@@ -20040,16 +20059,35 @@ drawEffects() {
                 // scales with sector so a Sector-5 boss is worth more
                 // than a Sector-1 one. Gate on tutorial flag is already
                 // outside this branch, so tutorial bosses don't pay.
-                const bossSparks = 3 + Math.max(0, (this.sector || 1) - 1) * 2;
-                this.grantSparks(bossSparks, 'boss_kill_s' + (this.sector || 1));
+                // Challenge Mode triples the payout on the FINAL boss
+                // (sector 5) so the whole gauntlet pays out 3× — the
+                // advertised completion reward for clearing the run.
+                const isChallengeFinal = !!this.challengeMode && this.sector >= 5;
+                const challengeMult = isChallengeFinal ? 3 : 1;
+                const baseBossSparks = 3 + Math.max(0, (this.sector || 1) - 1) * 2;
+                const bossSparks = baseBossSparks * challengeMult;
+                this.grantSparks(bossSparks, 'boss_kill_s' + (this.sector || 1) + (isChallengeFinal ? '_chal3x' : ''));
                 if (this.sector >= 5) {
                     Unlocks.grant('ascension', 'sector5_cleared');
                     // Sector-5 clear = full run win → grant a heftier
                     // bonus on top of the boss reward. Ascension level
-                    // adds proportional bonus.
+                    // adds proportional bonus. Challenge Mode multiplies
+                    // this 3× on the final boss as well.
                     const ascLevel = (Ascension && Ascension.getSelected) ? Ascension.getSelected() : 0;
-                    const winSparks = 15 + Math.max(0, ascLevel) * 3;
-                    this.grantSparks(winSparks, 'run_win_asc' + ascLevel);
+                    const winSparks = (15 + Math.max(0, ascLevel) * 3) * challengeMult;
+                    this.grantSparks(winSparks, 'run_win_asc' + ascLevel + (isChallengeFinal ? '_chal3x' : ''));
+                    if (isChallengeFinal) {
+                        // Surface the 3× banner where the player will see it —
+                        // mid-screen during the boss death cinematic so the
+                        // payout reads as the gauntlet's grand reward, not a
+                        // silent server-side multiplier.
+                        const cx = CONFIG.CANVAS_WIDTH / 2;
+                        const cy = CONFIG.CANVAS_HEIGHT / 2;
+                        ParticleSys.createFloatingText(cx, cy - 80, 'CHALLENGE CLEAR', '#ff3355');
+                        ParticleSys.createFloatingText(cx, cy - 30, '3× SPARKS BONUS', COLORS.GOLD);
+                        ParticleSys.createShockwave && ParticleSys.createShockwave(cx, cy, '#ff3355', 80);
+                        AudioMgr.playSound && AudioMgr.playSound('upgrade');
+                    }
                     // Diag — run-win event + auto-dump.
                     try {
                         Diag.event('run_win', {

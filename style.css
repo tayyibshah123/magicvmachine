@@ -14580,6 +14580,139 @@ body.reduced-motion #screen-map[data-sector="5"]::after { animation: none; }
 }
 
 /* =========================================
+   CHALLENGE MODE MAP — ominous boss-gauntlet theme
+   Triggered by data-challenge="true" on #screen-map. Overrides per-sector
+   wash + radar tint with a heavy crimson palette so the run reads as
+   immediately more dangerous. Title flickers; backdrop pulses in red.
+   ========================================= */
+#screen-map[data-challenge="true"] {
+    background:
+        radial-gradient(ellipse at 50% 30%, rgba(120, 0, 18, 0.55), transparent 60%),
+        radial-gradient(ellipse at 50% 80%, rgba(60, 0, 0, 0.7), transparent 65%),
+        linear-gradient(180deg, #18020a 0%, #050000 100%);
+}
+/* Override the per-sector ambient wash so Challenge always reads red,
+   regardless of which sector boss is currently in play. */
+#screen-map[data-challenge="true"][data-sector="1"]::after,
+#screen-map[data-challenge="true"][data-sector="2"]::after,
+#screen-map[data-challenge="true"][data-sector="3"]::after,
+#screen-map[data-challenge="true"][data-sector="4"]::after,
+#screen-map[data-challenge="true"][data-sector="5"]::after {
+    background: radial-gradient(ellipse at 50% 30%, rgba(255, 0, 50, 0.45), transparent 55%);
+    animation: challenge-blood-throb 2.2s ease-in-out infinite;
+    opacity: 0.55;
+    mix-blend-mode: screen;
+}
+@keyframes challenge-blood-throb {
+    0%, 100% { opacity: 0.40; }
+    50%      { opacity: 0.78; }
+}
+body.reduced-motion #screen-map[data-challenge="true"]::after { animation: none; }
+
+/* Drop a creeping vignette over the whole screen so the edges feel like
+   they're closing in. Sits BELOW nodes (z-index 1) so taps still pass. */
+#screen-map[data-challenge="true"]::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background:
+        radial-gradient(ellipse at 50% 50%, transparent 35%, rgba(0, 0, 0, 0.55) 80%, rgba(0, 0, 0, 0.85) 100%),
+        repeating-linear-gradient(0deg,
+            transparent 0px, transparent 3px,
+            rgba(255, 0, 50, 0.04) 3px, rgba(255, 0, 50, 0.04) 4px);
+    animation: challenge-vignette-creep 6s ease-in-out infinite;
+}
+@keyframes challenge-vignette-creep {
+    0%, 100% { opacity: 0.85; }
+    50%      { opacity: 1; }
+}
+body.reduced-motion #screen-map[data-challenge="true"]::before { animation: none; }
+
+/* Title flickers blood-red. Override the blue gradient + add a glitch
+   shadow so the player feels the stakes the moment the map loads. */
+#screen-map[data-challenge="true"] > h2.map-title {
+    color: #ff2244 !important;
+    text-shadow:
+        0 0 8px rgba(255, 30, 60, 0.85),
+        0 0 22px rgba(180, 0, 30, 0.7),
+        2px 0 0 rgba(255, 100, 100, 0.3),
+        -2px 0 0 rgba(120, 0, 0, 0.4);
+    animation: challenge-title-flicker 4.2s ease-in-out infinite;
+    letter-spacing: 0.16em;
+}
+#screen-map[data-challenge="true"] > h2.map-title #map-title-text {
+    text-shadow: inherit;
+}
+#screen-map[data-challenge="true"] > h2.map-title #map-sector-display {
+    color: #ffb0b0 !important;
+    text-shadow: 0 0 6px rgba(255, 60, 80, 0.8);
+}
+#screen-map[data-challenge="true"] > h2.map-title::after {
+    background: linear-gradient(to right, transparent, #ff0033, #6a0010, #ff0033, transparent) !important;
+    box-shadow: 0 0 10px #ff0033 !important;
+}
+@keyframes challenge-title-flicker {
+    0%, 100% { opacity: 1; filter: brightness(1); }
+    14%      { opacity: 0.6; filter: brightness(1.4); }
+    16%      { opacity: 1;   filter: brightness(0.85); }
+    50%      { opacity: 0.95; filter: brightness(1.15); }
+    72%      { opacity: 0.7; filter: brightness(1.5); }
+    74%      { opacity: 1;   filter: brightness(1); }
+}
+body.reduced-motion #screen-map[data-challenge="true"] > h2.map-title { animation: none; }
+
+/* All boss nodes on the Challenge map glow harder + pulse faster so the
+   long vertical chain feels like a wall of threats stacked over the
+   player. */
+#screen-map[data-challenge="true"] .map-node-abs[data-type="boss"] {
+    border-color: #ff0033 !important;
+    box-shadow: 0 0 26px #ff0033, inset 0 0 18px rgba(255, 0, 50, 0.55) !important;
+    animation: challenge-boss-pulse 1.6s ease-in-out infinite !important;
+}
+@keyframes challenge-boss-pulse {
+    0%, 100% { box-shadow: 0 0 18px #ff0033, inset 0 0 14px rgba(255, 0, 50, 0.5); transform: scale(1); }
+    50%      { box-shadow: 0 0 38px #ff0033, inset 0 0 24px rgba(255, 0, 50, 0.75); transform: scale(1.05); }
+}
+body.reduced-motion #screen-map[data-challenge="true"] .map-node-abs[data-type="boss"] { animation: none !important; }
+
+/* Radar sweep recoloured to crimson so the ambient pulse stays on-theme. */
+#screen-map[data-challenge="true"] .map-svg-layer::before {
+    background:
+        radial-gradient(circle at 50% 50%,
+            transparent 0,
+            transparent calc(var(--r, 0%) - 2px),
+            rgba(255, 0, 60, 0.5) calc(var(--r, 0%) - 1px),
+            rgba(255, 0, 60, 0.5) calc(var(--r, 0%)),
+            transparent calc(var(--r, 0%) + 1px)
+        ) !important;
+}
+#screen-map[data-challenge="true"] .map-svg-layer {
+    background: linear-gradient(to bottom,
+        transparent 0%,
+        transparent 45%,
+        rgba(255, 0, 60, 0.18) 50%,
+        transparent 55%,
+        transparent 100%) !important;
+    background-size: 100% 250%;
+    background-repeat: no-repeat;
+    animation: map-scan-travel 7s linear infinite !important;
+}
+
+/* Map legend tinted red for Challenge runs. */
+#screen-map[data-challenge="true"] .map-legend-top {
+    border-color: rgba(255, 0, 50, 0.5) !important;
+    background: rgba(40, 0, 8, 0.55) !important;
+    box-shadow: 0 0 16px rgba(255, 0, 50, 0.25), inset 0 0 12px rgba(255, 0, 50, 0.15) !important;
+    animation: challenge-legend-glow 3s ease-in-out infinite !important;
+}
+@keyframes challenge-legend-glow {
+    0%, 100% { box-shadow: 0 0 8px rgba(255, 0, 50, 0.2), inset 0 0 8px rgba(255, 0, 50, 0.1); }
+    50%      { box-shadow: 0 0 20px rgba(255, 0, 50, 0.45), inset 0 0 16px rgba(255, 0, 50, 0.25); }
+}
+
+/* =========================================
    SHARED MENU POLISH — Sanctuary, Intel, Shop, Rest, Event
    ========================================= */
 
