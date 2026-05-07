@@ -186,14 +186,18 @@
     height: 100%;
     display: grid;
     /* Rows in order:
-         hdr · title · ticker · orb (1fr) · ops · console
-         · cluster · energy · footer
-       The 1fr track on the orb absorbs leftover space, so all
-       other rows hug their content. */
-    grid-template-rows: auto auto auto 1fr auto auto auto auto auto;
-    padding: 2cqh 4cqw 1.2cqh;
-    gap: 1.2cqh;
+         hdr · title · ticker · orb · SPACER (1fr)
+         · ops · console · cluster · energy · footer
+       The 1fr SPACER absorbs leftover vertical space so the
+       title/orb cluster anchors at the top and the ops →
+       footer block hugs the bottom edge of the frame. Stops
+       the orb halo from bleeding into the title and gives
+       the footer thumb-room. */
+    grid-template-rows: auto auto auto auto 1fr auto auto auto auto auto;
+    padding: 0.8cqh 4cqw 1.2cqh;
+    gap: 0.9cqh;
 }
+.menu-v2.dropbay .db-spacer { min-height: 0; }
 
 
 /* ──────────────────────────────────────────────────────────
@@ -276,7 +280,7 @@
     display: flex; flex-direction: column; align-items: center;
     justify-content: center;
     gap: 0.4cqh;
-    padding: 1cqh 0 0.4cqh;
+    padding: 0.4cqh 0 0.2cqh;
 }
 
 /* Cosmetic Archivist Slain frame — stays anchored around the
@@ -387,37 +391,38 @@
 .menu-v2.dropbay .db-orb-stage {
     display: grid; place-items: center;
     position: relative;
-    /* The 1fr track gives the stage breathing room; place-items
-       keeps the orb perfectly centred even when neighbouring
-       rows expand. */
+    /* Now an `auto` track. The 1fr spacer below the stage
+       absorbs leftover space, so the stage hugs the orb's
+       intrinsic size and the title sits flush above it. */
     min-height: 0;
+    padding: 0.8cqh 0;
     overflow: visible;
 }
 .menu-v2.dropbay .db-orb {
     position: relative;
-    /* Bumped from 38cqh → 40cqh so the centerpiece earns more
-       presence. max-width/max-height: 100% clamp it to the 1fr
-       track when the surrounding rows squeeze the cell on
-       shorter viewports — prevents the orb from overflowing
-       into the ops strip. aspect-ratio: 1 + width drives height. */
-    width: min(40cqh, 80cqw);
+    /* Capped at 32cqh so the orb sits clearly between title
+       (above) and ops (below) without halo overlap. The
+       outer ring + corners + halo all live within this box
+       now. Wider phones get the 80cqw cap. */
+    width: min(32cqh, 78cqw);
     aspect-ratio: 1;
     max-width: 100%;
-    max-height: 100%;
 }
 
-/* Halo — soft bloom. The blur is cheaper as a static rasterized
-   layer (compositor caches it) than re-running per frame. Breath
-   uses opacity + transform only. */
+/* Halo — soft bloom contained INSIDE the orb's bounding box so
+   it doesn't bleed onto the title above or the ops strip below.
+   The radial fades to transparent at 70% so the halo dissipates
+   inside the box (visually identical to the old inset:-10%
+   halo, just without the spillover). */
 .menu-v2.dropbay .db-orb-halo {
-    position: absolute; inset: -10%;
+    position: absolute; inset: 0;
     border-radius: 50%;
     background: radial-gradient(circle at 50% 50%,
-        rgba(var(--db-accent-rgb), 0.40) 0%,
-        rgba(var(--db-accent-rgb), 0.18) 30%,
-        rgba(var(--db-accent-rgb), 0.06) 55%,
-        transparent 75%);
-    filter: blur(6px);
+        rgba(var(--db-accent-rgb), 0.45) 0%,
+        rgba(var(--db-accent-rgb), 0.20) 25%,
+        rgba(var(--db-accent-rgb), 0.06) 50%,
+        transparent 72%);
+    filter: blur(4px);
     will-change: opacity, transform;
     animation: db-orb-halo 5.2s ease-in-out infinite;
 }

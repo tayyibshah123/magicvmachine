@@ -358,6 +358,14 @@
                         </div>
                     </div>
 
+                    <!-- 1fr spacer — eats leftover vertical space so
+                         the title/orb cluster sits at the top of the
+                         frame and the ops/console/cluster/footer
+                         block anchors against the bottom. Prevents
+                         the orb halo from bleeding into the title
+                         and gives the bottom controls thumb-room. -->
+                    <div class="db-spacer" aria-hidden="true"></div>
+
                     <!-- OPS — 3-cell readout strip (last sector,
                          sparks, encrypted files). -->
                     <div class="db-ops">
@@ -447,7 +455,7 @@
                     <!-- FOOTER — streak chip + version stamp. -->
                     <div class="db-footer">
                         <div id="login-streak" class="login-streak db-streak hidden"></div>
-                        <span class="db-version">ALPHA V1.7.3</span>
+                        <span class="db-version">ALPHA V1.7.4</span>
                     </div>
                 </div>
 
