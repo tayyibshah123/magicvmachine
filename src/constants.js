@@ -907,14 +907,23 @@ const BOSS_DATA = {
         moves: ['attack', 'shield', 'buff'], 
         shieldVal: 100
     },
-    4: { 
-        name: "HIVE PROTOCOL", 
+    4: {
+        // Audit 2026-05 balance pass — actionsPerTurn dropped 4 → 3.
+        // S3→S4 boss effective-DPS was the steepest spike in the run:
+        // 70 (Compiler) → 120 (Hive 4×30) = 1.71× jump. With 3
+        // actions/turn the effective DPS becomes 90 = 1.29× from S3,
+        // and S5 (Tesseract 3×50 = 150) regains its role as the
+        // climactic per-turn spike (1.67× from S4 instead of 1.25×).
+        // Per-action damage held at 30 so each Hive hit still bites;
+        // the change reduces the action volume, not the per-action
+        // pressure. The "swarm" fantasy (3 distinct moves) survives.
+        name: "HIVE PROTOCOL",
         subtitle: "DISTRIBUTED LETHALITY",
-        hp: 900, 
-        dmg: 30, 
-        actionsPerTurn: 4,
+        hp: 900,
+        dmg: 30,
+        actionsPerTurn: 3,
         color: '#32cd32', // Neon Lime Green
-        moves: ['attack', 'multi_attack', 'summon'], 
+        moves: ['attack', 'multi_attack', 'summon'],
         shieldVal: 15
     },
     5: {
