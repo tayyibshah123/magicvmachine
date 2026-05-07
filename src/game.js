@@ -8,6 +8,7 @@ import { ParticleSys } from './effects/particles.js';
 import { TooltipMgr } from './ui/tooltip.js';
 import { getEventArt, getOptionIcon } from './ui/event-art.js';
 import { getClassEmblemSvg } from './ui/class-emblems.js';
+import { CombatMetrics } from './services/combat-metrics.js';
 import { ClassAbility } from './ui/class-ability.js';
 import { ICONS, iconImage, drawIcon, preloadCombatIcons } from './ui/icons.js';
 import { drawIntentIcon, drawEffectIcon, blitEffectIcon } from './ui/canvas-icons.js';
@@ -11879,6 +11880,9 @@ triggerSystemCrash() {
                     this.player.relics[secondIdx].fused = true;
                     this.player.relics[secondIdx].name = '★ ' + this.player.relics[secondIdx].name;
                 }
+                // v1.8.4 — fused stack changes the cache (stackCount of
+                // the source relic id drops from 2 to 4 in one move).
+                this.invalidateStackCache && this.invalidateStackCache();
                 AudioMgr.playSound('buy');
                 ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "FUSED", COLORS.GOLD);
                 this.renderRelics();
@@ -11889,16 +11893,42 @@ triggerSystemCrash() {
         });
     },
 
-    // v1.8.3 — fused relic counts as 4 stacks (was 3). 2× the effect of
-    // a single copy, up from +50% — the user reasonably called the prior
-    // bump "no benefit" since slot capacity is unlimited. The base
-    // module is also now filtered out of future reward / shop offers
-    // for the rest of the run (see generateRewards reward-pool filter).
+    // v1.8.3 — fused relic counts as 4 stacks (was 3). 2× the effect
+    // of a single copy, up from +50%.
+    //
+    // v1.8.4 — Map cache. Each call previously did `.filter().reduce()`
+    // which allocated a filtered array per call. Hot-path callers
+    // (calculateCardDamage, every dice resolve, every status tick)
+    // were hitting this 9+ times per turn × 60fps = ~540 array
+    // allocations per second, each scanning the full relic list.
+    // With 15-20 relics by S5, the per-call cost compounded into a
+    // measurable per-turn slowdown that grew run-to-run.
+    //
+    // Cache is invalidated on any relic mutation:
+    //   - addRelic / pushing into player.relics  → invalidateStackCache()
+    //   - fusion-consume splice                  → invalidateStackCache()
+    //   - relic stripped by an event             → invalidateStackCache()
+    //   - combat start (paranoid clean slate)    → invalidateStackCache()
+    // Reads through the cache O(1); rebuilds lazily on first miss
+    // after invalidation by a single full pass.
+    invalidateStackCache() {
+        this._stackCache = null;
+    },
+    _rebuildStackCache() {
+        const m = new Map();
+        const relics = (this.player && this.player.relics) || [];
+        for (const r of relics) {
+            if (!r || !r.id) continue;
+            const inc = r.fused ? 4 : 1;
+            m.set(r.id, (m.get(r.id) || 0) + inc);
+        }
+        this._stackCache = m;
+        return m;
+    },
     stackCount(relicId) {
         if (!this.player || !this.player.relics) return 0;
-        return this.player.relics
-            .filter(r => r.id === relicId)
-            .reduce((sum, r) => sum + (r.fused ? 4 : 1), 0);
+        const m = this._stackCache || this._rebuildStackCache();
+        return m.get(relicId) || 0;
     },
 
     leaveShop() {
@@ -13390,6 +13420,13 @@ async startCombat(type) {
         ParticleSys.clear();
         CombatLog.clear();
         this.player.minions = [];
+        // v1.8.4 — fresh combat-metrics buffer. Sampler runs once per
+        // endTurn; snapshot folds into Diag.dump on gameOver / win.
+        try { CombatMetrics.start(); } catch (_) {}
+        // v1.8.4 — paranoid stackCount cache reset. addRelic /
+        // splice sites already invalidate, but resetting at combat
+        // start guarantees no stale entry survives a state edge case.
+        this.invalidateStackCache && this.invalidateStackCache();
         this._ensureDailyChip();
         this._renderPactPills && this._renderPactPills();
         // Per-combat trackers used by new relics and combos.
@@ -19377,6 +19414,26 @@ drawEffects() {
       const gen = this._combatGen || 0;
       const stillLive = () => (this._combatGen === gen);
       try {
+        // v1.8.4 — sample combat-metric counters once per turn (zero
+        // overhead when CombatMetrics._active is false). Snapshot
+        // fans into Diag.dump on gameOver / Sector-5 win.
+        try { CombatMetrics.sampleTurn(this.turnCount || 0); } catch (_) {}
+        // v1.8.4 — defensive effects[] cleanup. Each drawEffects branch
+        // decrements its own `life` and splices itself out, so this is
+        // belt-and-braces: drop any entry whose life has already reached
+        // 0 (in case a code path forgot the decrement) and hard-cap the
+        // array length so a runaway push site can't accumulate. The cap
+        // drops oldest entries first — those are the ones closest to
+        // expiring anyway, so the visual cost is negligible.
+        if (Array.isArray(this.effects) && this.effects.length > 0) {
+            this.effects = this.effects.filter(e =>
+                !e || (typeof e.life !== 'number') || e.life > 0
+            );
+            const MAX_FX_INFLIGHT = 60;
+            if (this.effects.length > MAX_FX_INFLIGHT) {
+                this.effects = this.effects.slice(-MAX_FX_INFLIGHT);
+            }
+        }
         ClassAbility.onTurnEnd();
         // Relic: TEMPO LOOP — count unused dice for next-turn shield bonus.
         if (this.player && this.player.hasRelic && this.player.hasRelic('tempo_loop')) {
@@ -21656,6 +21713,11 @@ drawEffects() {
                             const idx = this.player.relics.findIndex(r => r.id === consumeId);
                             if (idx !== -1) this.player.relics.splice(idx, 1);
                         }
+                        // v1.8.4 — addRelic below invalidates anyway, but
+                        // a second invalidation right after the consume
+                        // splices keeps the cache truthful between the
+                        // splice and the addRelic if any code reads it.
+                        this.invalidateStackCache && this.invalidateStackCache();
                     }
                     this.player.addRelic({
                         id: item.id, name: item.name, desc: item.desc,

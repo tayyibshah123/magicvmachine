@@ -100,6 +100,10 @@ class Player extends Entity {
     
     addRelic(relic) {
         this.relics.push(relic);
+        // v1.8.4 — invalidate Game.stackCount() Map cache. The cache
+        // returns sums per relic id; any push/splice on the relic list
+        // invalidates it. _rebuildStackCache lazily rebuilds on next read.
+        if (Game && Game.invalidateStackCache) Game.invalidateStackCache();
         // Custom Run: Daily Dupes — relics duplicate on pickup. Guard against
         // recursion by short-circuiting on the second entry (_dupeMarker).
         if (Game && Game._customRelicPickDupe && !relic._dupeMarker) {

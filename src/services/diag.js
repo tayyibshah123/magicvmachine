@@ -346,6 +346,22 @@ export const Diag = {
             lines.push(`  heap ${mem.usedMB} MB used / ${mem.totalMB} MB allocated / ${mem.limitMB} MB limit`);
         }
 
+        // v1.8.4 — combat-metric snapshot (turn-by-turn counter trends).
+        // Built for the perf-degradation investigation; auto-active during
+        // combat. Reads through window.CombatMetrics so this Diag service
+        // stays decoupled from the new module.
+        try {
+            const CM = (typeof window !== 'undefined') ? window.CombatMetrics : null;
+            if (CM && typeof CM.formatForDump === 'function') {
+                const body = CM.formatForDump();
+                if (body && body !== '(no combat-metric samples this run)') {
+                    lines.push('');
+                    lines.push('--- Combat metrics (per-turn trends) ---');
+                    lines.push(body);
+                }
+            }
+        } catch (_) { /* defensive — diag must never throw during dump */ }
+
         lines.push('');
         lines.push('--- Action counters (since boot) ---');
         const c = counters;

@@ -739,7 +739,9 @@ class Entity {
                     const healAmt = Math.floor(this.maxHp * 0.3); // Heal 30%
                     this.heal(healAmt);
                     this.relics.splice(kitIndex, 1); // Consume
-                    Game.renderRelics(); 
+                    // v1.8.4 — invalidate Game.stackCount() cache.
+                    if (Game && Game.invalidateStackCache) Game.invalidateStackCache();
+                    Game.renderRelics();
                     ParticleSys.createFloatingText(this.x, this.y - 140, "KIT USED", COLORS.NATURE_LIGHT);
                 }
             }
