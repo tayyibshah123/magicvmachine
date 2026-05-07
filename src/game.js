@@ -2350,11 +2350,17 @@ startDrag(e, die, el) {
     // Single source of truth for reduced-motion checks across all
     // JS-driven motion paths (shake, screen flash, chromatic pulse,
     // QTE label scaling, etc.). Reduced motion is **combat-scoped
-    // only** — non-combat screens (menus, sanctuary, glossary, intro,
-    // story, reward, end-of-run) always run at full motion regardless
-    // of the user toggle or OS preference. The toggle in DISPLAY →
-    // Accessibility → Reduced motion only takes effect during
-    // COMBAT / TUTORIAL_COMBAT / COMBAT_WIN / BREAKOUT.
+    // only** by design — non-combat screens (menus, sanctuary,
+    // glossary, intro, story, reward, end-of-run) always run at full
+    // motion regardless of the user toggle or OS preference. The
+    // toggle in DISPLAY → Accessibility → Reduced motion only takes
+    // effect during COMBAT / TUTORIAL_COMBAT / COMBAT_WIN / BREAKOUT.
+    // Rationale: the menu / sanctuary chrome IS the game's visual
+    // identity; motion-sensitivity in those screens is handled by
+    // the static fallbacks already in place (db-orb static frame,
+    // perf-low animation kills, etc.). Combat is the only screen
+    // that genuinely produces vestibular triggers (screen shake,
+    // flash, slam-zoom).
     _isReducedMotion() {
         return document.body.classList.contains('reduced-motion');
     },
