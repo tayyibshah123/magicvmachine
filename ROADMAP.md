@@ -7,8 +7,9 @@ in `docs/archive/`.
 
 ## Status
 
-- **Current build:** v1.9.0 (combat polish. boss reworks, Reality Shift,
-  Time Control, victory rank, dead-minion cleanup)
+- **Current build:** v1.9.8 (Intel Codex deep dive complete: 40
+  structured entries with multi-paragraph bodies, dedicated modal
+  popup, format-specific rendering, rare unlock triggers wired)
 - **Last ship:** 2026-05-08
 - **Active branch:** main
 - **Test baseline:** 98/98 passing
@@ -134,7 +135,33 @@ New bucket post-v1.9.0. driven by Honor Tab 10 playtest.
 - Diag-dump artifact archive. `docs/diag-archive/` folder, dumps
   tagged by device + version, helps track perf trends.
 
-### 7 · Intel Codex deep dive
+### 7 · Intel Codex deep dive ✅ SHIPPED
+
+**Closed v1.9.8.** All six chunks landed:
+
+- C7.1 v1.9.1: structured intel-codex.js scaffold with 40 entry
+  metadata records and backwards-compat re-export
+- C7.2 v1.9.2: dedicated modal popup, format-specific rendering,
+  swipe / arrow / hash routing, READ FULL on unlock card
+- C7.3 v1.9.3: chapter I bodies (THE FALL, 8 entries)
+- C7.4 v1.9.4: chapters II + III bodies (16 entries)
+- C7.5 v1.9.5: chapters IV + V bodies (9 entries)
+- C7.6a v1.9.6: 7 hidden entry bodies
+- C7.6b v1.9.7: typewriter reveal, redacted glitch, unread badge
+- C7.6c v1.9.8: rare unlock triggers wired to player actions
+
+Total: ~13,740 words across 40 entries. Six format voices
+(field_report, personal_log, cipher_fragment, manifesto,
+audio_transcript, schematic). Cross-chapter character
+continuity (Vish, Lin, M. Kel, V. Aroma, Henderson, the
+Archivist, the Shopkeeper). The singular antagonist arc closes
+with entry 38 (Patch Note 0.0.0) where the Core speaks for the
+first time. Hidden tail gated on rare actions (no-death S5
+clear, S20 endless, qte-perfect run, all-bosses-no-minion-loss,
+low-hp killing blow, cumulative 1000 kills, all-other-lore-
+decrypted).
+
+Kept the original section below archived for reference.
 
 **See dedicated section below.** This is a content + UI overhaul, not a
 bug fix bundle, so it gets its own design section. Implementation will
