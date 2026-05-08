@@ -8802,6 +8802,32 @@ body.reduced-motion .hack-title { animation: none; }
     border-radius: 3px;
     text-shadow: 0 0 6px var(--neon-gold);
 }
+
+/* Fusion comparison block. Sits between the description and the
+   synergy hints on a fusion reward card. INPUTS lists the source
+   modules that get consumed; NET tells the player in one
+   sentence what the trade actually buys them. Both lines are
+   muted so the description still reads as primary. */
+.reward-fusion-inputs {
+    margin-top: 6px;
+    padding: 2px 0;
+    font-family: var(--font-cyber);
+    font-size: 0.58rem;
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+}
+.reward-fusion-net {
+    margin-top: 3px;
+    padding: 4px 8px;
+    font-family: var(--font-mono, 'Inter', sans-serif);
+    font-size: 0.7rem;
+    line-height: 1.3;
+    color: rgba(255, 215, 106, 0.92);
+    background: linear-gradient(90deg, rgba(255, 215, 106, 0.18) 0%, rgba(255, 215, 106, 0.06) 100%);
+    border-left: 2px solid rgba(255, 215, 106, 0.7);
+    border-radius: 2px;
+}
 .reward-stack-hint {
     margin-top: 2px;
     font-family: var(--font-main);

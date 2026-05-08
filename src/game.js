@@ -22186,11 +22186,31 @@ drawEffects() {
                 }
             }
 
+            // Fusion comparison block. Reads the inputs by id and
+            // builds an "INPUTS: A + B" line so the player sees what
+            // they trade in. The netGain string on the fusion data
+            // tells them in one sentence what the trade is worth.
+            // Plain reward cards (non-fusion) skip this block.
+            let fusionBlock = '';
+            if (isFusion && Array.isArray(item.ids)) {
+                const inputNames = item.ids.map(id => {
+                    const found = (typeof UPGRADES_POOL !== 'undefined' && UPGRADES_POOL.find(r => r.id === id))
+                        || (typeof META_UPGRADES !== 'undefined' && META_UPGRADES.find(r => r.id === id))
+                        || (typeof CORRUPTED_RELICS !== 'undefined' && CORRUPTED_RELICS.find(r => r.id === id));
+                    return (found && found.name) ? found.name : id;
+                }).join(' + ');
+                fusionBlock += `<div class="reward-fusion-inputs">INPUTS: ${inputNames}</div>`;
+                if (item.netGain) {
+                    fusionBlock += `<div class="reward-fusion-net">▲ ${item.netGain}</div>`;
+                }
+            }
+
             card.innerHTML = `
                 <div class="reward-rarity ${rarityClass}">${rarityIcon} ${rarityLabel}</div>
                 <div class="reward-icon">${item.icon}</div>
                 <div class="reward-name ${isGold ? 'gold-text' : ''} ${isRed ? 'red-text' : ''}">${item.name}</div>
                 <div class="reward-desc">${nextDesc}</div>
+                ${fusionBlock}
                 ${synergyHint}
             `;
             

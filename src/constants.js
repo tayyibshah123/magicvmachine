@@ -557,6 +557,7 @@ const MODULE_FUSIONS = [
         ids: ['kinetic_battery', 'iron_lung'],
         name: "Voltaic Bulwark",
         desc: "First Defend each turn: +8 Shield AND +2 Rerolls. Every 5 Shield gained still rolls Kinetic.",
+        netGain: "Adds the +2 reroll trigger on top of every defend, plus your Kinetic shield-rolls keep going.",
         icon: '⚡',
         rarity: 'red'
     },
@@ -565,6 +566,7 @@ const MODULE_FUSIONS = [
         ids: ['static_field', 'venom_edge'],
         name: "Toxic Coil",
         desc: "Static Field strikes apply 2 stacks of Poison. Attacks also chain a 5 DMG static spark to a random other enemy.",
+        netGain: "Doubles your poison output and chains every attack to a second target. Synergy you cannot get from the parts alone.",
         icon: '☣',
         rarity: 'red'
     },
@@ -573,6 +575,7 @@ const MODULE_FUSIONS = [
         ids: ['second_life', 'emergency_kit'],
         name: "Phoenix Protocol",
         desc: "Revive at 100% HP and clear all debuffs. Emergency Kit charges restored on revive.",
+        netGain: "Full-HP revive, debuff wipe, and your kit gets a fresh charge. The two parts cannot do this alone.",
         icon: '🜂',
         rarity: 'red'
     },
@@ -581,6 +584,7 @@ const MODULE_FUSIONS = [
         ids: ['static_capacitor', 'crit_lens'],
         name: "Tesla Lens",
         desc: "Static Capacitor zaps for 25 DMG and counts as a guaranteed Crit. Crit Lens chance +10%.",
+        netGain: "Capacitor zap is now 25 DMG (up from 10) and always crits. Lens crit chance still climbs.",
         icon: '✦',
         rarity: 'red'
     },
@@ -589,6 +593,7 @@ const MODULE_FUSIONS = [
         ids: ['shield_gen', 'spike_armor'],
         name: "Reflective Plating",
         desc: "Shield Gen is +8/turn (was 5) and refunds 30% reflected damage as DPS to a random enemy.",
+        netGain: "Shield tick is +3/turn higher and your thorns finally hit something useful.",
         icon: '◈',
         rarity: 'red'
     },
@@ -597,6 +602,7 @@ const MODULE_FUSIONS = [
         ids: ['mana_syphon', 'recycle_bin'],
         name: "Flux Cycler",
         desc: "+2 Mana at start of turn. Each Mana gained heals 2 HP (max 8/turn).",
+        netGain: "Mana income matches your two stacks AND every gain heals you. The combo is the upgrade.",
         icon: '⟁',
         rarity: 'red'
     },
@@ -608,6 +614,7 @@ const MODULE_FUSIONS = [
         ids: ['nano_shield', 'warden_protocol'], // warden_protocol is sentinel-locked
         name: "Aegis Field",
         desc: "Start combat with 18 Shield. Minions gain +6 Shield at start of every turn.",
+        netGain: "Combat-start shield jumps from 5 to 18, and every turn your minions get a fresh +6 plate.",
         icon: '◇',
         rarity: 'red'
     },
@@ -616,6 +623,7 @@ const MODULE_FUSIONS = [
         ids: ['crit_lens', 'volt_primer'],
         name: "Pulse Hammer",
         desc: "First attack each turn deals +12 flat DMG and is a guaranteed crit.",
+        netGain: "First attack always crits AND adds +12 flat. The two parts could never combine the trigger.",
         icon: '⚒',
         rarity: 'red'
     },
@@ -624,6 +632,7 @@ const MODULE_FUSIONS = [
         ids: ['relentless', 'titan_module'],
         name: "Tyrant Engine",
         desc: "Every attack deals +50% damage and stacks on itself. Your 3rd attack each turn still triples.",
+        netGain: "Damage multiplier per stack is +50% (up from Titan's +25%). Stacks compound. Your triple still fires.",
         icon: '☗',
         rarity: 'red'
     },
@@ -632,6 +641,7 @@ const MODULE_FUSIONS = [
         ids: ['thorn_mail', 'coolant_loop'],
         name: "Bramble Cycle",
         desc: "Gain 4 Block on every damage you deal. Heal 5 HP whenever your shield breaks.",
+        netGain: "Damage now feeds shield. Shield breaks now heal. Loop your defence into your offence.",
         icon: '✺',
         rarity: 'red'
     },
@@ -640,6 +650,7 @@ const MODULE_FUSIONS = [
         ids: ['minion_core', 'wisp_hp'],
         name: "Wisp Engine",
         desc: "Start combat with 2 Wisps at +10 HP each AND 5 starting Shield.",
+        netGain: "Two Wisps instead of one, each tougher, plus 5 shield on you for the opener.",
         icon: '✧',
         rarity: 'red'
     },
@@ -648,6 +659,7 @@ const MODULE_FUSIONS = [
         ids: ['last_stand', 'retaliator'],
         name: "Wounded Beast",
         desc: "Below 33% HP: +30% damage, +1 Reroll/turn, AND every reflect deals 3× damage.",
+        netGain: "Three effects fire at once below 33% HP. The parts only ever gave you one or the other.",
         icon: '⚔',
         rarity: 'red'
     }
