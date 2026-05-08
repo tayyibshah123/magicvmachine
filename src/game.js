@@ -16008,14 +16008,29 @@ async startTurn() {
                 if (this.hasMetaUpgrade(_SLOT_BIAS_KEYS[slot])) { _hasBias = true; break; }
             }
         }
-        if (_hasBias) {
+        // Soft pity ramp — when a slot has missed 2 turns (one short of
+        // the hard pity threshold of 3 in rollDice) we duplicate that
+        // slot's candidates once so the random pick is roughly +50% more
+        // likely to land it. This smooths the "either nothing or forced"
+        // feel: at miss=2 the slot starts whispering, at miss=3 it gets
+        // forced into the pity index. Skipped while hard pity is already
+        // armed (covered by the rollDice forced placement).
+        let _hasSoftPity = false;
+        if (this.player && this.player._slotMissStreak) {
+            for (const slot in this.player._slotMissStreak) {
+                if (this.player._slotMissStreak[slot] === 2) { _hasSoftPity = true; break; }
+            }
+        }
+        if (_hasBias || _hasSoftPity) {
             weighted = candidates.slice();
             for (const t of candidates) {
                 const slot = this._dieSlot(t);
-                if (slot && _SLOT_BIAS_KEYS[slot] && this.hasMetaUpgrade(_SLOT_BIAS_KEYS[slot])) {
-                    // +25% bias = add one extra entry every 4. Push one
-                    // duplicate to lift the slot's expected weight by
-                    // roughly +25% (depends on candidate composition).
+                if (!slot) continue;
+                if (_SLOT_BIAS_KEYS[slot] && this.hasMetaUpgrade(_SLOT_BIAS_KEYS[slot])) {
+                    weighted.push(t);
+                }
+                if (this.player && this.player._slotMissStreak
+                    && this.player._slotMissStreak[slot] === 2) {
                     weighted.push(t);
                 }
             }
@@ -16155,6 +16170,12 @@ async startTurn() {
             } else if (i === _PITY_SLOT_INDEX && _pityType) {
                 // Slot-pity placement — see _slotMissStreak block above.
                 k = _pityType;
+                if (this.player && _pitySlot) {
+                    ParticleSys.createFloatingText(
+                        this.player.x, this.player.y - 110,
+                        `PITY: ${_pitySlot.toUpperCase()} SECURED`, '#ffd76a'
+                    );
+                }
                 _pityType = null; // single placement only, even if multiple slots over threshold
             } else if (hasSignature && !sigPlaced && (
                 sigPity ||
