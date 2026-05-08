@@ -7741,9 +7741,14 @@ triggerPhaseGlitch() {
                 // phase-2 drip-spawn would push the count over the
                 // intended cap and stack overlapping sprites.)
             } else if (phase === 3) {
-                // Assimilate — 20% chance each turn to convert a player minion.
-                enemy.assimilateActive = true;
-                // Deeper green — conversion protocol.
+                // v1.9.0 — Assimilate reworked. Was: 20% chance per turn
+                // to convert a player minion to enemy side. New: each
+                // Hive Drone death restores 5% of boss maxHp (handled
+                // in entity._resolveEnemyKill). Phase 3 just amps the
+                // colour cue and accelerates the resummon cadence so
+                // the swarm comes back faster once the boss is bloodied.
+                enemy.assimilateActive = true; // tag stays — kept for legacy reads
+                enemy._hiveResummonEvery = 3;  // was 4 in phase 1-2
                 enemy.phaseTelegraphColor = '#32cd32';
                 this.triggerScreenFlash && this.triggerScreenFlash('rgba(50, 205, 50, 0.35)', 400);
                 ParticleSys.createShockwave(enemy.x, enemy.y, '#32cd32', 44);
@@ -7793,7 +7798,12 @@ triggerPhaseGlitch() {
                 this.triggerScreenFlash && this.triggerScreenFlash('rgba(255, 51, 85, 0.35)', 400);
                 ParticleSys.createShockwave(enemy.x, enemy.y, telegraphPhase2, 40);
             } else if (phase === 3) {
-                enemy.realitySplit = true;
+                // v1.9.0 — `realitySplit` (silent attack-doubling) removed.
+                // The Reality Shift threat now expresses through the
+                // existing `reality_overwrite` intent, which applies the
+                // 1-turn heal/damage inversion debuff. Phase 3 just
+                // bumps actionsPerTurn so the boss has another slot to
+                // queue the intent in, plus the colour telegraph.
                 enemy.phaseTelegraphColor = telegraphPhase3;
                 if (enemy.bossData.actionsPerTurn < 4) enemy.bossData.actionsPerTurn++;
                 this.triggerScreenFlash && this.triggerScreenFlash('rgba(188, 19, 254, 0.35)', 400);
@@ -8019,13 +8029,17 @@ triggerSystemCrash() {
                 label = `${ICONS.intentSummon} VOID SPAWN`;
                 body  = `Summons a Void Spawn (28 HP / 8 DMG). Phase 2 fills both slots in one turn.`;
                 break;
+            case 'summon_hive':
+                label = `${ICONS.intentSummon} HIVE SURGE`;
+                body  = `Re-deploys the drone swarm — refills missing Hive Drones up to 5. Each kill restores <strong>5%</strong> of the boss's max HP via <em>Assimilate</em>.`;
+                break;
             case 'buff_voidlings':
                 label = `${ICONS.intentSummon} EMPOWER VOID`;
                 body  = `Both Void Spawns gain a random +1-10 HP and +1-5 DMG. Stacks for the fight — break them now or the empowered voidlings carry into Phase 3.`;
                 break;
             case 'self_destruct':
                 label = `☠ SELF-DESTRUCT`;
-                body  = `This unit is primed to explode. Brace next turn — heavy damage on detonation.`;
+                body  = `Primed to detonate next turn — <strong>${val} damage</strong> to the player. Kill it first or wall up.`;
                 break;
             case 'dispel':
                 label = `${ICONS.intentDispel} CLEANSE`;
@@ -8037,7 +8051,7 @@ triggerSystemCrash() {
                 break;
             case 'reality_overwrite':
                 label = `${ICONS.intentReality} REALITY SHIFT`;
-                body  = `Inverts the battlefield. Boss-only mechanic. Controls behave erratically.`;
+                body  = `Applies <strong>REALITY SHIFT (1 turn)</strong> — your damage heals enemies, your healing harms you and your minions.`;
                 break;
             case 'aoe_sweep':
                 label = `${ICONS.intentMultiAttack} SWEEP`;
@@ -13792,12 +13806,36 @@ async startCombat(type) {
 
         // Tesseract Prime Logic
         if (this.enemy.name === "TESSERACT PRIME") {
-            this.enemy.invincibleTurns = 3;
-            // Was a raw setTimeout(1000) that fired during the boss
-            // intro slate. Now goes through the announcement queue so
-            // it slots AFTER the slate retreats, in stagger sequence.
+            this.enemy.invincibleTurns = 0; // legacy 3-turn self-shield
+                                            // removed; invincibility now
+                                            // comes from living fragments
+            // v1.9.0 — spawn 4 Tesseract Fragments orbiting the boss.
+            // Boss is invincible while any fragment lives. When all
+            // fragments die, boss becomes vulnerable for 3 turns,
+            // then respawns the fragments and restores invincibility.
+            // Fragments are tagged `_isTessFragment` so the renderer
+            // and damage gate can recognise them. Stat block kept
+            // small so the player can clear them at S5 power level
+            // but it's the resummon that creates the difficulty.
+            const FRAG_COUNT = 4;
+            for (let i = 0; i < FRAG_COUNT; i++) {
+                const angle = (i / FRAG_COUNT) * Math.PI * 2;
+                const radius = 130;
+                const fx = this.enemy.x + Math.cos(angle) * radius;
+                const fy = this.enemy.y + Math.sin(angle) * radius * 0.55;
+                const m = new Minion(fx, fy, this.enemy.minions.length + 1, false, 3);
+                m.name = "Tesseract Fragment";
+                m.maxHp = 40; m.currentHp = 40;
+                m.dmg = 14;
+                m._isTessFragment = true;
+                m._tessOrbitAngle = angle;       // rotation seed for renderer
+                m._tessOrbitRadius = radius;
+                m.spawnTimer = 1.0;
+                this.enemy.minions.push(m);
+            }
             this._queueBossAnnouncement(() => {
-                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200, "SHIELDS ACTIVE (3 TURNS)", "#00f3ff");
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200,
+                    "INVINCIBLE — DESTROY FRAGMENTS", "#ffd76a");
             });
 
             AudioMgr.bossSilence = true;
@@ -14157,6 +14195,40 @@ async startTurn() {
         this.inputLocked = true;
         this.recycleBinCount = 0;
         this._fluxCyclerHeal = 0;
+
+        // v1.9.0 — Tesseract Prime fragment resummon. When the player
+        // killed the last fragment, _resolveEnemyKill stamped a
+        // deadline `turnCount + 3`. When it lands, restore the
+        // 4-fragment orbit and the boss returns to invincible.
+        if (this.enemy && this.enemy.name === 'TESSERACT PRIME'
+            && this.enemy.currentHp > 0
+            && typeof this.enemy._fragmentResummonAt === 'number'
+            && this.turnCount >= this.enemy._fragmentResummonAt) {
+            this.enemy._fragmentResummonAt = null;
+            const FRAG_COUNT = 4;
+            for (let i = 0; i < FRAG_COUNT; i++) {
+                const angle = (i / FRAG_COUNT) * Math.PI * 2;
+                const radius = 130;
+                const fx = this.enemy.x + Math.cos(angle) * radius;
+                const fy = this.enemy.y + Math.sin(angle) * radius * 0.55;
+                const m = new Minion(fx, fy, this.enemy.minions.length + 1, false, 3);
+                m.name = "Tesseract Fragment";
+                m.maxHp = 40; m.currentHp = 40;
+                m.dmg = 14;
+                m._isTessFragment = true;
+                m._tessOrbitAngle = angle;
+                m._tessOrbitRadius = radius;
+                m.spawnTimer = 1.0;
+                this.enemy.minions.push(m);
+                ParticleSys.createShockwave(fx, fy, '#ffd76a', 26);
+                ParticleSys.createSparks(fx, fy, '#ffd76a', 12);
+                if (this.triggerVFX) this.triggerVFX('materialize', null, m);
+            }
+            ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200,
+                'FRAGMENTS RECONSTITUTED', '#ffd76a');
+            if (this.shake) this.shake(10);
+            AudioMgr.playSound('grid_fracture');
+        }
         // Custom Run: reset the per-turn flag for the Hot Hands modifier
         // (first die played each turn costs HP).
         this._hotHandsUsedThisTurn = false;
@@ -14294,31 +14366,11 @@ async startTurn() {
             }
         }
 
-        // --- HIVE PROTOCOL: Assimilate (phase 3) ---
-        // 20% chance each turn to convert one of the player's lowest-HP
-        // minions to the enemy side. Carries the original minion reference
-        // so its stats (dmg, shield, effects) follow the conversion.
-        if (this.enemy && this.enemy.name === 'HIVE PROTOCOL' && this.enemy.assimilateActive
-            && this.enemy.currentHp > 0 && Array.isArray(this.player.minions) && this.player.minions.length > 0) {
-            if (Math.random() < 0.2) {
-                // Pick the lowest-HP player minion so Assimilate eats stragglers.
-                let target = this.player.minions[0];
-                for (let i = 1; i < this.player.minions.length; i++) {
-                    if (this.player.minions[i].currentHp < target.currentHp) target = this.player.minions[i];
-                }
-                // Flip sides — remove from player, push to enemy. The renderer
-                // branches on isPlayerSide for positioning + color.
-                target.isPlayerSide = false;
-                target.name = 'Assimilated ' + (target.name || 'Drone');
-                this.player.minions = this.player.minions.filter(m => m !== target);
-                this.enemy.minions = (this.enemy.minions || []);
-                this.enemy.minions.push(target);
-                this.triggerVFX && this.triggerVFX('beam', this.enemy, target);
-                ParticleSys.createFloatingText(target.x, target.y - 80, "ASSIMILATED", "#32cd32");
-                ParticleSys.createExplosion(target.x, target.y, 24, '#32cd32');
-                AudioMgr.playSound('grid_fracture', { playbackRate: 1.2 });
-            }
-        }
+        // (HIVE PROTOCOL Assimilate-conversion removed in v1.9.0. The
+        // ability now restores 5% of the boss's max HP per drone death
+        // instead of converting a player minion — see entity.js
+        // _resolveEnemyKill. Same name on the player side, but the
+        // mechanic is HP-siphon rather than minion-flip.)
 
         if (this.enemy && this.enemy.invincibleTurns > 0) {
             this.enemy.invincibleTurns--;
@@ -14779,6 +14831,19 @@ async startTurn() {
         }
 
         this.updateHUD();
+
+        // v1.9.0 — THE ARCHIVIST TIME CONTROL. Phase 2+ caps the player
+        // turn at a shrinking budget (30s start, -1s per player turn,
+        // floor 10s). At deadline the turn is force-ended. A big neon
+        // countdown is rendered centered while active.
+        if (this.enemy && this.enemy.name === 'THE ARCHIVIST'
+            && (this.enemy.phase || 1) >= 2
+            && this.currentState === STATE.COMBAT) {
+            this._startArchivistTimeControl();
+        } else {
+            this._stopArchivistTimeControl();
+        }
+
         // Player phase is live — release the single-flight endTurn gate so
         // the player's next END TURN press can fire.
         this._endTurnRunning = false;
@@ -14786,6 +14851,91 @@ async startTurn() {
         this._endTurnRunning = false;
         this._recoverFromCombatError('startTurn', err, false);
       }
+    },
+
+    /* THE ARCHIVIST — Time Control. Enables a turn-budget countdown and
+     * forces endTurn when the deadline elapses. Called per player turn
+     * from startTurn while phase >= 2. */
+    _startArchivistTimeControl() {
+        // Per-turn budget — starts 30s, drops 1s every player turn, floor 10s.
+        // The budget is stored across turns on the Game so the same boss
+        // instance keeps tightening the screw between combats (combat
+        // start re-initialises via setupCombat path).
+        if (typeof this._archivistTimerBudget !== 'number') {
+            this._archivistTimerBudget = 30000;
+        } else {
+            this._archivistTimerBudget = Math.max(10000, this._archivistTimerBudget - 1000);
+        }
+        const budget = this._archivistTimerBudget;
+        const deadline = performance.now() + budget;
+        this._archivistTimerDeadline = deadline;
+
+        // Stop any prior loop / overlay so back-to-back turns don't
+        // accumulate intervals.
+        this._stopArchivistTimeControl({ keepBudget: true });
+
+        // Build / show overlay.
+        let overlay = document.getElementById('turn-timer-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'turn-timer-overlay';
+            overlay.className = 'turn-timer-overlay';
+            overlay.setAttribute('aria-live', 'polite');
+            document.body.appendChild(overlay);
+        }
+        overlay.classList.remove('hidden');
+        overlay.classList.add('active');
+        overlay.dataset.health = 'good';
+        overlay.textContent = Math.ceil(budget / 1000);
+
+        // Floating warning at activation so the player reads the threat.
+        if (this.player) {
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 160,
+                `TIME CONTROL · ${Math.ceil(budget / 1000)}s`, '#ff77aa');
+        }
+        AudioMgr.playSound && AudioMgr.playSound('siren', { playbackRate: 0.85, volume: 0.6 });
+
+        // 100ms tick — fast enough to read smoothly, light enough to be
+        // free in the loop. Force-end at deadline.
+        this._archivistTimerLoopId = this.setLoop(() => {
+            const now = performance.now();
+            const remaining = Math.max(0, this._archivistTimerDeadline - now);
+            const sec = Math.ceil(remaining / 1000);
+            const node = document.getElementById('turn-timer-overlay');
+            if (node) {
+                node.textContent = sec;
+                node.dataset.health = sec <= 3 ? 'crit' : (sec <= 7 ? 'warn' : 'good');
+            }
+            if (remaining <= 0) {
+                // Force end-of-turn.
+                this._stopArchivistTimeControl({ keepBudget: true });
+                if (this.player) {
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 160,
+                        'TIME EXPIRED', '#ff0055');
+                }
+                AudioMgr.playSound && AudioMgr.playSound('siren');
+                if (this.shake) this.shake(12);
+                if (this.currentState === STATE.COMBAT && !this._endTurnRunning) {
+                    this.endTurn();
+                }
+            }
+        }, 100);
+    },
+
+    _stopArchivistTimeControl(opts) {
+        if (this._archivistTimerLoopId) {
+            this.clearLoop(this._archivistTimerLoopId);
+            this._archivistTimerLoopId = null;
+        }
+        const overlay = document.getElementById('turn-timer-overlay');
+        if (overlay) {
+            overlay.classList.remove('active');
+            overlay.classList.add('hidden');
+        }
+        if (!opts || !opts.keepBudget) {
+            this._archivistTimerBudget = undefined;
+            this._archivistTimerDeadline = 0;
+        }
     },
 
     calculateCardDamage(baseDmg, type = null, target = null, opts = {}) {
@@ -19451,6 +19601,13 @@ drawEffects() {
       if (this._combatStartedAt && (Date.now() - this._combatStartedAt) < 500) return;
       if (this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT && this.currentState !== STATE.BREAKOUT) return;
       this._endTurnRunning = true;
+      // v1.9.0 — Archivist time-control: hide the overlay the moment the
+      // turn ends so the countdown doesn't sit stuck during the enemy
+      // phase. Budget itself is preserved (keepBudget) so next turn
+      // continues the shrink schedule.
+      if (typeof this._stopArchivistTimeControl === 'function') {
+          this._stopArchivistTimeControl({ keepBudget: true });
+      }
       // Capture the generation at entry. If a new combat starts while this
       // endTurn is still suspended on an await (sleep / VFX callback), the
       // loops below will check `_combatGen !== gen` and bail — keeps the
@@ -19865,7 +20022,18 @@ drawEffects() {
             }
             else if (intent.type === 'reality_overwrite') {
                 this.enemy.realityOverwritten = true;
-                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 150, "REALITY OVERWRITE", "#bc13fe");
+                // v1.9.0 — apply REALITY SHIFT debuff to the player. For
+                // 1 turn the player's outgoing damage heals enemies and
+                // their incoming heals damage the player + minions.
+                // Hooks live in entity.takeDamage / entity.heal.
+                if (this.player && typeof this.player.addEffect === 'function') {
+                    this.player.addEffect('reality_shift', 1, 1, '🌀',
+                        'Damage heals enemies, healing damages you. Wears off at end of next turn.',
+                        'REALITY SHIFT');
+                }
+                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 150, "REALITY SHIFT", "#bc13fe");
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 130, "INVERTED · 1 TURN", "#bc13fe");
+                ParticleSys.createShockwave(this.player.x, this.player.y, '#bc13fe', 40);
                 Game.shake(20);
                 // Signature purple sting — grid_fracture at low rate layered
                 // with a siren so the move sounds unlike any other boss beat.
@@ -19907,6 +20075,49 @@ drawEffects() {
                 if (this.shake) this.shake(8);
                 AudioMgr.playSound('mana');
                 AudioMgr.playSound('grid_fracture');
+            }
+            else if (intent.type === 'summon_hive') {
+                // v1.9.0 — HIVE PROTOCOL re-summon. Top up the drone
+                // swarm to 5 (matching the combat-start spawn count).
+                // Mirrors the setupCombat hive-spawn formula so the
+                // arc + offsets stay consistent with the original
+                // swarm position. Each drone re-spawns at full HP /
+                // full DMG.
+                const TARGET_COUNT = 5;
+                const livingDrones = (this.enemy.minions || []).filter(m =>
+                    m && m._isHiveDrone && m.currentHp > 0
+                );
+                const need = Math.max(0, TARGET_COUNT - livingDrones.length);
+                for (let i = 0; i < need; i++) {
+                    const slot = livingDrones.length + i;
+                    const offset = (slot - (TARGET_COUNT - 1) / 2) * 110;
+                    const m = new Minion(
+                        this.enemy.x + offset,
+                        this.enemy.y + 90 + Math.abs(offset) * 0.15,
+                        this.enemy.minions.length + 1,
+                        /*isPlayerSide*/ false,
+                        /*tier*/ 2
+                    );
+                    m.name = "Hive Drone";
+                    m.maxHp = 60; m.currentHp = 60;
+                    m.dmg = 6;
+                    m._isHiveDrone = true;
+                    m.spawnTimer = 1.0;
+                    this.enemy.minions.push(m);
+                    ParticleSys.createShockwave(m.x, m.y, '#7fff00', 24);
+                    ParticleSys.createSparks(m.x, m.y, '#7fff00', 10);
+                    if (this.triggerVFX) this.triggerVFX('materialize', null, m);
+                }
+                if (need > 0) {
+                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100,
+                        `HIVE SURGE × ${need}`, '#7fff00');
+                    if (this.shake) this.shake(6);
+                    AudioMgr.playSound('mana');
+                    AudioMgr.playSound('grid_fracture');
+                } else {
+                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100,
+                        'SWARM HOLDS', '#7fff00');
+                }
             }
             else if (intent.type === 'summon_void') {
                 // v1.8.2 — honour intent.count so Phase 2's double-summon
@@ -20190,12 +20401,11 @@ drawEffects() {
 
                 // Determine Hit Count (Multi-attack support)
                 let hits = (intent.type === 'multi_attack' && intent.hits) ? intent.hits : 1;
-                // Tesseract Prime P3 — `realitySplit`: every attack resolves
-                // twice. Doubles multi_attack counts as well.
-                if (this.enemy && this.enemy.realitySplit) {
-                    hits = hits * 2;
-                    ParticleSys.createFloatingText(validTarget.x, validTarget.y - 160, "REALITY SPLIT", "#bc13fe");
-                }
+                // (Tesseract Prime P3 `realitySplit` doubling removed
+                // in v1.9.0 — Reality Shift now applies a 1-turn
+                // heal/damage inversion debuff to the player instead
+                // of silently doubling enemy hits. See takeDamage /
+                // heal hooks in entity.js.)
 
                 // Purge gets a signature descending earthquake-pitched siren
                 // on top of orbital_strike's own VFX sound so it lands with
@@ -20616,6 +20826,13 @@ drawEffects() {
     },
 
     async winCombat() {
+        // v1.9.0 — wipe Archivist Time Control on combat end so the
+        // overlay disappears immediately and the budget resets for the
+        // next fight. Calling with keepBudget:false also clears the
+        // shrinking schedule so a fresh Archivist starts at 30s again.
+        if (typeof this._stopArchivistTimeControl === 'function') {
+            this._stopArchivistTimeControl({ keepBudget: false });
+        }
         // Guard: a detonator / reflect / thorns interaction can kill the player
         // in the same tick that kills the enemy. gameOver() has usually
         // already moved the state — bail before we hand out rewards to a
@@ -21849,6 +22066,11 @@ drawEffects() {
             try { Breakout.onPlayerWouldDie(); } catch (e) {}
             return;
         }
+        // v1.9.0 — wipe Archivist Time Control on death so the overlay
+        // doesn't outlive the run.
+        if (typeof this._stopArchivistTimeControl === 'function') {
+            this._stopArchivistTimeControl({ keepBudget: false });
+        }
         AudioMgr.stopSectorAmbient && AudioMgr.stopSectorAmbient();
         AudioMgr.clearSectorMusic && AudioMgr.clearSectorMusic();
         this._activeSectorMech = null;
@@ -22326,30 +22548,84 @@ drawEffects() {
         const frags = this.techFragments || 0;
         const relics = (this.player && this.player.relics) ? this.player.relics.length : 0;
         const cls = (this.player && this.player.classId) ? this.player.classId.toUpperCase() : '???';
+        const sparks = this.sparks || 0;
 
-        // Grade: S if fast + efficient, down to C
-        let grade = 'C';
-        if (turns <= 30 && dmg >= 800) grade = 'S';
-        else if (turns <= 45 && dmg >= 500) grade = 'A';
-        else if (turns <= 60) grade = 'B';
+        const biggestHit  = s.highestHit || 0;
+        const rerollsUsed = s.rerollsUsed || 0;
+        const perfectQTEs = s.perfectQTEs || 0;
+        const dmgTaken    = s.damageTaken || 0;
+        const totalQTEs   = s.totalQTEs || (perfectQTEs + (s.goodQTEs || 0) + (s.failedQTEs || 0)) || 0;
+
+        // v1.9.0 — multi-axis grading. Was: B for any sub-60-turn run, no
+        // matter how brutal. Now: 0-100 score across five axes that all
+        // contribute, so every run earns its grade.
+        //
+        //   speed      — turns to clear (≤30=25, ≤45=18, ≤60=12, ≤80=6, else 0)
+        //   efficiency — damage per turn (≥150=20, ≥100=14, ≥60=8, else 4)
+        //   survival   — HP lost (≤100=20, ≤200=14, ≤350=8, else 4)
+        //   qte        — perfect-QTE ratio (≥80%=15, ≥60%=10, ≥40%=6, else 3)
+        //   depth      — relics + sparks (relics≥25 + sparks≥100 = 20,
+        //                partial credit at lower thresholds)
+        //
+        // Tier cutoffs: ≥90 S, ≥75 A, ≥60 B, ≥40 C, else D.
+        const dmgPerTurn = turns > 0 ? (dmg / turns) : dmg;
+        const qteRatio = totalQTEs > 0 ? (perfectQTEs / totalQTEs) : 0;
+        const speedPts      = turns <= 30 ? 25 : turns <= 45 ? 18 : turns <= 60 ? 12 : turns <= 80 ? 6 : 0;
+        const efficiencyPts = dmgPerTurn >= 150 ? 20 : dmgPerTurn >= 100 ? 14 : dmgPerTurn >= 60 ? 8 : 4;
+        const survivalPts   = dmgTaken <= 100 ? 20 : dmgTaken <= 200 ? 14 : dmgTaken <= 350 ? 8 : 4;
+        const qtePts        = qteRatio >= 0.8 ? 15 : qteRatio >= 0.6 ? 10 : qteRatio >= 0.4 ? 6 : 3;
+        let depthPts        = 0;
+        if (relics >= 25) depthPts += 12; else if (relics >= 18) depthPts += 9; else if (relics >= 10) depthPts += 5; else depthPts += 2;
+        if (sparks >= 100) depthPts += 8; else if (sparks >= 50) depthPts += 5; else if (sparks >= 20) depthPts += 3; else depthPts += 1;
+        const totalScore = speedPts + efficiencyPts + survivalPts + qtePts + depthPts;
+        let grade;
+        if (totalScore >= 90) grade = 'S';
+        else if (totalScore >= 75) grade = 'A';
+        else if (totalScore >= 60) grade = 'B';
+        else if (totalScore >= 40) grade = 'C';
+        else grade = 'D';
 
         const gradeEl = document.getElementById('victory-grade');
         if (gradeEl) gradeEl.textContent = grade;
 
         const ring = document.getElementById('victory-grade-ring');
         if (ring) {
-            const colors = { S: '#ffd700', A: '#00f3ff', B: '#00ff99', C: '#aaa' };
+            const colors = { S: '#ffd700', A: '#00f3ff', B: '#00ff99', C: '#aaa', D: '#ff7766' };
             ring.style.borderColor = colors[grade] || '#ffd700';
             ring.style.boxShadow = `0 0 30px ${colors[grade]}80, inset 0 0 20px ${colors[grade]}33`;
             if (gradeEl) { gradeEl.style.color = colors[grade]; gradeEl.style.textShadow = `0 0 20px ${colors[grade]}`; }
         }
 
-        // Tier 5 — richer end-of-run breakdown. Pulls from both runStats
-        // (per-run rolling counters) and CombatLog (final-boss combat log).
-        const biggestHit = s.highestHit || 0;
-        const rerollsUsed = s.rerollsUsed || 0;
-        const perfectQTEs = s.perfectQTEs || 0;
-        const dmgTaken = s.damageTaken || 0;
+        // Build a per-axis breakdown so the rank reads, not mystifies.
+        // Threshold for "✓" is the top bracket of each axis; "△" is mid;
+        // "○" is below mid. Picks the four most informative lines.
+        const breakdown = [
+            { ok: turns <= 30,         lbl: 'Fast clear',        sub: `${turns} turns` },
+            { ok: dmgPerTurn >= 100,   lbl: 'Heavy hitter',      sub: `${Math.round(dmgPerTurn)} dmg/turn` },
+            { ok: dmgTaken <= 200,     lbl: 'Light scratches',   sub: `${dmgTaken} HP lost` },
+            { ok: qteRatio >= 0.6,     lbl: 'Sharp reflex',      sub: totalQTEs > 0 ? `${Math.round(qteRatio * 100)}% perfect` : `${perfectQTEs} perfect` },
+            { ok: relics >= 18 || sparks >= 50, lbl: 'Resourceful', sub: `${relics} relics · ${sparks} ✦` }
+        ];
+        const breakdownEl = document.getElementById('victory-grade-breakdown');
+        const targetBreakdown = breakdownEl || (() => {
+            const ringHost = document.getElementById('victory-grade-ring');
+            const host = ringHost && ringHost.parentNode;
+            if (!host) return null;
+            const el = document.createElement('div');
+            el.id = 'victory-grade-breakdown';
+            el.className = 'victory-grade-breakdown';
+            ringHost.after(el);
+            return el;
+        })();
+        if (targetBreakdown) {
+            targetBreakdown.innerHTML = breakdown.map(b =>
+                `<div class="vg-line${b.ok ? ' vg-ok' : ''}">
+                    <span class="vg-mark">${b.ok ? '✓' : '○'}</span>
+                    <span class="vg-lbl">${b.lbl}</span>
+                    <span class="vg-sub">${b.sub}</span>
+                 </div>`
+            ).join('') + `<div class="vg-score">SCORE · ${totalScore}/100</div>`;
+        }
 
         const container = document.getElementById('victory-stats');
         if (container) {
@@ -22653,6 +22929,26 @@ drawEffects() {
             // Enemy-side row 2 sits behind the enemy (dy negative) so
             // summoned drones don't clip into the enemy health bar.
             placeMinions(this.enemy.minions, this.enemy.x, this.enemy.y, -1);
+
+            // v1.9.0 — Tesseract Prime fragment orbit override. Replaces
+            // the slot-grid placement above for `_isTessFragment` minions
+            // so they rotate around the boss in a slow elliptical orbit,
+            // visually integrated as part of the Tesseract centerpiece
+            // rather than reading as detached drones. Slow rotation rate
+            // matches the boss's own outer-cube spin.
+            if (this.enemy.name === 'TESSERACT PRIME' && Array.isArray(this.enemy.minions)) {
+                const t = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+                const spinRate = 0.00035; // rad/ms ≈ ~12s per full rotation
+                this.enemy.minions.forEach(m => {
+                    if (!m || !m._isTessFragment) return;
+                    const baseAngle = m._tessOrbitAngle || 0;
+                    const r = m._tessOrbitRadius || 130;
+                    const a = baseAngle + t * spinRate;
+                    m.x = this.enemy.x + Math.cos(a) * r;
+                    m.y = this.enemy.y + Math.sin(a) * r * 0.55;
+                    m._tessSpinAngle = a; // for future renderer use
+                });
+            }
         }
     },
 

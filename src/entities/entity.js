@@ -24,6 +24,33 @@ function _resolveEnemyKill(target) {
         return;
     }
     if (Game.enemy && Game.enemy.minions && Game.enemy.minions.includes(target)) {
+        // v1.9.0 — HIVE PROTOCOL "Assimilate": each Hive Drone death
+        // restores 5% of the boss's max HP. Boss must still be alive
+        // (otherwise we'd resurrect the boss with a stray death).
+        if (target._isHiveDrone && Game.enemy.name === 'HIVE PROTOCOL'
+            && Game.enemy.currentHp > 0 && Game.enemy.currentHp < Game.enemy.maxHp) {
+            const heal = Math.floor(Game.enemy.maxHp * 0.05);
+            Game.enemy.currentHp = Math.min(Game.enemy.maxHp, Game.enemy.currentHp + heal);
+            ParticleSys.createFloatingText(Game.enemy.x, Game.enemy.y - 130,
+                `ASSIMILATE +${heal}`, '#32cd32');
+            ParticleSys.createShockwave(Game.enemy.x, Game.enemy.y, '#32cd32', 30);
+            AudioMgr.playSound && AudioMgr.playSound('mana');
+        }
+        // v1.9.0 — TESSERACT PRIME: when the LAST fragment dies, queue
+        // a respawn 3 turns later. Storing the deadline on the boss
+        // object so startTurn() can spawn them back when the timer
+        // hits, and the boss becomes vulnerable in the meantime.
+        if (target._isTessFragment && Game.enemy.name === 'TESSERACT PRIME'
+            && Game.enemy.currentHp > 0) {
+            const remaining = Game.enemy.minions.filter(m => m !== target && m._isTessFragment && m.currentHp > 0);
+            if (remaining.length === 0) {
+                Game.enemy._fragmentResummonAt = (Game.turnCount || 0) + 3;
+                ParticleSys.createFloatingText(Game.enemy.x, Game.enemy.y - 200,
+                    'FRAGMENTS DOWN — VULNERABLE', '#ffd76a');
+                if (Game.shake) Game.shake(12);
+                AudioMgr.playSound && AudioMgr.playSound('grid_fracture');
+            }
+        }
         Game.enemy.minions = Game.enemy.minions.filter(m => m !== target);
     } else if (Game.player && Game.player.minions && Game.player.minions.includes(target)) {
         Game.player.minions = Game.player.minions.filter(m => m !== target);
@@ -55,6 +82,45 @@ class Entity {
         // --- GOD MODE INVINCIBILITY ---
         if (this instanceof Player && Game.godMode) {
             ParticleSys.createFloatingText(this.x, this.y - 60, "GOD MODE", "#ff0055");
+            return false;
+        }
+
+        // --- TESSERACT PRIME — fragment shield ---
+        // v1.9.0. While ANY Tesseract Fragment minion is alive, the
+        // boss takes zero damage. Player must clear the fragments
+        // before they can chip the boss. Floating-text rate-limited
+        // by tagging the boss with a frame-id so spam attacks don't
+        // flood the screen.
+        if (Enemy && this instanceof Enemy && this === Game.enemy
+            && this.name === 'TESSERACT PRIME'
+            && Array.isArray(this.minions)
+            && this.minions.some(m => m && m._isTessFragment && m.currentHp > 0)) {
+            const now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+            if (!this._invincibleTextAt || (now - this._invincibleTextAt) > 600) {
+                this._invincibleTextAt = now;
+                ParticleSys.createFloatingText(this.x, this.y - 140,
+                    'INVINCIBLE — DESTROY FRAGMENTS', '#ffd76a');
+                ParticleSys.createShockwave(this.x, this.y, '#ffd76a', 28);
+            }
+            return false;
+        }
+
+        // --- REALITY SHIFT — outgoing damage redirect ---
+        // v1.9.0. While the player carries the `reality_shift` debuff,
+        // their attacks heal the enemy instead of harming it. Hooked
+        // here so every damage path (single, multi, AoE, reflect)
+        // routes through the inversion. Player-side minions count
+        // as the player's hand — their attacks invert too. Effect
+        // wears off at end of player turn (1-turn duration).
+        if (Enemy && this instanceof Enemy
+            && Game && Game.player && Game.player.hasEffect && Game.player.hasEffect('reality_shift')
+            && (source instanceof Player || (Minion && source instanceof Minion && source.isPlayerSide))
+            && amount > 0) {
+            const heal = Math.max(1, Math.floor(amount));
+            this.currentHp = Math.min(this.maxHp, this.currentHp + heal);
+            ParticleSys.createFloatingText(this.x, this.y - 100, `INVERTED +${heal}`, '#bc13fe');
+            ParticleSys.createSparks(this.x, this.y, '#bc13fe', 12);
+            AudioMgr.playSound && AudioMgr.playSound('mana');
             return false;
         }
 
@@ -884,6 +950,20 @@ class Entity {
         if (this.currentHp <= 0 && killedTargetIsHostile && !this.isBoss && !this.isTutorialDummy && Game.deathBurst) {
             try { Game.deathBurst(this, { hostile: true }); } catch (_) {}
         }
+        // v1.9.0 — fire _resolveEnemyKill on the LETHAL HIT so a dead
+        // enemy minion is removed from `enemy.minions` immediately,
+        // not at the start of the next enemy-minion turn loop. Two
+        // playtest reports (Void Spawn at 0 HP attacking, Hive
+        // Drones rendering at "0" before the start-of-turn filter
+        // ran) traced back to the same gap: the filter ran later
+        // than the minion's last queued intent and last render
+        // pass. By calling the resolver here we close that gap for
+        // every enemy minion, including any new ones added later.
+        if (Minion && this instanceof Minion && !this.isPlayerSide
+            && this.currentHp <= 0 && Game && Game.enemy && Game.enemy.minions
+            && Game.enemy.minions.includes(this)) {
+            _resolveEnemyKill(this);
+        }
         // Module: SIPHON BLADE — kills heal +4 HP and refund 1 Mana. Stacks
         // multiply the heal but the mana refund stays at 1 (otherwise
         // stacking trivialises the mana economy).
@@ -975,6 +1055,27 @@ class Entity {
     }
 
     heal(amount) {
+        // --- REALITY SHIFT — incoming heal redirect ---
+        // v1.9.0. When the player carries `reality_shift`, every heal
+        // they would receive becomes self-damage AND splashes onto
+        // their living minions. Recursive call into takeDamage uses
+        // bypassShield/source=this so the inverted hit can't be
+        // mitigated by shield or relics that key on enemy-source.
+        // Effect wears off at end of player turn.
+        if (Player && this instanceof Player
+            && this.hasEffect && this.hasEffect('reality_shift')
+            && amount > 0) {
+            const dmg = Math.max(1, Math.floor(amount));
+            ParticleSys.createFloatingText(this.x, this.y - 100, `INVERTED -${dmg}`, '#bc13fe');
+            ParticleSys.createSparks(this.x, this.y, '#bc13fe', 12);
+            this.currentHp = Math.max(0, this.currentHp - dmg);
+            (this.minions || []).forEach(m => {
+                if (m && m.currentHp > 0) m.currentHp = Math.max(0, m.currentHp - dmg);
+            });
+            if (Game && Game.shake) Game.shake(6);
+            return;
+        }
+
         let actualHeal = amount;
 
         const constrict = this.hasEffect('constrict');

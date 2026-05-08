@@ -11552,22 +11552,90 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
     font-weight: 700;
 }
 .victory-actions {
-    /* Stack vertically — the prior horizontal flex squeezed both
-       buttons to ~50px each on a 432px screen, breaking labels into
-       one-character-per-line. Vertical stack guarantees the full
-       label is readable on every container size. */
+    /* v1.9.0 — pinned to the bottom of the screen with sticky so the
+       SHARE RUN + ENTER SANCTUARY buttons stay reachable while the
+       player scrolls the stat grid. Prior version let the buttons
+       scroll out of view on tall stat lists, especially under the
+       safe-area inset on iOS. Backdrop strip keeps the buttons
+       readable when stats sit behind them. */
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     margin-top: 6px;
     width: 100%;
     max-width: 360px;
-    padding: 0 6px;
+    padding: 10px 6px max(10px, env(safe-area-inset-bottom, 0px));
     flex-shrink: 0;
+    position: sticky;
+    bottom: 0;
+    background: linear-gradient(180deg,
+        rgba(2, 6, 22, 0) 0%,
+        rgba(2, 6, 22, 0.85) 35%,
+        rgba(2, 6, 22, 0.95) 100%);
+    z-index: 5;
 }
 .victory-actions .btn {
     width: 100%;
     padding: 12px 16px !important;
+}
+/* Drop the per-button bracket frames on the victory screen — they
+   collide with the page-frame brackets when the layout is short,
+   which read as visual noise in the playtest screenshot. The
+   bracket-screens.css selectors paint diagonal corner strips on
+   every .btn; this override neutralises them only inside the
+   sticky action footer. */
+#screen-victory .victory-actions .btn {
+    background-image: none !important;
+}
+
+/* v1.9.0 — Rank breakdown panel. Sits between the grade ring and
+   the stat grid; one line per axis with a check / circle marker,
+   the axis label, and a short stat line. Total score chip closes
+   the panel so the rank is legible instead of mysterious. */
+.victory-grade-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 8px auto 4px;
+    max-width: 360px;
+    width: 100%;
+    padding: 8px 14px;
+    border: 1px solid rgba(255, 215, 106, 0.35);
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(20, 14, 4, 0.6), rgba(8, 4, 2, 0.7));
+    font-family: 'Audiowide', 'Orbitron', sans-serif;
+    font-size: 0.78rem;
+    color: rgba(255, 215, 106, 0.85);
+    letter-spacing: 0.04em;
+}
+.victory-grade-breakdown .vg-line {
+    display: grid;
+    grid-template-columns: 22px 1fr auto;
+    gap: 6px;
+    align-items: baseline;
+    opacity: 0.7;
+}
+.victory-grade-breakdown .vg-line.vg-ok {
+    opacity: 1;
+    color: #ffe28a;
+}
+.victory-grade-breakdown .vg-mark {
+    font-weight: 800;
+}
+.victory-grade-breakdown .vg-line.vg-ok .vg-mark {
+    color: #00ff99;
+}
+.victory-grade-breakdown .vg-sub {
+    color: rgba(255, 215, 106, 0.7);
+    font-size: 0.7rem;
+}
+.victory-grade-breakdown .vg-score {
+    margin-top: 6px;
+    text-align: center;
+    font-weight: 800;
+    color: #ffd76a;
+    text-shadow: 0 0 10px rgba(255, 215, 106, 0.5);
+    letter-spacing: 0.1em;
 }
 
 /* Run summary card (GAMEOVER + VICTORY) */
@@ -17727,4 +17795,57 @@ body.perf-mid .menu-glyphs span:nth-child(n+4) { display: none; }
     font-weight: normal;
     letter-spacing: 0.04em;
     margin-top: 1px;
+}
+
+/* v1.9.0 — THE ARCHIVIST Time Control overlay. Big neon countdown
+   centered on the playfield while phase >= 2 is active. Pointer
+   events disabled so it never intercepts input — players can still
+   reach dice / END TURN underneath. Magenta-pink palette matches
+   the boss's phase-3 telegraph colour. */
+.turn-timer-overlay {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Orbitron', 'Audiowide', sans-serif;
+    font-size: clamp(96px, 22vw, 200px);
+    font-weight: 800;
+    color: #ff77aa;
+    text-shadow:
+        0 0 18px rgba(255, 119, 170, 0.85),
+        0 0 36px rgba(255, 119, 170, 0.55),
+        0 0 72px rgba(188, 19, 254, 0.4);
+    opacity: 0.65;
+    pointer-events: none;
+    z-index: 9000;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    transition: opacity 200ms ease, color 200ms ease;
+    animation: turnTimerPulse 1s ease-in-out infinite;
+}
+.turn-timer-overlay.hidden {
+    display: none;
+}
+.turn-timer-overlay[data-health="warn"] {
+    color: #ffaa44;
+    text-shadow:
+        0 0 18px rgba(255, 170, 68, 0.9),
+        0 0 36px rgba(255, 170, 68, 0.6);
+    animation-duration: 0.6s;
+    opacity: 0.78;
+}
+.turn-timer-overlay[data-health="crit"] {
+    color: #ff0055;
+    text-shadow:
+        0 0 22px rgba(255, 0, 85, 0.95),
+        0 0 44px rgba(255, 0, 85, 0.7);
+    animation-duration: 0.35s;
+    opacity: 0.92;
+}
+@keyframes turnTimerPulse {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    50%      { transform: translate(-50%, -50%) scale(1.06); }
+}
+body.reduced-motion .turn-timer-overlay {
+    animation: none;
 }

@@ -293,6 +293,25 @@ class Enemy extends Entity {
                 }
             }
 
+            // --- HIVE PROTOCOL SPECIAL LOGIC ---
+            // v1.9.0. Boss now resummons drones every N turns (4 in
+            // phases 1-2, 3 in phase 3 — see Game._applyBossPhaseMechanic
+            // which sets `_hiveResummonEvery`). Skipped if the swarm is
+            // already at cap or boss HP is critical (so the death-spiral
+            // turn doesn't get hijacked by a swarm refresh).
+            if (this.name === "HIVE PROTOCOL") {
+                const everyN = this._hiveResummonEvery || 4;
+                this._hiveTurnCounter = (this._hiveTurnCounter || 0) + 1;
+                const livingDrones = (this.minions || []).filter(m =>
+                    m && m._isHiveDrone && m.currentHp > 0
+                ).length;
+                const lowHp = this.currentHp < this.maxHp * 0.3;
+                if (this._hiveTurnCounter % everyN === 0 && livingDrones < 5 && !lowHp) {
+                    return { type: 'summon_hive', val: 0 };
+                }
+                // Otherwise fall through to the standard boss-move pick.
+            }
+
             // --- THE COMPILER SPECIAL LOGIC ---
             // (a) Every basic attack becomes AoE — fits the "industrial
             //     crusher" fantasy and pairs with the Bolster Mech
@@ -524,7 +543,14 @@ class Enemy extends Entity {
             'attack', 'multi_attack', 'debuff', 'purge_attack',
             'aoe_sweep', 'frost_aoe', 'immolate',
             'shield_strip_attack', 'chaotic_act',
-            'mirror_attack', 'observer_strike', 'burrow_resurge'
+            'mirror_attack', 'observer_strike', 'burrow_resurge',
+            // Self-destruct previously skipped — its `val` was set
+            // once at arming and never rechecked, so the displayed
+            // detonation damage diverged from the actual hit if the
+            // detonator picked up Brittle / Weak / Constrict between
+            // arming and explosion. Recompute each turn so the plate
+            // and tooltip number match what'll really land.
+            'self_destruct'
         ]);
         this.nextIntents.forEach(intent => {
             if (DAMAGE_INTENTS.has(intent.type)) {
