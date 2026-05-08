@@ -211,17 +211,30 @@ export const Perf = {
         let pinned = null;
         try { pinned = localStorage.getItem(KEY_OVERRIDE); } catch (_) {}
         if (pinned) return;
-        const WINDOW = 180;             // ~3s of frames at 60fps
+        // v1.8.6 — stickier hysteresis. Diag dump from a 26-min run
+        // revealed 7 auto-downgrades + 8 auto-upgrades despite frame
+        // time being flat at avg 1.8ms / 100% 60fps. The 3s rolling
+        // window was being tipped below 48fps by single 200-300ms GC
+        // pauses, forcing visible visual-fidelity oscillation that
+        // read to the user as "performance is degrading". Bumped:
+        //   - WINDOW 180 → 540 frames (~3s → ~9s) so a single
+        //     stall can't drag the avg below threshold.
+        //   - base cooldown 15s → 60s so successive tier changes
+        //     can't ping-pong every 15-20s after the cooldown
+        //     elapses.
+        //   - UPGRADE_FPS 58 → 59 so an upgrade demands near-perfect
+        //     fps, not just "mostly 60". Asymmetric with the
+        //     downgrade threshold prevents the borderline-fps
+        //     bounce.
+        const WINDOW = 540;             // ~9s of frames at 60fps
         const DOWNGRADE_FPS = 48;
-        const UPGRADE_FPS   = 58;
-        let cooldownMs = 15000;         // base cool-down between tier changes
-        const FLAP_COOLDOWN_MS = 90000; // if we've flapped, lock in the lower
-                                        // tier for a longer window so the
-                                        // user doesn't see the log spam the
-                                        // dev console flagged in the trace
-                                        // (auto-down → auto-up → auto-down
-                                        // every 15s when the avg fps was
-                                        // bouncing around the threshold).
+        const UPGRADE_FPS   = 59;
+        let cooldownMs = 60000;         // base cool-down between tier changes
+        const FLAP_COOLDOWN_MS = 180000; // if we've flapped, lock in the lower
+                                        // tier for 3 minutes (was 90s) so a
+                                        // borderline-fps oscillation truly
+                                        // commits to the lower tier and the
+                                        // user gets a stable visual.
         let last = performance.now();
         // Circular buffer — O(1) per frame. Previously used Array.shift()
         // on a 180-entry Array, which was O(n) × 60fps = 10k+ ops/sec of
