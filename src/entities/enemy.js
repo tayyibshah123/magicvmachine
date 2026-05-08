@@ -131,6 +131,13 @@ class Enemy extends Entity {
         // Archivist rewind cooldown resets at the start of each round so the
         // boss can rewind once per player turn, not once per fight.
         this._rewindUsedThisTurn = false;
+        // Tesseract Prime Reality Shift cooldown decrements once per
+        // enemy turn. Cooldown is set to 2 when the move queues; this
+        // turn it drops to 1, next turn to 0, and the move becomes
+        // available again. Bounded at 0.
+        if (this.name === 'TESSERACT PRIME' && this._realityShiftCooldownTurnsLeft > 0) {
+            this._realityShiftCooldownTurnsLeft--;
+        }
         // STUN consumer — the effect was previously applied (e.g. SIG_ANNI_3)
         // but never read. A stunned enemy queues a single 'stunned' intent
         // (no actions) and the resolver short-circuits the turn loop. Stun
@@ -319,6 +326,37 @@ class Enemy extends Entity {
                     return { type: 'summon_hive', val: 0 };
                 }
                 // Otherwise fall through to the standard boss-move pick.
+            }
+
+            // --- TESSERACT PRIME SPECIAL LOGIC ---
+            // Reality Shift is gated to phase 2 onwards and capped at
+            // once every 2 turns (cooldown stored on the boss as
+            // _realityShiftCooldownTurnsLeft). Cooldown is set when
+            // the intent is QUEUED (here in generateSingleIntent), not
+            // when it later resolves, so subsequent action-slot rolls
+            // in the same turn also see the cooldown and skip the
+            // move. Decrement happens in decideTurn before the slots
+            // generate.
+            if (this.name === "TESSERACT PRIME") {
+                let tMoves = this.bossData.moves;
+                const cdLeft = this._realityShiftCooldownTurnsLeft || 0;
+                if ((this.phase || 1) < 2 || cdLeft > 0) {
+                    tMoves = tMoves.filter(m => m !== 'reality_overwrite');
+                }
+                const tRoll = this._pickBossMove(tMoves);
+                if (tRoll === 'reality_overwrite') {
+                    // Lock out for 2 turns starting now. Sub-turn
+                    // rolls see the cooldown and pick another move.
+                    this._realityShiftCooldownTurnsLeft = 2;
+                    return { type: 'reality_overwrite', val: 0 };
+                }
+                if (tRoll === 'shield') {
+                    return { type: 'shield', val: this.bossData.shieldVal || 120 };
+                }
+                if (tRoll === 'purge_attack') {
+                    return { type: 'purge_attack', val: Math.floor(this.baseDmg * 1.4), target: Game.player };
+                }
+                return { type: 'attack', val: this.baseDmg, target: getTarget() };
             }
 
             // --- THE COMPILER SPECIAL LOGIC ---

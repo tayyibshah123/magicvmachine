@@ -921,11 +921,16 @@ const BOSS_DATA = {
         name: "TESSERACT PRIME",
         subtitle: "GEOMETRIC IMPOSSIBILITY",
         hp: 1000,
-        dmg: 50,
+        // Damage doubled (50 to 100) and shield doubled (60 to 120)
+        // to lift the sector 5 boss to its proper endgame weight.
+        // Each attack and purge_attack now bites twice as hard while
+        // a shield turn becomes a substantial threat-clear instead
+        // of a chip the player ignores.
+        dmg: 100,
         actionsPerTurn: 3,
         color: '#ffffff', // Pure White/Gold
         moves: ['attack', 'purge_attack', 'reality_overwrite', 'shield'],
-        shieldVal: 60
+        shieldVal: 120
     },
     // Sector X — Roadmap Part 24.2. Post-Sector-5 boss; only spawned via the
     // ARCHIVE main-menu run path. HP scales +150 per Ascension level (handled
