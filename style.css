@@ -15979,6 +15979,45 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     font-size: var(--text-base);
 }
 .sanctuary-npc-body .npc-relic-desc { font-size: var(--text-sm); color: var(--text-muted); }
+.sanctuary-npc-body .npc-fusion-pick {
+    border-color: rgba(255, 85, 119, 0.45);
+}
+.sanctuary-npc-body .npc-fusion-pick:hover {
+    border-color: #ff5577;
+    background: rgba(255, 85, 119, 0.08);
+}
+.sanctuary-npc-body .npc-fusion-pick .npc-relic-name {
+    color: #ff8aaa;
+}
+.sanctuary-npc-body .npc-fusion-net {
+    margin-top: 4px;
+    font-size: var(--text-xs);
+    color: #ffe6a8;
+    font-style: italic;
+    opacity: 0.85;
+}
+.sanctuary-npc-body .npc-fusion-list {
+    max-height: 50vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-right: 4px;
+}
+.sanctuary-npc-body .npc-fusion-forge-row {
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.sanctuary-npc-body .npc-fusion-forge-row .btn {
+    border-color: #ff5577;
+    color: #ff8aaa;
+}
+.sanctuary-npc-body .npc-fusion-forge-hint {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    opacity: 0.85;
+}
 .sanctuary-npc-body .npc-trophy-row {
     display: flex;
     align-items: center;

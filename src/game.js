@@ -4722,12 +4722,16 @@ startQTE(type, x, y, callback, opts) {
         if (which === 'smith') {
             title.textContent = 'SMITH';
             const saved = localStorage.getItem('mvm_start_relic') || '';
-            const current = UPGRADES_POOL.find(r => r.id === saved);
+            const currentBase = UPGRADES_POOL.find(r => r.id === saved);
+            const currentFusion = (typeof MODULE_FUSIONS !== 'undefined')
+                ? MODULE_FUSIONS.find(f => f.id === saved) : null;
+            const current = currentBase || currentFusion;
             // Smith now bills in Sparks. Fragments are run-only and would
             // be 0 the moment the player walked into the Sanctuary, so
             // the 150-frag price-tag was dead UI. 4 ✦ ≈ a Hex Breach
             // payout for a one-shot starter relic — fair tempo cost.
             const cost = 4;
+            const fusionCost = 8;
             const picks = [];
             // Class-locked modules don't surface in the Smith bank — the
             // player picks a starting module BEFORE they pick a class,
@@ -4738,9 +4742,9 @@ startQTE(type, x, y, callback, opts) {
                 picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
             }
             const curLine = current
-                ? `<p>Your banked starting relic: <b style="color:var(--neon-gold)">${current.name}</b>. It will be granted on your next run.</p>`
+                ? `<p>Your banked starting relic: <b style="color:var(--neon-gold)">${current.name}</b>${currentFusion ? ' <span style="color:var(--neon-pink)">(FUSED)</span>' : ''}. It will be granted on your next run.</p>`
                 : `<p>No starting relic banked. Roll a new one below.</p>`;
-            const sparkLine = `<p>Sparks: <b style="color:var(--neon-gold)">${this.sparks || 0} ✦</b> &nbsp;·&nbsp; Reroll cost: <b>${cost} ✦</b></p>`;
+            const sparkLine = `<p>Sparks: <b style="color:var(--neon-gold)">${this.sparks || 0} ✦</b> &nbsp;·&nbsp; Reroll cost: <b>${cost} ✦</b> &nbsp;·&nbsp; Fusion Forge: <b>${fusionCost} ✦</b></p>`;
             body.innerHTML = `
                 ${curLine}
                 ${sparkLine}
@@ -4751,6 +4755,10 @@ startQTE(type, x, y, callback, opts) {
                             <div class="npc-relic-desc">${p.desc || ''}</div>
                         </div>
                     `).join('')}
+                </div>
+                <div class="npc-fusion-forge-row">
+                    <button class="btn primary" id="btn-smith-fusion-forge" type="button">FUSION FORGE</button>
+                    <span class="npc-fusion-forge-hint">Pick any fused module as your starter for 8 ✦.</span>
                 </div>
             `;
             body.querySelectorAll('.npc-relic-pick').forEach(el => {
@@ -4766,6 +4774,8 @@ startQTE(type, x, y, callback, opts) {
                     this.openSanctuaryNPC('smith'); // refresh
                 };
             });
+            const forgeBtn = document.getElementById('btn-smith-fusion-forge');
+            if (forgeBtn) forgeBtn.onclick = () => this._openFusionForge();
         }
         else if (which === 'oracle') {
             title.textContent = 'ORACLE';
@@ -4867,6 +4877,59 @@ startQTE(type, x, y, callback, opts) {
     closeSanctuaryNPC() {
         const modal = document.getElementById('sanctuary-npc-modal');
         if (modal) modal.classList.add('hidden');
+    },
+
+    // FUSION FORGE — pick any MODULE_FUSIONS entry as your starter
+    // relic for the next run. Repurposes the same Sanctuary NPC modal
+    // (replaces Smith's body with the fusion list while the modal is
+    // open). Costs 8 sparks per pick; the fusion id is written to
+    // mvm_start_relic and consumed at run start by the existing
+    // banked-relic pipeline.
+    _openFusionForge() {
+        const modal = document.getElementById('sanctuary-npc-modal');
+        if (!modal) return;
+        if (typeof MODULE_FUSIONS === 'undefined' || !Array.isArray(MODULE_FUSIONS)) return;
+        const title = modal.querySelector('.sanctuary-npc-title');
+        const body  = modal.querySelector('.sanctuary-npc-body');
+        const actions = modal.querySelector('.sanctuary-npc-actions');
+        title.textContent = 'FUSION FORGE';
+        const cost = 8;
+        const sparkLine = `<p>Sparks: <b style="color:var(--neon-gold)">${this.sparks || 0} ✦</b> &nbsp;·&nbsp; Forge cost: <b>${cost} ✦</b> per pick.</p>`;
+        const list = MODULE_FUSIONS.map(f => `
+            <div class="npc-relic-pick npc-fusion-pick" data-fusion-id="${f.id}">
+                <div class="npc-relic-name">${f.icon || ''} ${f.name}</div>
+                <div class="npc-relic-desc">${f.desc || ''}</div>
+                <div class="npc-fusion-net">${f.netGain || ''}</div>
+            </div>
+        `).join('');
+        body.innerHTML = `
+            ${sparkLine}
+            <p style="opacity:0.85">Pick a fused module to start your next run with. Replaces any banked starter relic.</p>
+            <div class="npc-fusion-list">${list}</div>
+        `;
+        // Replace CLOSE with a BACK action so the player can return to
+        // Smith's main view without dismissing the modal entirely.
+        actions.innerHTML = `
+            <button class="btn secondary" data-action="forge-back">BACK</button>
+            <button class="btn secondary" data-action="npc-close">CLOSE</button>
+        `;
+        const back = actions.querySelector('[data-action="forge-back"]');
+        if (back) back.onclick = () => this.openSanctuaryNPC('smith');
+        const closeBtn = actions.querySelector('[data-action="npc-close"]');
+        if (closeBtn) closeBtn.onclick = () => this.closeSanctuaryNPC();
+        body.querySelectorAll('.npc-fusion-pick').forEach(el => {
+            el.onclick = () => {
+                if (!this.spendSparks(cost, 'smith_fusion_forge')) {
+                    AudioMgr.playSound('defend');
+                    ParticleSys.createFloatingText(540, 800, 'NOT ENOUGH SPARKS', '#ff3355');
+                    return;
+                }
+                try { localStorage.setItem('mvm_start_relic', el.dataset.fusionId); } catch (_) {}
+                AudioMgr.playSound('upgrade');
+                ParticleSys.createFloatingText(540, 800, 'FUSION BANKED', '#ff5577');
+                this.openSanctuaryNPC('smith');
+            };
+        });
     },
 
     // Render up to 5 small "trophy" frames on a vertical strip to the right
@@ -5624,10 +5687,27 @@ startQTE(type, x, y, callback, opts) {
         this._hasHackedThisRun = false;
 
         // Smith's banked starting relic — consume on run start (one-shot).
+        // Fusion Forge purchases store a MODULE_FUSIONS id here too, so
+        // the lookup falls through to the fusion table if the id isn't a
+        // base relic. Fused starters are still single relics and stand
+        // on their own (the fusion's effect is wired by the fusion id
+        // alone, not by the input-pair).
         try {
             const bankedId = localStorage.getItem('mvm_start_relic');
             if (bankedId) {
-                const relic = UPGRADES_POOL.find(r => r.id === bankedId);
+                let relic = UPGRADES_POOL.find(r => r.id === bankedId);
+                if (!relic && typeof MODULE_FUSIONS !== 'undefined') {
+                    const fusion = MODULE_FUSIONS.find(f => f.id === bankedId);
+                    if (fusion) {
+                        relic = {
+                            id: fusion.id,
+                            name: fusion.name,
+                            desc: fusion.desc,
+                            icon: fusion.icon,
+                            rarity: fusion.rarity || 'red'
+                        };
+                    }
+                }
                 if (relic && this.player.addRelic) {
                     this.player.addRelic(relic);
                     ParticleSys.createFloatingText(540, 220, `RELIC: ${relic.name}`, '#ffd76a');
