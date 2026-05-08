@@ -16,7 +16,7 @@
 // entry on page load. Closing the modal strips the fragment so the
 // back button returns the player to wherever they were.
 
-import { INTEL_ENTRIES, INTEL_FORMATS, getIntelEntry } from '../data/intel-codex.js';
+import { INTEL_ENTRIES, INTEL_FORMATS, INTEL_CHAPTERS, getIntelEntry } from '../data/intel-codex.js';
 import { AudioMgr } from '../audio.js';
 
 let host = null;
@@ -214,6 +214,8 @@ function renderEntry(id) {
     setText('[data-bind="format"]', formatLabel);
     setText('[data-bind="title"]', entry.shortTitle);
     setText('[data-bind="legacyEpigram"]', entry.legacyEpigram);
+    const chapterMeta = INTEL_CHAPTERS[entry.chapter];
+    setText('[data-bind="chapterLabel"]', chapterMeta ? chapterMeta.title : entry.chapter);
     const isFirstOpen = markRead(entry.id);
     renderBody(entry, isFirstOpen);
     // Progress label, e.g. "3 of 18".
@@ -312,21 +314,6 @@ function onClick(e) {
     if (action === 'close') close();
     else if (action === 'prev') prev();
     else if (action === 'next') next();
-    else if (action === 'extract') {
-        // Polish target for C7.6. For now, copy the legacy epigram to
-        // clipboard as a one-line shareable extract.
-        const entry = getIntelEntry(currentId);
-        if (entry && navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(entry.legacyEpigram).catch(() => {});
-            // Lightweight feedback: temporarily relabel the button.
-            const btn = card.querySelector('[data-action="extract"]');
-            if (btn) {
-                const prevText = btn.textContent;
-                btn.textContent = '★ COPIED';
-                setTimeout(() => { if (btn) btn.textContent = prevText; }, 1200);
-            }
-        }
-    }
 }
 
 export function init() {

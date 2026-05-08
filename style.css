@@ -17835,9 +17835,14 @@ body.perf-mid .menu-glyphs span:nth-child(n+4) { display: none; }
     overflow-x: hidden;
     padding: 24px 22px 18px;
     border-radius: 14px;
-    background: linear-gradient(180deg,
-        rgba(8, 6, 22, 0.96) 0%,
-        rgba(4, 2, 14, 0.98) 100%);
+    /* Solid-feel layered background. Three stacked gradients give the
+       card a paper-fold inner highlight without letting any sibling
+       decoration bleed through. The card no longer carries glass-panel
+       so the bracket-screens pseudo-decorations cannot leak through
+       at the bottom edge while the body scrolls. */
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, rgba(0, 0, 0, 0) 18%),
+        linear-gradient(180deg, rgba(8, 6, 22, 0.985) 0%, rgba(4, 2, 14, 0.995) 100%);
     border: 1px solid rgba(255, 215, 106, 0.4);
     box-shadow:
         0 0 32px rgba(0, 0, 0, 0.65),
@@ -17847,6 +17852,9 @@ body.perf-mid .menu-glyphs span:nth-child(n+4) { display: none; }
     line-height: 1.55;
     transition: border-color 200ms ease, box-shadow 200ms ease;
     animation: intelModalIn 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    /* Own stacking context so any future overlay / decoration stays
+       inside the card's box and never paints over the body. */
+    isolation: isolate;
 }
 @keyframes intelModalIn {
     from { transform: scale(0.94); opacity: 0; }
@@ -18067,7 +18075,10 @@ body.reduced-motion .intel-modal-card {
     text-indent: 0;
 }
 
-/* Footer. Progress + extract button. */
+/* Footer. Progress on the left, chapter chip on the right. The chip
+   reuses the chapter accent palette via the data-chapter attribute
+   on the parent card. EXTRACT button removed in v1.10 polish pass:
+   the user does not want players copy-pasting lore off-platform. */
 .intel-modal-footer {
     margin-top: 18px;
     padding-top: 12px;
@@ -18080,23 +18091,16 @@ body.reduced-motion .intel-modal-card {
     letter-spacing: 0.12em;
     color: rgba(255, 255, 255, 0.55);
 }
-.intel-modal-extract {
-    background: transparent;
-    color: rgba(255, 215, 106, 0.85);
-    border: 1px solid rgba(255, 215, 106, 0.35);
-    padding: 6px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-family: inherit;
-    font-size: inherit;
-    letter-spacing: inherit;
-    transition: background 160ms ease, color 160ms ease;
+.intel-modal-chapter-chip {
+    color: rgba(255, 215, 106, 0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
 }
-.intel-modal-extract:hover,
-.intel-modal-extract:focus-visible {
-    background: rgba(255, 215, 106, 0.12);
-    color: #fff;
-}
+.intel-modal-card[data-chapter="THE_NEW_WORLD"]  .intel-modal-chapter-chip { color: rgba(0, 243, 255, 0.7); }
+.intel-modal-card[data-chapter="THE_RESISTANCE"] .intel-modal-chapter-chip { color: rgba(127, 255, 0, 0.7); }
+.intel-modal-card[data-chapter="THE_CLASSES"]    .intel-modal-chapter-chip { color: rgba(255, 119, 170, 0.7); }
+.intel-modal-card[data-chapter="THE_TRUTH"]      .intel-modal-chapter-chip { color: rgba(255, 215, 0, 0.85); }
+.intel-modal-card[data-chapter="HIDDEN"]         .intel-modal-chapter-chip { color: rgba(255, 255, 255, 0.85); }
 
 /* v1.9.7 polish: typewriter cascade. On first open of a codex
    entry, paragraphs fade and slide in with a stagger so the body

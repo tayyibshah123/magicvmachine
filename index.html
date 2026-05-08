@@ -451,7 +451,7 @@
                     <!-- FOOTER — streak chip + version stamp. -->
                     <div class="db-footer">
                         <div id="login-streak" class="login-streak db-streak hidden"></div>
-                        <span class="db-version">ALPHA V1.9.10</span>
+                        <span class="db-version">ALPHA V1</span>
                     </div>
                     </div><!-- /db-bottom-block -->
                 </div>
@@ -1410,7 +1410,7 @@
          src/data/intel-codex.js with format-specific styling. -->
     <div id="intel-modal" class="modal intel-modal hidden" aria-hidden="true">
         <div class="intel-modal-backdrop" data-action="close"></div>
-        <div class="intel-modal-card glass-panel" role="dialog" aria-labelledby="intel-modal-title" aria-describedby="intel-modal-body">
+        <div class="intel-modal-card" role="dialog" aria-labelledby="intel-modal-title" aria-describedby="intel-modal-body">
             <button class="intel-modal-close" data-action="close" aria-label="Close" type="button">×</button>
             <button class="intel-modal-nav intel-modal-prev" data-action="prev" aria-label="Previous file" type="button">‹</button>
             <button class="intel-modal-nav intel-modal-next" data-action="next" aria-label="Next file" type="button">›</button>
@@ -1437,7 +1437,7 @@
 
             <div class="intel-modal-footer">
                 <span class="intel-modal-progress" data-bind="progress">1 of 33</span>
-                <button class="intel-modal-extract" data-action="extract" type="button">★ EXTRACT</button>
+                <span class="intel-modal-chapter-chip" data-bind="chapterLabel"></span>
             </div>
         </div>
     </div>
