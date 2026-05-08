@@ -24,6 +24,7 @@ const HORIZONTAL_BIAS = 1.4;
 const MODAL_REGISTRY = [
     { id: 'hack-minigame-overlay', block: true },
     { id: 'sanctuary-npc-modal', closeSelector: '[data-action="npc-close"]' },
+    { id: 'intel-modal', closeSelector: '[data-action="close"]' },
     { id: 'modal-glossary', closeBtn: 'btn-glossary-close' },
     { id: 'modal-settings', closeBtn: 'btn-resume' },
     { id: 'loadout-modal', closeBtn: 'btn-loadout-close' },

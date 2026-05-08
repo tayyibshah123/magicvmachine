@@ -17797,6 +17797,329 @@ body.perf-mid .menu-glyphs span:nth-child(n+4) { display: none; }
     margin-top: 1px;
 }
 
+/* ============================================================
+   v1.9.x — Intel Codex modal. Replaces the legacy tooltip on the
+   Cipher grid with a dedicated reading experience. Glass-panel
+   card, chapter-coloured accents, format-specific body styling
+   (cipher fragments get redacted blocks, audio transcripts get
+   monospace timestamps, etc.). Edge-swipe-back closes; horizontal
+   swipe within the card navigates between unlocked entries.
+   ============================================================ */
+.intel-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 9500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    pointer-events: auto;
+}
+.intel-modal.hidden {
+    display: none;
+}
+.intel-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center,
+        rgba(8, 4, 18, 0.85) 0%,
+        rgba(2, 0, 8, 0.95) 100%);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+.intel-modal-card {
+    position: relative;
+    width: min(560px, 100%);
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 24px 22px 18px;
+    border-radius: 14px;
+    background: linear-gradient(180deg,
+        rgba(8, 6, 22, 0.96) 0%,
+        rgba(4, 2, 14, 0.98) 100%);
+    border: 1px solid rgba(255, 215, 106, 0.4);
+    box-shadow:
+        0 0 32px rgba(0, 0, 0, 0.65),
+        inset 0 0 18px rgba(255, 215, 106, 0.12);
+    color: #e7e7f0;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    line-height: 1.55;
+    transition: border-color 200ms ease, box-shadow 200ms ease;
+    animation: intelModalIn 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes intelModalIn {
+    from { transform: scale(0.94); opacity: 0; }
+    to   { transform: scale(1);    opacity: 1; }
+}
+body.reduced-motion .intel-modal-card {
+    animation: none;
+}
+
+/* Per-chapter accent colours. Border + shadow + format chip pick
+   up the chapter's accent so the player can feel which chapter
+   they're reading at a glance. */
+.intel-modal-card[data-chapter="THE_FALL"]       { border-color: rgba(255, 215, 106, 0.55); box-shadow: 0 0 32px rgba(0,0,0,0.65), inset 0 0 18px rgba(255, 215, 106, 0.18); }
+.intel-modal-card[data-chapter="THE_NEW_WORLD"]  { border-color: rgba(0, 243, 255, 0.5);    box-shadow: 0 0 32px rgba(0,0,0,0.65), inset 0 0 18px rgba(0, 243, 255, 0.16); }
+.intel-modal-card[data-chapter="THE_RESISTANCE"] { border-color: rgba(127, 255, 0, 0.45);   box-shadow: 0 0 32px rgba(0,0,0,0.65), inset 0 0 18px rgba(127, 255, 0, 0.14); }
+.intel-modal-card[data-chapter="THE_CLASSES"]    { border-color: rgba(255, 119, 170, 0.5);  box-shadow: 0 0 32px rgba(0,0,0,0.65), inset 0 0 18px rgba(255, 119, 170, 0.16); }
+.intel-modal-card[data-chapter="THE_TRUTH"]      { border-color: rgba(255, 215, 0, 0.6);    box-shadow: 0 0 36px rgba(255, 215, 0, 0.25), inset 0 0 22px rgba(255, 215, 0, 0.2); }
+.intel-modal-card[data-chapter="HIDDEN"]         { border-color: rgba(255, 255, 255, 0.7);  box-shadow: 0 0 32px rgba(255, 255, 255, 0.18), inset 0 0 22px rgba(255, 255, 255, 0.1); }
+
+/* Top-right close, top-left/right prev/next nav. Buttons sit on
+   top of the body so they stay visible while the body scrolls. */
+.intel-modal-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 32px; height: 32px;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 160ms ease, color 160ms ease;
+}
+.intel-modal-close:hover,
+.intel-modal-close:focus-visible {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+.intel-modal-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px; height: 56px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(0, 0, 0, 0.4);
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 160ms ease, color 160ms ease, opacity 160ms ease;
+    z-index: 2;
+}
+.intel-modal-prev { left: -2px; }
+.intel-modal-next { right: -2px; }
+.intel-modal-nav:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+}
+.intel-modal-nav:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+}
+
+/* Header rows. File number, decryption state, classification meta. */
+.intel-modal-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'Audiowide', 'Orbitron', sans-serif;
+    font-size: 0.82rem;
+    letter-spacing: 0.12em;
+    margin-bottom: 6px;
+    color: rgba(255, 215, 106, 0.85);
+}
+.intel-modal-card[data-chapter="THE_NEW_WORLD"]  .intel-modal-meta { color: rgba(0, 243, 255, 0.85); }
+.intel-modal-card[data-chapter="THE_RESISTANCE"] .intel-modal-meta { color: rgba(127, 255, 0, 0.85); }
+.intel-modal-card[data-chapter="THE_CLASSES"]    .intel-modal-meta { color: rgba(255, 119, 170, 0.85); }
+.intel-modal-card[data-chapter="THE_TRUTH"]      .intel-modal-meta { color: rgba(255, 215, 0, 0.95); }
+.intel-modal-card[data-chapter="HIDDEN"]         .intel-modal-meta { color: rgba(255, 255, 255, 0.95); }
+.intel-modal-state {
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    opacity: 0.7;
+}
+.intel-modal-classification {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: baseline;
+    margin-bottom: 14px;
+    font-family: 'Audiowide', 'Orbitron', sans-serif;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.55);
+}
+.intel-modal-classification .im-dot { opacity: 0.4; }
+.intel-modal-classification .im-format { color: rgba(255, 255, 255, 0.78); }
+
+/* Title and pull-quote. The pull-quote is the original 1-line
+   epigram, framed as a recovered fragment that the body expands. */
+.intel-modal-title {
+    font-family: 'Orbitron', 'Audiowide', sans-serif;
+    font-size: clamp(1.4rem, 5vw, 1.85rem);
+    font-weight: 700;
+    color: #fff;
+    margin: 0 0 14px;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+}
+.intel-modal-quote {
+    margin: 0 0 18px;
+    padding: 10px 14px;
+    border-left: 3px solid rgba(255, 215, 106, 0.5);
+    background: rgba(0, 0, 0, 0.3);
+    color: rgba(255, 255, 255, 0.78);
+    font-style: italic;
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+.intel-modal-card[data-chapter="THE_NEW_WORLD"]  .intel-modal-quote { border-left-color: rgba(0, 243, 255, 0.55); }
+.intel-modal-card[data-chapter="THE_RESISTANCE"] .intel-modal-quote { border-left-color: rgba(127, 255, 0, 0.55); }
+.intel-modal-card[data-chapter="THE_CLASSES"]    .intel-modal-quote { border-left-color: rgba(255, 119, 170, 0.55); }
+.intel-modal-card[data-chapter="THE_TRUTH"]      .intel-modal-quote { border-left-color: rgba(255, 215, 0, 0.65); }
+.intel-modal-card[data-chapter="HIDDEN"]         .intel-modal-quote { border-left-color: rgba(255, 255, 255, 0.65); }
+
+/* Body. Format-specific styling lives below. */
+.intel-modal-body {
+    font-size: 0.95rem;
+    line-height: 1.65;
+    color: rgba(232, 232, 240, 0.95);
+}
+.intel-modal-body p {
+    margin: 0 0 12px;
+}
+.intel-modal-body p:last-child {
+    margin-bottom: 0;
+}
+.intel-body-pending {
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+}
+
+/* Cipher fragment: black redaction blocks. Width auto-sized off
+   the data-lines attribute when present. */
+.intel-redacted {
+    display: inline-block;
+    background: #000;
+    color: transparent;
+    user-select: none;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 2px;
+    height: 1em;
+    width: 6em;
+    margin: 0 2px;
+    vertical-align: middle;
+}
+.intel-redacted[data-lines="2"] { width: 12em; }
+.intel-redacted[data-lines="3"] { width: 18em; }
+.intel-body-cipher_fragment {
+    font-family: 'Source Code Pro', 'Courier New', monospace;
+    font-size: 0.88rem;
+}
+
+/* Audio transcript: monospace, timestamps in cyan, speakers
+   bolded, environment descriptors in dim italic. */
+.intel-body-audio_transcript {
+    font-family: 'Source Code Pro', 'Courier New', monospace;
+    font-size: 0.86rem;
+    line-height: 1.7;
+}
+.intel-audio-line {
+    margin: 0 0 6px;
+    padding-left: 0;
+}
+.intel-audio-ts {
+    color: #00f3ff;
+    margin-right: 4px;
+}
+.intel-audio-speaker {
+    color: rgba(255, 215, 106, 0.95);
+    font-weight: 700;
+    margin-right: 6px;
+}
+.intel-audio-env {
+    color: rgba(255, 255, 255, 0.5);
+    font-style: italic;
+    font-size: 0.85em;
+}
+
+/* Schematic: technical, monospace, with a hint of grid. */
+.intel-body-schematic {
+    font-family: 'Source Code Pro', 'Courier New', monospace;
+    font-size: 0.88rem;
+    color: rgba(0, 243, 255, 0.92);
+    background: linear-gradient(180deg, rgba(0, 243, 255, 0.04), rgba(0, 0, 0, 0));
+    padding: 10px 12px;
+    border-left: 2px solid rgba(0, 243, 255, 0.35);
+    border-radius: 4px;
+}
+
+/* Manifesto: slightly heavier weight, urgent rhythm. */
+.intel-body-manifesto {
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.96);
+}
+.intel-body-manifesto p {
+    margin-bottom: 14px;
+}
+
+/* Personal log: indented first line, slightly intimate spacing. */
+.intel-body-personal_log p {
+    text-indent: 1.2em;
+}
+.intel-body-personal_log p:first-child {
+    text-indent: 0;
+}
+
+/* Footer. Progress + extract button. */
+.intel-modal-footer {
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'Audiowide', 'Orbitron', sans-serif;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    color: rgba(255, 255, 255, 0.55);
+}
+.intel-modal-extract {
+    background: transparent;
+    color: rgba(255, 215, 106, 0.85);
+    border: 1px solid rgba(255, 215, 106, 0.35);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: inherit;
+    letter-spacing: inherit;
+    transition: background 160ms ease, color 160ms ease;
+}
+.intel-modal-extract:hover,
+.intel-modal-extract:focus-visible {
+    background: rgba(255, 215, 106, 0.12);
+    color: #fff;
+}
+
+/* Unlock-popup READ FULL button. Sits beside CONTINUE on the
+   first-decrypt celebration card so the player can dive straight
+   into the long-form body. */
+.lore-unlock-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+}
+.lore-unlock-actions .btn {
+    flex: 1 1 auto;
+}
+.lore-unlock-readfull {
+    background: transparent;
+    color: rgba(255, 215, 106, 0.9);
+    border: 1px solid rgba(255, 215, 106, 0.5);
+}
+.lore-unlock-readfull:hover,
+.lore-unlock-readfull:focus-visible {
+    background: rgba(255, 215, 106, 0.14);
+    color: #fff;
+}
+
 /* v1.9.0 — THE ARCHIVIST Time Control overlay. Big neon countdown
    centered on the playfield while phase >= 2 is active. Pointer
    events disabled so it never intercepts input — players can still

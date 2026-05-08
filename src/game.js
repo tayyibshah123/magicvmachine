@@ -6,6 +6,7 @@ import { Minion } from './entities/minion.js';
 import { Enemy } from './entities/enemy.js';
 import { ParticleSys } from './effects/particles.js';
 import { TooltipMgr } from './ui/tooltip.js';
+import { IntelModal } from './ui/intel-modal.js';
 import { getEventArt, getOptionIcon } from './ui/event-art.js';
 import { getClassEmblemSvg } from './ui/class-emblems.js';
 import { CombatMetrics } from './services/combat-metrics.js';
@@ -513,6 +514,7 @@ const Game = {
 
         this.bindEvents();
         TooltipMgr.init();
+        IntelModal.init();
         ClassAbility.init(this);
         preloadCombatIcons(['#ffffff', '#00ff99', '#ff3355', '#ffd76a', '#bc13fe', '#00f3ff']);
         this.loadSettings();
@@ -12507,9 +12509,12 @@ triggerSystemCrash() {
                 if (unlocked.includes(i)) tile.classList.add('unlocked');
                 tile.textContent = (i + 1).toString();
                 if (unlocked.includes(i)) {
-                    tile.onclick = (e) => {
+                    // v1.9.x — open the dedicated Intel modal instead
+                    // of the legacy tooltip. File ids are 1-based,
+                    // grid index is 0-based, so id = i + 1.
+                    tile.onclick = () => {
                         AudioMgr.playSound && AudioMgr.playSound('click');
-                        TooltipMgr.show(LORE_DATABASE[i], e.clientX, e.clientY);
+                        IntelModal.open(i + 1);
                     };
                 }
                 grid.appendChild(tile);
@@ -13135,7 +13140,10 @@ updateHexBreach(dt) {
                     <span class="lore-unlock-spark-num">+${sparks || 0}</span>
                     <span class="lore-unlock-spark-label">SPARKS</span>
                 </div>
-                <button id="btn-lore-unlock-continue" class="btn primary lore-unlock-continue">CONTINUE</button>
+                <div class="lore-unlock-actions">
+                    <button id="btn-lore-unlock-readfull" class="btn lore-unlock-readfull" type="button">READ FULL</button>
+                    <button id="btn-lore-unlock-continue" class="btn primary lore-unlock-continue" type="button">CONTINUE</button>
+                </div>
             </div>
         `;
         document.body.appendChild(overlay);
@@ -13149,6 +13157,23 @@ updateHexBreach(dt) {
         };
         const btn = document.getElementById('btn-lore-unlock-continue');
         if (btn) btn.onclick = dismiss;
+        // v1.9.x — READ FULL routes the player straight into the new
+        // Intel modal so the long-form body is one tap away from the
+        // unlock celebration. Closes the popup first so the modal
+        // isn't stacked on a fading overlay.
+        const readBtn = document.getElementById('btn-lore-unlock-readfull');
+        if (readBtn) {
+            readBtn.onclick = () => {
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                this.changeState(STATE.INTEL);
+                // Defer one tick so the Intel screen mounts before the
+                // modal opens on top of it.
+                setTimeout(() => {
+                    const fileId = (typeof index === 'number' ? index : 0) + 1;
+                    IntelModal.open(fileId);
+                }, 50);
+            };
+        }
         // Tap-anywhere fallback so a player can dismiss the popup
         // without aiming for the small button on a phone.
         overlay.addEventListener('click', (e) => { if (e.target === overlay) dismiss(); });

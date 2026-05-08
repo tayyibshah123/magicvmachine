@@ -451,7 +451,7 @@
                     <!-- FOOTER — streak chip + version stamp. -->
                     <div class="db-footer">
                         <div id="login-streak" class="login-streak db-streak hidden"></div>
-                        <span class="db-version">ALPHA V1.9.1</span>
+                        <span class="db-version">ALPHA V1.9.2</span>
                     </div>
                     </div><!-- /db-bottom-block -->
                 </div>
@@ -1400,6 +1400,44 @@
             <div class="sanctuary-npc-body"></div>
             <div class="sanctuary-npc-actions">
                 <button class="btn secondary" data-action="npc-close">CLOSE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Intel Codex modal. Replaces the legacy tooltip on the Cipher
+         grid with a full read experience. Lives at body top-level so
+         it overlays any screen. Renders the structured entries from
+         src/data/intel-codex.js with format-specific styling. -->
+    <div id="intel-modal" class="modal intel-modal hidden" aria-hidden="true">
+        <div class="intel-modal-backdrop" data-action="close"></div>
+        <div class="intel-modal-card glass-panel" role="dialog" aria-labelledby="intel-modal-title" aria-describedby="intel-modal-body">
+            <button class="intel-modal-close" data-action="close" aria-label="Close" type="button">×</button>
+            <button class="intel-modal-nav intel-modal-prev" data-action="prev" aria-label="Previous file" type="button">‹</button>
+            <button class="intel-modal-nav intel-modal-next" data-action="next" aria-label="Next file" type="button">›</button>
+
+            <div class="intel-modal-meta">
+                <span class="intel-modal-filenum" data-bind="filenum">// FILE 00</span>
+                <span class="intel-modal-state" data-bind="state">DECRYPTED</span>
+            </div>
+            <div class="intel-modal-classification">
+                <span class="im-tag" data-bind="classification">PROTOCOL-000</span>
+                <span class="im-dot">•</span>
+                <span class="im-tag" data-bind="decryptDate">00.00.0000</span>
+                <span class="im-dot">•</span>
+                <span class="im-tag im-format" data-bind="format">Field Report</span>
+            </div>
+
+            <h2 id="intel-modal-title" class="intel-modal-title" data-bind="title">Title</h2>
+
+            <blockquote class="intel-modal-quote" data-bind="legacyEpigram">Quote</blockquote>
+
+            <div id="intel-modal-body" class="intel-modal-body" data-bind="body">
+                <p class="intel-body-pending">Body pending. Decryption ongoing.</p>
+            </div>
+
+            <div class="intel-modal-footer">
+                <span class="intel-modal-progress" data-bind="progress">1 of 33</span>
+                <button class="intel-modal-extract" data-action="extract" type="button">★ EXTRACT</button>
             </div>
         </div>
     </div>
