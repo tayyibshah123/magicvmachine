@@ -1290,6 +1290,16 @@ class Entity {
             try { AudioMgr.playSound(id === 'bleed' || id === 'poison' ? 'click' : 'hex_barrier'); } catch (_) {}
         }
 
+        // Reality Shift: when the debuff lands on the player, add a
+        // body-level class that drives the full-viewport magenta
+        // overlay + banner so the inversion state can never be
+        // missed. The class is removed in updateEffects when the
+        // effect's duration ticks to 0 (filtered out).
+        if (Player && this instanceof Player && id === 'reality_shift'
+            && typeof document !== 'undefined' && document.body) {
+            document.body.classList.add('reality-shift-active');
+        }
+
         // If this debuff changes outgoing damage (weak) or healing (constrict)
         // and it landed on the active enemy, re-bake nextIntents so the
         // already-queued attack reflects the reduced value in the UI AND when
@@ -1370,6 +1380,18 @@ class Entity {
             }
         }
         this.effects = this.effects.filter(e => e.duration > 0);
+        // Reality Shift visual: when the player no longer carries
+        // the reality_shift effect (just expired in the filter
+        // above, or never had it), strip the body class so the
+        // full-viewport magenta overlay clears. Only acts on the
+        // Player so an enemy effect doesn't toggle the class.
+        if (Player && this instanceof Player
+            && typeof document !== 'undefined' && document.body) {
+            const stillActive = this.effects.some(e => e.id === 'reality_shift');
+            if (!stillActive) {
+                document.body.classList.remove('reality-shift-active');
+            }
+        }
     }
 
     hasEffect(id) {

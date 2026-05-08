@@ -18616,3 +18616,73 @@ body.reduced-motion .intel-unread-badge {
 body.reduced-motion .turn-timer-overlay {
     animation: none;
 }
+
+/* ===========================================================
+   Reality Shift active indicator. Triggers when the player
+   carries the `reality_shift` debuff (Tesseract Prime phase 2+
+   intent). Body class is added in entity.js addEffect() and
+   removed in updateEffects() once the effect filters out.
+
+   Layered visual:
+     ::before  full-viewport magenta radial overlay, mix-blend
+               screen so the canvas tints rather than darkens.
+               Pulses 1.6s.
+     ::after   centred top banner reading REALITY SHIFT ACTIVE
+               with a neon glow.
+     #gameCanvas filter: subtle hue rotate + saturation lift on
+               high/mid tier so the canvas itself shifts. Skipped
+               on body.perf-low to keep the GPU clear.
+
+   Reduced-motion strips the pulse and banner blink but keeps
+   the overlay tint visible (the colour shift is gameplay
+   information, not decoration).
+   =========================================================== */
+body.reality-shift-active::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9000;
+    background: radial-gradient(ellipse at center,
+        rgba(188, 19, 254, 0.10) 0%,
+        rgba(188, 19, 254, 0.32) 55%,
+        rgba(255, 0, 170, 0.55) 100%);
+    mix-blend-mode: screen;
+    animation: realityShiftPulse 1.6s ease-in-out infinite;
+}
+body.reality-shift-active::after {
+    content: 'REALITY SHIFT ACTIVE';
+    position: fixed;
+    top: max(14px, env(safe-area-inset-top, 14px));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9001;
+    pointer-events: none;
+    font-family: 'Orbitron', 'Audiowide', sans-serif;
+    font-size: 0.95rem;
+    letter-spacing: 0.32em;
+    color: #ffaaff;
+    text-shadow:
+        0 0 12px rgba(188, 19, 254, 0.95),
+        0 0 28px rgba(255, 0, 170, 0.7);
+    animation: realityShiftBanner 1.2s ease-in-out infinite;
+}
+@keyframes realityShiftPulse {
+    0%, 100% { opacity: 0.78; }
+    50%      { opacity: 1; }
+}
+@keyframes realityShiftBanner {
+    0%, 100% { opacity: 0.7; transform: translateX(-50%) scale(1); }
+    50%      { opacity: 1;   transform: translateX(-50%) scale(1.04); }
+}
+/* Canvas hue shift. Cyan/magenta crosstalk that makes the whole
+   playfield read as inverted reality. Skipped under perf-low so
+   the GPU isn't asked to apply a fullscreen filter every frame
+   on weaker hardware. */
+body.reality-shift-active:not(.perf-low) #gameCanvas {
+    filter: hue-rotate(35deg) saturate(1.15);
+}
+body.reduced-motion.reality-shift-active::before,
+body.reduced-motion.reality-shift-active::after {
+    animation: none;
+}
