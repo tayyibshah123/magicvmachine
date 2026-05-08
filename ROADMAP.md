@@ -72,8 +72,10 @@ Carryover from AUDIT §6, SESSION_NOTES.
 
 - Achievement progress N/M for trackable counters
   (KILLS_50/250/1000, STREAK_*, DAILY_*)
-- Module Fusion celebration moment. first-fusion banner + sting +
-  shockwave; suppressed on repeats
+- ✅ Module Fusion celebration moment. first-fusion banner + sting +
+  shockwave; suppressed on repeats (shipped: layered grid_fracture +
+  upgrade audio, stacked pink/gold shockwaves, screen flash, boss-
+  variant banner; mvm_first_fusion_picked localStorage flag)
 - Visual regression checklist. Settings modal padding, glossary tab
   wrap, hint-toast width, btn spin-loader positioning
 - Tablet/iPad portrait pass. `@media (min-width: 768px) and
