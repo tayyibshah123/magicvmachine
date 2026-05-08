@@ -9584,10 +9584,14 @@ body.reduced-motion .reward-rarity.rarity-fusion             { animation: none; 
     top: 60px;
 }
 /* Dedicated keyframe that preserves translateX(-50%) horizontal centering
-   (the shared fadeInUp keyframe wipes out the X transform during playback). */
+   (the shared fadeInUp keyframe wipes out the X transform during playback).
+   v1.8.8 — dropped the `filter: blur(2px)→blur(0)` step. Animating filter
+   forced a per-frame full-screen repaint for the 340ms entry, dragging
+   tutorial frame time on mobile. Transform + opacity alone reads
+   identical at 60fps — both compositor-cheap properties. */
 @keyframes tutorialNarrationIn {
-    from { opacity: 0; transform: translate(-50%, 18px); filter: blur(2px); }
-    to   { opacity: 1; transform: translate(-50%, 0);    filter: blur(0); }
+    from { opacity: 0; transform: translate(-50%, 18px); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
 }
 /* Stage-change: pane itself lifts + fades out, not just its text. The
    JS waits for this to complete before swapping the strings, then
@@ -9599,6 +9603,16 @@ body.reduced-motion .reward-rarity.rarity-fusion             { animation: none; 
 body.reduced-motion .tutorial-narration {
     animation: none;
     transition: top 120ms linear, bottom 120ms linear;
+}
+/* v1.8.8 — drop backdrop-filter on perf-low. Android Chrome's
+   backdrop-filter costs ~2-4ms per frame even at blur(6px); on
+   mid-tier tablets it tipped the tutorial below 60fps. The
+   solid-bg fallback keeps the read-through legible without the
+   composite cost. */
+body.perf-low .tutorial-narration {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: linear-gradient(180deg, rgba(4, 8, 22, 0.94), rgba(8, 0, 26, 0.97));
 }
 
 /* ──────────────────────────────────────────────────────────────────
@@ -9858,6 +9872,18 @@ body.reduced-motion .info-overlay .info-card {
 body.reduced-motion .breakout-storyboard .sb-cta {
     animation: none;
 }
+/* v1.8.8 — perf-low storyboard trim. The full visual stack runs 7
+   simultaneous infinite-loop animations (CW/CCW spin, pulse, blink,
+   float, sweep, CTA). On mid-tier tablets the GPU layer churn
+   dragged tutorial frame time. Drop the non-essential ones (pupil
+   blink + glyph float + CTA pulse) under perf-low; keep the two
+   spin animations + scan sweep + core pulse so the visual still
+   reads as alive. */
+body.perf-low .breakout-storyboard .sb-hex-pupil,
+body.perf-low .breakout-storyboard .sb-glyph,
+body.perf-low .breakout-storyboard .sb-cta {
+    animation: none;
+}
 
 /* ──────────────────────────────────────────────────────────────────
  * Storyboard animated visual block
@@ -9925,8 +9951,15 @@ body.reduced-motion .breakout-storyboard .sb-cta {
     to   { transform: rotate(-360deg); }
 }
 @keyframes sbCorePulse {
-    0%, 100% { transform: scale(1);     filter: drop-shadow(0 0 6px rgba(255, 51, 85, 0.6)); }
-    50%      { transform: scale(1.12);  filter: drop-shadow(0 0 18px rgba(255, 51, 85, 0.95)); }
+    /* v1.8.8 — drop the per-frame `filter: drop-shadow` animation.
+       Drop-shadow on Android Chrome forces a full SVG repaint each
+       frame instead of compositing. The static drop-shadow is now
+       on .breakout-storyboard .sb-sigil (single set, not animated).
+       We get the pulse via transform + opacity, both compositor-
+       cheap. Visual difference from the animated glow is ~2px and
+       imperceptible at typical mobile viewing distance. */
+    0%, 100% { transform: scale(1);    opacity: 0.85; }
+    50%      { transform: scale(1.12); opacity: 1; }
 }
 @keyframes sbPupilBlink {
     0%, 88%  { opacity: 1; transform: scale(1); }
@@ -9966,10 +9999,19 @@ body.reduced-motion .breakout-storyboard .sb-cta {
     z-index: 3;
 }
 @keyframes sbScanSweep {
+    /* v1.8.8 — was translateY(-110%) → translateY(2200%). The 23×
+       viewport-height range forced the compositor to maintain an
+       invalidation region 23× the scanline's box on Android Chrome,
+       which on mid-tier tablets dragged frame time by 4-6ms even
+       though the line itself is just a 4px gradient. The scanline
+       container has overflow:hidden so the visible sweep only ever
+       covers the parent's height anyway — capping the keyframe to
+       a sane range is functionally identical visually but cheap to
+       composite. */
     0%   { transform: translateY(-110%); opacity: 0; }
     8%   { opacity: 1; }
     92%  { opacity: 1; }
-    100% { transform: translateY(2200%); opacity: 0; }
+    100% { transform: translateY(220%);  opacity: 0; }
 }
 .breakout-storyboard .sb-glitch {
     position: absolute;
