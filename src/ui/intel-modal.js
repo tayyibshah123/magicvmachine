@@ -207,7 +207,7 @@ function renderEntry(id) {
     if (!entry || !card) return false;
     const fileNum = String(entry.id).padStart(2, '0');
     setText('[data-bind="filenum"]', '// FILE ' + fileNum);
-    setText('[data-bind="state"]', unlockedSet.has(entry.id) ? 'DECRYPTED' : 'LOCKED');
+    setText('[data-bind="state"]', unlockedSet.has(entry.id) ? '✓ DECRYPTED' : '⌧ LOCKED');
     setText('[data-bind="classification"]', entry.classification);
     setText('[data-bind="decryptDate"]', entry.decryptDate);
     const formatLabel = (INTEL_FORMATS[entry.format] && INTEL_FORMATS[entry.format].label) || entry.format;

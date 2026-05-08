@@ -17864,6 +17864,74 @@ body.reduced-motion .intel-modal-card {
     animation: none;
 }
 
+/* D2 chapter accent top bar. A 3px coloured strip pinned to the top
+   edge of the card. Reads as the page-edge of a recovered file with
+   the chapter colour acting as a label tag. The bar uses currentColor
+   so the per-chapter overrides below set it through the parent. */
+.intel-modal-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 14px;
+    right: 14px;
+    height: 3px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        currentColor 12%,
+        currentColor 88%,
+        transparent 100%);
+    color: rgba(255, 215, 106, 0.85);
+    border-radius: 0 0 2px 2px;
+    pointer-events: none;
+    z-index: 1;
+    box-shadow: 0 0 12px currentColor;
+    animation: intelAccentPulse 4s ease-in-out infinite;
+}
+@keyframes intelAccentPulse {
+    0%, 100% { opacity: 0.85; }
+    50%      { opacity: 0.55; }
+}
+.intel-modal-card[data-chapter="THE_NEW_WORLD"]::before  { color: rgba(0, 243, 255, 0.85); }
+.intel-modal-card[data-chapter="THE_RESISTANCE"]::before { color: rgba(127, 255, 0, 0.85); }
+.intel-modal-card[data-chapter="THE_CLASSES"]::before    { color: rgba(255, 119, 170, 0.85); }
+.intel-modal-card[data-chapter="THE_TRUTH"]::before      { color: rgba(255, 215, 0, 0.95); }
+.intel-modal-card[data-chapter="HIDDEN"]::before         { color: rgba(255, 255, 255, 0.95); }
+body.reduced-motion .intel-modal-card::before {
+    animation: none;
+    opacity: 0.7;
+}
+
+/* D1 CRT scanline overlay on the body. Faint horizontal stripes that
+   drift slowly downward, layered with mix-blend-mode: screen so the
+   pattern reads as light artefacts rather than obstructive bars. The
+   pattern matches the intro slate vocabulary so the codex reads as
+   part of the same world. */
+.intel-modal-body { position: relative; }
+.intel-modal-body::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    background-image: repeating-linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.03) 0px,
+        rgba(255, 255, 255, 0.03) 1px,
+        transparent 1px,
+        transparent 3px
+    );
+    mix-blend-mode: screen;
+    pointer-events: none;
+    animation: intelScanlineDrift 6s linear infinite;
+    z-index: 0;
+}
+.intel-modal-body > * { position: relative; z-index: 1; }
+@keyframes intelScanlineDrift {
+    from { background-position: 0 0; }
+    to   { background-position: 0 12px; }
+}
+body.reduced-motion .intel-modal-body::after {
+    animation: none;
+}
+
 /* Per-chapter accent colours. Border + shadow + format chip pick
    up the chapter's accent so the player can feel which chapter
    they're reading at a glance. */
@@ -17921,26 +17989,54 @@ body.reduced-motion .intel-modal-card {
     cursor: not-allowed;
 }
 
-/* Header rows. File number, decryption state, classification meta. */
+/* Header line. Reads as a single terminal output: file number,
+   double-colon separator, decryption state with a check glyph, and
+   a blinking cursor pinned to the end so the line feels alive. */
 .intel-modal-meta {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
     font-family: 'Audiowide', 'Orbitron', sans-serif;
     font-size: 0.82rem;
     letter-spacing: 0.12em;
-    margin-bottom: 6px;
+    margin: 4px 0 6px;
     color: rgba(255, 215, 106, 0.85);
 }
+.intel-modal-meta::before {
+    content: '> ';
+    opacity: 0.55;
+}
+.intel-modal-meta::after {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 1.05em;
+    background: currentColor;
+    margin-left: 2px;
+    vertical-align: middle;
+    animation: intelHeaderCursor 1.05s steps(2, end) infinite;
+}
+@keyframes intelHeaderCursor {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+body.reduced-motion .intel-modal-meta::after { animation: none; }
 .intel-modal-card[data-chapter="THE_NEW_WORLD"]  .intel-modal-meta { color: rgba(0, 243, 255, 0.85); }
 .intel-modal-card[data-chapter="THE_RESISTANCE"] .intel-modal-meta { color: rgba(127, 255, 0, 0.85); }
 .intel-modal-card[data-chapter="THE_CLASSES"]    .intel-modal-meta { color: rgba(255, 119, 170, 0.85); }
 .intel-modal-card[data-chapter="THE_TRUTH"]      .intel-modal-meta { color: rgba(255, 215, 0, 0.95); }
 .intel-modal-card[data-chapter="HIDDEN"]         .intel-modal-meta { color: rgba(255, 255, 255, 0.95); }
+.intel-modal-filenum::after {
+    content: ' ::';
+    opacity: 0.45;
+    margin-left: 4px;
+}
 .intel-modal-state {
-    font-size: 0.7rem;
+    font-size: 0.78rem;
     letter-spacing: 0.18em;
-    opacity: 0.7;
+    opacity: 0.85;
 }
 .intel-modal-classification {
     display: flex;
@@ -17967,16 +18063,57 @@ body.reduced-motion .intel-modal-card {
     letter-spacing: 0.04em;
     line-height: 1.2;
 }
+/* Pull-quote: the original 1-line epigram as a recovered margin
+   annotation. Corner brackets flank the quote so it reads as a
+   fragment cut out of an older document. Slightly leaned (oblique)
+   font to feel hand-marked rather than typeset. */
 .intel-modal-quote {
+    position: relative;
     margin: 0 0 18px;
-    padding: 10px 14px;
+    padding: 12px 22px;
     border-left: 3px solid rgba(255, 215, 106, 0.5);
-    background: rgba(0, 0, 0, 0.3);
+    background: linear-gradient(90deg,
+        rgba(255, 215, 106, 0.08) 0%,
+        rgba(0, 0, 0, 0.18) 50%,
+        rgba(0, 0, 0, 0) 100%);
     color: rgba(255, 255, 255, 0.78);
     font-style: italic;
     font-size: 0.92rem;
     line-height: 1.5;
+    transform: skewX(-1deg);
 }
+.intel-modal-quote::before,
+.intel-modal-quote::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-color: rgba(255, 215, 106, 0.65);
+    pointer-events: none;
+}
+.intel-modal-quote::before {
+    top: 0;
+    left: 0;
+    border-top: 2px solid;
+    border-left: 2px solid;
+}
+.intel-modal-quote::after {
+    bottom: 0;
+    right: 0;
+    border-bottom: 2px solid;
+    border-right: 2px solid;
+}
+.intel-modal-card[data-chapter="THE_NEW_WORLD"]  .intel-modal-quote::before,
+.intel-modal-card[data-chapter="THE_NEW_WORLD"]  .intel-modal-quote::after  { border-color: rgba(0, 243, 255, 0.7); }
+.intel-modal-card[data-chapter="THE_RESISTANCE"] .intel-modal-quote::before,
+.intel-modal-card[data-chapter="THE_RESISTANCE"] .intel-modal-quote::after  { border-color: rgba(127, 255, 0, 0.7); }
+.intel-modal-card[data-chapter="THE_CLASSES"]    .intel-modal-quote::before,
+.intel-modal-card[data-chapter="THE_CLASSES"]    .intel-modal-quote::after  { border-color: rgba(255, 119, 170, 0.7); }
+.intel-modal-card[data-chapter="THE_TRUTH"]      .intel-modal-quote::before,
+.intel-modal-card[data-chapter="THE_TRUTH"]      .intel-modal-quote::after  { border-color: rgba(255, 215, 0, 0.85); }
+.intel-modal-card[data-chapter="HIDDEN"]         .intel-modal-quote::before,
+.intel-modal-card[data-chapter="HIDDEN"]         .intel-modal-quote::after  { border-color: rgba(255, 255, 255, 0.85); }
+body.reduced-motion .intel-modal-quote { transform: none; }
 .intel-modal-card[data-chapter="THE_NEW_WORLD"]  .intel-modal-quote { border-left-color: rgba(0, 243, 255, 0.55); }
 .intel-modal-card[data-chapter="THE_RESISTANCE"] .intel-modal-quote { border-left-color: rgba(127, 255, 0, 0.55); }
 .intel-modal-card[data-chapter="THE_CLASSES"]    .intel-modal-quote { border-left-color: rgba(255, 119, 170, 0.55); }
