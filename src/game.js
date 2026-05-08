@@ -15212,16 +15212,23 @@ async startTurn() {
                 ParticleSys.createFloatingText(this.player.x, this.player.y - 160, `TITAN ×${stacks}`, COLORS.GOLD);
             }
         }
-        // FUSION: TYRANT ENGINE (relentless × titan_module). Flat +35%
-        // outgoing damage on every hit. Relentless triple-crit moves
-        // to "every 3rd attack" (the existing rStacks branch reads
-        // hasRelic('fusion_tyrant_engine') as a stand-in for the
-        // legacy 1-stack relentless behaviour below).
+        // FUSION: TYRANT ENGINE (relentless × titan_module). +50%
+        // outgoing damage per stack (multiplicative, like Titan).
+        // Originally +35% flat, which was strictly worse than two
+        // stacked Titan Modules (1.5625x). Now 1.50x per stack so
+        // a single Tyrant beats single Titan handily, two Tyrants
+        // (2.25x) dominate any Titan stack arrangement, and the
+        // fused trade always feels like an upgrade. Relentless
+        // triple-crit moves to "every 3rd attack" (existing branch
+        // below reads hasRelic('fusion_tyrant_engine') as the
+        // stand-in for the legacy 1-stack relentless behaviour).
         if (this.player.hasRelic('fusion_tyrant_engine')) {
-            dmg = Math.floor(dmg * 1.35);
+            const tyrantStacks = this.stackCount('fusion_tyrant_engine') || 1;
+            dmg = Math.floor(dmg * Math.pow(1.5, tyrantStacks));
             if (!peek && !this._tyrantPopThisCombat) {
                 this._tyrantPopThisCombat = true;
-                ParticleSys.createFloatingText(this.player.x, this.player.y - 160, "TYRANT ×1.35", COLORS.GOLD);
+                const mult = Math.pow(1.5, tyrantStacks).toFixed(2);
+                ParticleSys.createFloatingText(this.player.x, this.player.y - 160, `TYRANT ×${mult}`, COLORS.GOLD);
             }
         }
         
@@ -16856,10 +16863,19 @@ async startTurn() {
                     if (rStacks === 1 && this.attacksThisTurn === 3) triggerRelentless = true;
                     else if (rStacks === 2 && this.attacksThisTurn === 2) triggerRelentless = true;
                     else if (rStacks >= 3 && this.attacksThisTurn === 1) triggerRelentless = true;
-                    // FUSION: TYRANT ENGINE — replaces relentless 1-stack
-                    // behaviour. 3rd attack each turn triples damage.
-                    if (this.player.hasRelic('fusion_tyrant_engine') && this.attacksThisTurn === 3) {
-                        triggerRelentless = true;
+                    // FUSION: TYRANT ENGINE — scales the triple-attack
+                    // timing with Tyrant Engine stacks (mirrors the
+                    // Relentless input's stacking semantics so a
+                    // player who fused multiple Relentless stacks
+                    // doesn't lose progression). 1 stack triples on
+                    // the 3rd attack, 2 stacks on the 2nd, 3+ on the
+                    // 1st. Combines additively with Relentless if the
+                    // player still owns base Relentless copies.
+                    if (this.player.hasRelic('fusion_tyrant_engine')) {
+                        const tStacks = this.stackCount('fusion_tyrant_engine') || 1;
+                        if (tStacks === 1 && this.attacksThisTurn === 3) triggerRelentless = true;
+                        else if (tStacks === 2 && this.attacksThisTurn === 2) triggerRelentless = true;
+                        else if (tStacks >= 3 && this.attacksThisTurn === 1) triggerRelentless = true;
                     }
 
                     if (triggerRelentless) {

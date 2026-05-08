@@ -623,7 +623,7 @@ const MODULE_FUSIONS = [
         id: 'fusion_tyrant_engine',
         ids: ['relentless', 'titan_module'],
         name: "Tyrant Engine",
-        desc: "All attacks deal +35% damage. Your 3rd attack each turn TRIPLES (was 3rd-tier Relentless).",
+        desc: "Every attack deals +50% damage and stacks on itself. Your 3rd attack each turn still triples.",
         icon: '☗',
         rarity: 'red'
     },
