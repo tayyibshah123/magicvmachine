@@ -2471,14 +2471,15 @@ body[data-transition-dir] .screen.active {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(0, 0, 0, 0.82);
     z-index: 2000;
-    /* Anchor the modal to the top ~25% of the container so title + tabs
-       stay in view; body scrolls inside. Was center-aligned, which caused
-       long tabs (Display/Gameplay) to push the top title off-screen
-       upward and the RESUME/ABORT buttons off-screen downward. */
+    /* Anchor the modal near the top so title + tabs stay in view on tall
+       portrait screens. Asymmetric pad-top + pad-bottom replaced with a
+       clamped value so the modal centres reasonably on shorter viewports
+       (small phones in landscape) without pushing the close buttons off
+       the bottom on tablets in portrait. */
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    padding-top: 25%;
+    padding: clamp(24px, 8%, 90px) 0 clamp(24px, 4%, 40px);
     box-sizing: border-box;
     pointer-events: auto;
     backdrop-filter: blur(6px);
@@ -2978,11 +2979,15 @@ h2 {
 .btn.ghost:hover { color: var(--neon-blue); text-shadow: 0 0 10px var(--neon-blue); }
 
 /* Loading state — prevents double-click, shows activity */
-.btn.loading { pointer-events: none; opacity: 0.6; }
+.btn.loading { pointer-events: none; opacity: 0.6; position: relative; }
 .btn.loading::after {
     content: '';
-    position: absolute; right: 16px; top: 50%;
-    width: 12px; height: 12px; margin-top: -6px;
+    /* Was right-anchored which placed the spinner outside narrow
+       buttons on small phones. Centre via translate so the spinner
+       sits cleanly inside any button width. */
+    position: absolute; left: 50%; top: 50%;
+    width: 14px; height: 14px;
+    transform: translate(-50%, -50%);
     border: 2px solid rgba(255,255,255,0.3);
     border-top-color: #fff;
     border-radius: 50%;
@@ -3882,6 +3887,11 @@ body.reduced-motion .victory-tally * {
     border-bottom: 2px solid transparent;
     font-family: var(--font-cyber);
     font-weight: 700;
+    /* Tab labels never wrap onto multiple lines — the parent strip
+       scrolls horizontally instead. Without this an over-long label
+       like "STATUS EFFECTS" splits at the space on a narrow screen
+       and the underline border sits behind the second line. */
+    white-space: nowrap;
     /* Scaled token so glossary tab labels respect the text-size
        slider. Kept at xs since the tabs are dense + multiple chips
        fit horizontally — bumping past sm risks horizontal overflow. */
@@ -10209,7 +10219,9 @@ body.tutorial-auto-run #tutorial-overlay { background: transparent !important; }
     left: 50%;
     top: 14px;
     transform: translateX(-50%) translateY(-16px);
-    max-width: 88%;
+    /* Was a flat 88% which on a 700px+ tablet stretched the toast
+       wider than the readable line-length. Cap at a sensible 480px. */
+    max-width: min(88%, 480px);
     padding: 10px 16px;
     background: var(--surface-2);
     border: 1px solid var(--neon-blue);

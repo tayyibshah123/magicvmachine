@@ -23686,7 +23686,11 @@ drawEffects() {
                 tact_primed: '#00f3ff',   // Tactician primed attack (+5 next strike)
                 aegis_primed:'#ffffff',   // Sentinel block primed
                 // Incoming damage multipliers (Reckless Charge self-debuff etc.)
-                exposed:     '#ff3355'
+                exposed:     '#ff3355',
+                // Tesseract Prime — heal-to-damage inversion. Magenta to
+                // match the body.reality-shift-active vignette already
+                // shipped in v1.9.19.
+                reality_shift: '#bc13fe'
             };
 
             // Indexed for-loop — closure churn × N entities × 60 fps was
