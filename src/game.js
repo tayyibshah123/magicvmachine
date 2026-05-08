@@ -1177,12 +1177,25 @@ const Game = {
             if (typeof Share !== 'undefined' && Share.shareRun) Share.shareRun(this);
         });
         attachButtonEvent('btn-victory-sanctuary', () => {
-            this.renderMeta();
-            this.changeState(STATE.META);
-            const screen = document.getElementById('screen-meta');
-            const btn = document.getElementById('btn-view-sanctuary');
-            screen.classList.add('viewing-mode');
-            btn.innerText = "🔙 RESTORE UI";
+            const goSanctuary = () => {
+                this.renderMeta();
+                this.changeState(STATE.META);
+                const screen = document.getElementById('screen-meta');
+                const btn = document.getElementById('btn-view-sanctuary');
+                screen.classList.add('viewing-mode');
+                btn.innerText = "🔙 RESTORE UI";
+            };
+            this._drainFinaleLorePopupQueue(goSanctuary);
+        });
+        attachButtonEvent('btn-victory-endless', () => {
+            // CONTINUE ENDLESS from the victory recap card. The run
+            // currency was wiped earlier in the Tesseract win branch
+            // assuming the run was ending; restore it before handing
+            // off to the endless escalator. The lore popup queue
+            // stays — it drains the next time the player visits the
+            // Sanctuary, so the celebration isn't silently lost.
+            this.techFragments = this._lastRunFinalFrags || 0;
+            this._enterEndlessSector();
         });
 
         const relicBtn = d.getElementById('btn-relics');
@@ -13229,7 +13242,7 @@ updateHexBreach(dt) {
     // text verbatim above the spark payout. Tap CONTINUE (or wait 8s)
     // to dismiss and return to Intel.
     _showLoreUnlockPopup(opts) {
-        const { index, text, sparks } = opts || {};
+        const { index, text, sparks, _onDismiss } = opts || {};
         // Single-instance — strip any leftover popup before mounting.
         const prior = document.getElementById('lore-unlock-popup');
         if (prior) prior.remove();
@@ -13261,7 +13274,11 @@ updateHexBreach(dt) {
             overlay.classList.add('lore-unlock-fade-out');
             setTimeout(() => {
                 if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-                this.changeState(STATE.INTEL);
+                if (typeof _onDismiss === 'function') {
+                    try { _onDismiss(); } catch (_) {}
+                } else {
+                    this.changeState(STATE.INTEL);
+                }
             }, 280);
         };
         const btn = document.getElementById('btn-lore-unlock-continue');
@@ -13269,25 +13286,55 @@ updateHexBreach(dt) {
         // v1.9.x — READ FULL routes the player straight into the new
         // Intel modal so the long-form body is one tap away from the
         // unlock celebration. Closes the popup first so the modal
-        // isn't stacked on a fading overlay.
+        // isn't stacked on a fading overlay. When _onDismiss is set
+        // (queued finale popup) hide the button instead — the player
+        // is on the victory card and can revisit Intel from Sanctuary.
         const readBtn = document.getElementById('btn-lore-unlock-readfull');
         if (readBtn) {
-            readBtn.onclick = () => {
-                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-                this.changeState(STATE.INTEL);
-                // Defer one tick so the Intel screen mounts before the
-                // modal opens on top of it.
-                setTimeout(() => {
-                    const fileId = (typeof index === 'number' ? index : 0) + 1;
-                    IntelModal.open(fileId);
-                }, 50);
-            };
+            if (typeof _onDismiss === 'function') {
+                readBtn.style.display = 'none';
+            } else {
+                readBtn.onclick = () => {
+                    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                    this.changeState(STATE.INTEL);
+                    setTimeout(() => {
+                        const fileId = (typeof index === 'number' ? index : 0) + 1;
+                        IntelModal.open(fileId);
+                    }, 50);
+                };
+            }
         }
         // Tap-anywhere fallback so a player can dismiss the popup
         // without aiming for the small button on a phone.
         overlay.addEventListener('click', (e) => { if (e.target === overlay) dismiss(); });
         // Auto-dismiss safety net.
         setTimeout(() => { if (overlay.parentNode) dismiss(); }, 12000);
+    },
+
+    // Queue a lore-unlock popup so it surfaces after the Tesseract
+    // Prime victory cinematic + storyboard have played, instead of
+    // overlaying them. Drained when the player taps RETURN TO
+    // SANCTUARY on the victory recap.
+    _queueFinaleLorePopup(opts) {
+        if (!Array.isArray(this._finaleLorePopupQueue)) this._finaleLorePopupQueue = [];
+        this._finaleLorePopupQueue.push(opts);
+    },
+
+    // Drain the finale lore popup queue serially, calling onComplete
+    // after the last popup dismisses (or immediately if the queue is
+    // empty). Each popup uses the _onDismiss callback to chain into
+    // the next, so the player taps through them one by one.
+    _drainFinaleLorePopupQueue(onComplete) {
+        const done = (typeof onComplete === 'function') ? onComplete : () => {};
+        if (!Array.isArray(this._finaleLorePopupQueue) || this._finaleLorePopupQueue.length === 0) {
+            done();
+            return;
+        }
+        const next = this._finaleLorePopupQueue.shift();
+        this._showLoreUnlockPopup({
+            ...next,
+            _onDismiss: () => this._drainFinaleLorePopupQueue(done)
+        });
     },
 
     /* v1.9.8. Hidden Intel Codex unlock. Called from rare-trigger hooks
@@ -13307,13 +13354,17 @@ updateHexBreach(dt) {
         // Celebration popup. The existing _showLoreUnlockPopup builds
         // its file number by adding 1 to the index, so passing
         // index = id - 1 yields the correct "FILE 38 DECRYPTED"
-        // header for entry 38.
+        // header for entry 38. During the Tesseract Prime victory
+        // sequence the popup would overlay the system-crash cinematic
+        // and final storyboard, so queue it for drain on Sanctuary
+        // entry instead.
         try {
-            this._showLoreUnlockPopup({
-                index: id - 1,
-                text: entry.legacyEpigram,
-                sparks: 0
-            });
+            const popupArgs = { index: id - 1, text: entry.legacyEpigram, sparks: 0 };
+            if (this.enemy && this.enemy.name === 'TESSERACT PRIME') {
+                this._queueFinaleLorePopup(popupArgs);
+            } else {
+                this._showLoreUnlockPopup(popupArgs);
+            }
         } catch (_) {}
         // Re-run the lore_unlock check so unlocking any of the
         // 34-37/39/40 tail can cascade into entry 38 once the rest
@@ -21643,21 +21694,13 @@ drawEffects() {
                 return;
             }
 
-            // ── ENDLESS SPIRE branch. If the Sanctuary upgrade is
-            // owned (and we're not inside a Challenge/Archive run,
-            // which have their own end-conditions), surface a CONTINUE
-            // / RETIRE prompt before the run-end cinematic. Continue
-            // pushes into Sector 6+ which the existing enemy/boss
-            // pipeline handles via fallbacks (BOSS_DATA[1] for unknown
-            // sectors, sectorMult linear scaling already gives +20%
-            // per sector). Retire routes to STATE.ENDING as before.
-            if (!this.challengeMode && !this.archiveMode && this.hasMetaUpgrade('s_endless')) {
-                // Restore the run-frag balance we wiped a moment ago —
-                // the run isn't actually ending if the player continues.
-                this.techFragments = this._lastRunFinalFrags || 0;
-                this._endlessAwaitContinue();
-                return;
-            }
+            // v1.9.25 — the pre-ending Endless prompt has been retired.
+            // The Endless choice now lives on the victory recap card
+            // (CONTINUE ENDLESS button) so the player gets the final
+            // storyboard cinematic + grade screen before deciding
+            // whether to push deeper into the Spire. _enterEndlessSector
+            // restores `techFragments` from `_lastRunFinalFrags` when
+            // the button is tapped.
 
             // Challenge / Archive runs skip the canonical FATAL EXCEPTION
             // ending cinematic. Those modes have their own end-condition
@@ -23032,6 +23075,19 @@ drawEffects() {
         // 3+ negative). One-shot consumed inside the helper so opening
         // the victory card later doesn't re-pulse.
         try { this._renderShareTriggerHint('btn-share-victory'); } catch (_) {}
+
+        // CONTINUE ENDLESS button visible only when the player owns
+        // Endless Spire and isn't in a Challenge or Archive run. The
+        // pre-ending Endless prompt has been retired in favour of this
+        // post-recap CTA, so the player gets the final storyboard +
+        // grade card before deciding whether to push deeper.
+        const endlessBtn = document.getElementById('btn-victory-endless');
+        if (endlessBtn) {
+            const eligible = !this.challengeMode && !this.archiveMode
+                && this.bossDefeated && this.hasMetaUpgrade('s_endless');
+            if (eligible) endlessBtn.classList.remove('hidden');
+            else          endlessBtn.classList.add('hidden');
+        }
     },
 
 	restoreCombatButtons() {
