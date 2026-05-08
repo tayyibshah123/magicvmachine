@@ -609,6 +609,19 @@ const Game = {
         attachButtonEvent('btn-save-slots', () => this._openSaveSlotPicker());
         attachButtonEvent('btn-save-slot-close', () => this._closeSaveSlotPicker());
         attachButtonEvent('btn-resume', () => d.getElementById('modal-settings').classList.add('hidden'));
+        // v1.8.5 — settings-side Copy Diag button. Lets the user dump
+        // mid-run from any state (combat, map, sanctuary), not just on
+        // gameover. Same handler as the gameover-screen variant.
+        attachButtonEvent('btn-copy-diag', () => {
+            const btn = d.getElementById('btn-copy-diag');
+            this._copyDiagReport(btn);
+            // Reset the button label after a few seconds so a second
+            // dump in the same session reads as "tappable" again.
+            if (btn) {
+                const orig = '📋 COPY DIAG';
+                setTimeout(() => { if (btn) btn.textContent = orig; }, 4000);
+            }
+        });
         // Quick Rules glossary — opens from the settings modal so the
         // player can look up status / combo / sector / dice / QTE /
         // class definitions mid-run without abandoning combat.
@@ -22165,7 +22178,109 @@ drawEffects() {
                 <div class="rs-subtitle">Synergies Triggered</div>
                 <div class="rs-synergy-list">${synergies}</div>
             </div>
+            <div class="run-summary-actions" style="margin-top: 14px; text-align: center;">
+                <button class="btn secondary rs-copy-diag" type="button"
+                        style="font-size: 0.78rem; padding: 8px 16px; letter-spacing: 0.12em;">
+                    📋 COPY DIAG REPORT
+                </button>
+                <div class="rs-copy-hint" style="margin-top: 6px; font-size: 0.66rem; opacity: 0.6; letter-spacing: 0.08em;">
+                    INCLUDES PER-TURN PERF TRENDS · PASTE IN BUG REPORT
+                </div>
+            </div>
         `;
+        // Wire the copy button (see _copyDiagReport for the dump call).
+        const copyBtn = container.querySelector('.rs-copy-diag');
+        if (copyBtn) {
+            copyBtn.onclick = (e) => {
+                e.stopPropagation();
+                this._copyDiagReport(copyBtn);
+            };
+        }
+    },
+
+    /* v1.8.5 — Mobile-friendly diag dump trigger. Brave / iOS Safari /
+     * Android browsers don't expose dev tools, so the user can't see
+     * console.log output. This button calls Diag.dump({ copy: true })
+     * which pushes the paste-ready text to navigator.clipboard. The
+     * button's label is mutated to confirm success / failure so the
+     * user knows the copy landed. Falls back to surfacing the raw
+     * text in a textarea overlay if clipboard API is unavailable
+     * (older WebView contexts). */
+    _copyDiagReport(triggerBtn) {
+        let text = '';
+        try {
+            // Diag.dump returns the text + (optionally) writes to clipboard.
+            text = (typeof Diag !== 'undefined' && Diag.dump)
+                ? Diag.dump({ copy: true })
+                : '';
+        } catch (e) {
+            console.warn('[Diag copy] dump failed', e);
+            text = '';
+        }
+        if (!text) {
+            if (triggerBtn) triggerBtn.textContent = '✗ DUMP FAILED';
+            return;
+        }
+        const clipboardOk = !!(typeof navigator !== 'undefined'
+            && navigator.clipboard && navigator.clipboard.writeText);
+        // Even when Diag.dump's internal copy succeeds, retry from the
+        // user-gesture context — iOS Safari sometimes rejects writeText
+        // unless it fires inside a click handler call stack.
+        if (clipboardOk) {
+            navigator.clipboard.writeText(text).then(() => {
+                if (triggerBtn) triggerBtn.textContent = '✓ COPIED — PASTE TO SHARE';
+            }).catch(() => {
+                this._showDiagFallbackOverlay(text);
+                if (triggerBtn) triggerBtn.textContent = '⚠ TAP-AND-HOLD TO COPY';
+            });
+        } else {
+            this._showDiagFallbackOverlay(text);
+            if (triggerBtn) triggerBtn.textContent = '⚠ TAP-AND-HOLD TO COPY';
+        }
+    },
+
+    /* Fallback when clipboard API is blocked: drop a full-screen
+     * overlay with a selectable textarea so the user can long-press
+     * → Select All → Copy manually. */
+    _showDiagFallbackOverlay(text) {
+        // Reuse if one already exists from a prior tap.
+        let host = document.getElementById('diag-fallback-overlay');
+        if (host) host.remove();
+        host = document.createElement('div');
+        host.id = 'diag-fallback-overlay';
+        host.setAttribute('role', 'dialog');
+        host.style.cssText = [
+            'position: fixed', 'inset: 0', 'z-index: 99999',
+            'background: rgba(0, 0, 0, 0.92)',
+            'display: flex', 'flex-direction: column',
+            'align-items: center', 'justify-content: center',
+            'padding: 20px', 'gap: 12px'
+        ].join(';');
+        host.innerHTML = `
+            <div style="color:#0ff;font-family:'Orbitron',monospace;font-size:0.85rem;letter-spacing:0.2em;">
+                LONG-PRESS BELOW · SELECT ALL · COPY
+            </div>
+            <textarea readonly style="
+                width: 100%; max-width: 440px; flex: 1 1 auto;
+                background: #050010; color: #aaffee;
+                border: 1px solid #0ff; padding: 10px;
+                font-family: 'Consolas', monospace; font-size: 0.7rem;
+                resize: none;
+            ">${text.replace(/</g, '&lt;')}</textarea>
+            <button id="diag-fallback-close" class="btn secondary"
+                    style="padding: 8px 18px; letter-spacing: 0.16em;">
+                CLOSE
+            </button>
+        `;
+        document.body.appendChild(host);
+        const close = host.querySelector('#diag-fallback-close');
+        if (close) close.onclick = () => host.remove();
+        // Auto-select the textarea so the long-press menu surfaces "Copy"
+        // as the primary action without manual range selection.
+        const ta = host.querySelector('textarea');
+        if (ta) {
+            try { ta.focus(); ta.select(); } catch (_) {}
+        }
     },
 
     _renderVictoryCard() {
