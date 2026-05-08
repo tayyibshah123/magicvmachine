@@ -943,6 +943,22 @@ class Entity {
             && typeof window !== 'undefined' && window.__diag) {
             try { window.__diag.event('enemy_kill', { name: this.name || '?' }); } catch (_) {}
         }
+        // v1.9.8 hidden-lore trigger: cumulative enemy kills across
+        // all runs unlocks entry 40 at 1000. Boss kills count too;
+        // the call site lives outside the !this.isBoss gate above.
+        if (diedByPlayer && killedTargetIsHostile && Game && typeof Game._checkHiddenLoreTriggers === 'function') {
+            try { Game._checkHiddenLoreTriggers('enemy_kill'); } catch (_) {}
+        }
+        // v1.9.8 hidden-lore trigger 37: track player-minion losses
+        // during boss fights. When ANY player-side minion drops in a
+        // boss fight, increment a runStats counter. The end-of-run
+        // check at run_win reads zero to award the entry.
+        if (Minion && this instanceof Minion && this.isPlayerSide
+            && this.currentHp <= 0
+            && Game && Game.enemy && Game.enemy.isBoss
+            && Game.runStats) {
+            Game.runStats.bossFightMinionLosses = (Game.runStats.bossFightMinionLosses || 0) + 1;
+        }
         // Death-burst VFX — fire once per non-boss kill. Boss deaths run
         // their dedicated `_runBossDeathDissolve` cinematic separately so
         // we skip them here to avoid double-blast. Skipped on tutorial

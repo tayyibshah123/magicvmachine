@@ -7,6 +7,7 @@ import { Enemy } from './entities/enemy.js';
 import { ParticleSys } from './effects/particles.js';
 import { TooltipMgr } from './ui/tooltip.js';
 import { IntelModal } from './ui/intel-modal.js';
+import { getIntelEntry, getHiddenEntries } from './data/intel-codex.js';
 import { getEventArt, getOptionIcon } from './ui/event-art.js';
 import { getClassEmblemSvg } from './ui/class-emblems.js';
 import { CombatMetrics } from './services/combat-metrics.js';
@@ -374,6 +375,15 @@ const Game = {
             // array of 1-based file ids matching INTEL_ENTRIES.id.
             const savedReadLore = localStorage.getItem('mvm_read_lore');
             this.readLore = savedReadLore ? JSON.parse(savedReadLore) : [];
+            // v1.9.8 Intel Codex hidden tail. unlockedHiddenLore stores
+            // the ids of hidden entries the player has unlocked through
+            // rare actions (no-death S5, qte-perfect, S20 endless, etc).
+            // cumulativeKills is a persistent counter across all runs,
+            // gating entry 40 (cumulative_kills_1000).
+            const savedHiddenLore = localStorage.getItem('mvm_hidden_lore');
+            this.unlockedHiddenLore = savedHiddenLore ? JSON.parse(savedHiddenLore) : [];
+            const savedCumKills = localStorage.getItem('mvm_cum_kills');
+            this.cumulativeKills = savedCumKills ? parseInt(savedCumKills) : 0;
             const savedSeen = localStorage.getItem('mvm_seen');
             this.seenFlags = savedSeen ? JSON.parse(savedSeen) : {};
             const savedCorruption = localStorage.getItem('mvm_corruption');
@@ -3279,6 +3289,11 @@ startQTE(type, x, y, callback, opts) {
             else if (quality === 'good') Diag.event && Diag.event('qte_good', { qteType: this.qte.type });
             else Diag.event && Diag.event('qte_fail', { qteType: this.qte.type, reason: quality });
         } catch (_) {}
+        // v1.9.8. Track every QTE the player engages so the
+        // qte-perfect-run hidden trigger (entry 36) can compute the
+        // ratio at run-end. Perfect QTEs are already incremented in
+        // the per-quality branches below; this is the denominator.
+        if (this.runStats) this.runStats.totalQTEs = (this.runStats.totalQTEs || 0) + 1;
 
         if (quality === 'early') {
             msg = "TOO EARLY";
@@ -5610,7 +5625,7 @@ startQTE(type, x, y, callback, opts) {
         });
 
         // Run stats reset
-        this.runStats = { turns: 0, totalDamage: 0, highestHit: 0, kills: 0, rerollsUsed: 0, perfectQTEs: 0, damageTaken: 0, synergies: [] };
+        this.runStats = { turns: 0, totalDamage: 0, highestHit: 0, kills: 0, rerollsUsed: 0, perfectQTEs: 0, totalQTEs: 0, damageTaken: 0, synergies: [], deaths: 0, bossFightMinionLosses: 0 };
         this.synergiesTriggered = new Set();
         this.firstSynergyAwardedRun = false;
         
@@ -11020,7 +11035,8 @@ triggerSystemCrash() {
             if (data.runStats && typeof data.runStats === 'object') {
                 this.runStats = {
                     turns: 0, totalDamage: 0, highestHit: 0, kills: 0,
-                    rerollsUsed: 0, perfectQTEs: 0, damageTaken: 0, synergies: [],
+                    rerollsUsed: 0, perfectQTEs: 0, totalQTEs: 0, damageTaken: 0,
+                    synergies: [], deaths: 0, bossFightMinionLosses: 0,
                     ...data.runStats
                 };
             }
@@ -12567,6 +12583,47 @@ triggerSystemCrash() {
             wrap.appendChild(el);
         });
 
+        // v1.9.8 hidden tail. Once the player has unlocked at least
+        // one hidden entry, render an extra chapter block titled
+        // "?. Hidden Files" so the tail is visible and openable from
+        // the cipher screen. Locked hidden entries do not appear at
+        // all (their unlock conditions are intentionally opaque).
+        const hiddenIds = (this.unlockedHiddenLore || []).slice().sort((a, b) => a - b);
+        if (hiddenIds.length > 0) {
+            const hEl = document.createElement('div');
+            hEl.className = 'intel-cipher-chapter intel-cipher-hidden';
+            const hTitle = document.createElement('div');
+            hTitle.className = 'intel-cipher-chapter-title';
+            hTitle.textContent = '?. Hidden Files';
+            const hUnread = hiddenIds.filter(id => !(this.readLore || []).includes(id)).length;
+            if (hUnread > 0) {
+                const cb = document.createElement('span');
+                cb.className = 'intel-unread-badge';
+                cb.textContent = String(hUnread);
+                hTitle.appendChild(cb);
+            }
+            hEl.appendChild(hTitle);
+            const hMeta = document.createElement('div');
+            hMeta.className = 'intel-cipher-chapter-meta';
+            hMeta.textContent = `${hiddenIds.length} recovered`;
+            hEl.appendChild(hMeta);
+            const hGrid = document.createElement('div');
+            hGrid.className = 'intel-cipher-entries';
+            hiddenIds.forEach(id => {
+                const tile = document.createElement('div');
+                tile.className = 'intel-cipher-tile unlocked';
+                if (!(this.readLore || []).includes(id)) tile.classList.add('unread');
+                tile.textContent = String(id);
+                tile.onclick = () => {
+                    AudioMgr.playSound && AudioMgr.playSound('click');
+                    IntelModal.open(id);
+                };
+                hGrid.appendChild(tile);
+            });
+            hEl.appendChild(hGrid);
+            wrap.appendChild(hEl);
+        }
+
         // DECRYPT FILE button state.
         const btnDecrypt = document.getElementById('btn-decrypt');
         if (btnDecrypt) {
@@ -13146,6 +13203,13 @@ updateHexBreach(dt) {
         // complete or Silent Chronicle).
         if (unlockedEntry) {
             this._showLoreUnlockPopup({ index: unlockedIdx, text: unlockedEntry, sparks: breachSparks });
+            // v1.9.8 hidden-lore trigger: every breach unlock checks
+            // whether the player has now decrypted enough to unlock
+            // entry 38 (Patch Note 0.0.0). The trigger requires all
+            // 33 default entries plus the other 6 hidden entries.
+            if (typeof this._checkHiddenLoreTriggers === 'function') {
+                this._checkHiddenLoreTriggers('lore_unlock');
+            }
         } else {
             this._showHexResult({ kind: 'win', title: 'DECRYPTION SUCCESSFUL', rewards });
         }
@@ -13215,6 +13279,103 @@ updateHexBreach(dt) {
         overlay.addEventListener('click', (e) => { if (e.target === overlay) dismiss(); });
         // Auto-dismiss safety net.
         setTimeout(() => { if (overlay.parentNode) dismiss(); }, 12000);
+    },
+
+    /* v1.9.8. Hidden Intel Codex unlock. Called from rare-trigger hooks
+       around the codebase (see _checkHiddenLoreTriggers below). Pushes
+       the id into unlockedHiddenLore, persists, and reuses the
+       celebration popup so the moment lands the same way a Hex
+       Breach decrypt does. Idempotent: re-calling for an id already
+       in the array is a no-op. */
+    _unlockHiddenLore(id, reason) {
+        if (!Array.isArray(this.unlockedHiddenLore)) this.unlockedHiddenLore = [];
+        if (this.unlockedHiddenLore.includes(id)) return false;
+        const entry = getIntelEntry(id);
+        if (!entry) return false;
+        this.unlockedHiddenLore.push(id);
+        try { localStorage.setItem('mvm_hidden_lore', JSON.stringify(this.unlockedHiddenLore)); } catch (_) {}
+        try { Diag.event('hidden_lore_unlock', { id, reason: reason || 'unknown' }); } catch (_) {}
+        // Celebration popup. The existing _showLoreUnlockPopup builds
+        // its file number by adding 1 to the index, so passing
+        // index = id - 1 yields the correct "FILE 38 DECRYPTED"
+        // header for entry 38.
+        try {
+            this._showLoreUnlockPopup({
+                index: id - 1,
+                text: entry.legacyEpigram,
+                sparks: 0
+            });
+        } catch (_) {}
+        // Re-run the lore_unlock check so unlocking any of the
+        // 34-37/39/40 tail can cascade into entry 38 once the rest
+        // of the codex is complete. Skip 38 itself to avoid a loop.
+        if (id !== 38 && typeof this._checkHiddenLoreTriggers === 'function') {
+            this._checkHiddenLoreTriggers('lore_unlock');
+        }
+        return true;
+    },
+
+    /* v1.9.8. Centralised checks for the seven rare hidden-entry
+       triggers. Called at strategic points in the game flow:
+
+         eventType: 'run_win'       fired in winCombat after S5 boss kill
+         eventType: 'sector_enter'  fired when sector counter advances
+         eventType: 'enemy_kill'    fired by entity.takeDamage on player
+                                    side kills, gates 1000 cumulative
+         eventType: 'lore_unlock'   fired after any unlock (default or
+                                    rare) so 38 (all-others-unlocked)
+                                    can fire when the player completes
+                                    the codex
+
+       Each branch reads the live state, computes whether the trigger
+       fires, and calls _unlockHiddenLore with a readable reason. */
+    _checkHiddenLoreTriggers(eventType, payload) {
+        try {
+            const stats = this.runStats || {};
+            if (eventType === 'run_win') {
+                // 34: clear the run with zero player deaths
+                if ((stats.deaths || 0) === 0) {
+                    this._unlockHiddenLore(34, 'no_death_run');
+                }
+                // 36: every QTE in the run was perfect
+                const totalQte = stats.totalQTEs || 0;
+                if (totalQte > 0 && (stats.perfectQTEs || 0) === totalQte) {
+                    this._unlockHiddenLore(36, 'qte_perfect_run');
+                }
+                // 37: never lost a player minion during a boss fight
+                if ((stats.bossFightMinionLosses || 0) === 0) {
+                    this._unlockHiddenLore(37, 'all_bosses_no_minion_loss');
+                }
+            } else if (eventType === 'sector_enter') {
+                // 35: reach Sector 20 in Endless mode
+                if ((this.sector || 0) >= 20) {
+                    this._unlockHiddenLore(35, 'endless_s20');
+                }
+            } else if (eventType === 'boss_kill') {
+                // 39: kill a boss while at less than 10% HP
+                const p = this.player;
+                if (p && p.maxHp > 0 && (p.currentHp / p.maxHp) < 0.1) {
+                    this._unlockHiddenLore(39, 'low_hp_killing_blow');
+                }
+            } else if (eventType === 'enemy_kill') {
+                // 40: cumulative kills across all runs hits 1000
+                this.cumulativeKills = (this.cumulativeKills || 0) + 1;
+                try { localStorage.setItem('mvm_cum_kills', String(this.cumulativeKills)); } catch (_) {}
+                if (this.cumulativeKills >= 1000) {
+                    this._unlockHiddenLore(40, 'cumulative_kills_1000');
+                }
+            } else if (eventType === 'lore_unlock') {
+                // 38: every other lore entry has been unlocked. The 6
+                // other hidden entries (34-37, 39, 40) plus all 33
+                // breach-default entries. Total 39 must be unlocked
+                // before 38 fires.
+                const defaultUnlocked = (this.unlockedLore || []).length;
+                const hiddenUnlocked = (this.unlockedHiddenLore || []).filter(id => id !== 38).length;
+                if (defaultUnlocked >= 33 && hiddenUnlocked >= 6) {
+                    this._unlockHiddenLore(38, 'all_other_lore_decrypted');
+                }
+            }
+        } catch (e) { /* never throw out of a trigger check */ }
     },
 
     failHexBreach(el) {
@@ -21033,6 +21194,13 @@ drawEffects() {
                     name: this.enemy.name, sector: this.sector,
                     turns: this.turnCount || 0
                 }); } catch (_) {}
+                // v1.9.8 hidden-lore trigger: low-HP killing blow on a
+                // boss unlocks entry 39 (The Last Day). Check fires
+                // before any post-kill heal logic so the HP we read is
+                // the HP at the moment of the kill.
+                if (typeof this._checkHiddenLoreTriggers === 'function') {
+                    this._checkHiddenLoreTriggers('boss_kill');
+                }
                 // SPARKS — boss kill is a "significant event". Reward
                 // scales with sector so a Sector-5 boss is worth more
                 // than a Sector-1 one. Gate on tutorial flag is already
@@ -21089,6 +21257,13 @@ drawEffects() {
                         turns: this.turnCount || 0,
                         fragments: this.techFragments || 0
                     });
+                    // v1.9.8 hidden-lore triggers: run-end checks for
+                    // entries 34 (no-death), 36 (qte-perfect), 37
+                    // (no-minion-loss-in-boss-fights). Each runs once
+                    // and is idempotent so multiple wins do not stack.
+                    if (typeof this._checkHiddenLoreTriggers === 'function') {
+                        this._checkHiddenLoreTriggers('run_win');
+                    }
                 }
                 // Signature die evolution: T1 -> T2 after sector 2 clear,
                 // T2 -> T3 after sector 4 clear. GATED on `s_signature` —
@@ -21896,6 +22071,11 @@ drawEffects() {
                 this.sector++;
                 // Diag — sector clear is a milestone event for the dump.
                 try { Diag.event && Diag.event('sector_clear', { sector: this.sector }); } catch (_) {}
+                // v1.9.8 hidden-lore trigger: reaching Sector 20 in
+                // Endless mode unlocks entry 35 (Beyond the Spire).
+                if (typeof this._checkHiddenLoreTriggers === 'function') {
+                    this._checkHiddenLoreTriggers('sector_enter');
+                }
                 this.generateMap();
                 const sectorDisplay = document.getElementById('sector-display');
                 if (sectorDisplay) sectorDisplay.innerText = `SECTOR ${this.sector}`;
@@ -22076,6 +22256,9 @@ drawEffects() {
                 if (this.bossDefeated) {
                     this.bossDefeated = false;
                     this.sector++;
+                    if (typeof this._checkHiddenLoreTriggers === 'function') {
+                        this._checkHiddenLoreTriggers('sector_enter');
+                    }
                     this.generateMap();
                     // Ascension 12 (Heat Debt): crossing a sector boundary
                     // burns flat true damage. Bypasses shield so the cost

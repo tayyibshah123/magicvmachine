@@ -39,9 +39,9 @@ function refreshUnlockedSet() {
     if (Array.isArray(G.unlockedLore)) {
         G.unlockedLore.forEach(idx => unlockedSet.add(idx + 1));
     }
-    // Hidden entries unlock through Game.unlockedHiddenLore (added by
-    // C7.6). Until that lands, hidden ids are simply absent from the
-    // set so prev/next skips them in the navigation order.
+    // Hidden entries unlock through Game.unlockedHiddenLore (v1.9.8).
+    // Each id 34 through 40 is added to the set as it unlocks so the
+    // prev/next nav steps through them after the breach-default tail.
     if (Array.isArray(G.unlockedHiddenLore)) {
         G.unlockedHiddenLore.forEach(id => unlockedSet.add(id));
     }
