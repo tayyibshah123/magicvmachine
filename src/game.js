@@ -24384,42 +24384,230 @@ drawEffects() {
         }
 
         if (sector === 5) {
-            // --- TESSERACT PRIME background (toned down v1.10) ---
-            // The boss render now carries the visual weight (humanoid
-            // angelic figure + cascading cubes). Background was a
-            // competing 18-ray prismatic + scan-tears + chromatic
-            // aberration mess that made the boss read as noise.
-            // Stripped to the dark wash plus a small number of low-
-            // alpha rays. Wireframe tesseract removed entirely (the
-            // boss render owns the cube vocabulary now). Scan tears
-            // and chromatic ghosts dropped.
+            // === TESSERACT PRIME background spectacle (v1.10) ===
+            // 8-layer cosmic sanctum: void gradient, 3-layer parallax
+            // starfield, drifting nebula clouds, sweeping aurora bands,
+            // sacred-geometry hex tiling, cardinal beams, outer rune
+            // ring, phase-state overlays.
             const _tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
             const _isLow  = _tier === 'low';
             const _isMid  = _tier === 'mid';
-            const _rayN   = _isLow ? 0 : (_isMid ? 4 : 6);
+            const cx = w * 0.5, cy = horizon * 0.55;
+            const phase = (this.enemy && this.enemy.phase) || 1;
+
             ctx.save();
-            ctx.fillStyle = this._cachedGradient('s5_sky', () => {
+
+            // F1. Cosmic void gradient.
+            ctx.fillStyle = this._cachedGradient('s5_void', () => {
                 const g = ctx.createLinearGradient(0, 0, 0, horizon);
-                g.addColorStop(0, 'rgba(40, 0, 22, 0.6)');
-                g.addColorStop(1, 'rgba(80, 0, 30, 0.3)');
+                g.addColorStop(0,    'rgba(8, 0, 32, 1)');
+                g.addColorStop(0.55, 'rgba(40, 0, 60, 1)');
+                g.addColorStop(1,    'rgba(60, 0, 50, 1)');
                 return g;
             });
             ctx.fillRect(0, 0, w, horizon);
-            const cx = w * 0.5, cy = horizon * 0.55;
-            if (_rayN > 0) {
-                ctx.globalCompositeOperation = 'lighter';
-                for (let i = 0; i < _rayN; i++) {
-                    const a = time * 0.10 + i * (Math.PI * 2 / _rayN);
-                    const hue = (i * 28 + time * 16) % 360;
-                    ctx.strokeStyle = `hsla(${hue}, 80%, 60%, 0.09)`;
-                    ctx.lineWidth = 32;
+
+            // F2. Parallax starfield. Three layers; per-frame
+            // positions are derived from a per-star seed plus a slow
+            // drift so we don't allocate.
+            const starLayer = (count, depth, twinkle, color) => {
+                const drift = (time * (0.1 + depth * 0.15)) % horizon;
+                ctx.fillStyle = color;
+                for (let i = 0; i < count; i++) {
+                    const seed = i * 137 + depth * 17;
+                    const x = (seed * 53) % w;
+                    const y = ((seed * 91) % horizon + drift) % horizon;
+                    const sz = (depth === 0 ? 1.2 : depth === 1 ? 1.6 : 2.0);
+                    if (twinkle) {
+                        const tw = 0.5 + 0.5 * Math.sin(time * 2 + seed);
+                        ctx.globalAlpha = 0.4 + 0.4 * tw;
+                    } else {
+                        ctx.globalAlpha = 0.55;
+                    }
                     ctx.beginPath();
-                    ctx.moveTo(cx, cy);
-                    ctx.lineTo(cx + Math.cos(a) * 1400, cy + Math.sin(a) * 1400);
-                    ctx.stroke();
+                    ctx.arc(x, y, sz, 0, Math.PI * 2);
+                    ctx.fill();
                 }
-                ctx.globalCompositeOperation = 'source-over';
+                ctx.globalAlpha = 1;
+            };
+            starLayer(_isLow ? 40 : 80, 0, false, 'rgba(255, 255, 255, 1)');
+            if (!_isLow) {
+                starLayer(_isMid ? 30 : 50, 1, false, 'rgba(255, 220, 180, 1)');
+                starLayer(_isMid ? 18 : 30, 2, true,  'rgba(220, 200, 255, 1)');
             }
+
+            // F3. Nebula clouds. 4 large radial-gradient blobs drifting
+            // horizontally at different speeds. Mid drops to 2, low
+            // skips entirely.
+            if (!_isLow) {
+                const nebulaCount = _isMid ? 2 : 4;
+                const nebulaSpecs = [
+                    { x: 0.20, y: 0.30, color: 'rgba(255, 215, 0, 0.10)', drift: 6,  rad: 280 },
+                    { x: 0.75, y: 0.25, color: 'rgba(188, 19, 254, 0.10)', drift: -8, rad: 240 },
+                    { x: 0.50, y: 0.65, color: 'rgba(0, 200, 255, 0.08)',  drift: 4,  rad: 320 },
+                    { x: 0.85, y: 0.70, color: 'rgba(255, 255, 255, 0.06)', drift: -5, rad: 220 }
+                ];
+                for (let i = 0; i < nebulaCount; i++) {
+                    const spec = nebulaSpecs[i];
+                    const nx = (spec.x * w + Math.sin(time * 0.05 + i) * spec.drift * 30) % w;
+                    const ny = spec.y * horizon;
+                    const grad = ctx.createRadialGradient(nx, ny, 30, nx, ny, spec.rad);
+                    grad.addColorStop(0, spec.color);
+                    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(nx - spec.rad, ny - spec.rad, spec.rad * 2, spec.rad * 2);
+                }
+            }
+
+            // F4. Aurora bands. 2 wide horizontal soft gradient strips
+            // sweeping at different speeds. Phase 3 shifts colour to
+            // red/cyan crosstalk.
+            if (!_isLow) {
+                const auroraSpec = phase >= 3
+                    ? [{ y: 0.18, color: 'rgba(255, 0, 90, 0.10)', speed: 0.04 },
+                       { y: 0.72, color: 'rgba(0, 255, 220, 0.08)', speed: -0.06 }]
+                    : [{ y: 0.18, color: 'rgba(255, 180, 220, 0.08)', speed: 0.04 },
+                       { y: 0.72, color: 'rgba(120, 220, 255, 0.07)', speed: -0.06 }];
+                auroraSpec.forEach((band, i) => {
+                    const off = (Math.sin(time * band.speed) * 0.5 + 0.5) * w;
+                    const grad = ctx.createLinearGradient(off - 280, 0, off + 280, 0);
+                    grad.addColorStop(0,   'rgba(0, 0, 0, 0)');
+                    grad.addColorStop(0.5, band.color);
+                    grad.addColorStop(1,   'rgba(0, 0, 0, 0)');
+                    ctx.fillStyle = grad;
+                    const by = band.y * horizon;
+                    ctx.fillRect(off - 280, by - 60, 560, 120);
+                });
+            }
+
+            // F5. Sacred-geometry hexagonal tiling. Very low alpha,
+            // gold strokes. Static across the canvas, drawn once via
+            // a path-cache pattern.
+            if (!_isLow) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(255, 215, 106, 0.05)';
+                ctx.lineWidth = 1;
+                const hexR = 32;
+                const hexH = hexR * Math.sqrt(3);
+                for (let row = -1; row * hexH < horizon + hexH; row++) {
+                    const offsetX = (row % 2 === 0) ? 0 : hexR * 1.5;
+                    for (let col = -1; col * (hexR * 3) + offsetX < w + hexR * 3; col++) {
+                        const cxh = col * hexR * 3 + offsetX;
+                        const cyh = row * hexH;
+                        ctx.beginPath();
+                        for (let v = 0; v < 7; v++) {
+                            const a = v * Math.PI / 3;
+                            const px = cxh + Math.cos(a) * hexR;
+                            const py = cyh + Math.sin(a) * hexR;
+                            if (v === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                        }
+                        ctx.stroke();
+                    }
+                }
+                ctx.restore();
+            }
+
+            // F6. Cardinal beams. 4 vertical light beams at fixed X
+            // positions, brightness pulses at different rates so the
+            // beams don't all flash in unison.
+            const beamSpecs = [
+                { x: 0.25, rate: 0.7 },
+                { x: 0.40, rate: 0.5 },
+                { x: 0.60, rate: 0.6 },
+                { x: 0.75, rate: 0.8 }
+            ];
+            beamSpecs.forEach((beam, i) => {
+                const brightness = 0.4 + 0.6 * Math.sin(time * beam.rate + i * 1.3);
+                const alpha = 0.04 + 0.06 * brightness;
+                const bx = beam.x * w;
+                const grad = ctx.createLinearGradient(bx, 0, bx, horizon);
+                grad.addColorStop(0,    `rgba(255, 215, 106, ${alpha * 0.5})`);
+                grad.addColorStop(0.4,  `rgba(255, 255, 255, ${alpha})`);
+                grad.addColorStop(1,    `rgba(255, 215, 106, 0)`);
+                ctx.fillStyle = grad;
+                ctx.fillRect(bx - 40, 0, 80, horizon);
+            });
+
+            // F7. Outer rune ring near the canvas edge. Frames the
+            // fight as taking place inside a sacred space.
+            if (!_isLow) {
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.rotate(time * 0.04);
+                ctx.strokeStyle = 'rgba(255, 215, 106, 0.18)';
+                ctx.fillStyle = 'rgba(255, 215, 106, 0.4)';
+                ctx.lineWidth = 1;
+                const runeR = Math.min(w, horizon) * 0.55;
+                const runeCount = _isMid ? 16 : 24;
+                for (let g = 0; g < runeCount; g++) {
+                    const a = g * (Math.PI * 2 / runeCount);
+                    const rx = Math.cos(a) * runeR;
+                    const ry = Math.sin(a) * runeR;
+                    ctx.save();
+                    ctx.translate(rx, ry);
+                    ctx.rotate(a + Math.PI / 2);
+                    if (g % 4 === 0) {
+                        ctx.beginPath();
+                        ctx.moveTo(-4, -3); ctx.lineTo(4, 0); ctx.lineTo(-4, 3);
+                        ctx.closePath(); ctx.fill();
+                    } else if (g % 4 === 1) {
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 3, 0, Math.PI * 1.6);
+                        ctx.stroke();
+                    } else if (g % 4 === 2) {
+                        ctx.beginPath();
+                        ctx.moveTo(-4, 0); ctx.lineTo(4, 0);
+                        ctx.moveTo(0, -3); ctx.lineTo(0, 3);
+                        ctx.stroke();
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    ctx.restore();
+                }
+                ctx.restore();
+            }
+
+            // F8. Phase-state background reactions.
+            // Phase 2: red lightning cracks emanate from boss centre
+            // sporadically (chance per frame).
+            // Phase 3: chromatic aberration overlay tint on the whole
+            // background.
+            if (phase >= 2) {
+                if (Math.random() < 0.04) {
+                    ctx.save();
+                    ctx.strokeStyle = 'rgba(255, 50, 80, 0.55)';
+                    ctx.lineWidth = 1.2;
+                    ctx.shadowColor = '#ff3355';
+                    ctx.shadowBlur = 10;
+                    const segs = 5 + Math.floor(Math.random() * 4);
+                    const angle = Math.random() * Math.PI * 2;
+                    let px = cx, py = cy;
+                    ctx.beginPath();
+                    ctx.moveTo(px, py);
+                    for (let s = 0; s < segs; s++) {
+                        const stepLen = 60 + Math.random() * 60;
+                        const wobble = (Math.random() - 0.5) * 0.6;
+                        const a = angle + s * 0.2 + wobble;
+                        px += Math.cos(a) * stepLen;
+                        py += Math.sin(a) * stepLen;
+                        ctx.lineTo(px, py);
+                    }
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+            if (phase >= 3) {
+                ctx.save();
+                ctx.globalCompositeOperation = 'screen';
+                ctx.fillStyle = 'rgba(0, 200, 255, 0.04)';
+                ctx.fillRect(-3, 0, w, horizon);
+                ctx.fillStyle = 'rgba(255, 0, 170, 0.04)';
+                ctx.fillRect(3, 0, w, horizon);
+                ctx.restore();
+            }
+
             ctx.restore();
             return;
         }
