@@ -14061,6 +14061,7 @@ async startCombat(type) {
                 m._isTessFragment = true;
                 m._tessOrbitAngle = angle;       // rotation seed for renderer
                 m._tessOrbitRadius = radius;
+                m._tessShapeIdx = i % 4;         // 0-3, picks distinct abnormality shape
                 m.spawnTimer = 1.0;
                 this.enemy.minions.push(m);
             }
@@ -14449,6 +14450,7 @@ async startTurn() {
                 m._isTessFragment = true;
                 m._tessOrbitAngle = angle;
                 m._tessOrbitRadius = radius;
+                m._tessShapeIdx = i % 4;
                 m.spawnTimer = 1.0;
                 this.enemy.minions.push(m);
                 ParticleSys.createShockwave(fx, fy, '#ffd76a', 26);
@@ -24354,37 +24356,35 @@ drawEffects() {
         }
 
         if (sector === 5) {
-            // --- TESSERACT PRIME: GEOMETRIC IMPOSSIBILITY ---
-            // Tier-aware density: 18 prismatic rays use hsla() (slowest
-            // colorspace path), 4 scan-line tears blit the full screen
-            // width per frame, and the chromatic aberration draws each
-            // tesseract face 3× with shadowBlur. Mid drops rays/scans;
-            // low strips rays + scans + ghost overlays entirely while
-            // keeping the core tesseract wireframe.
+            // --- TESSERACT PRIME background (toned down v1.10) ---
+            // The boss render now carries the visual weight (humanoid
+            // angelic figure + cascading cubes). Background was a
+            // competing 18-ray prismatic + scan-tears + chromatic
+            // aberration mess that made the boss read as noise.
+            // Stripped to the dark wash plus a small number of low-
+            // alpha rays. Wireframe tesseract removed entirely (the
+            // boss render owns the cube vocabulary now). Scan tears
+            // and chromatic ghosts dropped.
             const _tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
             const _isLow  = _tier === 'low';
             const _isMid  = _tier === 'mid';
-            const _rayN   = _isLow ? 0 : (_isMid ? 10 : 18);
-            const _scanN  = _isLow ? 0 : (_isMid ? 2 : 4);
+            const _rayN   = _isLow ? 0 : (_isMid ? 4 : 6);
             ctx.save();
-            // Prismatic white-pink wash
             ctx.fillStyle = this._cachedGradient('s5_sky', () => {
                 const g = ctx.createLinearGradient(0, 0, 0, horizon);
-                g.addColorStop(0, 'rgba(60, 0, 30, 0.5)');
-                g.addColorStop(1, 'rgba(130, 0, 50, 0.25)');
+                g.addColorStop(0, 'rgba(40, 0, 22, 0.6)');
+                g.addColorStop(1, 'rgba(80, 0, 30, 0.3)');
                 return g;
             });
             ctx.fillRect(0, 0, w, horizon);
-
-            // Prismatic rays fanning from center
             const cx = w * 0.5, cy = horizon * 0.55;
             if (_rayN > 0) {
                 ctx.globalCompositeOperation = 'lighter';
                 for (let i = 0; i < _rayN; i++) {
-                    const a = time * 0.15 + i * (Math.PI * 2 / _rayN);
-                    const hue = (i * 20 + time * 30) % 360;
-                    ctx.strokeStyle = `hsla(${hue}, 90%, 65%, 0.18)`;
-                    ctx.lineWidth = 40;
+                    const a = time * 0.10 + i * (Math.PI * 2 / _rayN);
+                    const hue = (i * 28 + time * 16) % 360;
+                    ctx.strokeStyle = `hsla(${hue}, 80%, 60%, 0.09)`;
+                    ctx.lineWidth = 32;
                     ctx.beginPath();
                     ctx.moveTo(cx, cy);
                     ctx.lineTo(cx + Math.cos(a) * 1400, cy + Math.sin(a) * 1400);
@@ -24392,76 +24392,6 @@ drawEffects() {
                 }
                 ctx.globalCompositeOperation = 'source-over';
             }
-
-            // Rotating tesseract (outer cube + inner cube connected) wireframe
-            const tR = 230;
-            const rotOuter = time * 0.3;
-            const rotInner = time * 0.6;
-            const cubeVerts = (rot, size) => {
-                const verts = [];
-                const corners = [
-                    [-1, -1], [1, -1], [1, 1], [-1, 1]
-                ];
-                for (const [ux, uy] of corners) {
-                    const rx = ux * Math.cos(rot) - uy * Math.sin(rot);
-                    const ry = ux * Math.sin(rot) + uy * Math.cos(rot);
-                    verts.push([cx + rx * size, cy + ry * size]);
-                }
-                return verts;
-            };
-            const outer = cubeVerts(rotOuter, tR);
-            const inner = cubeVerts(rotInner, tR * 0.55);
-            const drawPoly = (pts, color, width) => {
-                ctx.strokeStyle = color; ctx.lineWidth = width;
-                ctx.beginPath();
-                for (let i = 0; i < pts.length; i++) {
-                    const [x, y] = pts[i];
-                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-                }
-                ctx.closePath(); ctx.stroke();
-            };
-            if (!_isLow) { ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 14; }
-            drawPoly(outer, 'rgba(255, 255, 255, 0.85)', 3);
-            drawPoly(inner, 'rgba(255, 100, 180, 0.9)', 2.5);
-            // Connect outer to inner (tesseract edges)
-            ctx.strokeStyle = 'rgba(255, 215, 100, 0.55)'; ctx.lineWidth = 1.5;
-            for (let i = 0; i < 4; i++) {
-                ctx.beginPath(); ctx.moveTo(outer[i][0], outer[i][1]); ctx.lineTo(inner[i][0], inner[i][1]); ctx.stroke();
-            }
-            ctx.shadowBlur = 0;
-
-            // Glitch scan-line tears — horizontal bands offset
-            for (let i = 0; i < _scanN; i++) {
-                const ty = ((time * 90 + i * 220) % horizon);
-                const off = Math.sin(time * 5 + i) * 20;
-                ctx.fillStyle = `rgba(255, 255, 255, ${0.06 + (i % 2) * 0.04})`;
-                ctx.fillRect(off, ty, w - off, 6);
-                ctx.fillStyle = `rgba(255, 50, 120, 0.12)`;
-                ctx.fillRect(-off, ty + 3, w, 2);
-            }
-
-            // Ghosted overlay echoes of the tesseract (chromatic aberration
-            // copies) — skip on low; the wireframe alone reads as "weird
-            // geometry" without the per-frame extra strokes.
-            if (!_isLow) {
-                ctx.globalAlpha = 0.35;
-                ctx.strokeStyle = 'rgba(0, 220, 255, 0.6)'; ctx.lineWidth = 1.5;
-                ctx.beginPath();
-                for (let i = 0; i < outer.length; i++) {
-                    const [x, y] = outer[i];
-                    if (i === 0) ctx.moveTo(x + 10, y); else ctx.lineTo(x + 10, y);
-                }
-                ctx.closePath(); ctx.stroke();
-                ctx.strokeStyle = 'rgba(255, 0, 120, 0.6)';
-                ctx.beginPath();
-                for (let i = 0; i < outer.length; i++) {
-                    const [x, y] = outer[i];
-                    if (i === 0) ctx.moveTo(x - 10, y); else ctx.lineTo(x - 10, y);
-                }
-                ctx.closePath(); ctx.stroke();
-                ctx.globalAlpha = 1;
-            }
-
             ctx.restore();
             return;
         }
@@ -28717,191 +28647,222 @@ drawEntity(entity) {
                     ctx.restore();
                 }
 
-                // --- SECTOR 5: TESSERACT PRIME (Sacred Geometry Overhaul) ---
+                // --- SECTOR 5: TESSERACT PRIME (Angelic Overhaul v1.10) ---
+                // Five-layer composition replacing the prior 8-layer
+                // overlapping geometry mess. Back-to-front:
+                //   1. Cascading wireframe cubes (depth field)
+                //   2. Halo disc (radial gradient behind figure)
+                //   3. Wings (high/mid only)
+                //   4. Humanoid silhouette + halo ring
+                //   5. Invincibility rune ring (only while fragments alive)
+                // Phase tinting: phase 1 white/gold; phase 2 red; phase 3
+                // magenta. Subtle vertical bob makes the figure float.
                 else if (this.sector === 5) {
                     ctx.save();
-                    const p2 = entity.phase === 2;
-                    const gold = p2 ? '#ff3355' : '#ffd700';
-                    const white = p2 ? '#ffaaaa' : '#ffffff';
-                    const paleGold = '#fffacd';
+                    const tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+                    const isLow = tier === 'low';
+                    const isMid = tier === 'mid';
+                    const cubeCount = isLow ? 2 : (isMid ? 4 : 6);
 
-                    // Phase-2 counter-ring (outer shield)
-                    if (p2) {
+                    let figFill = `rgba(255, 255, 255, ${entity.phase >= 2 ? 0.7 : 0.82})`;
+                    let accentColor = '#ffd700';
+                    let glowColor = 'rgba(255, 215, 0, 0.7)';
+                    if (entity.phase === 2) { figFill = 'rgba(255, 200, 200, 0.7)'; accentColor = '#ff3355'; glowColor = 'rgba(255, 51, 85, 0.7)'; }
+                    else if (entity.phase >= 3) { figFill = 'rgba(255, 200, 240, 0.7)'; accentColor = '#ff77aa'; glowColor = 'rgba(255, 119, 170, 0.8)'; }
+
+                    const bob = Math.sin(time * 1.4) * 3;
+                    ctx.translate(0, bob);
+
+                    // === Layer 1: cascading cubes ===
+                    const cubeBaseSizes = [60, 95, 135, 180, 225, 270];
+                    for (let c = 0; c < cubeCount; c++) {
+                        const size = cubeBaseSizes[c];
+                        const half = size / 2;
+                        const depth = size * 0.4;
+                        const rot = time * (0.18 + c * 0.07) * (c % 2 === 0 ? 1 : -1);
+                        const alpha = 0.20 + c * 0.06;
                         ctx.save();
-                        ctx.rotate(-time * 0.6);
-                        ctx.strokeStyle = 'rgba(255, 51, 85, 0.6)';
-                        ctx.lineWidth = 2;
-                        ctx.shadowColor = '#ff3355';
-                        ctx.shadowBlur = 18;
-                        ctx.beginPath();
-                        for (let i = 0; i < 7; i++) {
-                            const a = i * Math.PI / 3;
-                            ctx.lineTo(Math.cos(a) * 260, Math.sin(a) * 260);
+                        ctx.rotate(rot);
+                        ctx.strokeStyle = c === cubeCount - 1
+                            ? `rgba(255, 255, 255, ${Math.min(0.85, alpha + 0.2)})`
+                            : `rgba(255, 215, 0, ${alpha})`;
+                        ctx.lineWidth = 1 + (c / cubeCount) * 1.5;
+                        ctx.shadowColor = accentColor;
+                        ctx.shadowBlur = isLow ? 0 : (isMid ? 6 : 14);
+                        // Project 8 cube vertices with a tilt for pseudo-3D depth.
+                        const v = [];
+                        for (let i = 0; i < 8; i++) {
+                            const x = (i & 1) ? half : -half;
+                            const y = (i & 2) ? half : -half;
+                            const z = (i & 4) ? depth : -depth;
+                            v.push([x + z * 0.32, y - z * 0.22]);
                         }
-                        ctx.closePath();
+                        const edges = [
+                            [0,1],[1,3],[3,2],[2,0],
+                            [4,5],[5,7],[7,6],[6,4],
+                            [0,4],[1,5],[2,6],[3,7]
+                        ];
+                        ctx.beginPath();
+                        edges.forEach(([a,b]) => {
+                            ctx.moveTo(v[a][0], v[a][1]);
+                            ctx.lineTo(v[b][0], v[b][1]);
+                        });
                         ctx.stroke();
                         ctx.restore();
                     }
-                    
-                    // 1. Orbital Rings (Background Layer)
-                    ctx.lineWidth = 1;
-                    ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)';
-                    const rings = 3;
-                    for(let i=0; i<rings; i++) {
-                        ctx.save();
-                        // Wobble rotation
-                        ctx.rotate(time * (0.1 + i*0.05) + i);
-                        ctx.scale(1, 0.6); // Perspective tilt
-                        ctx.beginPath();
-                        ctx.arc(0, 0, 180 + i*40, 0, Math.PI*2);
-                        ctx.stroke();
-                        
-                        // Ring Particles
-                        const pCount = 3;
-                        for(let k=0; k<pCount; k++) {
-                            const angle = time * 2 + k * (Math.PI*2/pCount);
-                            const px = Math.cos(angle) * (180 + i*40);
-                            const py = Math.sin(angle) * (180 + i*40);
-                            ctx.fillStyle = gold;
-                            ctx.fillRect(px-2, py-2, 4, 4);
-                        }
-                        ctx.restore();
+
+                    // === Layer 2: halo disc behind figure ===
+                    ctx.save();
+                    const haloKey = `tess_halo_${entity.phase || 1}`;
+                    let haloGrad;
+                    if (this._cachedGradient) {
+                        haloGrad = this._cachedGradient(haloKey, () => {
+                            const g = ctx.createRadialGradient(0, 0, 30, 0, 0, 145);
+                            const baseAlpha = entity.phase >= 2 ? 0.55 : 0.45;
+                            const baseColor = accentColor;
+                            g.addColorStop(0, baseColor);
+                            g.addColorStop(0.45, `rgba(255, 215, 0, ${baseAlpha * 0.4})`);
+                            g.addColorStop(1, 'rgba(255, 215, 0, 0)');
+                            return g;
+                        });
+                    } else {
+                        haloGrad = ctx.createRadialGradient(0, 0, 30, 0, 0, 145);
+                        haloGrad.addColorStop(0, accentColor);
+                        haloGrad.addColorStop(0.45, 'rgba(255, 215, 0, 0.18)');
+                        haloGrad.addColorStop(1, 'rgba(255, 215, 0, 0)');
                     }
-
-                    // 1b. Parallax starfield (windowed through the hypercube)
-                    ctx.save();
-                    ctx.shadowBlur = 0;
-                    for (let layer = 0; layer < 3; layer++) {
-                        const speed = 0.05 + layer * 0.08;
-                        const count = 18 + layer * 10;
-                        const size = 2.5 - layer * 0.6;
-                        ctx.globalAlpha = 0.35 + layer * 0.2;
-                        ctx.fillStyle = layer === 0 ? paleGold : (layer === 1 ? white : gold);
-                        for (let i = 0; i < count; i++) {
-                            const seed = i * 97 + layer * 13;
-                            const a = (seed % 628) / 100 + time * speed;
-                            const r = 40 + ((seed * 7) % 130);
-                            const x = Math.cos(a) * r;
-                            const y = Math.sin(a) * r * 0.8;
-                            const tw = 0.6 + 0.4 * Math.sin(time * 3 + seed);
-                            ctx.beginPath(); ctx.arc(x, y, size * tw, 0, Math.PI * 2); ctx.fill();
-                        }
-                    }
-                    ctx.restore();
-
-                    // 1c. Outer rune ring (engraved glyphs, slow counter-rotation)
-                    ctx.save();
-                    ctx.rotate(-time * 0.15);
-                    ctx.strokeStyle = 'rgba(255, 215, 0, 0.45)';
-                    ctx.lineWidth = 1.5;
-                    ctx.shadowColor = gold; ctx.shadowBlur = 8;
-                    for (let g = 0; g < 12; g++) {
-                        const a = g * (Math.PI * 2 / 12);
-                        const rx = Math.cos(a) * 230, ry = Math.sin(a) * 230;
-                        ctx.save(); ctx.translate(rx, ry); ctx.rotate(a);
-                        ctx.beginPath();
-                        // Tiny glyph — varies by index for engraved feel
-                        if (g % 3 === 0) { ctx.moveTo(-6, -6); ctx.lineTo(6, 0); ctx.lineTo(-6, 6); }
-                        else if (g % 3 === 1) { ctx.moveTo(-6, -4); ctx.lineTo(6, -4); ctx.moveTo(-4, 4); ctx.lineTo(4, 4); }
-                        else { ctx.arc(0, 0, 5, 0, Math.PI * 1.5); }
-                        ctx.stroke();
-                        ctx.restore();
-                    }
-                    ctx.restore();
-
-                    // 2. Outer Geometric Star (Hexagram)
-                    ctx.save();
-                    ctx.rotate(time * 0.2);
-                    ctx.strokeStyle = white;
-                    ctx.lineWidth = 3;
-                    ctx.shadowColor = gold;
-                    ctx.shadowBlur = 20;
-                    
-                    const drawStar = (rad) => {
-                        ctx.beginPath();
-                        for(let i=0; i<7; i++) { // 6 points + close
-                            const angle = i * Math.PI / 3;
-                            const x = Math.cos(angle) * rad;
-                            const y = Math.sin(angle) * rad;
-                            if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-                        }
-                        ctx.closePath();
-                        ctx.stroke();
-                    };
-                    
-                    // Outer bright star
-                    drawStar(140);
-                    // Inner rotated star
-                    ctx.rotate(Math.PI/6); 
-                    ctx.strokeStyle = gold;
-                    ctx.lineWidth = 2;
-                    drawStar(140);
-                    ctx.restore();
-
-                    // 3. The Hypercube Core (Nested Polygons)
-                    ctx.save();
-                    // Counter-rotate core
-                    ctx.rotate(-time * 0.5);
-                    
-                    // Layer 1: White Hexagon
-                    ctx.strokeStyle = white;
-                    ctx.lineWidth = 4;
+                    ctx.globalAlpha = 0.55;
+                    ctx.fillStyle = haloGrad;
                     ctx.beginPath();
-                    for(let i=0; i<6; i++) {
-                         const angle = i * Math.PI / 3;
-                         ctx.lineTo(Math.cos(angle)*90, Math.sin(angle)*90);
+                    ctx.arc(0, 0, 145, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+
+                    // === Layer 3: wings (high/mid only) ===
+                    if (!isLow) {
+                        ctx.save();
+                        ctx.strokeStyle = accentColor;
+                        ctx.fillStyle = `rgba(255, 215, 0, ${entity.phase >= 2 ? 0.32 : 0.26})`;
+                        ctx.lineWidth = 1.5;
+                        ctx.shadowColor = accentColor;
+                        ctx.shadowBlur = isMid ? 8 : 16;
+                        const wingHalfCount = isMid ? 2 : 3;
+                        const flutter = Math.sin(time * 2) * 0.06;
+                        // Left wings (mirrored).
+                        for (let w = 0; w < wingHalfCount; w++) {
+                            const a = Math.PI - 0.45 - w * 0.36 + flutter;
+                            const len = 135 - w * 18;
+                            const tipX = Math.cos(a) * len;
+                            const tipY = Math.sin(a) * len - 30;
+                            const innerX = Math.cos(a) * (len - 32);
+                            const innerY = Math.sin(a) * (len - 32) - 8;
+                            ctx.beginPath();
+                            ctx.moveTo(-12, -22);
+                            ctx.lineTo(tipX, tipY);
+                            ctx.lineTo(innerX, innerY);
+                            ctx.closePath();
+                            ctx.fill();
+                            ctx.stroke();
+                        }
+                        // Right wings.
+                        for (let w = 0; w < wingHalfCount; w++) {
+                            const a = 0.45 + w * 0.36 - flutter;
+                            const len = 135 - w * 18;
+                            const tipX = Math.cos(a) * len;
+                            const tipY = Math.sin(a) * len - 30;
+                            const innerX = Math.cos(a) * (len - 32);
+                            const innerY = Math.sin(a) * (len - 32) - 8;
+                            ctx.beginPath();
+                            ctx.moveTo(12, -22);
+                            ctx.lineTo(tipX, tipY);
+                            ctx.lineTo(innerX, innerY);
+                            ctx.closePath();
+                            ctx.fill();
+                            ctx.stroke();
+                        }
+                        ctx.restore();
                     }
-                    ctx.closePath();
+
+                    // === Layer 4: humanoid silhouette ===
+                    ctx.save();
+                    ctx.lineCap = 'round';
+                    ctx.shadowColor = glowColor;
+                    ctx.shadowBlur = isLow ? 6 : 18;
+                    // Halo ring above the head.
+                    ctx.strokeStyle = accentColor;
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.ellipse(0, -78, 18, 5, 0, 0, Math.PI * 2);
                     ctx.stroke();
-                    
-                    // Layer 2: Gold Hexagon (Offset)
-                    ctx.scale(0.7, 0.7);
-                    ctx.rotate(Math.sin(time)*0.5);
-                    ctx.fillStyle = 'rgba(255, 215, 0, 0.1)';
-                    ctx.strokeStyle = gold;
-                    ctx.lineWidth = 6;
+                    // Head.
+                    ctx.fillStyle = figFill;
+                    ctx.strokeStyle = accentColor;
+                    ctx.lineWidth = 2;
                     ctx.beginPath();
-                    for(let i=0; i<6; i++) {
-                         const angle = i * Math.PI / 3;
-                         ctx.lineTo(Math.cos(angle)*90, Math.sin(angle)*90);
-                    }
+                    ctx.arc(0, -55, 14, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    // Torso (tapered diamond / hourglass).
+                    ctx.beginPath();
+                    ctx.moveTo(0, -38);
+                    ctx.lineTo(22, -22);
+                    ctx.lineTo(14, 35);
+                    ctx.lineTo(0, 50);
+                    ctx.lineTo(-14, 35);
+                    ctx.lineTo(-22, -22);
                     ctx.closePath();
                     ctx.fill();
                     ctx.stroke();
-                    
-                    // Layer 3: Central Solid Diamond
-                    ctx.scale(0.5, 0.5);
-                    ctx.rotate(time * 2);
-                    ctx.fillStyle = white;
-                    ctx.shadowColor = white;
-                    ctx.shadowBlur = 50;
+                    // Arms outstretched.
+                    ctx.lineWidth = 5;
+                    ctx.strokeStyle = accentColor;
                     ctx.beginPath();
-                    ctx.rect(-40, -40, 80, 80);
-                    ctx.fill();
-                    
+                    ctx.moveTo(-22, -22); ctx.lineTo(-72, -8);
+                    ctx.moveTo(22, -22);  ctx.lineTo(72, -8);
+                    ctx.stroke();
+                    // Legs taper.
+                    ctx.beginPath();
+                    ctx.moveTo(-8, 50); ctx.lineTo(-4, 95);
+                    ctx.moveTo(8, 50);  ctx.lineTo(4, 95);
+                    ctx.stroke();
+                    ctx.lineCap = 'butt';
                     ctx.restore();
 
-                    // 4. God Rays (Radiating Lines)
-                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-                    ctx.lineWidth = 2;
-                    const rays = 8;
-                    for(let i=0; i<rays; i++) {
-                        const angle = (Math.PI*2/rays) * i + (time * 0.1);
-                        ctx.beginPath();
-                        ctx.moveTo(Math.cos(angle)*50, Math.sin(angle)*50);
-                        ctx.lineTo(Math.cos(angle)*300, Math.sin(angle)*300);
-                        ctx.stroke();
-                    }
-
-                    // 5. Invincibility Visuals (Tesseract Shield)
-                    if (entity.invincibleTurns > 0) {
+                    // === Layer 5: invincibility rune ring (when fragments alive) ===
+                    const fragmentsAlive = Array.isArray(entity.minions)
+                        && entity.minions.some(m => m && m._isTessFragment && m.currentHp > 0);
+                    if (fragmentsAlive) {
                         ctx.save();
-                        ctx.strokeStyle = '#fff';
-                        ctx.lineWidth = 3;
-                        ctx.setLineDash([5, 10]);
-                        ctx.beginPath();
-                        ctx.arc(0, 0, 220, 0, Math.PI*2);
-                        ctx.stroke();
+                        ctx.rotate(-time * 0.18);
+                        ctx.strokeStyle = `rgba(255, 215, 0, 0.55)`;
+                        ctx.fillStyle = accentColor;
+                        ctx.lineWidth = 1.5;
+                        ctx.shadowColor = accentColor;
+                        ctx.shadowBlur = isLow ? 0 : 8;
+                        const runeCount = isLow ? 8 : 12;
+                        for (let g = 0; g < runeCount; g++) {
+                            const a = g * (Math.PI * 2 / runeCount);
+                            const rx = Math.cos(a) * 290;
+                            const ry = Math.sin(a) * 290;
+                            ctx.save();
+                            ctx.translate(rx, ry);
+                            ctx.rotate(a + Math.PI / 2);
+                            if (g % 3 === 0) {
+                                ctx.beginPath();
+                                ctx.moveTo(-5, -5); ctx.lineTo(5, 0); ctx.lineTo(-5, 5);
+                                ctx.closePath(); ctx.fill();
+                            } else if (g % 3 === 1) {
+                                ctx.beginPath();
+                                ctx.moveTo(-5, -3); ctx.lineTo(5, -3);
+                                ctx.moveTo(-3, 3);  ctx.lineTo(3, 3);
+                                ctx.stroke();
+                            } else {
+                                ctx.beginPath();
+                                ctx.arc(0, 0, 4, 0, Math.PI * 1.8);
+                                ctx.stroke();
+                            }
+                            ctx.restore();
+                        }
                         ctx.restore();
                     }
 
@@ -29958,13 +29919,128 @@ drawEntity(entity) {
             ctx.save();
             ctx.scale(1.8, 1.8);
 
+            // --- TESSERACT FRAGMENT (boss escort) — geometric
+            // abnormality shapes. Each fragment picks one of four
+            // distinct silhouettes via _tessShapeIdx so the four
+            // orbiting fragments read as four different impossible
+            // objects rather than four identical wireframes. Slight
+            // per-frame jitter keeps them feeling unstable.
+            if (entity._isTessFragment) {
+                const fragGold = '#ffd76a';
+                const fragWhite = '#ffffff';
+                const idx = entity._tessShapeIdx % 4;
+                // Tier-aware glitch jitter. Skipped on low-tier so the
+                // weaker GPU isn't randomising offsets per frame.
+                const tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
+                const jitter = (tier === 'low') ? 0 : 1.2;
+                const jx = (Math.random() - 0.5) * jitter;
+                const jy = (Math.random() - 0.5) * jitter;
+                const jr = (Math.random() - 0.5) * (jitter * 0.008);
+                ctx.save();
+                ctx.translate(jx, jy);
+                ctx.rotate(jr);
+                ctx.strokeStyle = fragGold;
+                ctx.fillStyle = `rgba(255, 215, 0, 0.18)`;
+                ctx.lineWidth = 2;
+                ctx.shadowColor = fragGold;
+                ctx.shadowBlur = (typeof Perf !== 'undefined' && Perf.shadowBlur) ? Perf.shadowBlur(10) : 10;
+                if (idx === 0) {
+                    // Möbius-ish ribbon (figure-8 stroke that twists).
+                    const tw = time * 1.5;
+                    ctx.beginPath();
+                    for (let s = 0; s <= 60; s++) {
+                        const t = s / 60;
+                        const a = t * Math.PI * 2;
+                        const r = 14 + Math.sin(a * 2 + tw) * 4;
+                        const x = Math.cos(a) * r;
+                        const y = Math.sin(a * 2) * 8;
+                        if (s === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                    ctx.stroke();
+                } else if (idx === 1) {
+                    // Penrose impossible triangle.
+                    const r = 18;
+                    ctx.beginPath();
+                    for (let i = 0; i < 4; i++) {
+                        const a = -Math.PI / 2 + i * (Math.PI * 2 / 3);
+                        const x = Math.cos(a) * r;
+                        const y = Math.sin(a) * r;
+                        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+                    // Inner offset triangle for the impossible shading hint.
+                    ctx.strokeStyle = fragWhite;
+                    ctx.lineWidth = 1.2;
+                    ctx.beginPath();
+                    for (let i = 0; i < 4; i++) {
+                        const a = -Math.PI / 2 + i * (Math.PI * 2 / 3);
+                        const x = Math.cos(a) * (r - 6);
+                        const y = Math.sin(a) * (r - 6) + 1;
+                        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+                } else if (idx === 2) {
+                    // Broken cube — three faces drawn, the fourth replaced
+                    // with a jittering line so the silhouette reads as
+                    // structurally damaged.
+                    const s = 14;
+                    ctx.beginPath();
+                    ctx.rect(-s, -s, s * 2, s * 2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(-s, -s); ctx.lineTo(-s + 6, -s - 6);
+                    ctx.lineTo(s + 6, -s - 6); ctx.lineTo(s, -s);
+                    ctx.stroke();
+                    // Broken edge — replaced with a small zig-zag.
+                    ctx.strokeStyle = fragWhite;
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    const seg = 5;
+                    for (let i = 0; i < seg; i++) {
+                        const t1 = i / seg;
+                        const t2 = (i + 1) / seg;
+                        const ox = (Math.random() - 0.5) * 3;
+                        const oy = (Math.random() - 0.5) * 2;
+                        const x1 = s + 6 - t1 * 12;
+                        const y1 = -s - 6 + ox;
+                        const x2 = s + 6 - t2 * 12;
+                        const y2 = -s - 6 + oy;
+                        if (i === 0) ctx.moveTo(x1, y1);
+                        ctx.lineTo(x2, y2);
+                    }
+                    ctx.stroke();
+                } else {
+                    // Inverted pyramid — downward triangle with flicker.
+                    const flicker = 0.6 + 0.4 * Math.sin(time * 5 + idx);
+                    ctx.globalAlpha = flicker;
+                    ctx.beginPath();
+                    ctx.moveTo(-16, -10);
+                    ctx.lineTo(16, -10);
+                    ctx.lineTo(0, 18);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                    // Inner white smaller pyramid.
+                    ctx.globalAlpha = 1;
+                    ctx.strokeStyle = fragWhite;
+                    ctx.lineWidth = 1.2;
+                    ctx.beginPath();
+                    ctx.moveTo(-9, -5);
+                    ctx.lineTo(9, -5);
+                    ctx.lineTo(0, 10);
+                    ctx.closePath();
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
             // --- BOLSTER MECH (Compiler bodyguard) — orange industrial
             // hovering jet. Trapezoid hull + chevron canopy + twin
             // bottom-thrusters with flickering plumes. Bobs on a sine
             // wave to read as anti-grav, plus a slow rotating intake
             // fan in the centre. Skinned pure orange so it stands
             // apart from sector minions visually as well as semantically.
-            if (entity._isBolsterMech) {
+            else if (entity._isBolsterMech) {
                 const bolsterOrange = '#ff8800';
                 const bolsterDeep   = '#cc5500';
                 const bolsterCore   = '#ffb84d';
