@@ -14037,37 +14037,38 @@ async startCombat(type) {
 
         // Tesseract Prime Logic
         if (this.enemy.name === "TESSERACT PRIME") {
-            this.enemy.invincibleTurns = 0; // legacy 3-turn self-shield
-                                            // removed; invincibility now
-                                            // comes from living fragments
-            // v1.9.0 — spawn 4 Tesseract Fragments orbiting the boss.
-            // Boss is invincible while any fragment lives. When all
-            // fragments die, boss becomes vulnerable for 3 turns,
-            // then respawns the fragments and restores invincibility.
-            // Fragments are tagged `_isTessFragment` so the renderer
-            // and damage gate can recognise them. Stat block kept
-            // small so the player can clear them at S5 power level
-            // but it's the resummon that creates the difficulty.
-            const FRAG_COUNT = 4;
-            for (let i = 0; i < FRAG_COUNT; i++) {
-                const angle = (i / FRAG_COUNT) * Math.PI * 2;
-                const radius = 130;
-                const fx = this.enemy.x + Math.cos(angle) * radius;
-                const fy = this.enemy.y + Math.sin(angle) * radius * 0.55;
-                const m = new Minion(fx, fy, this.enemy.minions.length + 1, false, 3);
-                m.name = "Tesseract Fragment";
-                m.maxHp = 40; m.currentHp = 40;
-                m.dmg = 14;
+            this.enemy.invincibleTurns = 0;
+            // 3 specialised role minions. Each orb is pacifist (never
+            // attacks) and fires a unique passive in startTurn:
+            //   heart  heals boss 8% maxHp / enemy turn
+            //   aegis  +20 boss shield / enemy turn
+            //   hex    applies WEAK to player every 2 turns
+            // Defensive prune of any leftover minions so the resummon
+            // path can never inherit a corpse and end up with 4 or 5
+            // entries in the array.
+            this.enemy.minions = this.enemy.minions.filter(m => m && m.currentHp > 0);
+            const TESS_ROLES = [
+                { role: 'heart', hp: 60, color: '#ff3355', name: 'Tesseract Heart' },
+                { role: 'aegis', hp: 40, color: '#3a8bff', name: 'Tesseract Aegis' },
+                { role: 'hex',   hp: 35, color: '#bc13fe', name: 'Tesseract Hex'   }
+            ];
+            TESS_ROLES.forEach((spec, i) => {
+                const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false, 3);
+                m.name = spec.name;
+                m.maxHp = spec.hp;
+                m.currentHp = spec.hp;
+                m.dmg = 0;
                 m._isTessFragment = true;
-                m._tessOrbitAngle = angle;       // rotation seed for renderer
-                m._tessOrbitRadius = radius;
-                m._tessShapeIdx = i % 4;         // 0-3, picks distinct abnormality shape
+                m._tessRole = spec.role;
+                m._tessShapeIdx = i;
+                m._tessOrbColor = spec.color;
+                m._pacifist = true;
                 m.spawnTimer = 1.0;
                 this.enemy.minions.push(m);
-            }
+            });
             this._queueBossAnnouncement(() => {
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200,
-                    "INVINCIBLE — DESTROY FRAGMENTS", "#ffd76a");
+                    "INVINCIBLE WHILE ORBS LIVE", "#ffd76a");
             });
 
             AudioMgr.bossSilence = true;
@@ -14428,37 +14429,41 @@ async startTurn() {
         this.recycleBinCount = 0;
         this._fluxCyclerHeal = 0;
 
-        // v1.9.0 — Tesseract Prime fragment resummon. When the player
-        // killed the last fragment, _resolveEnemyKill stamped a
-        // deadline `turnCount + 3`. When it lands, restore the
-        // 4-fragment orbit and the boss returns to invincible.
+        // Tesseract Prime orb resummon. When the player killed the
+        // last orb, _resolveEnemyKill stamped a deadline turnCount+3.
+        // When it lands, restore the 3 specialised orbs and the boss
+        // returns to invincible. Defensive prune ensures no leftover
+        // corpses can produce a phantom 4th/5th minion.
         if (this.enemy && this.enemy.name === 'TESSERACT PRIME'
             && this.enemy.currentHp > 0
             && typeof this.enemy._fragmentResummonAt === 'number'
             && this.turnCount >= this.enemy._fragmentResummonAt) {
             this.enemy._fragmentResummonAt = null;
-            const FRAG_COUNT = 4;
-            for (let i = 0; i < FRAG_COUNT; i++) {
-                const angle = (i / FRAG_COUNT) * Math.PI * 2;
-                const radius = 130;
-                const fx = this.enemy.x + Math.cos(angle) * radius;
-                const fy = this.enemy.y + Math.sin(angle) * radius * 0.55;
-                const m = new Minion(fx, fy, this.enemy.minions.length + 1, false, 3);
-                m.name = "Tesseract Fragment";
-                m.maxHp = 40; m.currentHp = 40;
-                m.dmg = 14;
+            this.enemy.minions = this.enemy.minions.filter(m => m && m.currentHp > 0);
+            const TESS_ROLES = [
+                { role: 'heart', hp: 60, color: '#ff3355', name: 'Tesseract Heart' },
+                { role: 'aegis', hp: 40, color: '#3a8bff', name: 'Tesseract Aegis' },
+                { role: 'hex',   hp: 35, color: '#bc13fe', name: 'Tesseract Hex'   }
+            ];
+            TESS_ROLES.forEach((spec, i) => {
+                const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false, 3);
+                m.name = spec.name;
+                m.maxHp = spec.hp;
+                m.currentHp = spec.hp;
+                m.dmg = 0;
                 m._isTessFragment = true;
-                m._tessOrbitAngle = angle;
-                m._tessOrbitRadius = radius;
-                m._tessShapeIdx = i % 4;
+                m._tessRole = spec.role;
+                m._tessShapeIdx = i;
+                m._tessOrbColor = spec.color;
+                m._pacifist = true;
                 m.spawnTimer = 1.0;
                 this.enemy.minions.push(m);
-                ParticleSys.createShockwave(fx, fy, '#ffd76a', 26);
-                ParticleSys.createSparks(fx, fy, '#ffd76a', 12);
+                ParticleSys.createShockwave(m.x, m.y, spec.color, 26);
+                ParticleSys.createSparks(m.x, m.y, spec.color, 12);
                 if (this.triggerVFX) this.triggerVFX('materialize', null, m);
-            }
+            });
             ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200,
-                'FRAGMENTS RECONSTITUTED', '#ffd76a');
+                'ORBS RECONSTITUTED', '#ffd76a');
             if (this.shake) this.shake(10);
             AudioMgr.playSound('grid_fracture');
         }
@@ -14540,6 +14545,44 @@ async startTurn() {
         }
 
         this.turnCount++;
+
+        // --- TESSERACT PRIME: orb passive tick ---
+        // Each living orb fires its role passive at the start of the
+        // player turn:
+        //   heart  heals boss for 8% maxHp
+        //   aegis  +20 boss shield
+        //   hex    applies WEAK to player every 2 turns
+        // The orbs are pacifist (m.dmg = 0, _pacifist = true) so they
+        // never queue an attack of their own; they only fire these
+        // passives. Boss invincibility-while-alive is handled in
+        // entity.takeDamage and isn't repeated here.
+        if (this.enemy && this.enemy.name === 'TESSERACT PRIME' && this.enemy.currentHp > 0
+            && Array.isArray(this.enemy.minions)) {
+            const liveOrbs = this.enemy.minions.filter(m => m && m.currentHp > 0 && m._isTessFragment);
+            liveOrbs.forEach(m => {
+                if (m._tessRole === 'heart') {
+                    const heal = Math.max(1, Math.floor(this.enemy.maxHp * 0.08));
+                    this.enemy.currentHp = Math.min(this.enemy.maxHp, this.enemy.currentHp + heal);
+                    ParticleSys.createFloatingText(this.enemy.x - 60, this.enemy.y - 110,
+                        `HEART +${heal}`, '#ff3355');
+                } else if (m._tessRole === 'aegis') {
+                    this.enemy.addShield(20);
+                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 110,
+                        'AEGIS +20 SHIELD', '#3a8bff');
+                } else if (m._tessRole === 'hex') {
+                    m._hexCooldown = (m._hexCooldown || 0) - 1;
+                    if (m._hexCooldown <= 0) {
+                        m._hexCooldown = 2;
+                        if (this.player && typeof this.player.addEffect === 'function') {
+                            this.player.addEffect('weak', 2, 0.5, '🦠',
+                                'Damage halved for 2 turns.', 'WEAK');
+                        }
+                        ParticleSys.createFloatingText(this.player.x, this.player.y - 90,
+                            'HEX', '#bc13fe');
+                    }
+                }
+            });
+        }
 
         // --- THE COMPILER: BOLSTER MECH support tick ---
         // Each living Bolster Mech feeds the Compiler +10 shield every
@@ -23244,26 +23287,11 @@ drawEffects() {
             // Enemy-side row 2 sits behind the enemy (dy negative) so
             // summoned drones don't clip into the enemy health bar.
             placeMinions(this.enemy.minions, this.enemy.x, this.enemy.y, -1);
-
-            // v1.9.0 — Tesseract Prime fragment orbit override. Replaces
-            // the slot-grid placement above for `_isTessFragment` minions
-            // so they rotate around the boss in a slow elliptical orbit,
-            // visually integrated as part of the Tesseract centerpiece
-            // rather than reading as detached drones. Slow rotation rate
-            // matches the boss's own outer-cube spin.
-            if (this.enemy.name === 'TESSERACT PRIME' && Array.isArray(this.enemy.minions)) {
-                const t = (typeof performance !== 'undefined') ? performance.now() : Date.now();
-                const spinRate = 0.00035; // rad/ms ≈ ~12s per full rotation
-                this.enemy.minions.forEach(m => {
-                    if (!m || !m._isTessFragment) return;
-                    const baseAngle = m._tessOrbitAngle || 0;
-                    const r = m._tessOrbitRadius || 130;
-                    const a = baseAngle + t * spinRate;
-                    m.x = this.enemy.x + Math.cos(a) * r;
-                    m.y = this.enemy.y + Math.sin(a) * r * 0.55;
-                    m._tessSpinAngle = a; // for future renderer use
-                });
-            }
+            // (Tesseract Prime orbit override removed in v1.10.
+            // The 3 specialised orbs now use the standard slot grid
+            // alongside every other boss-minion layout, which keeps
+            // their HP bars + role colours readable instead of
+            // stacking on top of the boss.)
         }
     },
 
