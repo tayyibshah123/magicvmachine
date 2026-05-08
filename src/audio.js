@@ -78,15 +78,45 @@ const AudioMgr = {
     // Soft music transitions — used for combat start/end, boss silence, and
     // the music toggle. Targets this._baseVol on fade-in and 0 on fade-out.
     // Mutually cancels prior fades so repeated calls don't stack.
+    //
+    // Quick-wins pass: route fade intervals through Game.setLoop /
+    // Game.clearLoop so the id is tracked in Game._intervals and gets
+    // drained automatically by Game.clearTrackedTimers() on state
+    // transitions. Without this, a fade started by one screen kept
+    // ticking volume after the state moved on, which manifested as
+    // "music stacks on rapid quit-then-resume". Feature-detected
+    // fallback to raw setInterval covers boot-order races where Game
+    // hasn't been registered on window yet.
+    _setFadeInterval(fn, ms) {
+        const g = (typeof window !== 'undefined') ? window.Game : null;
+        if (g && typeof g.setLoop === 'function') {
+            this._fadeIsTracked = true;
+            return g.setLoop(fn, ms);
+        }
+        this._fadeIsTracked = false;
+        return setInterval(fn, ms);
+    },
+    _clearFadeInterval(id) {
+        if (id == null) return;
+        const g = (typeof window !== 'undefined') ? window.Game : null;
+        if (this._fadeIsTracked && g && typeof g.clearLoop === 'function') {
+            g.clearLoop(id);
+        } else {
+            clearInterval(id);
+        }
+    },
     _cancelFade() {
-        if (this._fadeInterval) { clearInterval(this._fadeInterval); this._fadeInterval = null; }
+        if (this._fadeInterval) {
+            this._clearFadeInterval(this._fadeInterval);
+            this._fadeInterval = null;
+        }
     },
     fadeMusicOut(durationMs = 450) {
         if (!this.bgm) return;
         this._cancelFade();
         const startVol = this.bgm.volume;
         const start = performance.now();
-        this._fadeInterval = setInterval(() => {
+        this._fadeInterval = this._setFadeInterval(() => {
             const t = Math.min(1, (performance.now() - start) / durationMs);
             this._setBgmVolume(startVol * (1 - t));
             if (t >= 1) {
@@ -113,7 +143,7 @@ const AudioMgr = {
             console.warn('[bgm] play() rejected during fade-in', e && e.name);
         });
         const start = performance.now();
-        this._fadeInterval = setInterval(() => {
+        this._fadeInterval = this._setFadeInterval(() => {
             const t = Math.min(1, (performance.now() - start) / durationMs);
             // Re-read target each tick so a slider drag during the fade
             // retunes the in-flight fade to the new volume instead of

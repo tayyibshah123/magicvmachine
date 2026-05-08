@@ -19,6 +19,20 @@ function reducedMotion() {
         && matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
+// Quick-wins audit: combat-recap was firing on every combat-end on
+// every device. The full panel build + slide-in animation costs
+// 8-12ms per frame on Snapdragon-7 class hardware, which spikes the
+// post-combat slowdown players reported. Gate matches the
+// turn-digest pattern (src/services/turn-digest.js): on perf-low
+// devices we skip the panel entirely. The end-of-combat reward
+// screen renders right after, so the player isn't deprived of any
+// information by the skip.
+function perfLow() {
+    return typeof document !== 'undefined'
+        && document.body
+        && document.body.classList.contains('perf-low');
+}
+
 function ensureHost() {
     if (host) return host;
     const el = document.createElement('div');
@@ -152,6 +166,9 @@ function renderEncryptedFile(opts) {
 export const CombatRecap = {
     show(snap, opts) {
         if (!snap) return Promise.resolve();
+        // Quick-wins audit: skip the full recap on perf-low devices.
+        // The reward screen still fires immediately after.
+        if (perfLow()) return Promise.resolve();
         const playerName = (opts && opts.playerName) || 'YOU';
         const enemyName  = (opts && opts.enemyName)  || 'ENEMY';
         const tier       = (opts && opts.tier)       || 'normal';

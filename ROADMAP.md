@@ -30,24 +30,38 @@ Six buckets, ordered roughly by priority. Asset-bound work (Bucket 4)
 runs in parallel because it's user-bound. Bucket 7 is the new Intel
 Codex deep dive. see its dedicated section below.
 
-### 1 · Perf & UX blockers
+### 1 · Perf & UX blockers ✅ CLOSED
 
-Carryover from AUDIT_2026-05. All small, all win-net.
+Carryover from AUDIT_2026-05. Pre-implementation audit revealed
+4 of 7 items were already shipped (the AUDIT carried stale claims
+into the consolidation). The remaining 3 landed together as the
+quick-wins ship. All seven items now resolved:
 
-- Reroll + end-turn button hit-zones too small at 360px (52×52 → 56×56)
-  with translucent panel background to keep the dice-crescent clear
-- Music fade timers leak through state transitions (raw `setInterval`
-  not in `Game._intervals`) → migrate to `Game.setLoop`
-- Particle pool O(n) victim scan when full → silent-skip when full (the
-  visual cost of one missing particle is < the scan cost)
-- Combat-recap + turn-digest fire on `Perf.tier === 'low'` with no
-  fallback → gate to a single-line digest under low tier
-- Touch handlers blanket `passive: false` → switch to `passive: true`
-  except where `preventDefault` is genuinely needed
-- Death-screen glitch animation `filter` causing repaints (30-35fps
-  mid-tier) → promote to compositor layer or animate transform
-- Save-quota exhaustion fails silently → toast + auto-prune oldest
-  non-active slot on second consecutive fail
+- ~~Reroll + end-turn button hit-zones too small at 360px~~
+  shipped; 56×56 with translucent panel bg at `style.css:11053-11075`
+- ✅ Music fade timers leak through state transitions
+  shipped; `src/audio.js` fade intervals migrated to
+  `Game.setLoop` with feature-detect fallback for boot-order races
+- ~~Particle pool O(n) victim scan when full~~
+  shipped in v1.8.0; round-robin O(1) eviction at
+  `src/effects/particles.js:115-137`
+- ✅ Combat-recap + turn-digest fire on `Perf.tier === 'low'`
+  shipped; turn-digest had the gate already, combat-recap now
+  matches at `src/services/combat-recap.js`
+- ✅ Touch handlers blanket `passive: false`
+  shipped; canvas touchstart at `src/game.js:1395` flipped to
+  passive: true (handleInteraction does not preventDefault).
+  Remaining 3 passive: false sites legitimately call
+  preventDefault (intro dismiss, tutorialOverlay, pointermove
+  drag) and stay non-passive.
+- ~~Death-screen glitch animation filter causing repaints~~
+  no-op; death title uses `text-shadow` keyframes (compositor
+  safe), backdrop uses `background-position`. No `filter`
+  animation found on the gameover overlay.
+- ~~Save-quota exhaustion fails silently~~
+  shipped; `_writeSaveRaw` at `src/game.js:10655-10735` already
+  has auto-prune oldest non-active slot on first fail and
+  floating-text toast on second fail.
 
 ### 2 · Combat balance pass
 

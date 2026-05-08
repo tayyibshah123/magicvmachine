@@ -1392,12 +1392,17 @@ const Game = {
         };
 
         this.canvas.addEventListener('mousedown', handleInteraction);
+        // Quick-wins audit: handleInteraction does not call
+        // preventDefault on this path (drag-init lives on pointerdown
+        // below, which has its own listener). Flipping to passive:
+        // true unblocks scroll-start latency on touch devices without
+        // changing any tap behaviour.
         this.canvas.addEventListener('touchstart', (e) => {
             const coords = getLogicCoords(e);
             this.mouseX = coords.x;
             this.mouseY = coords.y;
             handleInteraction(e);
-        }, {passive: false});
+        }, { passive: true });
 
         // QTE PRIORITY POINTERDOWN — capture-phase, document-level. Locks
         // the timing snapshot at the very first instant of contact so a
