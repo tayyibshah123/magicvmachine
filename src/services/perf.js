@@ -364,6 +364,40 @@ export const Perf = {
     startTrace(opts) { PerfTrace.start(opts); },
     stopTrace()      { PerfTrace.stop(); },
 
+    // 30Hz / low-refresh probe. Samples the rAF gap over the next 60
+    // frames and resolves with the average dt in ms. Caller decides
+    // what to do with the result (typically: fire a hint if avg >= 28ms,
+    // i.e. <=36fps sustained from the panel). Idempotent via
+    // _lowRefreshChecked so a long session doesn't keep probing every
+    // combat. Returns null if a probe was already run.
+    _lowRefreshChecked: false,
+    probeRefreshOnce() {
+        if (this._lowRefreshChecked) return null;
+        this._lowRefreshChecked = true;
+        const FRAMES = 60;
+        return new Promise((resolve) => {
+            let last = performance.now();
+            let sum = 0;
+            let n = 0;
+            const tick = (now) => {
+                const dt = now - last;
+                last = now;
+                // Drop one-off stalls (tab-blur post-resume, GC pause)
+                // so the average reflects sustained refresh.
+                if (dt > 0 && dt < 250) {
+                    sum += dt;
+                    n++;
+                }
+                if (n < FRAMES) {
+                    requestAnimationFrame(tick);
+                    return;
+                }
+                resolve(sum / n);
+            };
+            requestAnimationFrame(tick);
+        });
+    },
+
     // Convenience getters for hot-path code.
     shadowBlur(base) {
         if (!this.caps.shadowBlur) return 0;

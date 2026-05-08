@@ -72,7 +72,13 @@ const HINTS = {
     // screen that surfaces a fusion offer — owning both source
     // modules unlocks a prismatic-bordered combined relic. Audit
     // 2026-05 flagged that this system was launching silent.
-    first_fusion:           { title: "FUSION OFFERED",   body: "Combine two modules into one stronger relic." }
+    first_fusion:           { title: "FUSION OFFERED",   body: "Combine two modules into one stronger relic." },
+    // 30Hz / low-refresh device detection (Roadmap Bucket 6). Fires once
+    // when a sustained 60-frame sample after combat start averages well
+    // below 60fps, suggesting a 30Hz panel or browser throttle. Players
+    // should know visuals are running at half-rate so they don't read
+    // motion stutter as a game bug.
+    low_refresh:            { title: "LOW REFRESH",       body: "30Hz display detected. Visuals run at half-rate." }
 };
 
 function readSeen() {

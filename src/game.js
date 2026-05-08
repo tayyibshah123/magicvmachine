@@ -14454,6 +14454,21 @@ async startCombat(type) {
         // single chokepoint that fires for every combat (standard, elite,
         // boss, breakout, tutorial) so this is the cleanest entry point.
         try { CombatStats.startCombat(); } catch (_) {}
+        // Bucket 6 — 30Hz / low-refresh device probe. Runs once per
+        // session, samples 60 frames after combat starts, fires the
+        // low_refresh hint if the panel averages <=36fps sustained.
+        try {
+            if (Perf && typeof Perf.probeRefreshOnce === 'function') {
+                const probe = Perf.probeRefreshOnce();
+                if (probe && typeof probe.then === 'function') {
+                    probe.then(avgMs => {
+                        if (avgMs >= 28 && typeof Hints !== 'undefined' && Hints.trigger) {
+                            Hints.trigger('low_refresh');
+                        }
+                    });
+                }
+            }
+        } catch (_) {}
         // Reset per-combat class-rework counters so they don't leak across fights.
         this.player.bloodTier = 0;
         // Annihilator anti-snowball: grant a single starter QTE-token at

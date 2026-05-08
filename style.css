@@ -9649,6 +9649,32 @@ body.perf-low .tutorial-narration {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     background: linear-gradient(180deg, rgba(4, 8, 22, 0.94), rgba(8, 0, 26, 0.97));
+    /* v1.9.30 — drop the cyan + black double box-shadow on perf-low.
+       The pane's `top` is animated during anchor changes (380ms), and
+       top transitions are paint-side rather than composited, which
+       forces the shadow to repaint each frame of the transition. The
+       solid bg + neon border alone read as "system pane" without the
+       glow cost. */
+    box-shadow: none;
+}
+body.perf-low .breakout-storyboard .sb-scanline,
+body.perf-low .breakout-storyboard .sb-glitch {
+    /* v1.9.30 — strip the box-shadow on the two animated overlay
+       elements when running on a low-perf tier. The scanline already
+       has a gradient that renders the bright sweep visually; the
+       16px outer glow was an extra compositor layer that bumped
+       tutorial paint cost ~1ms on mid-tier Android. */
+    box-shadow: none;
+}
+body.perf-low .breakout-storyboard .sb-sigil,
+body.perf-low .breakout-storyboard .sb-glyph,
+body.perf-low .breakout-storyboard .sb-hex-pupil {
+    /* drop-shadow filter on SVG forces a separate layer + a per-frame
+       repaint when the element animates. The hex-pupil and glyph
+       already have animation:none under perf-low above, but the
+       drop-shadow stays as a static cost — strip it too so the
+       storyboard renders as a flat composite. */
+    filter: none;
 }
 
 /* ──────────────────────────────────────────────────────────────────
