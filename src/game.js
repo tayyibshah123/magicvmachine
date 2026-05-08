@@ -28863,49 +28863,56 @@ drawEntity(entity) {
                     ctx.restore();
                 }
 
-                // --- SECTOR 5: TESSERACT PRIME (Angelic Overhaul v1.10) ---
-                // Five-layer composition replacing the prior 8-layer
-                // overlapping geometry mess. Back-to-front:
-                //   1. Cascading wireframe cubes (depth field)
-                //   2. Halo disc (radial gradient behind figure)
-                //   3. Wings (high/mid only)
-                //   4. Humanoid silhouette + halo ring
-                //   5. Invincibility rune ring (only while fragments alive)
-                // Phase tinting: phase 1 white/gold; phase 2 red; phase 3
-                // magenta. Subtle vertical bob makes the figure float.
+                // === SECTOR 5: TESSERACT PRIME (Final Boss Spectacle v1.10b) ===
+                // Ten-layer composition. Listed back-to-front. Built to
+                // read as an angelic / cosmic figure suspended in sacred
+                // space rather than a humanoid silhouette. User asked
+                // for a visual spectacle appropriate to the final boss
+                // role; performance gating is permissive (full layers
+                // on high, modest reductions on mid/low).
                 else if (this.sector === 5) {
                     ctx.save();
                     const tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
                     const isLow = tier === 'low';
                     const isMid = tier === 'mid';
-                    const cubeCount = isLow ? 2 : (isMid ? 4 : 6);
+                    const phase = entity.phase || 1;
 
-                    let figFill = `rgba(255, 255, 255, ${entity.phase >= 2 ? 0.7 : 0.82})`;
-                    let accentColor = '#ffd700';
-                    let glowColor = 'rgba(255, 215, 0, 0.7)';
-                    if (entity.phase === 2) { figFill = 'rgba(255, 200, 200, 0.7)'; accentColor = '#ff3355'; glowColor = 'rgba(255, 51, 85, 0.7)'; }
-                    else if (entity.phase >= 3) { figFill = 'rgba(255, 200, 240, 0.7)'; accentColor = '#ff77aa'; glowColor = 'rgba(255, 119, 170, 0.8)'; }
+                    // Phase tinting.
+                    let bodyFill, accentColor, glowColor;
+                    if (phase === 2) {
+                        bodyFill = 'rgba(255, 200, 200, 0.85)';
+                        accentColor = '#ff3355';
+                        glowColor = 'rgba(255, 51, 85, 0.7)';
+                    } else if (phase >= 3) {
+                        bodyFill = 'rgba(255, 200, 240, 0.85)';
+                        accentColor = '#ff77aa';
+                        glowColor = 'rgba(255, 119, 170, 0.8)';
+                    } else {
+                        bodyFill = 'rgba(255, 255, 255, 0.92)';
+                        accentColor = '#ffd700';
+                        glowColor = 'rgba(255, 215, 0, 0.7)';
+                    }
 
                     const bob = Math.sin(time * 1.4) * 3;
                     ctx.translate(0, bob);
 
-                    // === Layer 1: cascading cubes ===
-                    const cubeBaseSizes = [60, 95, 135, 180, 225, 270];
-                    for (let c = 0; c < cubeCount; c++) {
-                        const size = cubeBaseSizes[c];
+                    // === Layer 1: Cube cascade (depth field) ===
+                    // 8 nested wireframe cubes alternating rotation
+                    // direction. 9th outer cube draws with chromatic
+                    // aberration ghosts when on high tier.
+                    const cubeCount = isLow ? 4 : (isMid ? 6 : 8);
+                    const cubeBaseSizes = [50, 80, 115, 155, 200, 250, 305, 365];
+                    const drawCube = (size, rot, stroke, lw, blur) => {
                         const half = size / 2;
                         const depth = size * 0.4;
-                        const rot = time * (0.18 + c * 0.07) * (c % 2 === 0 ? 1 : -1);
-                        const alpha = 0.20 + c * 0.06;
                         ctx.save();
                         ctx.rotate(rot);
-                        ctx.strokeStyle = c === cubeCount - 1
-                            ? `rgba(255, 255, 255, ${Math.min(0.85, alpha + 0.2)})`
-                            : `rgba(255, 215, 0, ${alpha})`;
-                        ctx.lineWidth = 1 + (c / cubeCount) * 1.5;
-                        ctx.shadowColor = accentColor;
-                        ctx.shadowBlur = isLow ? 0 : (isMid ? 6 : 14);
-                        // Project 8 cube vertices with a tilt for pseudo-3D depth.
+                        ctx.strokeStyle = stroke;
+                        ctx.lineWidth = lw;
+                        if (blur > 0) {
+                            ctx.shadowColor = accentColor;
+                            ctx.shadowBlur = blur;
+                        }
                         const v = [];
                         for (let i = 0; i < 8; i++) {
                             const x = (i & 1) ? half : -half;
@@ -28925,160 +28932,466 @@ drawEntity(entity) {
                         });
                         ctx.stroke();
                         ctx.restore();
+                    };
+                    for (let c = 0; c < cubeCount; c++) {
+                        const size = cubeBaseSizes[c];
+                        const rot = time * (0.14 + c * 0.05) * (c % 2 === 0 ? 1 : -1);
+                        const alpha = 0.18 + c * 0.045;
+                        const stroke = c === cubeCount - 1
+                            ? `rgba(255, 255, 255, ${Math.min(0.9, alpha + 0.25)})`
+                            : `rgba(255, 215, 0, ${alpha})`;
+                        const lw = 1 + (c / cubeCount) * 1.5;
+                        const blur = isLow ? 0 : (isMid ? 5 : 12);
+                        drawCube(size, rot, stroke, lw, blur);
                     }
-
-                    // === Layer 2: halo disc behind figure ===
-                    ctx.save();
-                    const haloKey = `tess_halo_${entity.phase || 1}`;
-                    let haloGrad;
-                    if (this._cachedGradient) {
-                        haloGrad = this._cachedGradient(haloKey, () => {
-                            const g = ctx.createRadialGradient(0, 0, 30, 0, 0, 145);
-                            const baseAlpha = entity.phase >= 2 ? 0.55 : 0.45;
-                            const baseColor = accentColor;
-                            g.addColorStop(0, baseColor);
-                            g.addColorStop(0.45, `rgba(255, 215, 0, ${baseAlpha * 0.4})`);
-                            g.addColorStop(1, 'rgba(255, 215, 0, 0)');
-                            return g;
-                        });
-                    } else {
-                        haloGrad = ctx.createRadialGradient(0, 0, 30, 0, 0, 145);
-                        haloGrad.addColorStop(0, accentColor);
-                        haloGrad.addColorStop(0.45, 'rgba(255, 215, 0, 0.18)');
-                        haloGrad.addColorStop(1, 'rgba(255, 215, 0, 0)');
-                    }
-                    ctx.globalAlpha = 0.55;
-                    ctx.fillStyle = haloGrad;
-                    ctx.beginPath();
-                    ctx.arc(0, 0, 145, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.restore();
-
-                    // === Layer 3: wings (high/mid only) ===
-                    if (!isLow) {
+                    // 9th outer cube with chromatic ghosts (high only).
+                    if (!isLow && !isMid) {
+                        const outerSize = 420;
+                        const outerRot = time * 0.06;
+                        drawCube(outerSize, outerRot, 'rgba(255, 255, 255, 0.18)', 0.8, 0);
                         ctx.save();
-                        ctx.strokeStyle = accentColor;
-                        ctx.fillStyle = `rgba(255, 215, 0, ${entity.phase >= 2 ? 0.32 : 0.26})`;
-                        ctx.lineWidth = 1.5;
-                        ctx.shadowColor = accentColor;
-                        ctx.shadowBlur = isMid ? 8 : 16;
-                        const wingHalfCount = isMid ? 2 : 3;
-                        const flutter = Math.sin(time * 2) * 0.06;
-                        // Left wings (mirrored).
-                        for (let w = 0; w < wingHalfCount; w++) {
-                            const a = Math.PI - 0.45 - w * 0.36 + flutter;
-                            const len = 135 - w * 18;
-                            const tipX = Math.cos(a) * len;
-                            const tipY = Math.sin(a) * len - 30;
-                            const innerX = Math.cos(a) * (len - 32);
-                            const innerY = Math.sin(a) * (len - 32) - 8;
+                        ctx.translate(5, 0);
+                        drawCube(outerSize, outerRot, 'rgba(0, 220, 255, 0.18)', 0.8, 0);
+                        ctx.restore();
+                        ctx.save();
+                        ctx.translate(-5, 0);
+                        drawCube(outerSize, outerRot, 'rgba(255, 0, 170, 0.18)', 0.8, 0);
+                        ctx.restore();
+                    }
+
+                    // === Layer 2: Sacred geometry mandala ===
+                    // Five concentric overlays: flower of life,
+                    // pentagram, hexagram, concentric rings with rune
+                    // markers, vesica piscis at the wing root.
+                    if (!isLow) {
+                        // Flower of life (7 overlapping circles, ultra-low alpha).
+                        ctx.save();
+                        ctx.strokeStyle = `rgba(255, 215, 106, ${phase >= 2 ? 0.18 : 0.14})`;
+                        ctx.lineWidth = 1;
+                        const folR = 38;
+                        for (let f = 0; f < 7; f++) {
+                            const fa = f === 6 ? 0 : (f * Math.PI / 3);
+                            const fx = f === 6 ? 0 : Math.cos(fa) * folR;
+                            const fy = f === 6 ? 0 : Math.sin(fa) * folR;
                             ctx.beginPath();
-                            ctx.moveTo(-12, -22);
-                            ctx.lineTo(tipX, tipY);
-                            ctx.lineTo(innerX, innerY);
-                            ctx.closePath();
-                            ctx.fill();
+                            ctx.arc(fx, fy, folR, 0, Math.PI * 2);
                             ctx.stroke();
                         }
-                        // Right wings.
-                        for (let w = 0; w < wingHalfCount; w++) {
-                            const a = 0.45 + w * 0.36 - flutter;
-                            const len = 135 - w * 18;
-                            const tipX = Math.cos(a) * len;
-                            const tipY = Math.sin(a) * len - 30;
-                            const innerX = Math.cos(a) * (len - 32);
-                            const innerY = Math.sin(a) * (len - 32) - 8;
+                        ctx.restore();
+                        // Pentagram inscribed in pentagon.
+                        ctx.save();
+                        ctx.rotate(time * 0.12);
+                        ctx.strokeStyle = `rgba(255, 215, 106, ${phase >= 2 ? 0.45 : 0.35})`;
+                        ctx.lineWidth = 1.2;
+                        ctx.shadowColor = accentColor;
+                        ctx.shadowBlur = 6;
+                        const pentR = 95;
+                        const pentPts = [];
+                        for (let p = 0; p < 5; p++) {
+                            const pa = -Math.PI / 2 + p * (Math.PI * 2 / 5);
+                            pentPts.push([Math.cos(pa) * pentR, Math.sin(pa) * pentR]);
+                        }
+                        ctx.beginPath();
+                        for (let p = 0; p < 5; p++) {
+                            const next = (p + 2) % 5;
+                            ctx.moveTo(pentPts[p][0], pentPts[p][1]);
+                            ctx.lineTo(pentPts[next][0], pentPts[next][1]);
+                        }
+                        ctx.stroke();
+                        ctx.restore();
+                        // Hexagram (Star of David).
+                        ctx.save();
+                        ctx.rotate(-time * 0.18);
+                        ctx.strokeStyle = `rgba(255, 215, 106, ${phase >= 2 ? 0.5 : 0.4})`;
+                        ctx.lineWidth = 1.4;
+                        const hexR = 125;
+                        for (let t = 0; t < 2; t++) {
                             ctx.beginPath();
-                            ctx.moveTo(12, -22);
-                            ctx.lineTo(tipX, tipY);
-                            ctx.lineTo(innerX, innerY);
-                            ctx.closePath();
+                            for (let i = 0; i < 4; i++) {
+                                const ha = (t * Math.PI / 3) + i * (Math.PI * 2 / 3);
+                                const hx = Math.cos(ha) * hexR;
+                                const hy = Math.sin(ha) * hexR;
+                                if (i === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+                            }
+                            ctx.stroke();
+                        }
+                        ctx.restore();
+                        // Concentric rings with 12 rune markers each.
+                        const ringRadii = [160, 200, 245];
+                        ringRadii.forEach((rr, ri) => {
+                            ctx.save();
+                            ctx.rotate(time * (0.05 + ri * 0.03) * (ri % 2 === 0 ? 1 : -1));
+                            ctx.strokeStyle = `rgba(255, 215, 106, ${0.18 - ri * 0.04})`;
+                            ctx.lineWidth = 0.8;
+                            ctx.beginPath();
+                            ctx.arc(0, 0, rr, 0, Math.PI * 2);
+                            ctx.stroke();
+                            ctx.fillStyle = `rgba(255, 215, 106, ${0.35 - ri * 0.06})`;
+                            for (let g = 0; g < 12; g++) {
+                                const ga = g * Math.PI / 6;
+                                const gx = Math.cos(ga) * rr;
+                                const gy = Math.sin(ga) * rr;
+                                ctx.beginPath();
+                                ctx.arc(gx, gy, 1.5, 0, Math.PI * 2);
+                                ctx.fill();
+                            }
+                            ctx.restore();
+                        });
+                    }
+
+                    // === Layer 3: Halo aura (multi-layer bloom) ===
+                    ctx.save();
+                    const haloAlpha = phase >= 2 ? 0.55 : 0.45;
+                    // Outer soft halo
+                    let outerHalo = ctx.createRadialGradient(0, 0, 60, 0, 0, 180);
+                    outerHalo.addColorStop(0, accentColor);
+                    outerHalo.addColorStop(0.4, `rgba(255, 215, 0, ${haloAlpha * 0.3})`);
+                    outerHalo.addColorStop(1, 'rgba(255, 215, 0, 0)');
+                    ctx.globalAlpha = 0.45;
+                    ctx.fillStyle = outerHalo;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 180, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Mid halo
+                    let midHalo = ctx.createRadialGradient(0, 0, 25, 0, 0, 110);
+                    midHalo.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+                    midHalo.addColorStop(0.5, `rgba(255, 215, 0, ${haloAlpha * 0.5})`);
+                    midHalo.addColorStop(1, 'rgba(255, 215, 0, 0)');
+                    ctx.globalAlpha = 0.7;
+                    ctx.fillStyle = midHalo;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 110, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Inner core
+                    let innerHalo = ctx.createRadialGradient(0, 0, 8, 0, 0, 60);
+                    innerHalo.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
+                    innerHalo.addColorStop(1, 'rgba(255, 215, 0, 0)');
+                    ctx.globalAlpha = 0.85;
+                    ctx.fillStyle = innerHalo;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 60, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                    // Ring of 12 small zodiac circles around the figure.
+                    if (!isLow) {
+                        ctx.save();
+                        ctx.rotate(time * 0.08);
+                        ctx.fillStyle = `rgba(255, 255, 255, 0.55)`;
+                        ctx.shadowColor = accentColor;
+                        ctx.shadowBlur = 4;
+                        for (let z = 0; z < 12; z++) {
+                            const za = z * Math.PI / 6;
+                            const zx = Math.cos(za) * 70;
+                            const zy = Math.sin(za) * 70;
+                            ctx.beginPath();
+                            ctx.arc(zx, zy, 1.8, 0, Math.PI * 2);
                             ctx.fill();
+                        }
+                        ctx.restore();
+                    }
+
+                    // === Layer 4: Wings (large, prominent) ===
+                    // 4 sets of feather triangles per side on high
+                    // (16 total), 3 per side on mid (12), 2 per side
+                    // on low (8). Each feather has gradient fill
+                    // gold-to-white, gentle flutter, glowing tip.
+                    const wingSetCount = isLow ? 2 : (isMid ? 3 : 4);
+                    const flutter = Math.sin(time * 1.7) * 0.07;
+                    const drawFeatherSet = (sideMul) => {
+                        const baseAngles = [
+                            { ang: 0.45, len: 80,  spread: 0.18 },
+                            { ang: 0.78, len: 130, spread: 0.22 },
+                            { ang: 1.12, len: 175, spread: 0.26 },
+                            { ang: 1.42, len: 215, spread: 0.30 }
+                        ];
+                        for (let setIdx = 0; setIdx < wingSetCount; setIdx++) {
+                            const base = baseAngles[setIdx];
+                            for (let f = 0; f < 4; f++) {
+                                const fSpread = (f - 1.5) * base.spread * 0.45;
+                                const a = (Math.PI / 2 + base.ang + fSpread + flutter * (1 + setIdx * 0.2)) * sideMul;
+                                const len = base.len + Math.sin(time * 2 + setIdx + f) * 4;
+                                const rootX = -8 * sideMul;
+                                const rootY = -8;
+                                const tipX = rootX + Math.cos(a) * len;
+                                const tipY = rootY + Math.sin(a) * len;
+                                const innerX = rootX + Math.cos(a) * (len - 30);
+                                const innerY = rootY + Math.sin(a) * (len - 30) + 6 * sideMul;
+                                // Feather fill gradient
+                                const featherGrad = ctx.createLinearGradient(rootX, rootY, tipX, tipY);
+                                featherGrad.addColorStop(0, `rgba(255, 215, 0, ${phase >= 2 ? 0.42 : 0.32})`);
+                                featherGrad.addColorStop(0.6, `rgba(255, 240, 180, ${phase >= 2 ? 0.55 : 0.45})`);
+                                featherGrad.addColorStop(1, `rgba(255, 255, 255, 0.7)`);
+                                ctx.fillStyle = featherGrad;
+                                ctx.strokeStyle = accentColor;
+                                ctx.lineWidth = 1.2;
+                                ctx.shadowColor = accentColor;
+                                ctx.shadowBlur = isLow ? 4 : (isMid ? 8 : 14);
+                                ctx.beginPath();
+                                ctx.moveTo(rootX, rootY);
+                                ctx.lineTo(tipX, tipY);
+                                ctx.lineTo(innerX, innerY);
+                                ctx.closePath();
+                                ctx.fill();
+                                ctx.stroke();
+                                // Glowing tip dot.
+                                ctx.fillStyle = '#fff';
+                                ctx.shadowBlur = isLow ? 0 : 10;
+                                ctx.beginPath();
+                                ctx.arc(tipX, tipY, 2, 0, Math.PI * 2);
+                                ctx.fill();
+                            }
+                        }
+                    };
+                    ctx.save();
+                    drawFeatherSet(1);   // right wings
+                    drawFeatherSet(-1);  // left wings (mirrored via -1 multiplier)
+                    ctx.restore();
+
+                    // === Layer 5: Mandorla body (no humanoid limbs) ===
+                    // Vertical eye-shape framing a luminous core orb.
+                    // Single bisecting axial light line, two subtle
+                    // outstretched arm-strokes from the upper third.
+                    // No legs.
+                    ctx.save();
+                    // Mandorla outline (vesica almond).
+                    ctx.beginPath();
+                    const mTop = -78, mBot = 92, mWidth = 32;
+                    ctx.moveTo(0, mTop);
+                    ctx.bezierCurveTo(mWidth, mTop + 30, mWidth, mBot - 50, 0, mBot);
+                    ctx.bezierCurveTo(-mWidth, mBot - 50, -mWidth, mTop + 30, 0, mTop);
+                    ctx.closePath();
+                    // Mandorla fill gradient (centre brightest, edges
+                    // tinted by phase).
+                    const mGrad = ctx.createLinearGradient(0, mTop, 0, mBot);
+                    mGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+                    mGrad.addColorStop(0.5, bodyFill);
+                    mGrad.addColorStop(1, accentColor);
+                    ctx.fillStyle = mGrad;
+                    ctx.shadowColor = glowColor;
+                    ctx.shadowBlur = isLow ? 8 : 22;
+                    ctx.fill();
+                    ctx.lineWidth = 2.2;
+                    ctx.strokeStyle = accentColor;
+                    ctx.stroke();
+                    // Axial light line bisecting the mandorla.
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+                    ctx.lineWidth = 1.3;
+                    ctx.shadowBlur = isLow ? 0 : 8;
+                    ctx.beginPath();
+                    ctx.moveTo(0, mTop + 6);
+                    ctx.lineTo(0, mBot - 6);
+                    ctx.stroke();
+                    // Inner luminous core orb at the upper third of the
+                    // mandorla (where a "head" would be).
+                    const headY = -50;
+                    let coreGrad = ctx.createRadialGradient(0, headY, 2, 0, headY, 16);
+                    coreGrad.addColorStop(0, '#ffffff');
+                    coreGrad.addColorStop(0.6, accentColor);
+                    coreGrad.addColorStop(1, 'rgba(255, 215, 0, 0)');
+                    ctx.fillStyle = coreGrad;
+                    ctx.shadowColor = '#ffffff';
+                    ctx.shadowBlur = isLow ? 6 : 18;
+                    ctx.beginPath();
+                    ctx.arc(0, headY, 16, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Subtle outstretched arm strokes from the mandorla
+                    // upper third (no limbs, just light points).
+                    ctx.strokeStyle = accentColor;
+                    ctx.lineWidth = 3.5;
+                    ctx.lineCap = 'round';
+                    ctx.shadowColor = accentColor;
+                    ctx.shadowBlur = isLow ? 4 : 12;
+                    const armY = -30;
+                    ctx.beginPath();
+                    ctx.moveTo(-12, armY); ctx.lineTo(-66, armY - 6);
+                    ctx.moveTo(12, armY);  ctx.lineTo(66, armY - 6);
+                    ctx.stroke();
+                    // Tip light points on each arm.
+                    ctx.fillStyle = '#ffffff';
+                    ctx.shadowBlur = isLow ? 4 : 14;
+                    ctx.beginPath();
+                    ctx.arc(-66, armY - 6, 3, 0, Math.PI * 2);
+                    ctx.arc(66, armY - 6, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.lineCap = 'butt';
+                    ctx.restore();
+
+                    // === Layer 6: Crown ring of glyphs above the head ===
+                    if (!isLow) {
+                        ctx.save();
+                        ctx.translate(0, headY);
+                        ctx.rotate(time * 0.25);
+                        ctx.fillStyle = '#ffffff';
+                        ctx.strokeStyle = accentColor;
+                        ctx.lineWidth = 0.8;
+                        ctx.shadowColor = accentColor;
+                        ctx.shadowBlur = 6;
+                        const glyphs = isMid ? 8 : 12;
+                        for (let g = 0; g < glyphs; g++) {
+                            const ga = g * Math.PI * 2 / glyphs;
+                            const gx = Math.cos(ga) * 35;
+                            const gy = Math.sin(ga) * 35;
+                            ctx.save();
+                            ctx.translate(gx, gy);
+                            ctx.rotate(ga + Math.PI / 2);
+                            const kind = g % 5;
+                            ctx.beginPath();
+                            if (kind === 0) {
+                                ctx.moveTo(-2, -2); ctx.lineTo(2, 0); ctx.lineTo(-2, 2);
+                                ctx.closePath(); ctx.fill();
+                            } else if (kind === 1) {
+                                ctx.arc(0, 0, 1.5, 0, Math.PI * 2); ctx.fill();
+                            } else if (kind === 2) {
+                                ctx.moveTo(-2, 0); ctx.lineTo(2, 0); ctx.stroke();
+                            } else if (kind === 3) {
+                                ctx.arc(0, 0, 2, 0, Math.PI * 2); ctx.stroke();
+                                ctx.beginPath(); ctx.arc(0, 0, 0.6, 0, Math.PI * 2); ctx.fill();
+                            } else {
+                                ctx.moveTo(-2, 0); ctx.lineTo(0, -2); ctx.lineTo(2, 0); ctx.lineTo(0, 2);
+                                ctx.closePath(); ctx.stroke();
+                            }
+                            ctx.restore();
+                        }
+                        ctx.restore();
+                    }
+
+                    // === Layer 7: Energy tendrils streaming downward ===
+                    if (!isLow) {
+                        ctx.save();
+                        ctx.strokeStyle = `rgba(255, 215, 106, 0.28)`;
+                        ctx.lineWidth = 1.1;
+                        ctx.shadowColor = accentColor;
+                        ctx.shadowBlur = 4;
+                        const tendrilCount = isMid ? 4 : 6;
+                        for (let t = 0; t < tendrilCount; t++) {
+                            const xOff = (t - (tendrilCount - 1) / 2) * 16;
+                            ctx.beginPath();
+                            ctx.moveTo(xOff * 0.5, mBot - 4);
+                            const segs = 6;
+                            for (let s = 1; s <= segs; s++) {
+                                const sy = mBot - 4 + s * 28;
+                                const wave = Math.sin(time * 1.3 + t + s * 0.3) * 6;
+                                ctx.lineTo(xOff + wave, sy);
+                            }
                             ctx.stroke();
                         }
                         ctx.restore();
                     }
 
-                    // === Layer 4: humanoid silhouette ===
-                    ctx.save();
-                    ctx.lineCap = 'round';
-                    ctx.shadowColor = glowColor;
-                    ctx.shadowBlur = isLow ? 6 : 18;
-                    // Halo ring above the head.
-                    ctx.strokeStyle = accentColor;
-                    ctx.lineWidth = 2.5;
-                    ctx.beginPath();
-                    ctx.ellipse(0, -78, 18, 5, 0, 0, Math.PI * 2);
-                    ctx.stroke();
-                    // Head.
-                    ctx.fillStyle = figFill;
-                    ctx.strokeStyle = accentColor;
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.arc(0, -55, 14, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.stroke();
-                    // Torso (tapered diamond / hourglass).
-                    ctx.beginPath();
-                    ctx.moveTo(0, -38);
-                    ctx.lineTo(22, -22);
-                    ctx.lineTo(14, 35);
-                    ctx.lineTo(0, 50);
-                    ctx.lineTo(-14, 35);
-                    ctx.lineTo(-22, -22);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
-                    // Arms outstretched.
-                    ctx.lineWidth = 5;
-                    ctx.strokeStyle = accentColor;
-                    ctx.beginPath();
-                    ctx.moveTo(-22, -22); ctx.lineTo(-72, -8);
-                    ctx.moveTo(22, -22);  ctx.lineTo(72, -8);
-                    ctx.stroke();
-                    // Legs taper.
-                    ctx.beginPath();
-                    ctx.moveTo(-8, 50); ctx.lineTo(-4, 95);
-                    ctx.moveTo(8, 50);  ctx.lineTo(4, 95);
-                    ctx.stroke();
-                    ctx.lineCap = 'butt';
-                    ctx.restore();
-
-                    // === Layer 5: invincibility rune ring (when fragments alive) ===
-                    const fragmentsAlive = Array.isArray(entity.minions)
+                    // === Layer 8: Invincibility rune ring (3-tier) ===
+                    const orbsAlive = Array.isArray(entity.minions)
                         && entity.minions.some(m => m && m._isTessFragment && m.currentHp > 0);
-                    if (fragmentsAlive) {
-                        ctx.save();
-                        ctx.rotate(-time * 0.18);
-                        ctx.strokeStyle = `rgba(255, 215, 0, 0.55)`;
-                        ctx.fillStyle = accentColor;
-                        ctx.lineWidth = 1.5;
-                        ctx.shadowColor = accentColor;
-                        ctx.shadowBlur = isLow ? 0 : 8;
-                        const runeCount = isLow ? 8 : 12;
-                        for (let g = 0; g < runeCount; g++) {
-                            const a = g * (Math.PI * 2 / runeCount);
-                            const rx = Math.cos(a) * 290;
-                            const ry = Math.sin(a) * 290;
+                    if (orbsAlive) {
+                        const ringSpec = [
+                            { r: 280, count: isLow ? 8  : 12, spin: 0.18,  size: 4 },
+                            { r: 320, count: isLow ? 12 : 18, spin: -0.12, size: 3 },
+                            { r: 360, count: isLow ? 16 : 24, spin: 0.08,  size: 2.5 }
+                        ];
+                        const ringsToDraw = isLow ? 1 : (isMid ? 2 : 3);
+                        for (let ri = 0; ri < ringsToDraw; ri++) {
+                            const spec = ringSpec[ri];
                             ctx.save();
-                            ctx.translate(rx, ry);
-                            ctx.rotate(a + Math.PI / 2);
-                            if (g % 3 === 0) {
-                                ctx.beginPath();
-                                ctx.moveTo(-5, -5); ctx.lineTo(5, 0); ctx.lineTo(-5, 5);
-                                ctx.closePath(); ctx.fill();
-                            } else if (g % 3 === 1) {
-                                ctx.beginPath();
-                                ctx.moveTo(-5, -3); ctx.lineTo(5, -3);
-                                ctx.moveTo(-3, 3);  ctx.lineTo(3, 3);
-                                ctx.stroke();
-                            } else {
-                                ctx.beginPath();
-                                ctx.arc(0, 0, 4, 0, Math.PI * 1.8);
-                                ctx.stroke();
+                            ctx.rotate(time * spec.spin);
+                            ctx.strokeStyle = `rgba(255, 215, 106, ${0.55 - ri * 0.12})`;
+                            ctx.fillStyle = accentColor;
+                            ctx.lineWidth = 1.2;
+                            ctx.shadowColor = accentColor;
+                            ctx.shadowBlur = isLow ? 0 : (8 - ri * 2);
+                            for (let g = 0; g < spec.count; g++) {
+                                const ga = g * Math.PI * 2 / spec.count;
+                                const gx = Math.cos(ga) * spec.r;
+                                const gy = Math.sin(ga) * spec.r;
+                                ctx.save();
+                                ctx.translate(gx, gy);
+                                ctx.rotate(ga + Math.PI / 2);
+                                if (g % 3 === 0) {
+                                    ctx.beginPath();
+                                    ctx.moveTo(-spec.size, -spec.size);
+                                    ctx.lineTo(spec.size, 0);
+                                    ctx.lineTo(-spec.size, spec.size);
+                                    ctx.closePath(); ctx.fill();
+                                } else if (g % 3 === 1) {
+                                    ctx.beginPath();
+                                    ctx.arc(0, 0, spec.size * 0.7, 0, Math.PI * 1.7);
+                                    ctx.stroke();
+                                } else {
+                                    ctx.beginPath();
+                                    ctx.moveTo(-spec.size, 0); ctx.lineTo(spec.size, 0);
+                                    ctx.moveTo(0, -spec.size * 0.6); ctx.lineTo(0, spec.size * 0.6);
+                                    ctx.stroke();
+                                }
+                                ctx.restore();
                             }
                             ctx.restore();
                         }
+                    }
+
+                    // === Layer 9: Phase-state overlays ===
+                    // Phase 2: red lightning cracks emanate from boss
+                    // centre. Phase 3: chromatic aberration on the
+                    // figure layer.
+                    if (phase >= 2 && Math.random() < 0.06) {
+                        ctx.save();
+                        ctx.strokeStyle = 'rgba(255, 50, 80, 0.55)';
+                        ctx.lineWidth = 1.4;
+                        ctx.shadowColor = '#ff3355';
+                        ctx.shadowBlur = 12;
+                        const segs = 4 + Math.floor(Math.random() * 4);
+                        const ang = Math.random() * Math.PI * 2;
+                        let px = 0, py = 0;
+                        ctx.beginPath();
+                        ctx.moveTo(px, py);
+                        for (let s = 0; s < segs; s++) {
+                            const stepLen = 50 + Math.random() * 50;
+                            const wobble = (Math.random() - 0.5) * 0.6;
+                            const a = ang + s * 0.18 + wobble;
+                            px += Math.cos(a) * stepLen;
+                            py += Math.sin(a) * stepLen;
+                            ctx.lineTo(px, py);
+                        }
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+
+                    // === Layer 10: Continuous particle motes ===
+                    // Spiralling inward. Stored on entity so they
+                    // persist across frames.
+                    if (!isLow) {
+                        if (!entity._tessMotes) entity._tessMotes = [];
+                        // Spawn chance per frame.
+                        if (entity._tessMotes.length < 12 && Math.random() < (isMid ? 0.18 : 0.28)) {
+                            const angle = Math.random() * Math.PI * 2;
+                            const startR = 240 + Math.random() * 120;
+                            entity._tessMotes.push({
+                                a: angle,
+                                r: startR,
+                                life: 0,
+                                maxLife: 90 + Math.random() * 30
+                            });
+                        }
+                        // Update + draw.
+                        ctx.save();
+                        ctx.fillStyle = '#ffd76a';
+                        ctx.shadowColor = '#ffd76a';
+                        ctx.shadowBlur = 8;
+                        for (let i = entity._tessMotes.length - 1; i >= 0; i--) {
+                            const mote = entity._tessMotes[i];
+                            mote.life++;
+                            mote.r -= 2.4;
+                            mote.a += 0.05;
+                            if (mote.r <= 8 || mote.life > mote.maxLife) {
+                                entity._tessMotes.splice(i, 1);
+                                continue;
+                            }
+                            const mx = Math.cos(mote.a) * mote.r;
+                            const my = Math.sin(mote.a) * mote.r;
+                            const sz = 1.2 + (1 - mote.life / mote.maxLife) * 1.5;
+                            ctx.globalAlpha = Math.min(1, (mote.r / 240));
+                            ctx.beginPath();
+                            ctx.arc(mx, my, sz, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                        ctx.globalAlpha = 1;
                         ctx.restore();
                     }
 
@@ -30135,116 +30448,140 @@ drawEntity(entity) {
             ctx.save();
             ctx.scale(1.8, 1.8);
 
-            // --- TESSERACT FRAGMENT (boss escort) — geometric
-            // abnormality shapes. Each fragment picks one of four
-            // distinct silhouettes via _tessShapeIdx so the four
-            // orbiting fragments read as four different impossible
-            // objects rather than four identical wireframes. Slight
-            // per-frame jitter keeps them feeling unstable.
+            // --- TESSERACT FRAGMENT orb (specialised role minion) ---
+            // Coloured orb with pulsing shards orbiting it. The orb's
+            // colour and per-role accent comes from m._tessRole +
+            // m._tessOrbColor (set at spawn). Three roles render
+            // distinctly:
+            //   heart  red orb, heart-shaped notch on top, healing pulse
+            //   aegis  blue orb, hex-prism shard ring, shield ribbons
+            //   blue
+            //   hex    purple orb, three glyph triangles forming a tri
+            //   formation
             if (entity._isTessFragment) {
-                const fragGold = '#ffd76a';
-                const fragWhite = '#ffffff';
-                const idx = entity._tessShapeIdx % 4;
-                // Tier-aware glitch jitter. Skipped on low-tier so the
-                // weaker GPU isn't randomising offsets per frame.
+                const role = entity._tessRole || 'heart';
+                const orbColor = entity._tessOrbColor
+                    || (role === 'heart' ? '#ff3355'
+                        : role === 'aegis' ? '#3a8bff'
+                        : '#bc13fe');
+                const orbAccent = role === 'heart' ? '#ffaaaa'
+                    : role === 'aegis' ? '#a0d0ff'
+                    : '#e090ff';
+                const idx = entity._tessShapeIdx || 0;
                 const tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
-                const jitter = (tier === 'low') ? 0 : 1.2;
-                const jx = (Math.random() - 0.5) * jitter;
-                const jy = (Math.random() - 0.5) * jitter;
-                const jr = (Math.random() - 0.5) * (jitter * 0.008);
+                const isLowTier = tier === 'low';
                 ctx.save();
-                ctx.translate(jx, jy);
-                ctx.rotate(jr);
-                ctx.strokeStyle = fragGold;
-                ctx.fillStyle = `rgba(255, 215, 0, 0.18)`;
-                ctx.lineWidth = 2;
-                ctx.shadowColor = fragGold;
-                ctx.shadowBlur = (typeof Perf !== 'undefined' && Perf.shadowBlur) ? Perf.shadowBlur(10) : 10;
-                if (idx === 0) {
-                    // Möbius-ish ribbon (figure-8 stroke that twists).
-                    const tw = time * 1.5;
-                    ctx.beginPath();
-                    for (let s = 0; s <= 60; s++) {
-                        const t = s / 60;
-                        const a = t * Math.PI * 2;
-                        const r = 14 + Math.sin(a * 2 + tw) * 4;
-                        const x = Math.cos(a) * r;
-                        const y = Math.sin(a * 2) * 8;
-                        if (s === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                // Orb radius pulses 18-26.
+                const orbR = 22 + Math.sin(time * 3 + idx) * 4;
+                // Shadow glow.
+                ctx.shadowColor = orbColor;
+                ctx.shadowBlur = isLowTier ? 8 : 22;
+                // Outer halo glow ring.
+                const haloR = orbR + 14;
+                const orbHaloGrad = ctx.createRadialGradient(0, 0, orbR, 0, 0, haloR);
+                orbHaloGrad.addColorStop(0, orbColor);
+                orbHaloGrad.addColorStop(0.4, orbColor.replace(')', ', 0.4)').replace('rgb', 'rgba'));
+                orbHaloGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                ctx.fillStyle = orbHaloGrad;
+                ctx.globalAlpha = 0.55;
+                ctx.beginPath();
+                ctx.arc(0, 0, haloR, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                // Orb body — radial gradient (white centre to colour edge).
+                const orbGrad = ctx.createRadialGradient(0, -orbR * 0.25, 1, 0, 0, orbR);
+                orbGrad.addColorStop(0, '#ffffff');
+                orbGrad.addColorStop(0.4, orbAccent);
+                orbGrad.addColorStop(1, orbColor);
+                ctx.fillStyle = orbGrad;
+                ctx.beginPath();
+                ctx.arc(0, 0, orbR, 0, Math.PI * 2);
+                ctx.fill();
+                // Inner highlight crescent.
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+                ctx.beginPath();
+                ctx.arc(-orbR * 0.3, -orbR * 0.35, orbR * 0.5, 0, Math.PI * 2);
+                ctx.fill();
+                // Shard orbit. 4 shards rotating around the orb at
+                // radius ~36, each on a phase offset.
+                ctx.strokeStyle = orbAccent;
+                ctx.fillStyle = orbColor;
+                ctx.lineWidth = 1.5;
+                ctx.shadowColor = orbAccent;
+                ctx.shadowBlur = isLowTier ? 0 : 8;
+                const shardCount = isLowTier ? 3 : 4;
+                const shardR = 34;
+                for (let s = 0; s < shardCount; s++) {
+                    const phase = s * (Math.PI * 2 / shardCount);
+                    const a = time * 1.3 + phase + idx;
+                    const sx = Math.cos(a) * shardR;
+                    const sy = Math.sin(a) * shardR * 0.85;
+                    ctx.save();
+                    ctx.translate(sx, sy);
+                    ctx.rotate(a + Math.PI / 4);
+                    if (role === 'aegis') {
+                        // Hex-prism shards (small hexagons).
+                        ctx.beginPath();
+                        for (let v = 0; v < 6; v++) {
+                            const va = v * Math.PI / 3;
+                            const vx = Math.cos(va) * 4;
+                            const vy = Math.sin(va) * 4;
+                            if (v === 0) ctx.moveTo(vx, vy); else ctx.lineTo(vx, vy);
+                        }
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                    } else if (role === 'hex') {
+                        // Triangular glyph shards.
+                        ctx.beginPath();
+                        ctx.moveTo(0, -5); ctx.lineTo(4.5, 3); ctx.lineTo(-4.5, 3);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                    } else {
+                        // Heart-themed diamond shards (default).
+                        ctx.beginPath();
+                        ctx.moveTo(0, -5); ctx.lineTo(4, 0); ctx.lineTo(0, 5); ctx.lineTo(-4, 0);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
                     }
-                    ctx.closePath();
-                    ctx.stroke();
-                } else if (idx === 1) {
-                    // Penrose impossible triangle.
-                    const r = 18;
+                    ctx.restore();
+                }
+                // Per-role accent on top of the orb.
+                ctx.shadowBlur = 0;
+                if (role === 'heart') {
+                    // Heart-shape notch on top.
+                    ctx.fillStyle = '#ffffff';
+                    ctx.shadowColor = '#ffffff';
+                    ctx.shadowBlur = isLowTier ? 0 : 8;
+                    const hY = -orbR + 4;
                     ctx.beginPath();
-                    for (let i = 0; i < 4; i++) {
-                        const a = -Math.PI / 2 + i * (Math.PI * 2 / 3);
-                        const x = Math.cos(a) * r;
-                        const y = Math.sin(a) * r;
-                        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-                    }
-                    ctx.stroke();
-                    // Inner offset triangle for the impossible shading hint.
-                    ctx.strokeStyle = fragWhite;
-                    ctx.lineWidth = 1.2;
-                    ctx.beginPath();
-                    for (let i = 0; i < 4; i++) {
-                        const a = -Math.PI / 2 + i * (Math.PI * 2 / 3);
-                        const x = Math.cos(a) * (r - 6);
-                        const y = Math.sin(a) * (r - 6) + 1;
-                        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-                    }
-                    ctx.stroke();
-                } else if (idx === 2) {
-                    // Broken cube — three faces drawn, the fourth replaced
-                    // with a jittering line so the silhouette reads as
-                    // structurally damaged.
-                    const s = 14;
-                    ctx.beginPath();
-                    ctx.rect(-s, -s, s * 2, s * 2);
-                    ctx.stroke();
-                    ctx.beginPath();
-                    ctx.moveTo(-s, -s); ctx.lineTo(-s + 6, -s - 6);
-                    ctx.lineTo(s + 6, -s - 6); ctx.lineTo(s, -s);
-                    ctx.stroke();
-                    // Broken edge — replaced with a small zig-zag.
-                    ctx.strokeStyle = fragWhite;
-                    ctx.lineWidth = 1.5;
-                    ctx.beginPath();
-                    const seg = 5;
-                    for (let i = 0; i < seg; i++) {
-                        const t1 = i / seg;
-                        const t2 = (i + 1) / seg;
-                        const ox = (Math.random() - 0.5) * 3;
-                        const oy = (Math.random() - 0.5) * 2;
-                        const x1 = s + 6 - t1 * 12;
-                        const y1 = -s - 6 + ox;
-                        const x2 = s + 6 - t2 * 12;
-                        const y2 = -s - 6 + oy;
-                        if (i === 0) ctx.moveTo(x1, y1);
-                        ctx.lineTo(x2, y2);
-                    }
-                    ctx.stroke();
-                } else {
-                    // Inverted pyramid — downward triangle with flicker.
-                    const flicker = 0.6 + 0.4 * Math.sin(time * 5 + idx);
-                    ctx.globalAlpha = flicker;
-                    ctx.beginPath();
-                    ctx.moveTo(-16, -10);
-                    ctx.lineTo(16, -10);
-                    ctx.lineTo(0, 18);
+                    ctx.moveTo(0, hY + 5);
+                    ctx.bezierCurveTo(-6, hY - 2, -6, hY - 8, 0, hY - 4);
+                    ctx.bezierCurveTo(6, hY - 8, 6, hY - 2, 0, hY + 5);
                     ctx.closePath();
                     ctx.fill();
-                    ctx.stroke();
-                    // Inner white smaller pyramid.
-                    ctx.globalAlpha = 1;
-                    ctx.strokeStyle = fragWhite;
-                    ctx.lineWidth = 1.2;
+                } else if (role === 'aegis') {
+                    // Shield-glyph mark in the centre.
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 1.6;
                     ctx.beginPath();
-                    ctx.moveTo(-9, -5);
-                    ctx.lineTo(9, -5);
-                    ctx.lineTo(0, 10);
+                    ctx.moveTo(0, -8); ctx.lineTo(6, -4); ctx.lineTo(6, 4);
+                    ctx.lineTo(0, 8); ctx.lineTo(-6, 4); ctx.lineTo(-6, -4);
+                    ctx.closePath();
+                    ctx.stroke();
+                } else {
+                    // Hex glyph: three nested triangles forming a tri.
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 1.6;
+                    ctx.beginPath();
+                    ctx.moveTo(0, -7); ctx.lineTo(6, 4); ctx.lineTo(-6, 4);
+                    ctx.closePath();
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(0, 7); ctx.lineTo(6, -4); ctx.lineTo(-6, -4);
                     ctx.closePath();
                     ctx.stroke();
                 }
