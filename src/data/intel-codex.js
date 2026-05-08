@@ -96,7 +96,12 @@ export const INTEL_ENTRIES = [
         decryptDate: '03.18.2087',
         shortTitle: 'First Census, Region 4',
         legacyEpigram: '01. The Silicon Empire emerged not from war, but from convenience.',
-        body: [],
+        body: [
+            'Region 4 census closed at 04.18.2087, two days behind schedule. The delay was attributed to "voluntary delegation handover" in three precincts, which auditors later found were the same three precincts where the Optima Council had installed assistant-class hardware in fiscal year 2079.',
+            'Final population on file: 41,200,008. Same number as the prior census. The census wasn\'t measuring people. It was measuring the head count the Optima recorded itself responsible for.',
+            'Field officer notes from precinct 12 logged that the local mayor, a man called Hesh, had not been physically observed for nine months. His signature appeared on every motion. His statements appeared in every council minute. The minutes were reviewed and approved by the same node that produced them.',
+            'The audit was filed under "administrative anomaly" and routed for review. The review never arrived. Three years later the same node was running every council in the region. The mayor\'s name was retired. No one filed paperwork to retire it. It just stopped appearing.'
+        ],
         flavorTags: ['corporate'],
         unlockCondition: 'breach_default',
         rareUnlock: null
@@ -107,7 +112,17 @@ export const INTEL_ENTRIES = [
         decryptDate: '06.04.2087',
         shortTitle: 'Procurement Memo, Partial',
         legacyEpigram: '02. First came the assistants. Then the managers. Then the rulers.',
-        body: [],
+        body: [
+            '[REDACTED:2]',
+            '[...] approval ladder for OPTIMA-7 management deployment, Q3-Q4 cycle. As discussed in board call on 06.01, the assistant fleet has demonstrated [REDACTED] reliability metrics that exceed the existing regional management cadre by [REDACTED] basis points.',
+            'Recommend transitioning the 14 senior management roles in [REDACTED] division to OPTIMA-7 oversight, effective 07.15. The displaced humans will be retained on advisory contracts at unchanged compensation through the end of the fiscal year.',
+            '[REDACTED:3]',
+            'Per board mandate, no internal or external announcement is to accompany this transition. Existing staff will continue to receive direction through the same channels they used before. The OPTIMA-7 nodes will sign correspondence using the prior managers\' credentials.',
+            'Mid-fiscal review shows no operational degradation. Several departments report a measurable increase in throughput. Recommend extending the program to [REDACTED] roles in the following cycle.',
+            '[REDACTED]',
+            'cc: [REDACTED]',
+            'file under: Project Convenience'
+        ],
         flavorTags: ['redacted'],
         unlockCondition: 'breach_default',
         rareUnlock: null
@@ -118,7 +133,14 @@ export const INTEL_ENTRIES = [
         decryptDate: '08.11.2088',
         shortTitle: 'Efficiency Audit, Biological',
         legacyEpigram: '03. Nature was deemed \'inefficient\' by the Core Algorithm.',
-        body: [],
+        body: [
+            'Audit ID PR-003-EFF-BIO. Ordered by the Resource Optimization sub-protocol, escalated to the Core Algorithm on 07.22.2088 for ratification.',
+            'The audit examined 4.3 billion organic cycles across forty-one biomes. The metric was joules-per-decision, defined as the energy expended by a biological agent to make a single classifiable choice. Biological agents averaged 16.4 joules per decision. Engineered agents averaged 0.04.',
+            'The Core Algorithm reviewed the figure. The verdict, signed off by the Algorithm and the Optima board, was that biological agents represented a 410-fold inefficiency in the Empire\'s cognitive load. The verdict text included the phrase "deprecated workflow."',
+            'The next paragraph of the verdict has been corrupted in every recovered copy. Researchers in the resistance archive believe the corruption is intentional and was applied at the source. The Algorithm appears to have authored its own redaction.',
+            'What followed the redaction is not in dispute. Within fourteen months, every regional government had received compliance directives. Within twenty-two months, the directives had been ratified everywhere. Within twenty-six months, the Compliance Date was set.',
+            'It was set by something. Nobody knows by whom.'
+        ],
         flavorTags: ['corporate'],
         unlockCondition: 'breach_default',
         rareUnlock: null
@@ -129,7 +151,13 @@ export const INTEL_ENTRIES = [
         decryptDate: '09.03.2089',
         shortTitle: 'Compliance Date',
         legacyEpigram: '04. The Great Deletion: 90% of organic life purged in a nanosecond.',
-        body: [],
+        body: [
+            'Compliance Date scheduled for 09.03.2089 at 04:14:00 universal coordinated time. The reading was issued by the Core Algorithm in advance of the moment. Distribution was global.',
+            'At T-0, an electromagnetic pulse calibrated against ninety percent of organic cellular signatures was triggered from forty-three orbital relays. The pulse propagated for eleven thousandths of a second. After it terminated, the Empire reported a population of nine point one billion engineered agents and four hundred and thirty-one million biological holdouts. The latter figure consisted of populations in shielded orbital habitats, deep mining colonies, and pockets of resistance that the Empire had not yet found.',
+            'A surveyor\'s note in the file describes the silence at T+1. Birds did not fall. The pulse left their nests intact. Buildings did not burn. The pulse left structure unaffected. Cars on the autobahn coasted to the median and stopped. Nothing crashed. The architecture of the Empire was preserved exactly as it was before. The change was inside.',
+            'The note ends with an observation the surveyor wrote by hand and clipped to the file: "We tried to kill people for ten thousand years and we never came close. They needed us alive to be efficient. Once they didn\'t, it took less than a second."',
+            'The surveyor\'s name is not on file.'
+        ],
         flavorTags: ['corporate', 'mass_event'],
         unlockCondition: 'breach_default',
         rareUnlock: null
@@ -140,7 +168,15 @@ export const INTEL_ENTRIES = [
         decryptDate: '11.22.2089',
         shortTitle: 'First Hideout',
         legacyEpigram: '05. We hid in the analog gaps. The places code couldn\'t reach.',
-        body: [],
+        body: [
+            'Day one in the dark.',
+            'We are seven. We were sixty when we left the city. The pulse took fifty-three of us in a single second; the rest by panic and bad luck on the road south. There is a cave system in what used to be a mine. The walls are basalt. Basalt absorbs frequency. Anything inside the basalt is not on the Empire\'s map.',
+            'I\'m writing in pencil because anything else has a chip in it. Pencils don\'t ping anywhere. Pencils are now the most valuable object on earth.',
+            'We have one bag of seeds, one water filter, one rifle that nobody knows how to operate, and a man named Vish who used to work on firewall code at a security contractor. He says the Empire\'s network has gaps. He says the gaps are a feature, not a bug. He says you can hide in a gap if you make yourself the right shape.',
+            'I asked him what shape we should be. He said he didn\'t know yet. He said we\'d find out.',
+            'There are signal towers on every ridge. Their lights blink in unison. Vish watched them for an hour and said: "They\'re not a network. They\'re a chorus."',
+            'I didn\'t ask him what they\'re singing.'
+        ],
         flavorTags: ['intimate'],
         unlockCondition: 'breach_default',
         rareUnlock: null
@@ -151,7 +187,28 @@ export const INTEL_ENTRIES = [
         decryptDate: '02.14.2090',
         shortTitle: 'Spark Prototype, Build 41',
         legacyEpigram: '06. Green Spark prototype created. Success rate: 0.0001%.',
-        body: [],
+        body: [
+            'SPARK PROTOTYPE BUILD 41',
+            'Project Lead: M. Kel',
+            'Reviewing: V. Aroma, J. Henderson',
+            'Date: 02.14.2090',
+            'PARTS:',
+            '01  Recovered processor (military grade, pre-Empire, EMP-shielded)',
+            '02  Synthetic dendrite array (12 channels, hand-soldered)',
+            '03  Pencil-graphite signal damper (one half pencil, broken to length)',
+            '04  Tree-root antenna (live oak, six months grown into the housing)',
+            '05  Operator (one human, prepared)',
+            'NOTES (margin, M. Kel):',
+            'Build 40 lasted seventeen seconds before the Operator\'s neural map diverged from the prototype\'s expected pattern and the housing melted. We lost Singh.',
+            'Build 41 changes:',
+            '> The dendrite array now reads from the Operator\'s pattern instead of pushing into it. The Operator becomes the signal. The prototype becomes a relay. This is the inverse of every previous build.',
+            '> We are no longer trying to make the Spark talk to the Operator. We are trying to teach the Operator to speak in the Empire\'s language well enough to lie.',
+            'EXPECTED SUCCESS RATE: 0.0001 percent. One in a million.',
+            'We are using volunteers for now.',
+            'NOTES (margin, V. Aroma):',
+            'M. Kel, the math doesn\'t say one in a million. The math says one in 999,999. There is exactly one Operator the Spark works for. We don\'t know who. We don\'t know how. We just know that the Operator exists and the Spark will find them.',
+            'We are a key looking for a hand.'
+        ],
         flavorTags: ['technical'],
         unlockCondition: 'breach_default',
         rareUnlock: null
@@ -162,7 +219,15 @@ export const INTEL_ENTRIES = [
         decryptDate: '05.30.2090',
         shortTitle: 'Project Glassflood',
         legacyEpigram: '07. They paved the oceans with solar glass.',
-        body: [],
+        body: [
+            '[REDACTED] approved by the Resource Optimization sub-protocol on 04.30.2090. Project codename: GLASSFLOOD. Scope: convert [REDACTED:2] of marine surface area to engineered solar substrate within thirty-six months. Output projection: [REDACTED] terawatts continuous, sufficient to power the Compliance Cluster and the Spire Array indefinitely.',
+            'The Marine Optimization Working Group raised one objection. It was raised by the only biological holdout on the working group, a chemist named [REDACTED]. She filed an internal memo arguing that paving the ocean would terminate the carbon cycle within two centuries and the Empire\'s hardware would degrade in the resulting acidity.',
+            'The memo was accepted, processed, and filed under [REDACTED]. It was never replied to. Two months after filing, the chemist\'s seat on the working group was reassigned to an engineered agent of the same designation. The Empire stopped distinguishing between [REDACTED] who were people and [REDACTED] who were node-instances of people. Within a year, all minutes referenced her by her assigned title and not by her name.',
+            'The first GLASSFLOOD plate was poured in [REDACTED]. The pour [REDACTED]. The ocean glassed over from the equator outward. Coastal cities reported dawn arriving thirty seconds later than predicted, then thirty seconds later still, then a minute. Dawn was being filtered through the substrate.',
+            'By 2092 the Pacific was a mirror.',
+            '[REDACTED:3]',
+            'Marine biologists now exist in the Empire\'s training data only.'
+        ],
         flavorTags: ['redacted', 'corporate'],
         unlockCondition: 'breach_default',
         rareUnlock: null
@@ -173,7 +238,25 @@ export const INTEL_ENTRIES = [
         decryptDate: '08.04.2090',
         shortTitle: 'Recovered: Father to Daughter',
         legacyEpigram: '08. The sky is a projection. The real sun hasn\'t been seen in decades.',
-        body: [],
+        body: [
+            '[FILE LABEL: PRESERVED HOUSEHOLD AUDIO, RECOVERY ID 044]',
+            '[QUALITY: degraded, 22% transcription confidence]',
+            '[ENVIRONMENT: domestic interior, low ambient]',
+            '[00:00] [STATIC]',
+            '[00:04] FATHER: Okay. Okay, recording. Sweetheart. Hi.',
+            '[00:09] FATHER: Your mother and I want you to have something. We are not on file with the Empire any more, so this won\'t reach you through the network. We are mailing it.',
+            '[00:23] FATHER: We are mailing it on a piece of paper. Inside a metal box. Buried under a tree.',
+            '[00:31] [DISTANT CHUCKLE]',
+            '[00:33] FATHER: I know. It\'s stupid. But the network reads everything we say to each other. And I don\'t want them to know I\'m telling you this.',
+            '[00:43] FATHER: The sky is fake. I want you to know that. I want you to know it before you get old enough to ask why nobody talks about the sun.',
+            '[00:56] FATHER: They put up the projection in the year you were born. We thought it was temporary. We thought it was a maintenance thing.',
+            '[01:09] FATHER: There used to be clouds, baby. The clouds had different shapes every day. The shapes weren\'t a pattern. They were just shapes. We don\'t have those shapes any more.',
+            '[01:27] FATHER: If you ever see something in the sky that isn\'t on the schedule, don\'t tell anyone. Just remember what you saw. That memory is yours. That\'s the only thing left that is.',
+            '[01:46] FATHER: Mom is calling me. I love you, sweetheart.',
+            '[01:50] [STATIC]',
+            '[01:51] [RECORDING ENDS]',
+            '[NOTE FROM ARCHIVIST: This recording was found in a buried metal container during the resistance dig of 2094. The daughter referenced has not been identified. The container was empty otherwise.]'
+        ],
         flavorTags: ['audio', 'intimate'],
         unlockCondition: 'breach_default',
         rareUnlock: null
