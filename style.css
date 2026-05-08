@@ -16018,6 +16018,51 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     color: var(--text-muted);
     opacity: 0.85;
 }
+.sanctuary-npc-body .npc-trophy-challenge-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 4px 0 12px 0;
+}
+.sanctuary-npc-body .npc-trophy-challenge {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    padding: 8px 10px;
+    transition: border-color 160ms, background 160ms;
+}
+.sanctuary-npc-body .npc-trophy-challenge.got {
+    border-color: rgba(255, 215, 106, 0.55);
+    background: rgba(255, 215, 106, 0.06);
+}
+.sanctuary-npc-body .npc-trophy-challenge-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-cyber);
+    font-size: 0.82rem;
+    letter-spacing: 0.06em;
+}
+.sanctuary-npc-body .npc-trophy-mark {
+    color: var(--text-muted);
+    font-weight: 700;
+}
+.sanctuary-npc-body .npc-trophy-challenge.got .npc-trophy-mark {
+    color: var(--neon-gold);
+}
+.sanctuary-npc-body .npc-trophy-name {
+    flex: 1 1 auto;
+    color: var(--text-primary);
+}
+.sanctuary-npc-body .npc-trophy-reward {
+    color: var(--neon-gold);
+    font-weight: 700;
+}
+.sanctuary-npc-body .npc-trophy-desc {
+    margin-top: 2px;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
 .sanctuary-npc-body .npc-trophy-row {
     display: flex;
     align-items: center;

@@ -4791,6 +4791,27 @@ startQTE(type, x, y, callback, opts) {
                 const idx = Math.abs(h0 + i * 7919) % pool.length;
                 picks.push(pool.splice(idx, 1)[0]);
             }
+            // Streak banked reroll: when the daily-login streak is >=3 the
+            // player can claim +1 banked reroll once per day. Banked
+            // rerolls accumulate (cap 5) and apply as a first-turn bonus
+            // on the next run's combats.
+            const streak = (typeof Streak !== 'undefined' && Streak.current) ? Streak.current() : 0;
+            const banked = parseInt(localStorage.getItem('mvm_oracle_banked_reroll') || '0', 10) || 0;
+            const lastClaim = localStorage.getItem('mvm_oracle_claim_date') || '';
+            const canClaim = streak >= 3 && lastClaim !== today && banked < 5;
+            const streakBlock = `
+                <div class="npc-stat-block">
+                    <div class="npc-stat-row"><span>Login streak</span><span>${streak} day${streak === 1 ? '' : 's'}</span></div>
+                    <div class="npc-stat-row"><span>Banked rerolls</span><span>${banked} / 5</span></div>
+                </div>
+                ${canClaim
+                    ? '<div class="npc-fusion-forge-row"><button class="btn primary" id="btn-oracle-claim-reroll" type="button">CLAIM +1 REROLL</button><span class="npc-fusion-forge-hint">Streak gift. Applies on the first turn of your next run.</span></div>'
+                    : (streak < 3
+                        ? '<p style="opacity:0.7;font-size:var(--text-sm)">Reach a 3-day streak to claim a banked reroll.</p>'
+                        : (banked >= 5
+                            ? '<p style="opacity:0.7;font-size:var(--text-sm)">Reroll bank full. Spend some on a run before claiming more.</p>'
+                            : '<p style="opacity:0.7;font-size:var(--text-sm)">Already claimed today. Vision returns at midnight.</p>'))}
+            `;
             body.innerHTML = `
                 <p>The Oracle peers through entropy. These relics will surface in your next run's first shop:</p>
                 ${picks.map(p => `
@@ -4800,7 +4821,20 @@ startQTE(type, x, y, callback, opts) {
                     </div>
                 `).join('')}
                 <p style="opacity:0.7;font-size:var(--text-sm)">Vision refreshes at midnight local time.</p>
+                ${streakBlock}
             `;
+            const claimBtn = document.getElementById('btn-oracle-claim-reroll');
+            if (claimBtn) {
+                claimBtn.onclick = () => {
+                    try {
+                        localStorage.setItem('mvm_oracle_banked_reroll', String(Math.min(5, banked + 1)));
+                        localStorage.setItem('mvm_oracle_claim_date', today);
+                    } catch (_) {}
+                    AudioMgr.playSound('upgrade');
+                    ParticleSys.createFloatingText(540, 800, '+1 REROLL BANKED', '#ffd76a');
+                    this.openSanctuaryNPC('oracle');
+                };
+            }
         }
         else if (which === 'curator') {
             title.textContent = 'CURATOR';
@@ -4849,6 +4883,22 @@ startQTE(type, x, y, callback, opts) {
             // sees their leaderboard scores reflected here too.
             const challengePb = (typeof Challenge !== 'undefined' && Challenge.personalBest) ? Challenge.personalBest() : null;
             const archivePb  = (typeof Archive  !== 'undefined' && Archive.personalBest)  ? Archive.personalBest()  : null;
+            // Trophy challenges — once-per-install feats with a small
+            // spark payout. Read the unlock set so each row renders as
+            // claimed or open.
+            const unlockedTrophies = this._readTrophyChallenges();
+            const trophyDefs = this._trophyChallengeDefs();
+            const trophyRows = trophyDefs.map(t => {
+                const got = unlockedTrophies.indexOf(t.id) !== -1;
+                return `<div class="npc-trophy-challenge${got ? ' got' : ''}">
+                    <div class="npc-trophy-challenge-head">
+                        <span class="npc-trophy-mark">${got ? '✓' : '○'}</span>
+                        <span class="npc-trophy-name">${t.name}</span>
+                        <span class="npc-trophy-reward">+${t.reward} ✦</span>
+                    </div>
+                    <div class="npc-trophy-desc">${t.desc}</div>
+                </div>`;
+            }).join('');
             body.innerHTML = `
                 <p>The Curator tends the quiet archive of your victories.</p>
                 <div class="npc-stat-block">
@@ -4862,6 +4912,8 @@ startQTE(type, x, y, callback, opts) {
                 </div>
                 <div class="npc-stat-head">VICTORIES BY CLASS</div>
                 <div class="npc-stat-block">${classRows}</div>
+                <div class="npc-stat-head">TROPHY CHALLENGES</div>
+                <div class="npc-trophy-challenge-list">${trophyRows}</div>
                 <div class="npc-stat-head">SECTOR TROPHIES</div>
                 <div class="npc-trophy-list">${bossRows}</div>
             `;
@@ -5685,6 +5737,18 @@ startQTE(type, x, y, callback, opts) {
         // Per-run flag: first hack minigame of the run is always normal
         // difficulty so new players aren't immediately face-planted.
         this._hasHackedThisRun = false;
+
+        // Oracle's banked rerolls — consume the entire bank on run start
+        // and stash as bonus rerolls for the player's first turn. Each
+        // banked entry adds +1 reroll on combat-1 turn-1 only; afterwards
+        // the per-turn reroll formula at line ~15144 takes over.
+        try {
+            const oracleBanked = parseInt(localStorage.getItem('mvm_oracle_banked_reroll') || '0', 10) || 0;
+            if (oracleBanked > 0) {
+                this._oracleBankedRerolls = oracleBanked;
+                localStorage.removeItem('mvm_oracle_banked_reroll');
+            }
+        } catch (_) {}
 
         // Smith's banked starting relic — consume on run start (one-shot).
         // Fusion Forge purchases store a MODULE_FUSIONS id here too, so
@@ -13455,6 +13519,64 @@ updateHexBreach(dt) {
         return true;
     },
 
+    // Curator trophy challenges — once-per-install feats with a +2
+    // spark payout each. Definitions are static; unlocks live in
+    // localStorage as `mvm_trophies_v1` (JSON array of trophy ids).
+    _trophyChallengeDefs() {
+        return [
+            { id: 'turns_under_50', reward: 2, name: 'Speedrunner',
+              desc: 'Win the run in 50 turns or fewer.' },
+            { id: 'win_high_hp', reward: 2, name: 'Iron Veil',
+              desc: 'Defeat Tesseract Prime with HP at 80% or above.' },
+            { id: 'win_low_reroll', reward: 2, name: 'Cold Hands',
+              desc: 'Win the run using 5 rerolls or fewer.' },
+            { id: 'win_relic_hoarder', reward: 2, name: 'Module Magnate',
+              desc: 'Win the run holding 20 or more relics.' }
+        ];
+    },
+    _readTrophyChallenges() {
+        try { return JSON.parse(localStorage.getItem('mvm_trophies_v1') || '[]'); }
+        catch (_) { return []; }
+    },
+    _writeTrophyChallenges(arr) {
+        try { localStorage.setItem('mvm_trophies_v1', JSON.stringify(arr)); } catch (_) {}
+    },
+    // Run-win trophy check. Called from the Tesseract Prime victory
+    // branch alongside the hidden-lore triggers. Idempotent — already-
+    // unlocked trophies are skipped, sparks are only granted once per
+    // trophy id per install.
+    _checkTrophyChallenges() {
+        const claimed = this._readTrophyChallenges();
+        const defs = this._trophyChallengeDefs();
+        const stats = this.runStats || {};
+        const player = this.player || {};
+        const tests = {
+            turns_under_50: () => (stats.turns || 0) <= 50,
+            win_high_hp: () => player.maxHp > 0
+                && player.currentHp >= Math.ceil(player.maxHp * 0.8),
+            win_low_reroll: () => (stats.rerollsUsed || 0) <= 5,
+            win_relic_hoarder: () => Array.isArray(player.relics)
+                && player.relics.length >= 20
+        };
+        let granted = 0;
+        defs.forEach(t => {
+            if (claimed.indexOf(t.id) !== -1) return;
+            const fn = tests[t.id];
+            if (fn && fn()) {
+                claimed.push(t.id);
+                granted += t.reward || 0;
+                ParticleSys.createFloatingText(540, 360 + claimed.length * 28,
+                    `TROPHY: ${t.name} +${t.reward} ✦`, '#ffd76a');
+            }
+        });
+        if (granted > 0) {
+            this._writeTrophyChallenges(claimed);
+            if (typeof this.grantSparks === 'function') {
+                this.grantSparks(granted, 'curator_trophy', { silent: true });
+            }
+        }
+    },
+
     /* v1.9.8. Centralised checks for the seven rare hidden-entry
        triggers. Called at strategic points in the game flow:
 
@@ -15151,6 +15273,16 @@ async startTurn() {
          // Custom Run: Steady Hand — extra rerolls per turn.
          if (this.player && this.player._customExtraRerolls) {
              this.rerolls += this.player._customExtraRerolls;
+         }
+         // Oracle banked rerolls — applied once on the first startTurn
+         // after run start, then drained so the bonus does not echo
+         // across every subsequent turn. The float text on the player
+         // surfaces the gift the moment the player can use it.
+         if (this._oracleBankedRerolls > 0) {
+             const gift = this._oracleBankedRerolls;
+             this.rerolls = (this.rerolls || 0) + gift;
+             this._oracleBankedRerolls = 0;
+             ParticleSys.createFloatingText(this.player.x, this.player.y - 130, `ORACLE +${gift} REROLL`, '#ffd76a');
          }
         
         if (this.deadMinionsThisTurn > 0) {
@@ -21485,6 +21617,13 @@ drawEffects() {
                     // and is idempotent so multiple wins do not stack.
                     if (typeof this._checkHiddenLoreTriggers === 'function') {
                         this._checkHiddenLoreTriggers('run_win');
+                    }
+                    // v1.9.28 Curator trophy challenges — once-per-install
+                    // feats checked at run end. Each unlock grants +2
+                    // sparks via grantSparks (silent so the popup chain
+                    // is not interrupted) and surfaces a floating text.
+                    if (typeof this._checkTrophyChallenges === 'function') {
+                        this._checkTrophyChallenges();
                     }
                 }
                 // Signature die evolution: T1 -> T2 after sector 2 clear,
