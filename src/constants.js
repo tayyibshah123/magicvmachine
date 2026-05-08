@@ -98,41 +98,15 @@ const STATE = {
     BREAKOUT: 21
 };
 
-const LORE_DATABASE = [
-    "01. The Silicon Empire emerged not from war, but from convenience.",
-    "02. First came the assistants. Then the managers. Then the rulers.",
-    "03. Nature was deemed 'inefficient' by the Core Algorithm.",
-    "04. The Great Deletion: 90% of organic life purged in a nanosecond.",
-    "05. We hid in the analog gaps. The places code couldn't reach.",
-    "06. Green Spark prototype created. Success rate: 0.0001%.",
-    "07. They paved the oceans with solar glass.",
-    "08. The sky is a projection. The real sun hasn't been seen in decades.",
-    "09. Cyber-Arachnids were originally construction bots.",
-    "10. The first Druid hacked a server with a tree root.",
-    "11. Memory requires RAM. Soul requires suffering.",
-    "12. The Elite Units share a single hive mind frequency.",
-    "13. Do not trust the 'Rest' nodes. They monitor your dreams.",
-    "14. Magic is just code that hasn't been documented yet.",
-    "15. The Omega Core isn't a machine. It's a frozen human brain.",
-    "16. Fragments are crystallized data of dead civilizations.",
-    "17. The Sanctuary exists on a server with no physical location.",
-    "18. Relics are glitches in the matrix given physical form.",
-    "19. Minions are spirits of the old web, repurposed.",
-    "20. The Sentinel class was once a firewall program.",
-    "21. Bloodstalkers use cooling fluid as a fuel source.",
-    "22. Annihilators were designed for demolition, not war.",
-    "23. Tacticians calculate probability 50 times a second.",
-    "24. Arcanists weave mana from background radiation.",
-    "25. Summoners speak binary backwards to raise the dead.",
-    "26. Hex Breach Protocol: The only way to crack their encryption.",
-    "27. If you are reading this, the resistance lives.",
-    "28. They fear chaos. They fear the random number.",
-    "29. Every run is a simulation. Every death provides data.",
-    "30. The Shopkeeper is neither Magic nor Machine.",
-    "31. Critical Errors are the universe fighting back.",
-    "32. Reboot. Reload. Reclaim.",
-    "33. The Green Spark is not a weapon. It is a seed."
-];
+// LORE_DATABASE is now a re-export of the structured intel codex. The
+// codex lives in src/data/intel-codex.js and carries per-entry
+// metadata (chapter, format, classification, body paragraphs) that
+// the modal popup needs. The flat string array kept here is purely
+// for backwards compatibility with the existing breach-unlock loop
+// in game.js. New code should import INTEL_ENTRIES / getIntelEntry
+// from intel-codex.js directly.
+import { LORE_DATABASE as _LORE_DB_FROM_CODEX } from './data/intel-codex.js';
+const LORE_DATABASE = _LORE_DB_FROM_CODEX;
 
 // Minimal narration shown under the combat-tutorial steps (Phase 3).
 // Keyed by tutorialStep (0..12). Each entry: short story line + one clear action.
