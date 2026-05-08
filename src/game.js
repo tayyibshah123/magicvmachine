@@ -18,6 +18,7 @@ import { Ascension, ASCENSION_TWISTS } from './services/ascension.js';
 import { Challenge, Archive } from './services/dailies.js';
 import { Achievements, ACHIEVEMENTS } from './services/achievements.js';
 import { Streak } from './services/streak.js';
+import { BossMinionRoster } from './services/boss-minion-roster.js';
 import { Hints } from './services/hints.js';
 import { Palette } from './services/palette.js';
 import { Analytics } from './services/analytics.js';
@@ -14328,6 +14329,16 @@ async startCombat(type) {
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200,
                     "INVINCIBLE WHILE ORBS LIVE", "#ffd76a");
             });
+            // BossMinionRoster registration. The hand-bolted invincibility
+            // / resummon / per-turn passive code in entity.js + startTurn
+            // remains untouched; the roster is a parallel read API for
+            // future code that wants a unified accessor instead of the
+            // _isTessFragment filter expression.
+            this.enemy.minionRoster = new BossMinionRoster(this.enemy, {
+                kind: 'tesseract',
+                invincibleWhileAnyAlive: true,
+                isMember: (m) => !!(m && m._isTessFragment)
+            });
 
             AudioMgr.bossSilence = true;
             AudioMgr.fadeMusicOut(600);
@@ -14374,6 +14385,15 @@ async startCombat(type) {
                 m.spawnTimer = 1.0;
                 this.enemy.minions.push(m);
             }
+            // BossMinionRoster registration for Hive Protocol. Drones
+            // are killable (no invincibility gate); the roster just
+            // surfaces a clean accessor for the existing summon_hive
+            // intent path in enemy.js.
+            this.enemy.minionRoster = new BossMinionRoster(this.enemy, {
+                kind: 'hive',
+                invincibleWhileAnyAlive: false,
+                isMember: (m) => !!(m && m._isHiveDrone)
+            });
         }
 
         // --- NEW: THE COMPILER LOGIC (Armor Plated) ---
@@ -14406,6 +14426,15 @@ async startCombat(type) {
                 m.spawnTimer = 1.0;
                 this.enemy.minions.push(m);
             }
+            // BossMinionRoster registration for the Compiler. Mechs
+            // feed the boss shield + 2x charge but are not gates —
+            // the boss stays vulnerable so the roster just exposes
+            // the swarm for unified queries.
+            this.enemy.minionRoster = new BossMinionRoster(this.enemy, {
+                kind: 'compiler',
+                invincibleWhileAnyAlive: false,
+                isMember: (m) => !!(m && m._isBolsterMech)
+            });
         }
         // ----------------------------------------------
 
