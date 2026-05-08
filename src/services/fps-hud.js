@@ -69,14 +69,24 @@ function render(now) {
     const sectionsEl = host.querySelector('[data-bind="sections"]');
 
     if (stats) {
+        // v1.8.9 — `stats.avgMs` is now the real wall-clock interval
+        // between rAFs (true fps source). `workAvgMs` is render work
+        // inside the rAF and is shown beside the percentiles as a
+        // headroom indicator. The previous version divided 1000 by
+        // workAvgMs (~2.4ms on Honor Tab 10) and reported "415 fps"
+        // while the device was actually drawing at ~26.
         const fps = 1000 / Math.max(0.1, stats.avgMs);
         if (fpsEl) {
             fpsEl.textContent = fps.toFixed(0) + ' fps';
             fpsEl.dataset.health = classifyFps(fps);
         }
+        // Show real frame interval percentiles (these are the
+        // numbers the player feels). The "work N.Nms" trailing label
+        // tells you the JS budget being spent — low work + low fps
+        // means the device or browser is throttling, not us.
         if (p50El) p50El.textContent = `p50 ${stats.p50.toFixed(1)}`;
         if (p95El) p95El.textContent = `p95 ${stats.p95.toFixed(1)}`;
-        if (p99El) p99El.textContent = `p99 ${stats.p99.toFixed(1)}`;
+        if (p99El) p99El.textContent = `p99 ${stats.p99.toFixed(1)} | work ${stats.workAvgMs.toFixed(1)}`;
     } else {
         // Pre-warmup — buffer hasn't filled yet. Show a placeholder so the
         // panel doesn't look broken on first open.

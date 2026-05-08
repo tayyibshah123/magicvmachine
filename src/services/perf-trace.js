@@ -30,12 +30,29 @@ let framesSinceReport = 0;
 // verbose `active` mode so we always have rolling frame stats to report
 // without spamming the console. Costs roughly two number writes per
 // frame (a single rAF tick is ~16ms; the writes are sub-microsecond).
+//
+// v1.8.9 — split into TWO ring buffers because the previous version
+// conflated "render work inside one rAF" with "real frame interval":
+//
+//   intervalBuf — wall-clock delta between consecutive beginFrame calls.
+//                 This is the true frame rate. 1000/avg = real fps.
+//   workBuf     — `now - frameStart` inside one rAF. The CPU/JS time
+//                 we spent in the loop. Useful for spotting headroom
+//                 (low work + low fps = browser/vsync throttle, not
+//                 our code), but NOT a fps measurement.
+//
+// Honor Tab 10 diag showed avg work 2.4ms with 100% "60fps band" —
+// while the device was actually rendering at ~26fps (lifetime
+// 7333 frames / 276s). The FPS HUD divided 1000/2.4 and reported
+// "415 fps" because it was using workBuf as a fps source. Fixed.
 const FRAME_BUF_SIZE = 600; // ~10s at 60 fps
-const frameBuf = new Float32Array(FRAME_BUF_SIZE);
-let frameBufWrite = 0;
-let frameBufFilled = 0;
+const intervalBuf = new Float32Array(FRAME_BUF_SIZE); // real frame deltas
+const workBuf = new Float32Array(FRAME_BUF_SIZE);     // render work per frame
+let bufWrite = 0;
+let bufFilled = 0;
 let totalFramesObserved = 0;
 let lastFrameStamp = 0;
+let prevFrameStart = 0; // wall-clock at previous beginFrame, for interval calc
 // Always-on per-section accumulator that survives `stop()` so the Diag
 // dump can show top phase costs even if PerfTrace was never started.
 const alwaysSections = new Map();
@@ -114,6 +131,26 @@ export const PerfTrace = {
         // up every frame, not just verbose-mode frames. The per-frame
         // log array is only cleared in active mode (it's a debug tool).
         const now = performance.now();
+        // Capture wall-clock interval since the previous beginFrame —
+        // this is the *true* frame rate as the browser is delivering
+        // rAFs (matches what Perf.startMonitor measures). Skip the
+        // first frame and any monstrous deltas (>500ms = page hidden
+        // / tab swap / GC pause) so the post-resume stutter doesn't
+        // drag the rolling avg down for the next 10s.
+        if (prevFrameStart > 0) {
+            const interval = now - prevFrameStart;
+            if (interval >= 0 && interval < 500) {
+                intervalBuf[bufWrite] = interval;
+            } else {
+                // Replay the previous interval rather than leaving zero —
+                // a zero would make 1000/0 explode in fps maths.
+                const prev = bufFilled > 0
+                    ? intervalBuf[(bufWrite - 1 + FRAME_BUF_SIZE) % FRAME_BUF_SIZE]
+                    : 16.7;
+                intervalBuf[bufWrite] = prev;
+            }
+        }
+        prevFrameStart = now;
         frameStart = now;
         lastMarkAt = now;
         lastLabel = '__begin';
@@ -153,20 +190,33 @@ export const PerfTrace = {
     },
 
     endFrame() {
-        // Always-on: capture total frame ms into the rolling buffer. This
-        // runs regardless of `active` so the Diag dump always has the
-        // last ~10s of frame timings to summarise.
+        // Always-on: capture render-work ms into the work ring. Real
+        // frame interval (the actual fps source) was already captured
+        // at beginFrame() above. This runs regardless of `active` so
+        // the Diag dump always has the last ~10s to summarise.
         const now = performance.now();
-        const total = now - frameStart;
-        if (frameStart > 0 && total >= 0) {
-            frameBuf[frameBufWrite] = total;
-            frameBufWrite = (frameBufWrite + 1) % FRAME_BUF_SIZE;
-            if (frameBufFilled < FRAME_BUF_SIZE) frameBufFilled++;
+        const work = now - frameStart;
+        if (frameStart > 0 && work >= 0) {
+            workBuf[bufWrite] = work;
+            bufWrite = (bufWrite + 1) % FRAME_BUF_SIZE;
+            if (bufFilled < FRAME_BUF_SIZE) bufFilled++;
             totalFramesObserved++;
             lastFrameStamp = now;
-            // Slow-frame ring — capped lookback for the dump.
-            if (total >= 25) {
-                pushSlowFrame({ t: now, total, breakdown: frameLog.slice(0, 6).map(s => `${s.label}=${s.ms.toFixed(1)}`).join(' ') });
+            // Slow-frame ring — gated on the *interval* (true frame
+            // duration) so the dump highlights real stutters, not
+            // frames where we happened to do a lot of optional work
+            // inside a comfortable budget. Read the interval that
+            // beginFrame() just wrote (one slot back from bufWrite
+            // since we incremented above).
+            const intervalIdx = (bufWrite - 1 + FRAME_BUF_SIZE) % FRAME_BUF_SIZE;
+            const interval = intervalBuf[intervalIdx] || work;
+            if (interval >= 25) {
+                pushSlowFrame({
+                    t: now,
+                    total: interval,
+                    work,
+                    breakdown: frameLog.slice(0, 6).map(s => `${s.label}=${s.ms.toFixed(1)}`).join(' ')
+                });
             }
         }
         if (!this.active) return;
@@ -211,44 +261,71 @@ export const PerfTrace = {
         return out;
     },
 
-    /* Compute frame statistics from the always-on rolling buffer. Returns
-     * { count, avgMs, p50, p95, p99, maxMs, fps60Pct, fps30Pct, lt30Pct }
-     * — used by Diag.dump to produce a paste-ready summary. */
+    /* Compute frame statistics from the always-on rolling buffers. Returns
+     * { count, avgMs, p50, p95, p99, maxMs, fps60Pct, fps30Pct, lt30Pct,
+     *   workAvgMs, workP99, workMaxMs }
+     *
+     * avgMs / p* / maxMs and the fps* buckets are computed from the
+     * INTERVAL buffer — i.e. the real wall-clock gap between rAFs. This
+     * is the actual fps the player is seeing.
+     *
+     * workAvgMs / workP99 / workMaxMs are computed from the WORK buffer —
+     * the time we spent inside one rAF doing render work. Headroom
+     * indicator: low work + low fps = browser/vsync throttle, not us.
+     */
     frameStats() {
-        const n = frameBufFilled;
+        const n = bufFilled;
         if (n === 0) return null;
-        // Snapshot to an array we can sort without disturbing the ring.
-        const arr = new Float32Array(n);
-        // Copy ordered oldest→newest so ranges are intuitive (not required
-        // for percentile maths but matches the recent-frames feel).
+        // Snapshot both rings to ordered oldest→newest copies so we can
+        // sort one for percentiles without touching the live buffers.
+        const intervals = new Float32Array(n);
+        const works = new Float32Array(n);
         for (let i = 0; i < n; i++) {
-            const idx = (frameBufWrite - n + i + FRAME_BUF_SIZE) % FRAME_BUF_SIZE;
-            arr[i] = frameBuf[idx];
+            const idx = (bufWrite - n + i + FRAME_BUF_SIZE) % FRAME_BUF_SIZE;
+            intervals[i] = intervalBuf[idx];
+            works[i]     = workBuf[idx];
         }
-        // Aggregate stats first (one pass).
-        let sum = 0, max = 0, fps60 = 0, fps30 = 0, lt30 = 0;
+        // Single pass for sums + buckets keyed on real interval.
+        let iSum = 0, iMax = 0, fps60 = 0, fps30 = 0, lt30 = 0;
+        let wSum = 0, wMax = 0;
+        let validIntervals = 0;
         for (let i = 0; i < n; i++) {
-            const v = arr[i];
-            sum += v;
-            if (v > max) max = v;
-            if (v <= 16.7) fps60++;
-            else if (v <= 33.4) fps30++;
-            else lt30++;
+            const iv = intervals[i];
+            // First-frame slot can be 0 (no prior beginFrame yet); skip
+            // those for the fps maths so the avg isn't dragged down.
+            if (iv > 0) {
+                iSum += iv;
+                if (iv > iMax) iMax = iv;
+                if (iv <= 16.7) fps60++;
+                else if (iv <= 33.4) fps30++;
+                else lt30++;
+                validIntervals++;
+            }
+            const wv = works[i];
+            wSum += wv;
+            if (wv > wMax) wMax = wv;
         }
-        // Sort for percentiles.
-        const sorted = Array.from(arr).sort((a, b) => a - b);
-        const pick = (p) => sorted[Math.min(n - 1, Math.floor(n * p))];
+        const sortedI = Array.from(intervals).filter(v => v > 0).sort((a, b) => a - b);
+        const sortedW = Array.from(works).sort((a, b) => a - b);
+        const pickI = (p) => sortedI.length
+            ? sortedI[Math.min(sortedI.length - 1, Math.floor(sortedI.length * p))]
+            : 0;
+        const pickW = (p) => sortedW[Math.min(n - 1, Math.floor(n * p))];
+        const denom = validIntervals || 1;
         return {
             count: n,
             totalObserved: totalFramesObserved,
-            avgMs: sum / n,
-            p50: pick(0.5),
-            p95: pick(0.95),
-            p99: pick(0.99),
-            maxMs: max,
-            fps60Pct: (fps60 / n) * 100,
-            fps30Pct: (fps30 / n) * 100,
-            lt30Pct: (lt30 / n) * 100
+            avgMs:    iSum / denom,
+            p50:      pickI(0.5),
+            p95:      pickI(0.95),
+            p99:      pickI(0.99),
+            maxMs:    iMax,
+            fps60Pct: (fps60 / denom) * 100,
+            fps30Pct: (fps30 / denom) * 100,
+            lt30Pct:  (lt30 / denom) * 100,
+            workAvgMs: wSum / n,
+            workP99:   pickW(0.99),
+            workMaxMs: wMax
         };
     },
 

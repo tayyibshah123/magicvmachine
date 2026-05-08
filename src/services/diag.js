@@ -295,9 +295,21 @@ export const Diag = {
         lines.push('');
         lines.push('--- Frame stats ---');
         if (stats && stats.count > 0) {
-            lines.push(`Sample window: ${stats.count} frames (lifetime observed: ${stats.totalObserved})`);
-            lines.push(`avg ${fmtMs(stats.avgMs)}ms | p50 ${fmtMs(stats.p50)} | p95 ${fmtMs(stats.p95)} | p99 ${fmtMs(stats.p99)} | max ${fmtMs(stats.maxMs)}`);
+            const realFps = stats.avgMs > 0 ? (1000 / stats.avgMs) : 0;
+            const lifeFps = (stats.totalObserved > 0 && sessionDuration > 0)
+                ? (stats.totalObserved / (sessionDuration / 1000))
+                : 0;
+            lines.push(`Sample window: ${stats.count} frames (lifetime observed: ${stats.totalObserved}, lifetime avg ${lifeFps.toFixed(1)} fps)`);
+            lines.push(`Real frame interval (true fps): avg ${fmtMs(stats.avgMs)}ms (${realFps.toFixed(1)} fps) | p50 ${fmtMs(stats.p50)} | p95 ${fmtMs(stats.p95)} | p99 ${fmtMs(stats.p99)} | max ${fmtMs(stats.maxMs)}`);
             lines.push(`60fps: ${stats.fps60Pct.toFixed(1)}% | 30fps band: ${stats.fps30Pct.toFixed(1)}% | <30fps: ${stats.lt30Pct.toFixed(1)}%`);
+            lines.push(`Render work (CPU/JS time inside one rAF): avg ${fmtMs(stats.workAvgMs)}ms | p99 ${fmtMs(stats.workP99)} | max ${fmtMs(stats.workMaxMs)}`);
+            // Headroom callout: when work is comfortably under the
+            // frame budget but real fps is dragging, the bottleneck is
+            // outside our render code (vsync throttle, GPU compositor,
+            // browser policy). Useful pointer when reading the dump.
+            if (realFps > 0 && realFps < 50 && stats.workAvgMs < 8) {
+                lines.push(`  ⚠ low fps with low work — likely browser/vsync throttle, not render code.`);
+            }
         } else {
             lines.push('(No frame data yet — Game.loop hasn\'t closed any frames.)');
         }
