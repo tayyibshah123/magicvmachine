@@ -8082,7 +8082,14 @@ triggerSystemCrash() {
                 break;
             case 'mirror_attack':
                 label = `${ICONS.intentAttack} MIRROR STRIKE`;
-                body  = `Reflects <strong>50%</strong> of the last hit it took back at you for <strong>${val} damage</strong>.`;
+                {
+                    // Sector-scaled reflect percent. S1 50%, +25% per
+                    // sector, no cap. The displayed damage value is
+                    // the live effectiveVal which tracks the player's
+                    // most recent hit and any debuffs on the enemy.
+                    const _mirrorPct = Math.round((0.5 + (((this.sector || 1) - 1) * 0.25)) * 100);
+                    body = `Reflects <strong>${_mirrorPct}%</strong> of the last hit it took back at you for <strong>${val} damage</strong>. Updates live as you hit it.`;
+                }
                 break;
             case 'frost_aoe':
                 label = `${ICONS.intentMultiAttack} FROST WAVE`;

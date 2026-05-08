@@ -4,14 +4,18 @@ import { Entity } from './entity.js';
 import { Game } from '../game.js';
 import { STATE } from '../constants.js';
 
-// Mirror reflect percentage. Flat 50% of the last player hit, every
-// sector. Was previously sector-scaled (S1 50%, S5 200%) but the
-// scaling was opaque to the player and the cap on the displayed
-// number made the tooltip read inconsistently with the actual hit.
-// Constrict and Digital Rot still apply on top via getEffectiveDamage,
-// which already routes mirror_attack through DAMAGE_INTENTS.
-const MIRROR_REFLECT_PCT_FLAT = 0.5;
-function mirrorReflectPct() { return MIRROR_REFLECT_PCT_FLAT; }
+// Mirror reflect percentage. Linear scaling: 50% in Sector 1, +25%
+// per subsequent sector (S2 75%, S3 100%, S4 125%, S5 150%, etc).
+// No floor on the resulting damage, no cap. Constrict and Digital
+// Rot still scale the effective value down via getEffectiveDamage
+// because mirror_attack is in DAMAGE_INTENTS. The displayed value
+// updates live each time the player hits the mirror enemy:
+// updateIntentValues re-reads _lastPlayerHitDmg, so the player can
+// see the threat shrink or grow with their own output.
+function mirrorReflectPct(sector) {
+    const s = (typeof sector === 'number' && sector > 0) ? sector : 1;
+    return 0.5 + (s - 1) * 0.25;
+}
 export { mirrorReflectPct };
 
 
@@ -227,16 +231,18 @@ class Enemy extends Entity {
         // Ascension 15 — Mirror World. Every enemy has a 28% chance per
         // action to echo the player's last damage dealt as a mirror_attack.
         // Scales the threat to the player's own output, so burst builds get
-        // punished by burst echoes. Flat 50% of the last hit (matching the
-        // base mirror enemy formula) so the player can read the threat
-        // consistently across sectors and ascensions.
+        // punished by burst echoes. Uses the same sector-scaled percent
+        // as the base mirror enemy so the player reads one consistent
+        // rule across every reflect surface.
         const cbMirrored = Game && Game._ascEffects && Game._ascEffects.enemyCopiesLastDie;
         if (cbMirrored && Math.random() < 0.28) {
+            const sector = (Game && Game.sector) || 1;
+            const pct = mirrorReflectPct(sector);
             const mirroredBase = (Game.player && Game.player._lastDamageDealt)
                 ? Game.player._lastDamageDealt : this.baseDmg;
             return {
                 type: 'mirror_attack',
-                val: Math.floor(mirroredBase * 0.5),
+                val: Math.floor(mirroredBase * pct),
                 target: Game.player
             };
         }
@@ -415,14 +421,19 @@ class Enemy extends Entity {
             return { type: 'attack', val: this.baseDmg, target: getTarget() };
         }
         if (this.kind === 'mirror') {
-            // Reflects a flat 50% of the last hit this entity took FROM
-            // THE PLAYER directly. No floor, no cap. Constrict and
+            // Reflects sector-scaled percent of the last hit this
+            // entity took FROM THE PLAYER directly. S1 50%, +25% per
+            // subsequent sector. No floor, no cap. Constrict and
             // Digital Rot still scale the displayed value down via
-            // updateIntentValues / getEffectiveDamage. If the player
-            // has not hit yet this combat the reflect falls back to
-            // 50% of baseDmg so the intent still resolves to something.
+            // updateIntentValues / getEffectiveDamage. The val is
+            // recomputed live each time the player hits the mirror
+            // (see updateIntentValues) so the displayed damage tracks
+            // the player's actual output rather than the value at
+            // intent-generation time.
+            const sector = (Game && Game.sector) || 1;
+            const pct = mirrorReflectPct(sector);
             const baseSrc = this._lastPlayerHitDmg || this.baseDmg;
-            return { type: 'mirror_attack', val: Math.floor(baseSrc * 0.5), target: Game.player };
+            return { type: 'mirror_attack', val: Math.floor(baseSrc * pct), target: Game.player };
         }
         if (this.kind === 'frost') {
             // 50/50 frost AoE (Weak debuff) or basic attack.
@@ -555,6 +566,19 @@ class Enemy extends Entity {
             'self_destruct'
         ]);
         this.nextIntents.forEach(intent => {
+            // Mirror reflect is special: its base damage is the most
+            // recent hit the entity has taken from the player, scaled
+            // by the sector percentage. Re-read live state every time
+            // updateIntentValues runs so the displayed value updates
+            // when the player hits the mirror mid-turn. Without this,
+            // the val was frozen at intent-generation time and the
+            // tooltip showed stale damage.
+            if (intent.type === 'mirror_attack') {
+                const sector = (Game && Game.sector) || 1;
+                const pct = mirrorReflectPct(sector);
+                const baseSrc = this._lastPlayerHitDmg || this.baseDmg;
+                intent.val = Math.floor(baseSrc * pct);
+            }
             if (DAMAGE_INTENTS.has(intent.type)) {
                 intent.effectiveVal = this.getEffectiveDamage(intent.val);
             } else if (intent.type === 'heal') {

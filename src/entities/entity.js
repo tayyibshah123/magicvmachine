@@ -544,6 +544,16 @@ class Entity {
             } else if (Minion && source instanceof Minion && source.isPlayerSide) {
                 this._lastPlayerSideHitDmg = actualDmg;
             }
+            // v1.9.10. If this entity has a queued mirror_attack
+            // intent, refresh its displayed value now so the tooltip
+            // and intent badge reflect the new last-hit base. The
+            // mirror branch in updateIntentValues recomputes intent.val
+            // from the freshly-set _lastPlayerHitDmg.
+            if (Enemy && this instanceof Enemy && Array.isArray(this.nextIntents)
+                && this.nextIntents.some(i => i && i.type === 'mirror_attack')
+                && typeof this.updateIntentValues === 'function') {
+                this.updateIntentValues();
+            }
         }
 
         // v1.8.3 — Detonator self-destruct rework. Was an on-death
