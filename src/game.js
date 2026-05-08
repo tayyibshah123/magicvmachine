@@ -22269,6 +22269,30 @@ drawEffects() {
                         `FUSION → ${item.name.toUpperCase()}`, '#ff5577');
                     if (ParticleSys.createShockwave) ParticleSys.createShockwave(this.player.x, this.player.y, '#ff5577', 56);
                     if (this.shake) this.shake(14);
+                    // First-fusion celebration. Closes the open ROADMAP
+                    // Bucket 3 item. Fires once per install on the first
+                    // fusion the player ever picks. Persistent flag so a
+                    // mid-run swap to a new device, or a second run on
+                    // the same install, both stay quiet after the first.
+                    let firstFusionFired = null;
+                    try { firstFusionFired = localStorage.getItem('mvm_first_fusion_picked'); } catch (_) {}
+                    if (!firstFusionFired) {
+                        try { localStorage.setItem('mvm_first_fusion_picked', '1'); } catch (_) {}
+                        if (typeof this.showPhaseBanner === 'function') {
+                            // Reuse the boss-variant dramatic banner so
+                            // the moment lands with the same weight as
+                            // a phase transition. No new CSS needed.
+                            this.showPhaseBanner('FUSION FORGED', item.name.toUpperCase(), 'boss');
+                        }
+                        AudioMgr.playSound('grid_fracture', { volume: 0.85 });
+                        AudioMgr.playSound('upgrade', { volume: 1.0 });
+                        if (ParticleSys.createShockwave) {
+                            ParticleSys.createShockwave(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2, '#ff5577', 96);
+                            ParticleSys.createShockwave(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2, '#ffd76a', 64);
+                        }
+                        if (this.triggerScreenFlash) this.triggerScreenFlash('rgba(255, 85, 119, 0.32)', 360);
+                        if (this.shake) this.shake(20);
+                    }
                 } else {
                     this.player.addRelic(item);
                 }
