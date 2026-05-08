@@ -1,3 +1,7 @@
+> **ARCHIVED.** This document is historical. Active roadmap lives at `/ROADMAP.md`. Do not edit.
+
+---
+
 # Session Notes — May 2026 (v1.5.0 → v1.6.0)
 
 > Snapshot: 2026-05-06.

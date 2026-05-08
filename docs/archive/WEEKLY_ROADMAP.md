@@ -1,3 +1,7 @@
+> **ARCHIVED.** This document is historical. Active roadmap lives at `/ROADMAP.md`. Do not edit.
+
+---
+
 # Weekly Roadmap — Mobile-First, 60fps, Neon Cyberpunk
 
 > ⚠️ **SUPERSEDED FOR EVERYTHING POST 2026-05-04.** This file is preserved as the Week 1 + Week 2 record (v1.3.5 → v1.5.0). The **41 commits shipped after** that, plus the v1.6.0 architectural contracts and recommended next steps, live in **`SESSION_NOTES_2026-05.md`**. New sessions should read SESSION_NOTES_2026-05.md first, then back-reference this file's §9 ledger for the v1.5.0 closed-parts list.

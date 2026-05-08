@@ -1,3 +1,7 @@
+> **ARCHIVED.** This document is historical. Active roadmap lives at `/ROADMAP.md`. Do not edit.
+
+---
+
 # Magic v Machine — Mobile Production Roadmap
 
 A meticulous, end-to-end plan to ship *Magic v Machine* as a casual-friendly, deeply masterable mobile roguelite on **iOS** and **Android**. Everything below is structured so a small team (1–3 devs + contractor art/audio) could execute it in quarter-long chunks.
