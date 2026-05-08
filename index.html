@@ -1426,6 +1426,15 @@
                 <span class="im-dot">•</span>
                 <span class="im-tag im-format" data-bind="format">Field Report</span>
             </div>
+            <!-- Audio waveform strip. Visible only when the entry's
+                 format is audio_transcript (gated by a CSS rule on
+                 the card's data-format attribute). 8 bars with
+                 staggered idle bounce so the strip reads as a live
+                 audio meter. -->
+            <div class="intel-modal-waveform" aria-hidden="true">
+                <span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span>
+            </div>
 
             <h2 id="intel-modal-title" class="intel-modal-title" data-bind="title">Title</h2>
 

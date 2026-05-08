@@ -218,6 +218,23 @@ function renderEntry(id) {
     setText('[data-bind="chapterLabel"]', chapterMeta ? chapterMeta.title : entry.chapter);
     const isFirstOpen = markRead(entry.id);
     renderBody(entry, isFirstOpen);
+    // D5 first-open glitch frame. Added on the very first open of an
+    // entry. CSS keyframe runs 480ms; remove the class after so a
+    // future re-open of the same entry doesn't replay the animation.
+    if (isFirstOpen) {
+        card.classList.remove('intel-glitch-in');
+        // Force a reflow so re-adding the class restarts the
+        // animation even if it was just removed.
+        // eslint-disable-next-line no-unused-expressions
+        void card.offsetWidth;
+        card.classList.add('intel-glitch-in');
+        setTimeout(() => {
+            if (card) card.classList.remove('intel-glitch-in');
+        }, 520);
+    }
+    // D6 reset scroll progress for the new entry.
+    card.style.setProperty('--scroll-pct', '0');
+    card.scrollTop = 0;
     // Progress label, e.g. "3 of 18".
     const ids = navigableIds();
     const pos = ids.indexOf(entry.id);
@@ -326,6 +343,14 @@ export function init() {
     document.addEventListener('keydown', onKey);
     card.addEventListener('touchstart', onTouchStart, { passive: true });
     card.addEventListener('touchend', onTouchEnd, { passive: true });
+    // D6 scroll-progress accent. The card is the scrollable element.
+    // Each scroll updates the --scroll-pct custom property, which
+    // drives the height of the right-edge accent bar via CSS.
+    card.addEventListener('scroll', () => {
+        const max = card.scrollHeight - card.clientHeight;
+        const pct = max > 0 ? Math.min(100, (card.scrollTop / max) * 100) : 0;
+        card.style.setProperty('--scroll-pct', pct.toFixed(1));
+    }, { passive: true });
     // Hash route on first load.
     if (typeof window !== 'undefined' && window.location && window.location.hash) {
         const m = window.location.hash.match(/^#\/intel\/(\d+)$/);
