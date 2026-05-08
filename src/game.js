@@ -8082,10 +8082,7 @@ triggerSystemCrash() {
                 break;
             case 'mirror_attack':
                 label = `${ICONS.intentAttack} MIRROR STRIKE`;
-                {
-                    const _mirrorPct = { 1: 50, 2: 75, 3: 100, 4: 150, 5: 200 }[this.sector || 1] || 50;
-                    body = `Reflects <strong>${_mirrorPct}%</strong> of the last hit it took back at you for <strong>${val} damage</strong>.`;
-                }
+                body  = `Reflects <strong>50%</strong> of the last hit it took back at you for <strong>${val} damage</strong>.`;
                 break;
             case 'frost_aoe':
                 label = `${ICONS.intentMultiAttack} FROST WAVE`;
