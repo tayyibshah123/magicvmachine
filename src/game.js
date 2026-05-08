@@ -14046,11 +14046,16 @@ async startCombat(type) {
             // Defensive prune of any leftover minions so the resummon
             // path can never inherit a corpse and end up with 4 or 5
             // entries in the array.
-            this.enemy.minions = this.enemy.minions.filter(m => m && m.currentHp > 0);
+            // Hardened prune: drop any leftovers AND any non-fragment
+            // minion that may have been pushed elsewhere. Belt-and-
+            // braces against future regressions.
+            this.enemy.minions = this.enemy.minions.filter(m =>
+                m && m.currentHp > 0 && m._isTessFragment);
             const TESS_ROLES = [
-                { role: 'heart', hp: 60, color: '#ff3355', name: 'Tesseract Heart' },
-                { role: 'aegis', hp: 40, color: '#3a8bff', name: 'Tesseract Aegis' },
-                { role: 'hex',   hp: 35, color: '#bc13fe', name: 'Tesseract Hex'   }
+                { role: 'heart',  hp: 60, color: '#ff3355', name: 'Tesseract Heart'  },
+                { role: 'aegis',  hp: 40, color: '#3a8bff', name: 'Tesseract Aegis'  },
+                { role: 'hex',    hp: 35, color: '#bc13fe', name: 'Tesseract Hex'    },
+                { role: 'mender', hp: 50, color: '#4ade80', name: 'Tesseract Mender' }
             ];
             TESS_ROLES.forEach((spec, i) => {
                 const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false, 3);
@@ -14355,16 +14360,11 @@ async startCombat(type) {
              });
         }
 
-        if (isBoss && this.sector === 5) {
-             const m1 = new Minion(0, 0, 1, false, 3);
-             m1.name = "Glitch Alpha"; m1.maxHp = 100; m1.currentHp = 100; m1.dmg = 5;
-             const m2 = new Minion(0, 0, 2, false, 3);
-             m2.name = "Glitch Beta"; m2.maxHp = 100; m2.currentHp = 100; m2.dmg = 5;
-             this.enemy.minions.push(m1, m2);
-             this._queueBossAnnouncement(() => {
-                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, "REALITY FRACTURE", "#ffffff");
-             });
-        }
+        // (Legacy Glitch Alpha + Beta minion spawn for sector 5 removed
+        // in v1.10. Tesseract Prime's minion roster is now the four
+        // specialised orbs spawned earlier in this function via the
+        // TESS_ROLES block. The Glitch pair was the source of the
+        // phantom 5th-minion render the player flagged.)
 
         this.player.spawnTimer = 1.0;
         this.player.minions.forEach(m => m.spawnTimer = 1.0);
@@ -14439,11 +14439,13 @@ async startTurn() {
             && typeof this.enemy._fragmentResummonAt === 'number'
             && this.turnCount >= this.enemy._fragmentResummonAt) {
             this.enemy._fragmentResummonAt = null;
-            this.enemy.minions = this.enemy.minions.filter(m => m && m.currentHp > 0);
+            this.enemy.minions = this.enemy.minions.filter(m =>
+                m && m.currentHp > 0 && m._isTessFragment);
             const TESS_ROLES = [
-                { role: 'heart', hp: 60, color: '#ff3355', name: 'Tesseract Heart' },
-                { role: 'aegis', hp: 40, color: '#3a8bff', name: 'Tesseract Aegis' },
-                { role: 'hex',   hp: 35, color: '#bc13fe', name: 'Tesseract Hex'   }
+                { role: 'heart',  hp: 60, color: '#ff3355', name: 'Tesseract Heart'  },
+                { role: 'aegis',  hp: 40, color: '#3a8bff', name: 'Tesseract Aegis'  },
+                { role: 'hex',    hp: 35, color: '#bc13fe', name: 'Tesseract Hex'    },
+                { role: 'mender', hp: 50, color: '#4ade80', name: 'Tesseract Mender' }
             ];
             TESS_ROLES.forEach((spec, i) => {
                 const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false, 3);
@@ -14579,6 +14581,25 @@ async startTurn() {
                         }
                         ParticleSys.createFloatingText(this.player.x, this.player.y - 90,
                             'HEX', '#bc13fe');
+                    }
+                } else if (m._tessRole === 'mender') {
+                    // Heal each OTHER live orb (not the boss, not self)
+                    // for a flat amount each turn. Caps at maxHp. Reads
+                    // as a healing pulse the player can see clearly
+                    // when other orbs come back from low HP.
+                    const others = liveOrbs.filter(o => o !== m);
+                    if (others.length > 0) {
+                        const healPerOrb = 8;
+                        others.forEach(o => {
+                            const amt = Math.min(healPerOrb, o.maxHp - o.currentHp);
+                            if (amt > 0) {
+                                o.currentHp += amt;
+                                ParticleSys.createFloatingText(o.x, o.y - 30,
+                                    `+${amt}`, '#4ade80');
+                            }
+                        });
+                        ParticleSys.createFloatingText(m.x, m.y - 50,
+                            'MEND', '#4ade80');
                     }
                 }
             });
@@ -24509,13 +24530,16 @@ drawEffects() {
 
             // F6. Cardinal beams. 4 vertical light beams at fixed X
             // positions, brightness pulses at different rates so the
-            // beams don't all flash in unison.
-            const beamSpecs = [
-                { x: 0.25, rate: 0.7 },
-                { x: 0.40, rate: 0.5 },
-                { x: 0.60, rate: 0.6 },
-                { x: 0.75, rate: 0.8 }
-            ];
+            // beams don't all flash in unison. Low drops to 2 beams
+            // (the symmetric pair).
+            const beamSpecs = _isLow
+                ? [{ x: 0.30, rate: 0.7 }, { x: 0.70, rate: 0.6 }]
+                : [
+                    { x: 0.25, rate: 0.7 },
+                    { x: 0.40, rate: 0.5 },
+                    { x: 0.60, rate: 0.6 },
+                    { x: 0.75, rate: 0.8 }
+                ];
             beamSpecs.forEach((beam, i) => {
                 const brightness = 0.4 + 0.6 * Math.sin(time * beam.rate + i * 1.3);
                 const alpha = 0.04 + 0.06 * brightness;
@@ -24598,7 +24622,7 @@ drawEffects() {
                     ctx.restore();
                 }
             }
-            if (phase >= 3) {
+            if (phase >= 3 && !_isLow) {
                 ctx.save();
                 ctx.globalCompositeOperation = 'screen';
                 ctx.fillStyle = 'rgba(0, 200, 255, 0.04)';
@@ -28899,8 +28923,12 @@ drawEntity(entity) {
                     // === Layer 1: Cube cascade (depth field) ===
                     // 8 nested wireframe cubes alternating rotation
                     // direction. 9th outer cube draws with chromatic
-                    // aberration ghosts when on high tier.
-                    const cubeCount = isLow ? 4 : (isMid ? 6 : 8);
+                    // aberration ghosts when on high tier. Low drops
+                    // hard to 2 cubes since iOS Brave was throttling
+                    // rAF to 15fps with 4 (each cube is 12 stroked
+                    // edges with shadowBlur, which forces CPU
+                    // compositing on mobile Safari/Brave).
+                    const cubeCount = isLow ? 2 : (isMid ? 6 : 8);
                     const cubeBaseSizes = [50, 80, 115, 155, 200, 250, 305, 365];
                     const drawCube = (size, rot, stroke, lw, blur) => {
                         const half = size / 2;
@@ -29040,29 +29068,35 @@ drawEntity(entity) {
                     }
 
                     // === Layer 3: Halo aura (multi-layer bloom) ===
+                    // Low tier renders only the inner core (single
+                    // gradient) instead of three stacked radial
+                    // gradients. The outer + mid halo ate compositor
+                    // time on iOS Brave.
                     ctx.save();
                     const haloAlpha = phase >= 2 ? 0.55 : 0.45;
-                    // Outer soft halo
-                    let outerHalo = ctx.createRadialGradient(0, 0, 60, 0, 0, 180);
-                    outerHalo.addColorStop(0, accentColor);
-                    outerHalo.addColorStop(0.4, `rgba(255, 215, 0, ${haloAlpha * 0.3})`);
-                    outerHalo.addColorStop(1, 'rgba(255, 215, 0, 0)');
-                    ctx.globalAlpha = 0.45;
-                    ctx.fillStyle = outerHalo;
-                    ctx.beginPath();
-                    ctx.arc(0, 0, 180, 0, Math.PI * 2);
-                    ctx.fill();
-                    // Mid halo
-                    let midHalo = ctx.createRadialGradient(0, 0, 25, 0, 0, 110);
-                    midHalo.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
-                    midHalo.addColorStop(0.5, `rgba(255, 215, 0, ${haloAlpha * 0.5})`);
-                    midHalo.addColorStop(1, 'rgba(255, 215, 0, 0)');
-                    ctx.globalAlpha = 0.7;
-                    ctx.fillStyle = midHalo;
-                    ctx.beginPath();
-                    ctx.arc(0, 0, 110, 0, Math.PI * 2);
-                    ctx.fill();
-                    // Inner core
+                    if (!isLow) {
+                        // Outer soft halo
+                        let outerHalo = ctx.createRadialGradient(0, 0, 60, 0, 0, 180);
+                        outerHalo.addColorStop(0, accentColor);
+                        outerHalo.addColorStop(0.4, `rgba(255, 215, 0, ${haloAlpha * 0.3})`);
+                        outerHalo.addColorStop(1, 'rgba(255, 215, 0, 0)');
+                        ctx.globalAlpha = 0.45;
+                        ctx.fillStyle = outerHalo;
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 180, 0, Math.PI * 2);
+                        ctx.fill();
+                        // Mid halo
+                        let midHalo = ctx.createRadialGradient(0, 0, 25, 0, 0, 110);
+                        midHalo.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+                        midHalo.addColorStop(0.5, `rgba(255, 215, 0, ${haloAlpha * 0.5})`);
+                        midHalo.addColorStop(1, 'rgba(255, 215, 0, 0)');
+                        ctx.globalAlpha = 0.7;
+                        ctx.fillStyle = midHalo;
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 110, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    // Inner core (always)
                     let innerHalo = ctx.createRadialGradient(0, 0, 8, 0, 0, 60);
                     innerHalo.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
                     innerHalo.addColorStop(1, 'rgba(255, 215, 0, 0)');
@@ -29095,7 +29129,7 @@ drawEntity(entity) {
                     // (16 total), 3 per side on mid (12), 2 per side
                     // on low (8). Each feather has gradient fill
                     // gold-to-white, gentle flutter, glowing tip.
-                    const wingSetCount = isLow ? 2 : (isMid ? 3 : 4);
+                    const wingSetCount = isLow ? 1 : (isMid ? 3 : 4);
                     const flutter = Math.sin(time * 1.7) * 0.07;
                     const drawFeatherSet = (sideMul) => {
                         const baseAngles = [
@@ -29121,11 +29155,15 @@ drawEntity(entity) {
                                 featherGrad.addColorStop(0, `rgba(255, 215, 0, ${phase >= 2 ? 0.42 : 0.32})`);
                                 featherGrad.addColorStop(0.6, `rgba(255, 240, 180, ${phase >= 2 ? 0.55 : 0.45})`);
                                 featherGrad.addColorStop(1, `rgba(255, 255, 255, 0.7)`);
-                                ctx.fillStyle = featherGrad;
+                                ctx.fillStyle = isLow
+                                    ? `rgba(255, 215, 0, ${phase >= 2 ? 0.42 : 0.32})`
+                                    : featherGrad;
                                 ctx.strokeStyle = accentColor;
                                 ctx.lineWidth = 1.2;
-                                ctx.shadowColor = accentColor;
-                                ctx.shadowBlur = isLow ? 4 : (isMid ? 8 : 14);
+                                if (!isLow) {
+                                    ctx.shadowColor = accentColor;
+                                    ctx.shadowBlur = isMid ? 8 : 14;
+                                }
                                 ctx.beginPath();
                                 ctx.moveTo(rootX, rootY);
                                 ctx.lineTo(tipX, tipY);
@@ -29133,12 +29171,14 @@ drawEntity(entity) {
                                 ctx.closePath();
                                 ctx.fill();
                                 ctx.stroke();
-                                // Glowing tip dot.
-                                ctx.fillStyle = '#fff';
-                                ctx.shadowBlur = isLow ? 0 : 10;
-                                ctx.beginPath();
-                                ctx.arc(tipX, tipY, 2, 0, Math.PI * 2);
-                                ctx.fill();
+                                // Glowing tip dot. Drop on low.
+                                if (!isLow) {
+                                    ctx.fillStyle = '#fff';
+                                    ctx.shadowBlur = 10;
+                                    ctx.beginPath();
+                                    ctx.arc(tipX, tipY, 2, 0, Math.PI * 2);
+                                    ctx.fill();
+                                }
                             }
                         }
                     };
@@ -29160,15 +29200,19 @@ drawEntity(entity) {
                     ctx.bezierCurveTo(mWidth, mTop + 30, mWidth, mBot - 50, 0, mBot);
                     ctx.bezierCurveTo(-mWidth, mBot - 50, -mWidth, mTop + 30, 0, mTop);
                     ctx.closePath();
-                    // Mandorla fill gradient (centre brightest, edges
-                    // tinted by phase).
-                    const mGrad = ctx.createLinearGradient(0, mTop, 0, mBot);
-                    mGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
-                    mGrad.addColorStop(0.5, bodyFill);
-                    mGrad.addColorStop(1, accentColor);
-                    ctx.fillStyle = mGrad;
-                    ctx.shadowColor = glowColor;
-                    ctx.shadowBlur = isLow ? 8 : 22;
+                    // Mandorla fill. Solid colour on low, gradient
+                    // elsewhere. shadowBlur skipped on low entirely.
+                    if (isLow) {
+                        ctx.fillStyle = bodyFill;
+                    } else {
+                        const mGrad = ctx.createLinearGradient(0, mTop, 0, mBot);
+                        mGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+                        mGrad.addColorStop(0.5, bodyFill);
+                        mGrad.addColorStop(1, accentColor);
+                        ctx.fillStyle = mGrad;
+                        ctx.shadowColor = glowColor;
+                        ctx.shadowBlur = 22;
+                    }
                     ctx.fill();
                     ctx.lineWidth = 2.2;
                     ctx.strokeStyle = accentColor;
@@ -29184,35 +29228,45 @@ drawEntity(entity) {
                     // Inner luminous core orb at the upper third of the
                     // mandorla (where a "head" would be).
                     const headY = -50;
-                    let coreGrad = ctx.createRadialGradient(0, headY, 2, 0, headY, 16);
-                    coreGrad.addColorStop(0, '#ffffff');
-                    coreGrad.addColorStop(0.6, accentColor);
-                    coreGrad.addColorStop(1, 'rgba(255, 215, 0, 0)');
-                    ctx.fillStyle = coreGrad;
-                    ctx.shadowColor = '#ffffff';
-                    ctx.shadowBlur = isLow ? 6 : 18;
+                    if (isLow) {
+                        ctx.fillStyle = '#ffffff';
+                    } else {
+                        let coreGrad = ctx.createRadialGradient(0, headY, 2, 0, headY, 16);
+                        coreGrad.addColorStop(0, '#ffffff');
+                        coreGrad.addColorStop(0.6, accentColor);
+                        coreGrad.addColorStop(1, 'rgba(255, 215, 0, 0)');
+                        ctx.fillStyle = coreGrad;
+                        ctx.shadowColor = '#ffffff';
+                        ctx.shadowBlur = 18;
+                    }
                     ctx.beginPath();
-                    ctx.arc(0, headY, 16, 0, Math.PI * 2);
+                    ctx.arc(0, headY, isLow ? 8 : 16, 0, Math.PI * 2);
                     ctx.fill();
                     // Subtle outstretched arm strokes from the mandorla
                     // upper third (no limbs, just light points).
                     ctx.strokeStyle = accentColor;
                     ctx.lineWidth = 3.5;
                     ctx.lineCap = 'round';
-                    ctx.shadowColor = accentColor;
-                    ctx.shadowBlur = isLow ? 4 : 12;
+                    if (!isLow) {
+                        ctx.shadowColor = accentColor;
+                        ctx.shadowBlur = 12;
+                    } else {
+                        ctx.shadowBlur = 0;
+                    }
                     const armY = -30;
                     ctx.beginPath();
                     ctx.moveTo(-12, armY); ctx.lineTo(-66, armY - 6);
                     ctx.moveTo(12, armY);  ctx.lineTo(66, armY - 6);
                     ctx.stroke();
-                    // Tip light points on each arm.
-                    ctx.fillStyle = '#ffffff';
-                    ctx.shadowBlur = isLow ? 4 : 14;
-                    ctx.beginPath();
-                    ctx.arc(-66, armY - 6, 3, 0, Math.PI * 2);
-                    ctx.arc(66, armY - 6, 3, 0, Math.PI * 2);
-                    ctx.fill();
+                    // Tip light points on each arm. Skip on low.
+                    if (!isLow) {
+                        ctx.fillStyle = '#ffffff';
+                        ctx.shadowBlur = 14;
+                        ctx.beginPath();
+                        ctx.arc(-66, armY - 6, 3, 0, Math.PI * 2);
+                        ctx.arc(66, armY - 6, 3, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
                     ctx.lineCap = 'butt';
                     ctx.restore();
 
@@ -30463,9 +30517,11 @@ drawEntity(entity) {
                 const orbColor = entity._tessOrbColor
                     || (role === 'heart' ? '#ff3355'
                         : role === 'aegis' ? '#3a8bff'
+                        : role === 'mender' ? '#4ade80'
                         : '#bc13fe');
                 const orbAccent = role === 'heart' ? '#ffaaaa'
                     : role === 'aegis' ? '#a0d0ff'
+                    : role === 'mender' ? '#a8f0c0'
                     : '#e090ff';
                 const idx = entity._tessShapeIdx || 0;
                 const tier = (typeof Perf !== 'undefined' && Perf.tier) || 'high';
@@ -30473,21 +30529,27 @@ drawEntity(entity) {
                 ctx.save();
                 // Orb radius pulses 18-26.
                 const orbR = 22 + Math.sin(time * 3 + idx) * 4;
-                // Shadow glow.
-                ctx.shadowColor = orbColor;
-                ctx.shadowBlur = isLowTier ? 8 : 22;
-                // Outer halo glow ring.
-                const haloR = orbR + 14;
-                const orbHaloGrad = ctx.createRadialGradient(0, 0, orbR, 0, 0, haloR);
-                orbHaloGrad.addColorStop(0, orbColor);
-                orbHaloGrad.addColorStop(0.4, orbColor.replace(')', ', 0.4)').replace('rgb', 'rgba'));
-                orbHaloGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-                ctx.fillStyle = orbHaloGrad;
-                ctx.globalAlpha = 0.55;
-                ctx.beginPath();
-                ctx.arc(0, 0, haloR, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.globalAlpha = 1;
+                // Shadow glow. Skipped entirely on low.
+                if (!isLowTier) {
+                    ctx.shadowColor = orbColor;
+                    ctx.shadowBlur = 22;
+                }
+                // Outer halo glow ring. Skipped on low (gradient
+                // allocation per-frame on each orb is the per-frame
+                // cost we're cutting hardest).
+                if (!isLowTier) {
+                    const haloR = orbR + 14;
+                    const orbHaloGrad = ctx.createRadialGradient(0, 0, orbR, 0, 0, haloR);
+                    orbHaloGrad.addColorStop(0, orbColor);
+                    orbHaloGrad.addColorStop(0.4, orbColor.replace(')', ', 0.4)').replace('rgb', 'rgba'));
+                    orbHaloGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                    ctx.fillStyle = orbHaloGrad;
+                    ctx.globalAlpha = 0.55;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, haloR, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.globalAlpha = 1;
+                }
                 // Orb body — radial gradient (white centre to colour edge).
                 const orbGrad = ctx.createRadialGradient(0, -orbR * 0.25, 1, 0, 0, orbR);
                 orbGrad.addColorStop(0, '#ffffff');
@@ -30539,6 +30601,18 @@ drawEntity(entity) {
                         ctx.closePath();
                         ctx.fill();
                         ctx.stroke();
+                    } else if (role === 'mender') {
+                        // Plus-cross leaf shards (suggest healing).
+                        ctx.beginPath();
+                        ctx.moveTo(-1.5, -5); ctx.lineTo(1.5, -5);
+                        ctx.lineTo(1.5, -1.5); ctx.lineTo(5, -1.5);
+                        ctx.lineTo(5, 1.5); ctx.lineTo(1.5, 1.5);
+                        ctx.lineTo(1.5, 5); ctx.lineTo(-1.5, 5);
+                        ctx.lineTo(-1.5, 1.5); ctx.lineTo(-5, 1.5);
+                        ctx.lineTo(-5, -1.5); ctx.lineTo(-1.5, -1.5);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
                     } else {
                         // Heart-themed diamond shards (default).
                         ctx.beginPath();
@@ -30572,6 +30646,16 @@ drawEntity(entity) {
                     ctx.lineTo(0, 8); ctx.lineTo(-6, 4); ctx.lineTo(-6, -4);
                     ctx.closePath();
                     ctx.stroke();
+                } else if (role === 'mender') {
+                    // Healing cross mark on top.
+                    ctx.fillStyle = '#ffffff';
+                    ctx.shadowColor = '#ffffff';
+                    ctx.shadowBlur = isLowTier ? 0 : 8;
+                    const mY = -orbR + 5;
+                    ctx.beginPath();
+                    ctx.rect(-1.5, mY - 5, 3, 10);
+                    ctx.rect(-5, mY - 1.5, 10, 3);
+                    ctx.fill();
                 } else {
                     // Hex glyph: three nested triangles forming a tri.
                     ctx.strokeStyle = '#ffffff';
