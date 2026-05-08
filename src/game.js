@@ -1024,12 +1024,43 @@ const Game = {
         });
         hookSetting('sel-perf-tier', (el) => {
             const v = el.value;
+            // v1.8.7 — live tier-lock. Apply the change immediately
+            // (no restart required) by stopping the auto-monitor and
+            // forcing the chosen tier, OR re-detecting + restarting
+            // the monitor when the user flips back to Auto. Pre-1.8.7
+            // the change only took effect on next page load.
             if (v === 'auto') {
                 try { localStorage.removeItem('mvm_perf_override'); } catch (e) {}
+                // Re-detect from hardware hints + prior probe so the
+                // tier matches what auto would have picked. Then
+                // re-arm the runtime monitor so it can flap on real
+                // sustained slowdowns again.
+                try { Perf.detect(); } catch (_) {}
+                try { Perf.startMonitor(); } catch (_) {}
+                ParticleSys.createFloatingText(
+                    CONFIG.CANVAS_WIDTH / 2, 800,
+                    'GRAPHICS: AUTO', '#00f3ff'
+                );
             } else {
                 try { localStorage.setItem('mvm_perf_override', v); } catch (e) {}
+                // Stop the monitor first so it can't fight the
+                // user's chosen tier, then pin the tier. setTier
+                // updates body class + caps + particle quality
+                // budget in one call.
+                try { Perf.stopMonitor(); } catch (_) {}
+                try { Perf.setTier(v); } catch (_) {}
+                // Sync the particle budget to the new tier so the
+                // current combat's pool size matches what the player
+                // just locked to. Without this, particles.maxParticles
+                // would stay at the boot-time value until next combat.
+                if (v === 'low')      ParticleSys.maxParticles = 128;
+                else if (v === 'mid') ParticleSys.maxParticles = 220;
+                else                  ParticleSys.maxParticles = 384;
+                ParticleSys.createFloatingText(
+                    CONFIG.CANVAS_WIDTH / 2, 800,
+                    'GRAPHICS LOCKED: ' + v.toUpperCase(), '#00f3ff'
+                );
             }
-            ParticleSys.createFloatingText(540, 800, 'PERF MODE: ' + v.toUpperCase() + ' (RESTART)', '#00f3ff');
         });
         hookSetting('chk-show-fps', (el) => {
             FpsHud.toggle(!!el.checked);
