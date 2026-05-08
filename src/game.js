@@ -368,6 +368,12 @@ const Game = {
             this.encryptedFiles = savedEncrypted ? parseInt(savedEncrypted) : 0;
             const savedLore = localStorage.getItem('mvm_lore');
             this.unlockedLore = savedLore ? JSON.parse(savedLore) : [];
+            // v1.9.7 Intel Codex polish. readLore tracks which entries
+            // the player has opened in the modal at least once. Used to
+            // compute the unread badge on the Intel tab. Stored as an
+            // array of 1-based file ids matching INTEL_ENTRIES.id.
+            const savedReadLore = localStorage.getItem('mvm_read_lore');
+            this.readLore = savedReadLore ? JSON.parse(savedReadLore) : [];
             const savedSeen = localStorage.getItem('mvm_seen');
             this.seenFlags = savedSeen ? JSON.parse(savedSeen) : {};
             const savedCorruption = localStorage.getItem('mvm_corruption');
@@ -12482,8 +12488,25 @@ triggerSystemCrash() {
         wrap.innerHTML = '';
         const total = (typeof LORE_DATABASE !== 'undefined') ? LORE_DATABASE.length : 0;
         const unlocked = (this.unlockedLore || []).slice();
+        // v1.9.7 polish. readLore stores the file ids the player has
+        // opened in the modal at least once. Convert to a Set keyed
+        // by index (subtract 1 since unlockedLore is 0-based but file
+        // ids are 1-based) so the unread check is O(1) per tile.
+        const readSet = new Set((this.readLore || []).map(id => id - 1));
         const setProgress = document.getElementById('intel-cipher-progress');
-        if (setProgress) setProgress.textContent = `${unlocked.length} / ${total} decrypted`;
+        const totalUnread = unlocked.filter(i => !readSet.has(i)).length;
+        if (setProgress) {
+            setProgress.textContent = `${unlocked.length} / ${total} decrypted`;
+            // Append an unread chip so the player knows there are
+            // entries waiting for them at a glance from the Intel tab.
+            if (totalUnread > 0) {
+                const badge = document.createElement('span');
+                badge.className = 'intel-unread-badge';
+                badge.textContent = String(totalUnread);
+                badge.title = `${totalUnread} unread entries`;
+                setProgress.appendChild(badge);
+            }
+        }
 
         const chapters = this._intelLoreChapters();
         chapters.forEach(ch => {
@@ -12492,13 +12515,23 @@ triggerSystemCrash() {
             const title = document.createElement('div');
             title.className = 'intel-cipher-chapter-title';
             title.textContent = ch.title;
+            // Per-chapter unread badge so each chapter shows its own
+            // count. Hides automatically when the player has read
+            // every unlocked entry in that chapter.
+            const chUnlocked = unlocked.filter(i => i >= ch.range[0] && i < ch.range[1]);
+            const chUnread = chUnlocked.filter(i => !readSet.has(i)).length;
+            if (chUnread > 0) {
+                const cb = document.createElement('span');
+                cb.className = 'intel-unread-badge';
+                cb.textContent = String(chUnread);
+                title.appendChild(cb);
+            }
             el.appendChild(title);
 
             const meta = document.createElement('div');
             meta.className = 'intel-cipher-chapter-meta';
             const span = ch.range[1] - ch.range[0];
-            const localUnlocked = unlocked.filter(i => i >= ch.range[0] && i < ch.range[1]).length;
-            meta.textContent = `${localUnlocked} / ${span} decrypted`;
+            meta.textContent = `${chUnlocked.length} / ${span} decrypted`;
             el.appendChild(meta);
 
             const grid = document.createElement('div');
@@ -12506,7 +12539,10 @@ triggerSystemCrash() {
             for (let i = ch.range[0]; i < ch.range[1]; i++) {
                 const tile = document.createElement('div');
                 tile.className = 'intel-cipher-tile';
-                if (unlocked.includes(i)) tile.classList.add('unlocked');
+                if (unlocked.includes(i)) {
+                    tile.classList.add('unlocked');
+                    if (!readSet.has(i)) tile.classList.add('unread');
+                }
                 tile.textContent = (i + 1).toString();
                 if (unlocked.includes(i)) {
                     // v1.9.x — open the dedicated Intel modal instead
@@ -12521,7 +12557,7 @@ triggerSystemCrash() {
             }
             el.appendChild(grid);
 
-            if (localUnlocked === 0) {
+            if (chUnlocked.length === 0) {
                 const hint = document.createElement('div');
                 hint.className = 'intel-cipher-hint';
                 hint.textContent = ch.hint;

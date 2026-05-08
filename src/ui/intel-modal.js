@@ -136,11 +136,21 @@ function renderAudioLine(line) {
     return div;
 }
 
-function renderBody(entry) {
+function renderBody(entry, isFirstOpen) {
     const bodyEl = card.querySelector('[data-bind="body"]');
     if (!bodyEl) return;
     bodyEl.innerHTML = '';
-    bodyEl.className = 'intel-modal-body intel-body-' + entry.format;
+    let className = 'intel-modal-body intel-body-' + entry.format;
+    // v1.9.7 polish: typewriter cascade on first open of an entry.
+    // Each paragraph fades and slides in with a stagger so the body
+    // reads like a teletype rolling out a recovered file. Skipped
+    // on subsequent opens (the player has already read this) and
+    // when the user has prefers-reduced-motion enabled.
+    const reduced = (typeof document !== 'undefined' && document.body && document.body.classList.contains('reduced-motion'))
+        || (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const animate = isFirstOpen && !reduced;
+    if (animate) className += ' intel-typewriter';
+    bodyEl.className = className;
     if (!Array.isArray(entry.body) || entry.body.length === 0) {
         const p = document.createElement('p');
         p.className = 'intel-body-pending';
@@ -148,24 +158,48 @@ function renderBody(entry) {
         bodyEl.appendChild(p);
         return;
     }
-    entry.body.forEach(para => {
+    entry.body.forEach((para, i) => {
+        let p;
         if (entry.format === 'audio_transcript') {
-            bodyEl.appendChild(renderAudioLine(para));
+            p = renderAudioLine(para);
         } else if (entry.format === 'cipher_fragment') {
-            const p = document.createElement('p');
+            p = document.createElement('p');
             p.appendChild(renderRedactedText(para));
-            bodyEl.appendChild(p);
         } else {
-            const p = document.createElement('p');
+            p = document.createElement('p');
             p.textContent = para;
-            bodyEl.appendChild(p);
         }
+        if (animate) {
+            // Stagger by paragraph index. Cap delay so a long body
+            // doesn't take forever to start; the tail still cascades
+            // once the early paragraphs land.
+            const delay = Math.min(i * 80, 1600);
+            p.style.animationDelay = delay + 'ms';
+        }
+        bodyEl.appendChild(p);
     });
-    // Mark first-render so a future typewriter effect (C7.6 polish)
-    // can detect a re-open and skip the animation.
     if (!bodyEl.dataset.shownAt) {
         bodyEl.dataset.shownAt = String(Date.now());
     }
+}
+
+function markRead(id) {
+    // v1.9.7. First open of an entry marks it as read and persists
+    // the new read-set to localStorage. Subsequent opens are silent.
+    // Returns true on the first open (used to gate the typewriter
+    // animation).
+    const G = (typeof window !== 'undefined') ? window.Game : null;
+    if (!G) return true;
+    if (!Array.isArray(G.readLore)) G.readLore = [];
+    if (G.readLore.includes(id)) return false;
+    G.readLore.push(id);
+    try { localStorage.setItem('mvm_read_lore', JSON.stringify(G.readLore)); } catch (_) {}
+    // Refresh the unread badge if the cipher screen is currently
+    // mounted. The render call is idempotent and cheap.
+    if (typeof G._renderIntelCipher === 'function') {
+        try { G._renderIntelCipher(); } catch (_) {}
+    }
+    return true;
 }
 
 function renderEntry(id) {
@@ -180,7 +214,8 @@ function renderEntry(id) {
     setText('[data-bind="format"]', formatLabel);
     setText('[data-bind="title"]', entry.shortTitle);
     setText('[data-bind="legacyEpigram"]', entry.legacyEpigram);
-    renderBody(entry);
+    const isFirstOpen = markRead(entry.id);
+    renderBody(entry, isFirstOpen);
     // Progress label, e.g. "3 of 18".
     const ids = navigableIds();
     const pos = ids.indexOf(entry.id);
