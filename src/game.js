@@ -2380,15 +2380,27 @@ startDrag(e, die, el) {
         const aligned = this.qte && this.qte.alignedVFX;
         if (!aligned || this.qte.alignedVFXFired) return;
         if (!this.triggerVFX) return;
+        // v1.9.34 — fire the aim-phase telegraph (no travel) instead of
+        // the full attack VFX. The impact burst is fired by executeAction
+        // on the same tick as damage, so the visual hit and the damage
+        // number land in lockstep regardless of frame rate.
+        const aimType = aligned.aimVfxType || aligned.vfxType;
+        const opts = Object.assign({}, aligned.vfxOpts || {}, {
+            qteId: this.qte.id,
+            qteMaxLife: (this.qte.activeMaxLife || this.qte.maxLife || 60)
+        });
         try {
-            this.triggerVFX(aligned.vfxType, aligned.source, aligned.target, null, aligned.vfxOpts || {});
+            this.triggerVFX(aimType, aligned.source, aligned.target, null, opts);
         } catch (_) {}
         this.qte.alignedVFXFired = true;
-        // Hand the executeAction path the info it needs to defer damage
-        // to the VFX impact moment (relevant for meteor-style VFX whose
-        // damage normally fires from an onHit callback). All three are
-        // single-shot — cleared the moment executeAction reads them.
-        this._alignedAttackVfxFired = aligned.vfxType;
+        // The legacy guard at executeAction (game.js ~17353) reads
+        // _alignedAttackVfxFired to skip a duplicate trigger. Since the
+        // executeAction path now fires the IMPACT vfx (impact_X) and the
+        // aim was just fired here, we record the IMPACT key so the guard
+        // does NOT skip — the impact burst must still play at damage tick.
+        // Set to a sentinel that will never match the impact key, so the
+        // guard always lets the impact through.
+        this._alignedAttackVfxFired = '__aim_only__';
         this._alignedAttackVfxStart = Date.now();
         this._alignedAttackVfxImpactMs = aligned.impactMs || 400;
     },
@@ -17332,27 +17344,30 @@ async startTurn() {
                     }
                 }
 
-                // Class fantasy attack VFX (Roadmap Part 26.1).
-                // Each class gets its own signature animation; falls back to
-                // the generic slash_heavy / blade_storm for classes that
-                // haven't yet received a bespoke VFX asset.
-                const _attackVfxByClass = {
-                    tactician:    'attack_pawn_volley',
-                    arcanist:     'attack_glyph_weave',
-                    bloodstalker: 'attack_sanguine_bite',
-                    annihilator:  'attack_overdrive',
-                    sentinel:     'attack_bulwark_bash',
-                    summoner:     'attack_verdant_lash'
+                // v1.9.34 — fire the IMPACT burst at the damage tick.
+                // The aim-phase telegraph (aim_X) was already played by
+                // _fireAlignedQteVFX during the QTE active phase, growing
+                // as the ring closed. This impact_X fires NOW so the
+                // visual burst and the damage number land on the same
+                // frame — no flying projectile in between.
+                const _impactVfxByClass = {
+                    tactician:    'impact_pawn_volley',
+                    arcanist:     'impact_glyph_weave',
+                    bloodstalker: 'impact_sanguine_bite',
+                    annihilator:  'impact_overdrive',
+                    sentinel:     'impact_bulwark_bash',
+                    summoner:     'impact_verdant_lash'
                 };
-                const _vfxKey = _attackVfxByClass[this.player.classId] || (isUpgraded ? 'blade_storm' : 'slash_heavy');
-                // Skip the trigger if the QTE already fired this VFX in
-                // its active-phase start — the aligned-VFX system has
-                // the meteor / slash / glyph already mid-flight, and
-                // re-triggering produces a duplicate. The flag is
-                // single-shot: cleared the moment we read it.
+                const _vfxKey = _impactVfxByClass[this.player.classId] || (isUpgraded ? 'blade_storm' : 'slash_heavy');
+                // Sentinel value '__aim_only__' is set by the aligned-VFX
+                // system when only the aim was fired — the impact MUST
+                // play, so we clear the flag and trigger normally. If
+                // some other path already fired the impact (legacy code)
+                // the key will match and we skip the duplicate.
                 if (this._alignedAttackVfxFired === _vfxKey) {
                     this._alignedAttackVfxFired = null;
                 } else {
+                    this._alignedAttackVfxFired = null;
                     this.triggerVFX(_vfxKey, this.player, finalEnemy, null, { upgraded: isUpgraded });
                 }
                 if (!isUpgraded) AudioMgr.playSound('attack');
@@ -18140,25 +18155,43 @@ async startTurn() {
     // suppressed via _alignedVfxFired below.
     _resolveAttackVfx(type, isUpgraded) {
         // Class-specific basic attack VFX (set 1-1 with classes).
+        // v1.9.34 — split into aimVfxType (the per-class CHARGE that plays
+        // during the QTE active phase, growing as the ring closes) and
+        // impactVfxType (the BURST at the target on the damage tick).
+        // The legacy `vfxType` field stays as the impact alias so any
+        // caller that still reads it gets the on-impact visual.
         const cls = this.player && this.player.classId;
         const _classVfx = {
-            tactician:    { vfxType: 'attack_pawn_volley',   impactMs: 380 },
-            arcanist:     { vfxType: 'attack_glyph_weave',   impactMs: 460 },
-            bloodstalker: { vfxType: 'attack_sanguine_bite', impactMs: 320 },
-            annihilator:  { vfxType: 'attack_overdrive',     impactMs: 420 },
-            sentinel:     { vfxType: 'attack_bulwark_bash',  impactMs: 340 },
-            summoner:     { vfxType: 'attack_verdant_lash',  impactMs: 400 }
+            tactician:    { aim: 'aim_pawn_volley',   impact: 'impact_pawn_volley',   impactMs: 380 },
+            arcanist:     { aim: 'aim_glyph_weave',   impact: 'impact_glyph_weave',   impactMs: 460 },
+            bloodstalker: { aim: 'aim_sanguine_bite', impact: 'impact_sanguine_bite', impactMs: 320 },
+            annihilator:  { aim: 'aim_overdrive',     impact: 'impact_overdrive',     impactMs: 420 },
+            sentinel:     { aim: 'aim_bulwark_bash',  impact: 'impact_bulwark_bash',  impactMs: 340 },
+            summoner:     { aim: 'aim_verdant_lash',  impact: 'impact_verdant_lash',  impactMs: 400 }
         };
         if (this._dieSlot(type) === 'attack' && cls && _classVfx[cls]) {
             const v = _classVfx[cls];
-            return { vfxType: v.vfxType, impactMs: v.impactMs, vfxOpts: { upgraded: isUpgraded } };
+            return {
+                vfxType: v.impact,
+                aimVfxType: v.aim,
+                impactVfxType: v.impact,
+                impactMs: v.impactMs,
+                vfxOpts: { upgraded: isUpgraded }
+            };
         }
-        // Skill dice with their own signature VFX.
+        // Skill dice — these already have telegraph + travel choreographed
+        // in their existing single-stage VFX, so they keep the legacy path.
         if (type === 'METEOR')     return { vfxType: 'orbital_strike', impactMs: 620 };
         if (type === 'EARTHQUAKE') return { vfxType: 'earthquake',     impactMs: 480 };
-        // Default fallbacks.
+        // Default fallback for non-class attack dice — generic aim laser
+        // during QTE then a single slash at impact tick.
         if (this._dieSlot(type) === 'attack') {
-            return { vfxType: isUpgraded ? 'blade_storm' : 'slash_heavy', impactMs: 380 };
+            return {
+                vfxType: isUpgraded ? 'blade_storm' : 'slash_heavy',
+                aimVfxType: 'aim_laser',
+                impactVfxType: isUpgraded ? 'blade_storm' : 'slash_heavy',
+                impactMs: 380
+            };
         }
         return null;
     },
@@ -19020,6 +19053,268 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
                 if (onHitCallback) onHitCallback();
             }, 240);
         }
+        // ============================================================
+        // v1.9.34 — IMPACT-SYNCED ATTACK CHAIN
+        //
+        // Per-class attacks now split into two halves:
+        //   aim_X      — charge animation during the QTE active phase.
+        //                Grows + brightens as the ring closes. No travel,
+        //                no damage. Auto-expires when the QTE clears.
+        //   impact_X   — burst at the target on the damage tick. No
+        //                wind-up, no travel. Damage and visual coincide.
+        //
+        // The aim effects all read Game.qte to drive their growth via
+        // the cubic ramp `1 - (qte.life / qte.maxLife) ** 0.6` so the
+        // charge is mostly built in the last third of the QTE.
+        // ============================================================
+
+        // ──── TACTICIAN ────
+        else if (type === 'aim_pawn_volley') {
+            // Three cyan dart silhouettes orbit the player. Lock-on
+            // laser snaps to the target in the final 30% of the QTE.
+            const sx = source ? source.x : x, sy = source ? source.y : y;
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            this.effects.push({
+                type: 'aim_pawn_volley',
+                sx, sy, tx, ty,
+                qteId: opts && opts.qteId,
+                life: 600, maxLife: 600,
+                color: '#00f3ff'
+            });
+        }
+        else if (type === 'impact_pawn_volley') {
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+            // Three quick dart-shape impact crescents at the target
+            for (let k = 0; k < 3; k++) {
+                this.effects.push({
+                    type: 'slash',
+                    x: tx + (k - 1) * 18, y: ty + (k - 1) * 8,
+                    angle: -Math.PI / 4 + (k - 1) * 0.2,
+                    life: 18, maxLife: 18,
+                    length: 120, width: 14,
+                    color: '#00f3ff',
+                    heavy: false
+                });
+            }
+            ParticleSys.createShockwave(tx, ty, '#00f3ff', 30);
+            ParticleSys.createExplosion(tx, ty, 32, '#00f3ff');
+            ParticleSys.createSparks(tx, ty, '#ffffff', lowTier ? 10 : 18);
+            AudioMgr.playSound('dart');
+            this.shake(6);
+            if (this.haptic) this.haptic('hit');
+            if (onHitCallback) onHitCallback();
+        }
+
+        // ──── SENTINEL ────
+        else if (type === 'aim_bulwark_bash') {
+            const sx = source ? source.x : x, sy = source ? source.y : y;
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            this.effects.push({
+                type: 'aim_bulwark_bash',
+                sx, sy, tx, ty,
+                qteId: opts && opts.qteId,
+                life: 600, maxLife: 600,
+                color: '#ffffff'
+            });
+        }
+        else if (type === 'impact_bulwark_bash') {
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+            this.effects.push({
+                type: 'hex_barrier',
+                x: tx, y: ty,
+                radius: 1, maxRadius: 140,
+                life: 32, maxLife: 32,
+                color: '#ffffff'
+            });
+            if (!lowTier) {
+                this.effects.push({
+                    type: 'hex_barrier',
+                    x: tx, y: ty,
+                    radius: 80, maxRadius: 170,
+                    life: 22, maxLife: 22,
+                    color: '#ffffff',
+                    ghost: true
+                });
+            }
+            ParticleSys.createShockwave(tx, ty, '#ffffff', 36);
+            ParticleSys.createExplosion(tx, ty, 30, '#c0e0ff');
+            ParticleSys.createSparks(tx, ty, '#c0c0c0', lowTier ? 14 : 28);
+            AudioMgr.playSound('hex_barrier');
+            this.shake(12);
+            if (this.haptic) this.haptic('heavy');
+            if (onHitCallback) onHitCallback();
+        }
+
+        // ──── ANNIHILATOR ────
+        else if (type === 'aim_overdrive') {
+            const sx = source ? source.x : x, sy = source ? source.y : y;
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            this.effects.push({
+                type: 'aim_overdrive',
+                sx, sy, tx, ty,
+                qteId: opts && opts.qteId,
+                life: 600, maxLife: 600,
+                color: '#ff8800'
+            });
+            // Audio stinger — rising plasma hum
+            AudioMgr.playSound('siren', { playbackRate: 0.9, volume: 0.4, duration: 0.4 });
+        }
+        else if (type === 'impact_overdrive') {
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+            ParticleSys.createShockwave(tx, ty, COLORS.ORANGE, 56);
+            ParticleSys.createExplosion(tx, ty, 64, '#ff8800');
+            ParticleSys.createExplosion(tx, ty, 36, '#ffee00');
+            ParticleSys.createSparks(tx, ty, '#ffffff', lowTier ? 12 : 22);
+            if (this.triggerScreenFlash) {
+                this.triggerScreenFlash('rgba(255, 100, 0, 0.35)', 180);
+            }
+            AudioMgr.playSound('explosion');
+            this.shake(16);
+            if (this.haptic) this.haptic('warn');
+            if (onHitCallback) onHitCallback();
+        }
+
+        // ──── BLOODSTALKER ────
+        else if (type === 'aim_sanguine_bite') {
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            this.effects.push({
+                type: 'aim_sanguine_bite',
+                x: tx, y: ty,
+                qteId: opts && opts.qteId,
+                life: 600, maxLife: 600,
+                color: '#ff0044'
+            });
+        }
+        else if (type === 'impact_sanguine_bite') {
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+            ParticleSys.createShockwave(tx, ty, '#ff0044', 28);
+            ParticleSys.createExplosion(tx, ty, 46, '#ff0044');
+            ParticleSys.createExplosion(tx, ty, 22, '#ff88a0');
+            this.effects.push({
+                type: 'slash',
+                x: tx, y: ty,
+                angle: -Math.PI / 3,
+                life: 38, maxLife: 38,
+                length: 260, width: 36,
+                color: '#ff2255', heavy: true
+            });
+            this.effects.push({
+                type: 'slash',
+                x: tx, y: ty + 18,
+                angle: Math.PI / 3,
+                life: 38, maxLife: 38,
+                length: 220, width: 30,
+                color: '#cc0033', heavy: true
+            });
+            // Blood droplets
+            for (let i = 0; i < 14; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const sp = 5 + Math.random() * 4;
+                const p = ParticleSys._acquire();
+                p.x = tx; p.y = ty;
+                p.vx = Math.cos(ang) * sp;
+                p.vy = Math.sin(ang) * sp - 2;
+                p.life = 1.1 + Math.random() * 0.4;
+                p.maxLife = p.life;
+                p.size = 3 + Math.random() * 3;
+                p.color = '#ff1a3a';
+                p.alpha = 1;
+                p.gravity = 0.25;
+                p.drag = 0.94;
+            }
+            if (!lowTier) {
+                this.effects.push({
+                    type: 'blood_pool',
+                    x: tx, y: ty + 26,
+                    life: 36, maxLife: 36,
+                    color: '#7a0020'
+                });
+            }
+            AudioMgr.playSound('hit');
+            this.shake(8);
+            if (this.haptic) this.haptic('heavy');
+            if (onHitCallback) onHitCallback();
+        }
+
+        // ──── ARCANIST ────
+        else if (type === 'aim_glyph_weave') {
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            const color = opts && opts.upgraded ? COLORS.GOLD : COLORS.PURPLE;
+            // Three glyphs orbit the target, synced to the QTE
+            for (let i = 0; i < 3; i++) {
+                this.effects.push({
+                    type: 'arcane_glyph_orbit',
+                    cx: tx, cy: ty,
+                    offsetAngle: (i / 3) * Math.PI * 2,
+                    radius: 70,
+                    qteId: opts && opts.qteId,
+                    life: 600, maxLife: 600,
+                    color: color
+                });
+            }
+        }
+        else if (type === 'impact_glyph_weave') {
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            const color = opts && opts.upgraded ? COLORS.GOLD : COLORS.PURPLE;
+            const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+            ParticleSys.createShockwave(tx, ty, color, 40);
+            ParticleSys.createExplosion(tx, ty, 48, color);
+            ParticleSys.createSparks(tx, ty, '#ffffff', lowTier ? 14 : 22);
+            AudioMgr.playSound('digital_sever');
+            this.shake(10);
+            if (this.haptic) this.haptic('hit');
+            if (onHitCallback) onHitCallback();
+        }
+
+        // ──── DRUID / SUMMONER ────
+        else if (type === 'aim_verdant_lash') {
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            this.effects.push({
+                type: 'aim_verdant_lash',
+                x: tx, y: ty,
+                qteId: opts && opts.qteId,
+                life: 600, maxLife: 600,
+                color: '#7fff00'
+            });
+        }
+        else if (type === 'impact_verdant_lash') {
+            const sx = source ? source.x : x, sy = source ? source.y : y;
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+            // Forked lightning bolt from above the target downward
+            this.effects.push({
+                type: 'sig_spark',
+                sx: tx + (Math.random() - 0.5) * 20, sy: ty - 240,
+                tx: tx, ty: ty,
+                life: 22, maxLife: 22,
+                color: '#7fff00',
+                seed: Math.random() * 1000
+            });
+            ParticleSys.createShockwave(tx, ty, COLORS.NATURE_LIGHT, 30);
+            ParticleSys.createExplosion(tx, ty, 42, COLORS.NATURE_LIGHT);
+            ParticleSys.createSparks(tx, ty, '#88ffaa', lowTier ? 10 : 20);
+            AudioMgr.playSound('zap');
+            this.shake(8);
+            if (this.haptic) this.haptic('hit');
+            if (onHitCallback) onHitCallback();
+        }
+
+        // ──── GENERIC FALLBACK aim laser ────
+        else if (type === 'aim_laser') {
+            const sx = source ? source.x : x, sy = source ? source.y : y;
+            const tx = target ? target.x : x, ty = target ? target.y : y;
+            this.effects.push({
+                type: 'aim_laser',
+                sx, sy, tx, ty,
+                qteId: opts && opts.qteId,
+                life: 600, maxLife: 600,
+                color: '#ffffff'
+            });
+        }
         else if (type === 'slash' || type === 'slash_heavy') {
             const heavy = (type === 'slash_heavy');
             // Anticipation flash on the player, then the slash lands after 180ms.
@@ -19074,8 +19369,15 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
                     sx: sx, sy: sy - 220,           // start above the target
                     tx: x,  ty: y,                  // land at the player
                     progress: 0,
-                    speed: 0.07,
-                    life: 18, maxLife: 18,
+                    // v1.9.34 — wall-clock timing. The renderer recomputes
+                    // progress from (now - startMs) / durationMs each
+                    // frame, so a 30Hz device still completes the descent
+                    // in 300ms instead of taking twice as long. Damage
+                    // still fires from the impact-phase setTimeout below
+                    // so visual + damage land together regardless of FPS.
+                    startMs: performance.now(),
+                    durationMs: 300,
+                    life: 30, maxLife: 30,
                     color: '#ff8800'
                 });
                 AudioMgr.playSound('siren', { playbackRate: 0.45, volume: 0.55, duration: 0.25 });
@@ -20026,11 +20328,20 @@ drawEffects() {
                 continue;
             }
 
-            // --- COMPILER SMASH (descending arc projectile, 18-frame impact) ---
+            // --- COMPILER SMASH (descending arc projectile, wall-clock timed) ---
             if (e.type === 'compiler_smash') {
                 e.life--;
-                e.progress = Math.min(1, e.progress + e.speed);
                 if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                // v1.9.34 — wall-clock progress so a low-FPS device still
+                // completes the arc in `durationMs`. Falls back to the
+                // legacy per-frame increment when startMs is missing
+                // (defensive against any spawner that didn't set it).
+                if (e.startMs && e.durationMs) {
+                    const elapsed = performance.now() - e.startMs;
+                    e.progress = Math.min(1, elapsed / e.durationMs);
+                } else {
+                    e.progress = Math.min(1, e.progress + (e.speed || 0.07));
+                }
                 const p = e.progress;
                 // Linear x interpolation; y arcs down via gravity-like curve
                 const cx = e.sx + (e.tx - e.sx) * p;
@@ -20261,14 +20572,30 @@ drawEffects() {
 
             // --- ARCANE GLYPH ORBIT (Arcanist glyphs that rotate AND lerp inward) ---
             if (e.type === 'arcane_glyph_orbit') {
+                // v1.9.34 — when bound to a QTE (qteId set) the progress
+                // is driven by the live QTE, not a fixed lifetime. Auto-
+                // expire when the QTE clears or a new one starts.
+                if (e.qteId !== undefined) {
+                    if (!this.qte || !this.qte.active || this.qte.id !== e.qteId) {
+                        this.effects.splice(i, 1); continue;
+                    }
+                }
                 e.life--;
                 if (e.life <= 0) { this.effects.splice(i, 1); continue; }
-                const p = 1 - (e.life / e.maxLife); // 0..1
-                // Orbit angle: rotates around centre over the lifetime.
-                // Radius shrinks from full -> 0 in the second half so the
-                // glyph collapses inward right before ignition.
+                let p;
+                if (e.qteId !== undefined) {
+                    // QTE-driven: progress from the live QTE life so the
+                    // glyph collapses in the LAST 30% of the QTE.
+                    const qLife = this.qte.life;
+                    const qMax  = this.qte.maxLife || 60;
+                    p = Math.min(1, 1 - qLife / qMax);
+                } else {
+                    p = 1 - (e.life / e.maxLife);
+                }
                 const orbitAng = e.offsetAngle + p * Math.PI * 1.5;
-                const radius = e.radius * (1 - Math.max(0, (p - 0.5) * 2));
+                // Collapse-inward only in the final 30% of progress
+                const collapseT = Math.max(0, (p - 0.7) / 0.3);
+                const radius = e.radius * (1 - collapseT);
                 const gx = e.cx + Math.cos(orbitAng) * radius;
                 const gy = e.cy + Math.sin(orbitAng) * radius;
                 ctx.save();
@@ -20278,8 +20605,7 @@ drawEffects() {
                 ctx.shadowBlur = 22;
                 ctx.strokeStyle = e.color;
                 ctx.lineWidth = 3;
-                ctx.globalAlpha = (1 - p * 0.4) * 0.9;
-                // Diamond rune shape
+                ctx.globalAlpha = (0.6 + 0.4 * p) * 0.95;
                 ctx.beginPath();
                 ctx.moveTo(0, -16);
                 ctx.lineTo(14, 0);
@@ -20287,7 +20613,6 @@ drawEffects() {
                 ctx.lineTo(-14, 0);
                 ctx.closePath();
                 ctx.stroke();
-                // Inner cross
                 ctx.beginPath();
                 ctx.moveTo(0, -8);
                 ctx.lineTo(0, 8);
@@ -20297,6 +20622,249 @@ drawEffects() {
                 ctx.restore();
                 continue;
             }
+
+            // --- AIM_LASER (generic charge laser fallback) ---
+            if (e.type === 'aim_laser') {
+                if (!this.qte || !this.qte.active || this.qte.id !== e.qteId) {
+                    this.effects.splice(i, 1); continue;
+                }
+                const qLife = this.qte.life, qMax = this.qte.maxLife || 60;
+                const p = Math.min(1, 1 - qLife / qMax);
+                const grow = Math.pow(p, 0.6);
+                ctx.save();
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 12;
+                ctx.strokeStyle = e.color;
+                ctx.lineWidth = 1 + 1.5 * grow;
+                ctx.globalAlpha = 0.4 + 0.5 * grow;
+                ctx.beginPath();
+                ctx.moveTo(e.sx, e.sy);
+                ctx.lineTo(e.tx, e.ty);
+                ctx.stroke();
+                // Target reticle that brightens with charge
+                ctx.lineWidth = 1.5;
+                ctx.globalAlpha = 0.5 + 0.4 * grow;
+                ctx.beginPath();
+                ctx.arc(e.tx, e.ty, 28 - 12 * grow, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+                continue;
+            }
+
+            // --- AIM_PAWN_VOLLEY (Tactician charge: 3 darts orbit player + lock-on laser at end) ---
+            if (e.type === 'aim_pawn_volley') {
+                if (!this.qte || !this.qte.active || this.qte.id !== e.qteId) {
+                    this.effects.splice(i, 1); continue;
+                }
+                const qLife = this.qte.life, qMax = this.qte.maxLife || 60;
+                const p = Math.min(1, 1 - qLife / qMax);
+                const grow = Math.pow(p, 0.6);
+                ctx.save();
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 16;
+                // Three orbiting darts at the player position
+                for (let k = 0; k < 3; k++) {
+                    const ang = (k / 3) * Math.PI * 2 + p * Math.PI * 4;
+                    const r = 36 + 12 * grow;
+                    const dx = e.sx + Math.cos(ang) * r;
+                    const dy = e.sy + Math.sin(ang) * r;
+                    ctx.save();
+                    ctx.translate(dx, dy);
+                    ctx.rotate(ang + Math.PI / 2);
+                    ctx.fillStyle = e.color;
+                    ctx.globalAlpha = 0.4 + 0.5 * grow;
+                    // Dart silhouette — thin elongated triangle
+                    const sz = 6 + 4 * grow;
+                    ctx.beginPath();
+                    ctx.moveTo(0, -sz);
+                    ctx.lineTo(sz * 0.4, sz);
+                    ctx.lineTo(-sz * 0.4, sz);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.restore();
+                }
+                // Lock-on laser snaps in during the final 30%
+                if (p > 0.7) {
+                    const lockGrow = (p - 0.7) / 0.3;
+                    ctx.strokeStyle = e.color;
+                    ctx.lineWidth = 1 + lockGrow * 2;
+                    ctx.globalAlpha = lockGrow * 0.85;
+                    ctx.beginPath();
+                    ctx.moveTo(e.sx, e.sy);
+                    ctx.lineTo(e.tx, e.ty);
+                    ctx.stroke();
+                }
+                ctx.restore();
+                continue;
+            }
+
+            // --- AIM_BULWARK_BASH (Sentinel charge: 6 fragments pull inward to a hex shield) ---
+            if (e.type === 'aim_bulwark_bash') {
+                if (!this.qte || !this.qte.active || this.qte.id !== e.qteId) {
+                    this.effects.splice(i, 1); continue;
+                }
+                const qLife = this.qte.life, qMax = this.qte.maxLife || 60;
+                const p = Math.min(1, 1 - qLife / qMax);
+                const grow = Math.pow(p, 0.6);
+                ctx.save();
+                ctx.translate(e.sx, e.sy);
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 18;
+                // Six fragments pulling inward from start radius 80 -> 30
+                const fragR = 80 - 50 * grow;
+                ctx.strokeStyle = e.color;
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.55 + 0.35 * grow;
+                for (let k = 0; k < 6; k++) {
+                    const ang = (k / 6) * Math.PI * 2 + p * 2;
+                    const fx = Math.cos(ang) * fragR;
+                    const fy = Math.sin(ang) * fragR;
+                    ctx.beginPath();
+                    ctx.moveTo(fx - 6, fy);
+                    ctx.lineTo(fx, fy - 6);
+                    ctx.lineTo(fx + 6, fy);
+                    ctx.lineTo(fx, fy + 6);
+                    ctx.closePath();
+                    ctx.stroke();
+                }
+                // Central hex shield growing as fragments converge
+                ctx.lineWidth = 2 + 2 * grow;
+                ctx.globalAlpha = 0.5 + 0.4 * grow;
+                ctx.beginPath();
+                const hexR = 18 + 18 * grow;
+                for (let k = 0; k < 6; k++) {
+                    const angH = (Math.PI / 3) * k + p * 1.5;
+                    const hx = hexR * Math.cos(angH);
+                    const hy = hexR * Math.sin(angH);
+                    if (k === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+                }
+                ctx.closePath();
+                ctx.stroke();
+                ctx.restore();
+                continue;
+            }
+
+            // --- AIM_OVERDRIVE (Annihilator charge: plasma core swells at player) ---
+            if (e.type === 'aim_overdrive') {
+                if (!this.qte || !this.qte.active || this.qte.id !== e.qteId) {
+                    this.effects.splice(i, 1); continue;
+                }
+                const qLife = this.qte.life, qMax = this.qte.maxLife || 60;
+                const p = Math.min(1, 1 - qLife / qMax);
+                const grow = Math.pow(p, 0.6);
+                ctx.save();
+                ctx.translate(e.sx, e.sy);
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 32;
+                // Outer halo with sin-pulse breathing
+                const pulse = 0.5 + 0.5 * Math.sin(p * Math.PI * 8);
+                ctx.fillStyle = e.color;
+                ctx.globalAlpha = (0.25 + 0.35 * grow) * (0.7 + 0.3 * pulse);
+                ctx.beginPath();
+                ctx.arc(0, 0, 30 + 30 * grow, 0, Math.PI * 2);
+                ctx.fill();
+                // Plasma core — orange to white-hot in final 30%
+                const coreColor = (p > 0.7) ? '#ffffff' : e.color;
+                ctx.fillStyle = coreColor;
+                ctx.globalAlpha = 0.7 + 0.3 * grow;
+                ctx.beginPath();
+                ctx.arc(0, 0, 8 + 16 * grow, 0, Math.PI * 2);
+                ctx.fill();
+                // Ember spit — small dots radiating outward
+                ctx.fillStyle = '#ffaa44';
+                ctx.globalAlpha = 0.6;
+                for (let k = 0; k < 4; k++) {
+                    const ang = (k / 4) * Math.PI * 2 + p * 8;
+                    const er = 18 + 32 * grow + Math.sin(p * 12 + k) * 6;
+                    ctx.beginPath();
+                    ctx.arc(Math.cos(ang) * er, Math.sin(ang) * er, 2 + 1.5 * grow, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+                continue;
+            }
+
+            // --- AIM_SANGUINE_BITE (Bloodstalker charge: red sigil + tendril pips at target) ---
+            if (e.type === 'aim_sanguine_bite') {
+                if (!this.qte || !this.qte.active || this.qte.id !== e.qteId) {
+                    this.effects.splice(i, 1); continue;
+                }
+                const qLife = this.qte.life, qMax = this.qte.maxLife || 60;
+                const p = Math.min(1, 1 - qLife / qMax);
+                const grow = Math.pow(p, 0.6);
+                ctx.save();
+                ctx.translate(e.x, e.y);
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 22;
+                // Outer sigil ring growing at target
+                const ringR = 90 * grow;
+                ctx.strokeStyle = e.color;
+                ctx.lineWidth = 3;
+                ctx.globalAlpha = 0.4 + 0.4 * grow;
+                ctx.beginPath();
+                ctx.arc(0, 0, ringR, 0, Math.PI * 2);
+                ctx.stroke();
+                // Six tendril pips reaching inward from the perimeter
+                ctx.lineWidth = 2 + 1.5 * grow;
+                for (let k = 0; k < 6; k++) {
+                    const ang = (k / 6) * Math.PI * 2 + p * 0.5;
+                    const tipR = ringR * (1 - grow * 0.7);
+                    const baseR = ringR;
+                    ctx.globalAlpha = 0.5 + 0.4 * grow;
+                    ctx.beginPath();
+                    ctx.moveTo(Math.cos(ang) * baseR, Math.sin(ang) * baseR);
+                    ctx.lineTo(Math.cos(ang) * tipR, Math.sin(ang) * tipR);
+                    ctx.stroke();
+                }
+                ctx.restore();
+                continue;
+            }
+
+            // --- AIM_VERDANT_LASH (Druid charge: storm clouds above target with crackles) ---
+            if (e.type === 'aim_verdant_lash') {
+                if (!this.qte || !this.qte.active || this.qte.id !== e.qteId) {
+                    this.effects.splice(i, 1); continue;
+                }
+                const qLife = this.qte.life, qMax = this.qte.maxLife || 60;
+                const p = Math.min(1, 1 - qLife / qMax);
+                const grow = Math.pow(p, 0.6);
+                ctx.save();
+                ctx.translate(e.x, e.y - 220);
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 18;
+                // Three storm clouds growing 0 -> 80px wide
+                ctx.fillStyle = e.color;
+                ctx.globalAlpha = 0.3 + 0.3 * grow;
+                const cloudW = 80 * grow;
+                const cloudH = 30 * grow;
+                for (let k = -1; k <= 1; k++) {
+                    ctx.beginPath();
+                    ctx.ellipse(k * 50, k * 8, cloudW * 0.6, cloudH * 0.7, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                // Crackles arcing between clouds — brighter and more frequent as charge grows
+                const crackleN = Math.floor(2 + 4 * grow);
+                ctx.strokeStyle = '#ccffcc';
+                ctx.lineWidth = 1 + grow;
+                ctx.globalAlpha = 0.7 * grow;
+                for (let k = 0; k < crackleN; k++) {
+                    const a = -50 + Math.random() * 100;
+                    const b =  50 - Math.random() * 100;
+                    const seg = 4;
+                    ctx.beginPath();
+                    ctx.moveTo(a, 0);
+                    for (let s = 1; s <= seg; s++) {
+                        const t = s / seg;
+                        const cx = a + (b - a) * t + (Math.random() - 0.5) * 10;
+                        const cy = (Math.random() - 0.5) * 8;
+                        ctx.lineTo(cx, cy);
+                    }
+                    ctx.stroke();
+                }
+                ctx.restore();
+                continue;
+            }
+
 
             // --- ANALYSE SWEEP (Panopticon's surveillance beam rotating across the field) ---
             if (e.type === 'analyse_sweep') {
