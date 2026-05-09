@@ -18824,10 +18824,18 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
             AudioMgr.playSound('orbital_strike');
         }
         else if (type === 'chains') {
+            // v1.9.41 — link count is overridable via opts so callers
+            // tied to a multi-hit chain (Bloodstalker bite combo,
+            // Druid lash) can pass the hit count and the visual reads
+            // as N constraining links instead of a fixed 6. Defaults
+            // to 6 for legacy callers.
+            const linkCount = (opts && typeof opts.linkCount === 'number')
+                ? Math.max(3, Math.min(10, opts.linkCount)) : 6;
             this.effects.push({
                 type: 'chains',
                 x: x, y: y,
-                life: 75, maxLife: 75
+                life: 75, maxLife: 75,
+                linkCount: linkCount
             });
             AudioMgr.playSound('chains');
         }
@@ -20003,10 +20011,31 @@ drawEffects() {
                     ctx.lineTo(160 * reveal, 0);
                     ctx.stroke();
                 }
-                // Shard sparks along the cut
-                if (Math.random() > 0.4) {
-                    ctx.fillStyle = '#fff';
-                    ctx.fillRect(Math.random()*160 - 80, -12, Math.random()*16, 24);
+                // v1.9.41 — denser shard-spray along the cut. Was a single
+                // random rectangle per frame; now a small fan of bright
+                // chip-shards along the active cut length, each with a
+                // brief perpendicular displacement so the cut reads as
+                // "splintering open" rather than glowing flat. Skipped
+                // on perf-low to keep the GPU clear.
+                const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+                const shardCount = lowTier ? 2 : 5;
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#ffffff';
+                ctx.globalAlpha = (e.life / e.maxLife) * 0.85;
+                for (let s = 0; s < shardCount; s++) {
+                    const sx = (Math.random() * 320 - 160) * reveal;
+                    const sy = (Math.random() - 0.5) * 24;
+                    const sw = 3 + Math.random() * 4;
+                    const sh = 8 + Math.random() * 14;
+                    ctx.fillRect(sx, sy, sw, sh);
+                }
+                // Coloured back-pass for richness
+                ctx.fillStyle = e.color;
+                ctx.globalAlpha = (e.life / e.maxLife) * 0.5;
+                for (let s = 0; s < shardCount; s++) {
+                    const sx = (Math.random() * 320 - 160) * reveal;
+                    const sy = (Math.random() - 0.5) * 18;
+                    ctx.fillRect(sx, sy, 2, 6 + Math.random() * 8);
                 }
                 ctx.restore();
                 continue;
@@ -20176,8 +20205,10 @@ drawEffects() {
                 ctx.strokeStyle = COLORS.MECH_LIGHT;
                 ctx.lineWidth = 3;
                 ctx.globalAlpha = alpha;
-                // 6 chain-link ellipses around the target, stagger-materializing.
-                const linkCount = 6;
+                // v1.9.41 — link count is now configurable on the effect
+                // (defaults to 6 for legacy callers). Callers tied to a
+                // multi-hit chain pass intent.hits via opts.linkCount.
+                const linkCount = e.linkCount || 6;
                 for (let k = 0; k < linkCount; k++) {
                     const appear = Math.min(1, Math.max(0, pr * linkCount - k));
                     if (appear <= 0) continue;
@@ -20212,39 +20243,57 @@ drawEffects() {
                 if (e.life % 24 === 0) AudioMgr.playSound('ticking');
                 const pr = 1 - (e.life / e.maxLife);
                 const alpha = Math.min(1, e.life / 20);
+                // v1.9.41 — final-frames warning flicker. Bomb is about
+                // to detonate; alpha jitters so the moment reads as
+                // "imminent". Only fires in the last 18 frames.
+                const flicker = (e.life < 18) ? (0.7 + Math.random() * 0.3) : 1;
                 ctx.save();
                 ctx.translate(e.x, e.y);
 
-                // 4-prong hex seal drawing under the skull
+                // v1.9.41 — 4-prong hex seal pulsing in radius (was fixed 70).
+                // Pulse range 56-84 px sells "bomb cycling" instead of a
+                // static circle. Seal still rotates but slower (was pr*PI,
+                // which spun a full half-turn over the life — now pr*PI*0.5
+                // so the rotation reads as ominous drift).
                 ctx.save();
                 ctx.strokeStyle = '#ff2244';
                 ctx.shadowColor = '#ff2244';
                 ctx.shadowBlur = 22;
                 ctx.lineWidth = 3;
-                ctx.globalAlpha = alpha * 0.8;
-                ctx.rotate(pr * Math.PI);
+                ctx.globalAlpha = alpha * 0.8 * flicker;
+                ctx.rotate(pr * Math.PI * 0.5);
                 ctx.beginPath();
                 const prongs = 4;
+                const prongR = 70 + Math.sin(e.life * 0.18) * 14;
                 for (let k = 0; k < prongs; k++) {
                     const a = (Math.PI * 2 / prongs) * k;
-                    const r = 70;
-                    const rx = Math.cos(a) * r, ry = Math.sin(a) * r;
+                    const rx = Math.cos(a) * prongR, ry = Math.sin(a) * prongR;
                     ctx.moveTo(0, 50);
                     ctx.lineTo(rx, ry + 50);
                 }
-                // Outer circle
-                ctx.moveTo(70, 50); ctx.arc(0, 50, 70, 0, Math.PI * 2);
+                ctx.moveTo(prongR, 50); ctx.arc(0, 50, prongR, 0, Math.PI * 2);
+                ctx.stroke();
+                // v1.9.41 — inner ripple ring expanding outward through
+                // the seal so the bomb reads as "armed and pulsing"
+                // rather than a static glyph.
+                ctx.lineWidth = 1.5;
+                ctx.globalAlpha = alpha * 0.5 * flicker;
+                const rippleR = (prongR * 0.3) + ((e.maxLife - e.life) * 0.6) % (prongR * 0.7);
+                ctx.beginPath();
+                ctx.arc(0, 50, rippleR, 0, Math.PI * 2);
                 ctx.stroke();
                 ctx.restore();
 
-                // Pulsing skull icon
+                // v1.9.41 — pulsing skull. Was scale 1.0..1.22 (fixed
+                // 0.22 amplitude); broadened to 0.85..1.4 so the cycle
+                // reads as "alive and ticking" with clear breath.
                 ctx.fillStyle = '#ff0000';
                 ctx.font = "bold 56px 'Orbitron'";
                 ctx.textAlign = "center";
                 ctx.shadowColor = 'red';
                 ctx.shadowBlur = 30;
-                ctx.globalAlpha = alpha;
-                const scale = 1 + Math.sin(e.life * 0.35) * 0.22;
+                ctx.globalAlpha = alpha * flicker;
+                const scale = 1.12 + Math.sin(e.life * 0.35) * 0.28;
                 ctx.scale(scale, scale);
                 ctx.fillText("☠️", 0, 0);
                 ctx.restore();
@@ -20282,17 +20331,44 @@ drawEffects() {
                     }
                     ctx.stroke();
                 }
-                // Forking branches
+                // v1.9.41 — adaptive forking branches. Front-half of the
+                // life renders 4-6 branches (peak intensity); back-half
+                // tapers to 2-3 branches as the bolt fades. Total fork
+                // count scales with how much life is left so the visual
+                // reads as a discharge collapsing.
+                const branchN = Math.max(2, Math.round(2 + 4 * alpha));
                 ctx.globalAlpha = alpha * 0.7;
                 ctx.lineWidth = 2;
                 ctx.strokeStyle = '#ffff88';
-                for (let b = 0; b < 3; b++) {
+                for (let b = 0; b < branchN; b++) {
                     const bx = e.x + (Math.random() - 0.5) * 120;
                     const by = e.y - 80 + (Math.random() - 0.5) * 80;
                     ctx.beginPath();
                     ctx.moveTo(bx, by);
                     for (let k = 0; k < 4; k++) {
                         ctx.lineTo(bx + (Math.random() - 0.5) * 40, by + k * 14);
+                    }
+                    ctx.stroke();
+                }
+                // v1.9.41 — ground-return arc. After the main bolt strikes,
+                // a smaller upward arc rebounds from the impact point so
+                // the moment reads as "energy discharging through the
+                // target into the floor and back up" rather than just a
+                // strike that vanishes. Only fires in the back half of
+                // the life so it reads as the rebound, not a second strike.
+                if (pr > 0.5 && pr < 0.95) {
+                    const rebound = 1 - (pr - 0.5) * 2; // 1 -> 0 over back half
+                    ctx.globalAlpha = alpha * 0.55 * rebound;
+                    ctx.strokeStyle = '#ffffaa';
+                    ctx.lineWidth = 1.5;
+                    ctx.shadowBlur = 14;
+                    ctx.beginPath();
+                    let rx = e.x, ry = e.y + 20;
+                    ctx.moveTo(rx, ry);
+                    for (let k = 0; k < 5; k++) {
+                        ry -= 14;
+                        rx += (Math.random() - 0.5) * 18;
+                        ctx.lineTo(rx, ry);
                     }
                     ctx.stroke();
                 }
@@ -20303,11 +20379,31 @@ drawEffects() {
             if (e.type === 'overheat') {
                 e.life--;
                 if(e.life <= 0) { this.effects.splice(i, 1); continue; }
-                // Dense flame aura swirling around source with spawning embers.
                 const ratio = e.life / e.maxLife;
                 const intensity = Math.sin(ratio * Math.PI); // rises then falls
+                // v1.9.41 — swirl speed ramps with intensity. Was 0.15
+                // (constant). Now scales 0.10 -> 0.28 by intensity so
+                // the embers spin faster at peak heat and slow as the
+                // aura cools.
+                const swirlSpeed = 0.10 + 0.18 * intensity;
                 ctx.save();
                 ctx.translate(e.x, e.y);
+                // v1.9.41 — ground-haze sprite. Static heat-shimmer
+                // ellipse below the swirling embers gives the aura a
+                // sense of "the floor is hot too" — sells the overheat
+                // bleeding into the environment, not just orbiting.
+                {
+                    const spr = this._auraSprite('overheatGround', [
+                        [0, 'rgba(255, 100, 30, 0.55)'],
+                        [0.6, 'rgba(255, 80, 20, 0.18)'],
+                        [1, 'rgba(255, 60, 0, 0)']
+                    ]);
+                    const prevA = ctx.globalAlpha;
+                    ctx.globalAlpha = prevA * intensity * 0.85;
+                    const haze = 90 + Math.sin((e.maxLife - e.life) * 0.18) * 8;
+                    ctx.drawImage(spr, -haze, 26 - haze * 0.35, haze * 2, haze * 0.7);
+                    ctx.globalAlpha = prevA;
+                }
                 // Five swirling embers — sprite blit (P1). Was 5×createRadialGradient
                 // per frame per active overheat effect.
                 {
@@ -20318,7 +20414,7 @@ drawEffects() {
                     const prevA = ctx.globalAlpha;
                     ctx.globalAlpha = prevA * intensity;
                     for (let k = 0; k < 5; k++) {
-                        const a = (e.maxLife - e.life) * 0.15 + k * (Math.PI * 2 / 5);
+                        const a = (e.maxLife - e.life) * swirlSpeed + k * (Math.PI * 2 / 5);
                         const r = 60 + Math.sin((e.maxLife - e.life) * 0.3 + k) * 25;
                         const fx = Math.cos(a) * r, fy = Math.sin(a) * r;
                         ctx.drawImage(spr, fx - 40, fy - 40, 80, 80);
