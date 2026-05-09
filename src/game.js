@@ -1,4 +1,4 @@
-import { CONFIG, COLORS, IMPACT_COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, SPARKS_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, MODULE_FUSIONS, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS } from './constants.js';
+import { CONFIG, COLORS, IMPACT_COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, SPARKS_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, MODULE_FUSIONS, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS, DMG_TYPES, SECTOR_DMG_TYPE } from './constants.js';
 import { AudioMgr } from './audio.js';
 import { Entity, registerEntityClasses } from './entities/entity.js';
 import { Player } from './entities/player.js';
@@ -14153,6 +14153,19 @@ async startCombat(type) {
         // Create New Enemy
         this.enemy = new Enemy(template, level, isElite);
 
+        // v1.9.44 — propagate the damage-type tag from the template /
+        // BOSS_DATA entry onto the spawned enemy so entity.takeDamage's
+        // _dmgTypeColor lookup hits an explicit value before falling
+        // back to the sector default. Per-enemy `dmgType` field on
+        // ENEMIES entries (constants.js) overrides the sector default
+        // for one-off thematic enemies (Slag Geyser → fire even in S1
+        // demo runs, etc.).
+        if (template && typeof template.dmgType === 'string' && DMG_TYPES && DMG_TYPES[template.dmgType]) {
+            this.enemy.dmgType = template.dmgType;
+        } else if (typeof SECTOR_DMG_TYPE !== 'undefined' && SECTOR_DMG_TYPE[this.sector]) {
+            this.enemy.dmgType = SECTOR_DMG_TYPE[this.sector];
+        }
+
         // Archivist HP scaling — base 500, +150 per Ascension level
         // (Roadmap Part 24.2). Applied after construction so the standard
         // sector multiplier doesn't compound onto the Sector X bracket.
@@ -14531,6 +14544,7 @@ async startCombat(type) {
                 m.currentHp = 60;
                 m.dmg = 6;
                 m._isHiveDrone = true;
+                m.dmgType = 'electric';
                 m.spawnTimer = 1.0;
                 this.enemy.minions.push(m);
             }
@@ -14586,6 +14600,7 @@ async startCombat(type) {
                 m.currentHp = 300;
                 m.dmg = 6; // light chip if it ever attacks directly (it shouldn't)
                 m._isBolsterMech = true;
+                m.dmgType = 'fire';
                 m._bolsterTickCount = 0;
                 m.spawnTimer = 1.0;
                 this.enemy.minions.push(m);
@@ -18254,6 +18269,7 @@ async startTurn() {
             m._tessShapeIdx = i;
             m._tessOrbColor = spec.color;
             m._pacifist = true;
+            m.dmgType = 'void';
             m.spawnTimer = 1.0;
             boss.minions.push(m);
             if (announceMaterialise) {
@@ -18786,8 +18802,32 @@ async startTurn() {
     // Sector-themed color used for ENEMY projectiles only (player projectiles
     // keep their original palette for class identity).
     _sectorEnemyProjectileColor() {
-        const map = { 1: '#00f3ff', 2: '#88eaff', 3: '#ff8800', 4: '#7fff00', 5: '#ff3355' };
-        return map[this.sector] || '#ff0000';
+        // v1.9.44 — kept as a fallback wrapper for any caller that does
+        // not have a source entity in scope. Reads SECTOR_DMG_TYPE +
+        // DMG_TYPES so the colour stays in sync with the unified
+        // palette. Direct map removed; the table now lives in
+        // constants.js so the registry is the single source of truth.
+        const t = (typeof SECTOR_DMG_TYPE !== 'undefined' && SECTOR_DMG_TYPE[this.sector]) || 'generic';
+        return (DMG_TYPES && DMG_TYPES[t] && DMG_TYPES[t].color) || '#ff3355';
+    },
+
+    // v1.9.44 — incoming damage palette dispatcher. Returns the colour
+    // that should tint the player's impact-burst particles + projectile
+    // VFX when `source` hits the player. Reads `source.dmgType`
+    // (explicitly tagged on the boss / enemy / minion) when present,
+    // falls back to the sector default. Used by entity.takeDamage and
+    // by glitch_spike's tint resolver so a Compiler hit reads orange
+    // even if the player happens to be in sector 5 (rare but real,
+    // since the boss can carry forward in Endless mode).
+    _dmgTypeOf(source) {
+        if (source && source.dmgType && DMG_TYPES && DMG_TYPES[source.dmgType]) {
+            return source.dmgType;
+        }
+        return (typeof SECTOR_DMG_TYPE !== 'undefined' && SECTOR_DMG_TYPE[this.sector]) || 'generic';
+    },
+    _dmgTypeColor(source) {
+        const t = this._dmgTypeOf(source);
+        return (DMG_TYPES && DMG_TYPES[t] && DMG_TYPES[t].color) || '#ff3355';
     },
 
     // Helper: is the VFX source an enemy-side entity? Applies to bosses,
@@ -19759,7 +19799,9 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
             let tint = '#ff0000';
             const isEnemySource = this._sourceIsEnemy(source);
             if (isEnemySource) {
-                tint = (source && source.phaseTelegraphColor) || this._sectorEnemyProjectileColor();
+                // v1.9.44 — phase-telegraph colour wins (boss teaching cue),
+                // then dmgType palette via the source, then sector fallback.
+                tint = (source && source.phaseTelegraphColor) || this._dmgTypeColor(source);
             }
             // v1.9.39 — pre-strike charge telegraph for generic enemies.
             // Bosses already have signature telegraphs (Compiler aura,
@@ -22338,6 +22380,7 @@ drawEffects() {
                     m.maxHp = 60; m.currentHp = 60;
                     m.dmg = 6;
                     m._isHiveDrone = true;
+                    m.dmgType = 'electric';
                     m.spawnTimer = 1.0;
                     this.enemy.minions.push(m);
                     ParticleSys.createShockwave(m.x, m.y, '#7fff00', 24);

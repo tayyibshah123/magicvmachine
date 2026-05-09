@@ -83,6 +83,35 @@ const SECTOR_MECHANICS = {
          damageNoiseRange: 0.15 }
 };
 
+// v1.9.44 — incoming damage type registry. Each enemy / boss can carry
+// a `dmgType` field; entity.takeDamage tints the player's impact-burst
+// particles + the glitch_spike projectile with the matching colour.
+// Common-sense split:
+//   fire     orange   — Compiler, immolators, foundry sector
+//   ice      cyan     — Cryo enemies, frost field sector
+//   electric yellow   — Annihilator / glitch / Hive swarm sector
+//   void     purple   — NULL_POINTER, Tesseract Prime, Archivist
+//   generic  red      — every other enemy (default fallback)
+const DMG_TYPES = {
+    fire:     { color: '#ff8800' },
+    ice:      { color: '#88eaff' },
+    electric: { color: '#ffff00' },
+    void:     { color: '#bc13fe' },
+    generic:  { color: '#ff3355' }
+};
+
+// Sector default dmg type for any enemy that lacks an explicit tag.
+// Bosses override via their BOSS_DATA entry; specific enemy templates
+// can override via a `dmgType` field on the enemy spec.
+const SECTOR_DMG_TYPE = {
+    1: 'generic',
+    2: 'ice',
+    3: 'fire',
+    4: 'electric',
+    5: 'void',
+    6: 'void'
+};
+
 const STATE = {
     BOOT: 0, MENU: 1, MAP: 2, COMBAT: 3, REWARD: 4, GAMEOVER: 6, TUTORIAL: 7, META: 8, SHOP: 9, CHAR_SELECT: 10, EVENT: 11,
     INTEL: 12, HEX: 13, TUTORIAL_COMBAT: 14, STORY: 15,
@@ -863,15 +892,16 @@ const ENEMIES = [
     { name: "Void Mender",       hp: 140, dmg: 12, sector: 5, shape: 'drone',  kind: 'healer' }
 ];
 const BOSS_DATA = {
-    1: { 
-        name: "THE PANOPTICON", 
+    1: {
+        name: "THE PANOPTICON",
         subtitle: "THE ALL-SEEING EYE",
-        hp: 300, 
-        dmg: 20, 
+        hp: 300,
+        dmg: 20,
         actionsPerTurn: 2,
         color: '#00ffff', // Electric Cyan
         moves: ['attack', 'debuff', 'multi_attack', 'analyse'],
-        shieldVal: 30
+        shieldVal: 30,
+        dmgType: 'electric'
     },
     2: {
         // v1.8.2 — shieldVal removed. NULL_POINTER no longer wastes a
@@ -886,17 +916,19 @@ const BOSS_DATA = {
         dmg: 40,
         actionsPerTurn: 1,
         color: '#ff00ff',
-        moves: ['summon_void']
+        moves: ['summon_void'],
+        dmgType: 'void'
     },
-    3: { 
-        name: "THE COMPILER", 
+    3: {
+        name: "THE COMPILER",
         subtitle: "INDUSTRIAL DATA CRUSHER",
-        hp: 750, 
-        dmg: 70, 
+        hp: 750,
+        dmg: 70,
         actionsPerTurn: 1,
         color: '#ff4500', // Neon Orange-Red
-        moves: ['attack', 'shield', 'buff'], 
-        shieldVal: 100
+        moves: ['attack', 'shield', 'buff'],
+        shieldVal: 100,
+        dmgType: 'fire'
     },
     4: {
         // Audit 2026-05 balance pass — actionsPerTurn dropped 4 → 3.
@@ -915,7 +947,8 @@ const BOSS_DATA = {
         actionsPerTurn: 3,
         color: '#32cd32', // Neon Lime Green
         moves: ['attack', 'multi_attack', 'summon'],
-        shieldVal: 15
+        shieldVal: 15,
+        dmgType: 'electric'
     },
     5: {
         name: "TESSERACT PRIME",
@@ -930,7 +963,8 @@ const BOSS_DATA = {
         actionsPerTurn: 3,
         color: '#ffffff', // Pure White/Gold
         moves: ['attack', 'purge_attack', 'reality_overwrite', 'shield'],
-        shieldVal: 120
+        shieldVal: 120,
+        dmgType: 'void'
     },
     // Sector X — Roadmap Part 24.2. Post-Sector-5 boss; only spawned via the
     // ARCHIVE main-menu run path. HP scales +150 per Ascension level (handled
@@ -946,7 +980,8 @@ const BOSS_DATA = {
         color: '#ffd76a',
         moves: ['attack'],
         shieldVal: 30,
-        isArchivist: true
+        isArchivist: true,
+        dmgType: 'void'
     }
 };
 
@@ -1717,4 +1752,4 @@ const CUSTOM_RUN_MODIFIERS = [
    modifier needs wiring, disable temporarily here while the handler lands. */
 const FEATURE_CUSTOM_RUNS = true;
 
-export { CONFIG, COLORS, IMPACT_COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, SPARKS_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, MODULE_FUSIONS, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS };
+export { CONFIG, COLORS, IMPACT_COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, SPARKS_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, MODULE_FUSIONS, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS, DMG_TYPES, SECTOR_DMG_TYPE };

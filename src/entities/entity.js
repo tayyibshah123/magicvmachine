@@ -582,7 +582,14 @@ class Entity {
         if (this instanceof Player || (this instanceof Minion && this.isPlayerSide)) {
             const enemySource = source && Game && Game._sourceIsEnemy && Game._sourceIsEnemy(source);
             if (enemySource) {
-                impactColor = Game._sectorEnemyProjectileColor ? Game._sectorEnemyProjectileColor() : '#f00';
+                // v1.9.44 — palette-driven impact tint. Reads source.dmgType
+                // (Compiler fire, NULL_POINTER void, Cryo Sentinel ice etc.)
+                // with sector-default fallback. Player perceives the
+                // attack's element by colour even before the damage
+                // number resolves.
+                impactColor = (Game._dmgTypeColor)
+                    ? Game._dmgTypeColor(source)
+                    : (Game._sectorEnemyProjectileColor ? Game._sectorEnemyProjectileColor() : '#f00');
                 shockColor = impactColor;
             } else {
                 impactColor = '#f00';
