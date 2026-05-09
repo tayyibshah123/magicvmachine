@@ -17508,6 +17508,7 @@ body:has(#hack-minigame-overlay:not(.hidden)) #gameCanvas {
     animation: ce-blood-drip 2.8s ease-in infinite;
 }
 .ce-blood-drip-2 { animation-delay: 1.4s; }
+.ce-blood-drip-3 { animation-delay: 0.7s; }
 @keyframes ce-blood-drip {
     0%   { transform: translateY(0);   opacity: 1; }
     80%  {                              opacity: 0.8; }
