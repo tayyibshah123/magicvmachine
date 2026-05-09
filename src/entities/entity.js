@@ -618,7 +618,14 @@ class Entity {
              if (source instanceof Player) sourceKind = 'player';
              else if (Minion && source instanceof Minion && source.isPlayerSide) sourceKind = 'minion';
              else if ((Enemy && source instanceof Enemy) || (Minion && source instanceof Minion && !source.isPlayerSide)) sourceKind = 'enemy';
-             const dmgTier = ParticleSys.createDamageText(this.x, this.y, actualDmg, this instanceof Player, sourceKind);
+             // v1.9.38 — consume the one-shot crit flag set by random-
+             // crit paths or by QTE perfect resolves. The flag bumps the
+             // damage text size + speed + gold colour so any crit reads
+             // visually distinct from a non-crit even when the damage
+             // amount itself doesn't cross a tier threshold.
+             const _isCrit = !!(Game && Game._nextDamageIsCrit);
+             if (Game) Game._nextDamageIsCrit = false;
+             const dmgTier = ParticleSys.createDamageText(this.x, this.y, actualDmg, this instanceof Player, sourceKind, _isCrit);
              // Pitch-shifted + gain-scaled hit sample per tier so chip pings
              // and catastrophic crunches feel audibly distinct.
              AudioMgr.playHit(dmgTier);
@@ -1294,6 +1301,12 @@ class Entity {
         } else {
             const eff = { id, duration, val, icon, desc, name: name };
             if (id === 'bleed' || id === 'poison') eff.stacks = 1;
+            // v1.9.38 — fresh-apply pulse stamp. The effect-strip
+            // renderer reads this and scales + brightens the icon
+            // for ~320ms after application so the new status is
+            // perceived as "just landed" rather than appearing
+            // statically alongside existing pips.
+            eff._pulseUntil = ((typeof performance !== 'undefined') ? performance.now() : Date.now()) + 320;
             this.effects.push(eff);
             // Fresh application — louder than a refresh. Shockwave +
             // sparks + floater all in the effect's signature colour so

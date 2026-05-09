@@ -371,7 +371,7 @@ const ParticleSys = {
     // source attribution. `sourceKind` is one of 'player' | 'minion' | 'enemy'
     // (undefined falls back to the legacy tier palette).
     // Returns the tier key so callers can pair it with shake/haptic/sound.
-    createDamageText(x, y, amount, isPlayerTarget, sourceKind) {
+    createDamageText(x, y, amount, isPlayerTarget, sourceKind, isCrit) {
         let tier = 'solid';
         let color = '#ff3333';
         let fontSize = 48;
@@ -382,6 +382,16 @@ const ParticleSys = {
         else if (amount < 100){ tier = 'heavy';        color = '#ff1100'; fontSize = 64; vy = -2.0; }
         else                  { tier = 'catastrophic'; color = '#ffdd33'; fontSize = 84; vy = -2.4; }
         if (isPlayerTarget && tier === 'solid') color = '#ff5566';
+        // v1.9.38 — crit text gets a noticeable size + speed bump on top
+        // of the tier scaling, plus the gold colour, so a crit on a chip
+        // hit still reads as a crit. Catastrophic tier already golds out
+        // by amount alone; the crit flag layers in for sub-100-dmg
+        // crits where the tier check wouldn't otherwise lift them.
+        if (isCrit && tier !== 'catastrophic') {
+            color = '#ffdd33';
+            fontSize = Math.round(fontSize * 1.5);
+            vy *= 1.3;
+        }
 
         // Source attribution — legibility in 3-enemy combat. Catastrophic
         // keeps its gold flash because that's a readable "big moment"

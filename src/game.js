@@ -3355,6 +3355,11 @@ startQTE(type, x, y, callback, opts) {
                      multiplier = 1.6;
                      msg = "CRITICAL!";
                      color = COLORS.GOLD;
+                     // v1.9.38 — QTE perfect resolves to a crit; flag the
+                     // next damage application so its text scales gold +
+                     // 1.5x size. The flag is one-shot and consumed in
+                     // entity.takeDamage's createDamageText path.
+                     this._nextDamageIsCrit = true;
                      this.haptic('crit');
                      Hints.trigger('first_crit');
                      // Composed sting (chime + zap + low-hit + attack-tail)
@@ -3389,6 +3394,11 @@ startQTE(type, x, y, callback, opts) {
                              life: 28, maxLife: 28,
                              color: COLORS.GOLD
                          });
+                         // v1.9.38 — sharp crackle at the shard-burst moment.
+                         // The composed perfect_attack sting is harmonic; the
+                         // 'snap' adds the percussive transient the audit
+                         // flagged as missing on the geometric shatter.
+                         AudioMgr.playSound('snap');
                      }
                      this.shake(14);
                      this.triggerSlowMo(0.1, 0.095);
@@ -3440,6 +3450,10 @@ startQTE(type, x, y, callback, opts) {
                          life: 28, maxLife: 28,
                          color: COLORS.GOLD
                      });
+                     // v1.9.38 — match the perfect-attack shatter percussive
+                     // cue on the parry path so both perfect resolutions
+                     // share the same crackle on the shard burst.
+                     AudioMgr.playSound('snap');
                      this.triggerSlowMo && this.triggerSlowMo(0.1, 0.085);
                      // Momentum: perfect parry is a high-value beat.
                      if (this._tickMomentum) this._tickMomentum('parry', 1);
@@ -17436,6 +17450,10 @@ async startTurn() {
                     ? this.player.traits.critMult : 1.5;
                 if (critChance > 0 && this._luckyChance(critChance)) {
                     dmg = Math.floor(dmg * critMult);
+                    // v1.9.38 — flag the next damage application as a
+                    // crit so entity.takeDamage's createDamageText fires
+                    // gold + 1.5x size + 1.3x rise speed.
+                    this._nextDamageIsCrit = true;
                     ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 100, "CRIT!", COLORS.GOLD);
                     ParticleSys.createSparks && ParticleSys.createSparks(finalEnemy.x, finalEnemy.y, COLORS.GOLD, 12);
                     if (this.triggerScreenFlash) this.triggerScreenFlash('rgba(255,220,80,0.22)', 140);
@@ -25304,7 +25322,27 @@ drawEffects() {
                 // Pass colourblind mode so the sprite gets baked with the
                 // 2-char abbreviation overlay when a CB palette is on.
                 const cbMode = (typeof Palette !== 'undefined' && Palette.mode && Palette.mode !== 'none') ? Palette.mode : null;
-                blitEffectIcon(ctx, eff.id, ix, iy, effectColor[eff.id] || '#ffffff', cbMode);
+                // v1.9.38 — fresh-apply pulse. addEffect stamps
+                // _pulseUntil on a freshly-pushed effect; the icon
+                // briefly scales + brightens for 320ms after so the
+                // landing of a new status reads as an event rather
+                // than a static pip joining the strip.
+                const _now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+                if (eff._pulseUntil && _now < eff._pulseUntil) {
+                    const left = Math.max(0, (eff._pulseUntil - _now) / 320); // 1 -> 0
+                    // Cubic ease-out on the scale + alpha bump.
+                    const easeOut = left * left * left;
+                    const scale = 1 + 0.45 * easeOut;
+                    const glow = 0.6 * easeOut;
+                    ctx.save();
+                    ctx.translate(ix, iy);
+                    ctx.scale(scale, scale);
+                    ctx.globalAlpha = Math.min(1, 1 + glow);
+                    blitEffectIcon(ctx, eff.id, 0, 0, effectColor[eff.id] || '#ffffff', cbMode);
+                    ctx.restore();
+                } else {
+                    blitEffectIcon(ctx, eff.id, ix, iy, effectColor[eff.id] || '#ffffff', cbMode);
+                }
 
                 // Count badge: show the most meaningful number.
                 //   stacked DoT (bleed/poison) → stack count
