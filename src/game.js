@@ -4685,17 +4685,24 @@ startQTE(type, x, y, callback, opts) {
     // Draw unlock-gated NPCs at fixed sanctuary positions. Each NPC is a
     // small silhouette with a class-themed idle animation.
     _drawSanctuaryNPCs(ctx, w, h, time, unlockedCount) {
+        // v1.9.40 — compute the currently-hovered NPC so the draw path
+        // can apply an aura glow on the active one. Cheap: one squared-
+        // distance check per NPC, mirrors the _sanctuaryHit logic.
+        const hovered = this._sanctuaryHit ? this._sanctuaryHit(this.mouseX || -999, this.mouseY || -999) : null;
+
         // Gatekeeper — always visible
         this._drawSanctuaryNPC(ctx, time, {
             x: w * 0.16, y: h * 0.72, color: '#00f3ff',
-            label: 'GATEKEEPER', size: 1.0, sway: 0.6
+            label: 'GATEKEEPER', size: 1.0, sway: 0.6,
+            hovered: hovered === 'gatekeeper'
         });
 
         // Smith — unlocks after 5 metas bought.
         if (unlockedCount >= 5) {
             this._drawSanctuaryNPC(ctx, time, {
                 x: w * 0.82, y: h * 0.74, color: '#ff8800',
-                label: 'SMITH', size: 1.0, sway: 0.2, toolSpark: true
+                label: 'SMITH', size: 1.0, sway: 0.2, toolSpark: true,
+                hovered: hovered === 'smith'
             });
         }
 
@@ -4703,7 +4710,8 @@ startQTE(type, x, y, callback, opts) {
         if (this.corruptionLevel > 0 || (typeof Ascension !== 'undefined' && Ascension.getSelected && Ascension.getSelected() > 0)) {
             this._drawSanctuaryNPC(ctx, time, {
                 x: w * 0.5, y: h * 0.55, color: '#bc13fe',
-                label: 'ORACLE', size: 1.0, sway: 0.4, float: true
+                label: 'ORACLE', size: 1.0, sway: 0.4, float: true,
+                hovered: hovered === 'oracle'
             });
         }
 
@@ -4712,7 +4720,8 @@ startQTE(type, x, y, callback, opts) {
         if ((this.unlockedLore && this.unlockedLore.length >= 6)) {
             this._drawSanctuaryNPC(ctx, time, {
                 x: w * 0.36, y: h * 0.68, color: '#ffd700',
-                label: 'CURATOR', size: 1.0, sway: 0.35
+                label: 'CURATOR', size: 1.0, sway: 0.35,
+                hovered: hovered === 'curator'
             });
         }
     },
@@ -5089,6 +5098,28 @@ startQTE(type, x, y, callback, opts) {
         const floatOff = opts.float ? Math.sin(time * 1.2) * 8 : 0;
         ctx.translate(opts.x, opts.y + floatOff);
         const sway = Math.sin(time * opts.sway) * 2;
+        // v1.9.40 — hover aura ring under the NPC. Pulses brightness
+        // (0.6 -> 1.0) at ~1.5Hz so the player gets clear "this NPC is
+        // selectable" feedback before they tap.
+        if (opts.hovered) {
+            const pulse = 0.6 + 0.4 * Math.sin(time * 4.5);
+            ctx.save();
+            ctx.shadowColor = opts.color;
+            ctx.shadowBlur = 28;
+            ctx.strokeStyle = opts.color;
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.35 + 0.35 * pulse;
+            ctx.beginPath();
+            ctx.ellipse(0, 14, 50, 14, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            // Inner brighter ring for depth
+            ctx.globalAlpha = 0.5 * pulse;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.ellipse(0, 14, 38, 10, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
         // Shadow pool
         ctx.fillStyle = 'rgba(0,0,0,0.45)';
         ctx.beginPath();
@@ -5099,7 +5130,7 @@ startQTE(type, x, y, callback, opts) {
         ctx.strokeStyle = opts.color;
         ctx.lineWidth = 2;
         ctx.shadowColor = opts.color;
-        ctx.shadowBlur = 12;
+        ctx.shadowBlur = opts.hovered ? 22 : 12;
         ctx.beginPath();
         ctx.moveTo(-18 + sway, 10);
         ctx.lineTo(-14 + sway, -30);

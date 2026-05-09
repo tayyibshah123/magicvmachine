@@ -920,12 +920,12 @@ export const ClassAbility = {
                 // Short titles everywhere so they never dominate the bar on narrow mobile widths.
                 return `
                     <div class="ca-reticle-bg" aria-hidden="true">${ICONS.tacticianReticle}</div>
-                    <div class="ca-title">COMMAND</div>
-                    <div class="ca-track">
+                    <div class="ca-title" title="Tactician — Command Track. Spend 3 pips on an action below.">COMMAND</div>
+                    <div class="ca-track" title="Earn 1 pip per die used. Reach 3 to unlock an action.">
                         <span class="ca-track-rail"></span>
-                        <span class="ca-pip" data-idx="0"><span class="ca-pip-dot"></span></span>
-                        <span class="ca-pip" data-idx="1"><span class="ca-pip-dot"></span></span>
-                        <span class="ca-pip" data-idx="2"><span class="ca-pip-dot"></span></span>
+                        <span class="ca-pip" data-idx="0" title="Command pip 1 of 3"><span class="ca-pip-dot"></span></span>
+                        <span class="ca-pip" data-idx="1" title="Command pip 2 of 3"><span class="ca-pip-dot"></span></span>
+                        <span class="ca-pip" data-idx="2" title="Command pip 3 of 3"><span class="ca-pip-dot"></span></span>
                     </div>
                     <div class="ca-actions">
                         <button class="ca-act" data-action="tact-reroll" title="Spend 3 pips for +1 reroll">${ICONS.reroll}</button>
@@ -935,24 +935,24 @@ export const ClassAbility = {
             case 'arcanist':
                 // Title tucked top-right so the conduit trail + vortex own the left/center.
                 return `
-                    <div class="ca-title ca-title-right">GLYPHS</div>
+                    <div class="ca-title ca-title-right" title="Arcanist — Glyph Wheel. Auto-cycles every 0.7s; tap when the wanted glyph is lit.">GLYPHS</div>
                     <button class="ca-glyph-wheel" data-action="arc-tap" title="Tap when the wanted glyph is lit. Fire: 12 dmg. Ice: 5 shield + Weak. Lightning: +1 reroll.">
                         <span class="ca-vortex-seal" aria-hidden="true">${ICONS.arcanistSeal}</span>
                         <span class="ca-glyph-orbit">
-                            <span class="ca-glyph" data-idx="0">${ICONS.glyphFire}</span>
-                            <span class="ca-glyph" data-idx="1">${ICONS.glyphIce}</span>
-                            <span class="ca-glyph" data-idx="2">${ICONS.glyphLightning}</span>
+                            <span class="ca-glyph" data-idx="0" title="Fire glyph: tap when lit for 12 damage">${ICONS.glyphFire}</span>
+                            <span class="ca-glyph" data-idx="1" title="Ice glyph: tap when lit for 5 shield + Weak debuff">${ICONS.glyphIce}</span>
+                            <span class="ca-glyph" data-idx="2" title="Lightning glyph: tap when lit for +1 reroll">${ICONS.glyphLightning}</span>
                         </span>
                     </button>
-                    <div class="ca-used-label">READY</div>`;
+                    <div class="ca-used-label" title="Cycles back to READY at start of your next turn">READY</div>`;
             case 'bloodstalker': {
                 // Compact blood droplet glyph — used as the "tier pip" inside each tribute button.
                 const drop = `<svg viewBox="0 0 10 14" class="ca-drop-glyph" aria-hidden="true"><path d="M5 0.8 C 5 4, 9 7, 9 10 C 9 12.5, 7.2 13.4, 5 13.4 C 2.8 13.4, 1 12.5, 1 10 C 1 7, 5 4, 5 0.8 Z" fill="currentColor"/></svg>`;
                 return `
-                    <div class="ca-title">BLOOD</div>
+                    <div class="ca-title" title="Bloodstalker — Blood Pool. Fills as you take damage. Spend a tribute below when full.">BLOOD</div>
                     <div class="ca-blood">
                         <span class="ca-heart" aria-hidden="true">${ICONS.bloodstalkerHeart}</span>
-                        <span class="ca-blood-bar">
+                        <span class="ca-blood-bar" title="Blood Pool. Fills as you take damage; tributes activate when ready.">
                             <span class="ca-blood-fill"></span>
                         </span>
                         <div class="ca-tributes">
@@ -976,7 +976,7 @@ export const ClassAbility = {
             }
             case 'annihilator':
                 return `
-                    <div class="ca-title">REACTOR</div>
+                    <div class="ca-title" title="Annihilator — Overheat Core. +10% heat per die used; vent in yellow / red zone for a payoff.">REACTOR</div>
                     <button class="ca-heat" data-action="heat-vent" title="Yellow: next die ×${CFG.annihilator.yellowMult} | Red: ${CFG.annihilator.redAoeDmg} AoE, self ${CFG.annihilator.redSelfDmg}">
                         <span class="ca-reactor-frame">
                             <span class="ca-heat-bar">
@@ -992,12 +992,12 @@ export const ClassAbility = {
                     </button>`;
             case 'sentinel':
                 return `
-                    <div class="ca-title">AEGIS</div>
+                    <div class="ca-title" title="Sentinel — Aegis Plates. Each ${CFG.sentinel.shieldPerPlate} shield gained banks 1 plate; 3 plates nullifies the next enemy attack.">AEGIS</div>
                     <button class="ca-wall" data-action="wall-ready" title="Fill 3 plates (+${CFG.sentinel.shieldPerPlate} shield each) to nullify the next enemy attack">
                         <span class="ca-aegis-sigil" aria-hidden="true">${ICONS.sentinelSigil}</span>
-                        <span class="ca-plate ca-plate-top"    data-idx="0"></span>
-                        <span class="ca-plate ca-plate-left"   data-idx="1"></span>
-                        <span class="ca-plate ca-plate-right"  data-idx="2"></span>
+                        <span class="ca-plate ca-plate-top"    data-idx="0" title="Aegis plate 1 of 3"></span>
+                        <span class="ca-plate ca-plate-left"   data-idx="1" title="Aegis plate 2 of 3"></span>
+                        <span class="ca-plate ca-plate-right"  data-idx="2" title="Aegis plate 3 of 3"></span>
                     </button>`;
             case 'summoner':
                 // SACRED GROVE — a thicket of intermingled vines fills the
@@ -1008,7 +1008,7 @@ export const ClassAbility = {
                 // the upper / lower bands so the canvas no longer reads
                 // as "thin string drawn across a black box."
                 return `
-                    <div class="ca-title ca-title-right">SACRED GROVE</div>
+                    <div class="ca-title ca-title-right" title="Summoner — Sacred Grove. Plots tick Seed → Sprout → Bloom while a minion lives; tap Bloom for a free Spirit.">SACRED GROVE</div>
                     <svg class="ca-vine" viewBox="0 0 620 88" preserveAspectRatio="none" aria-hidden="true">
                         <defs>
                             <linearGradient id="vine-glow" x1="0" y1="0" x2="1" y2="0">
