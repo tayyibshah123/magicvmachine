@@ -8113,15 +8113,74 @@ triggerPhaseGlitch() {
         host.style.setProperty('--sec-mid', mid);
         host.style.setProperty('--sec-bot', bot);
         host.style.setProperty('--sec-grid', grid);
+        // Tag the host with the sector id so per-sector CSS selectors
+        // (.sector-collapse[data-sector="2"] etc.) layer in unique
+        // decoration on top of the shared frame.
+        host.setAttribute('data-sector', String(sec));
         // Optional mechanic blurb — surfaces the sector signature rule
         // (Heat Tiles, Frost Field, Hive Resonance...) so players read
         // what the next stretch of combats will feel like before stepping
         // in. Empty string when the sector has no real mechanic so the
         // line collapses via :empty.
         const mechLine = (opts && opts.mech) ? opts.mech : '';
+        // v1.9.42 — per-sector cinematic decoration. Each sector ships
+        // a unique flair element layered under the shared title frame:
+        //   S1 — boot terminal lines typewriter-revealing
+        //   S2 — ice fractal corners crystallising inward
+        //   S3 — foundry embers + heat streaks rising
+        //   S4 — hive hex points materialising + lime drone swarm
+        //   S5 — prismatic 4-colour reality cycle + warp scanlines
+        let decoHTML = '';
+        if (sec === 1) {
+            decoHTML = `
+                <div class="sec-deco sec-deco-s1" aria-hidden="true">
+                    <div class="sec-boot-lines">
+                        <div class="sec-boot-line">// SECTOR 1.0 ONLINE</div>
+                        <div class="sec-boot-line">// CORE LINK ESTABLISHED</div>
+                        <div class="sec-boot-line">// HOSTILE GRID DETECTED</div>
+                    </div>
+                </div>`;
+        } else if (sec === 2) {
+            decoHTML = `
+                <div class="sec-deco sec-deco-s2" aria-hidden="true">
+                    <div class="sec-ice-corner sec-ice-tl"></div>
+                    <div class="sec-ice-corner sec-ice-tr"></div>
+                    <div class="sec-ice-corner sec-ice-bl"></div>
+                    <div class="sec-ice-corner sec-ice-br"></div>
+                </div>`;
+        } else if (sec === 3) {
+            decoHTML = `
+                <div class="sec-deco sec-deco-s3" aria-hidden="true">
+                    <div class="sec-ember"></div><div class="sec-ember"></div>
+                    <div class="sec-ember"></div><div class="sec-ember"></div>
+                    <div class="sec-ember"></div><div class="sec-ember"></div>
+                    <div class="sec-ember"></div><div class="sec-ember"></div>
+                    <div class="sec-heat-streak"></div>
+                </div>`;
+        } else if (sec === 4) {
+            decoHTML = `
+                <div class="sec-deco sec-deco-s4" aria-hidden="true">
+                    <div class="sec-hex sec-hex-1"></div>
+                    <div class="sec-hex sec-hex-2"></div>
+                    <div class="sec-hex sec-hex-3"></div>
+                    <div class="sec-hex sec-hex-4"></div>
+                    <div class="sec-hex sec-hex-5"></div>
+                </div>`;
+        } else if (sec === 5) {
+            decoHTML = `
+                <div class="sec-deco sec-deco-s5" aria-hidden="true">
+                    <div class="sec-prism sec-prism-1"></div>
+                    <div class="sec-prism sec-prism-2"></div>
+                    <div class="sec-prism sec-prism-3"></div>
+                    <div class="sec-prism sec-prism-4"></div>
+                    <div class="sec-warp-line sec-warp-1"></div>
+                    <div class="sec-warp-line sec-warp-2"></div>
+                </div>`;
+        }
         host.innerHTML = `
             <div class="sector-collapse-bg"></div>
             <div class="sector-collapse-grid"></div>
+            ${decoHTML}
             <div class="sector-collapse-content">
                 <div class="sector-collapse-num">SECTOR <span class="num">${sec}</span></div>
                 <div class="sector-collapse-name">${SECTOR_NAMES[sec] || ''}</div>
