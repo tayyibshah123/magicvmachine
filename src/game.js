@@ -18777,7 +18777,8 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
             /* BLOODSTALKER — lunge forward, spectral fang bite, blood spray */
             const sx = source ? source.x : x, sy = source ? source.y : y;
             const hitX = target ? target.x : x, hitY = target ? target.y : y;
-            this.effects.push({ type: 'slash_windup', x: sx, y: sy, life: 14, maxLife: 14, heavy: true, color: '#ff0044' });
+            const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+            this.effects.push({ type: 'slash_windup', x: sx, y: sy, life: 18, maxLife: 18, heavy: true, color: '#ff0044' });
             setTimeout(() => {
                 ParticleSys.createShockwave(hitX, hitY, '#ff0044', 26);
                 ParticleSys.createExplosion(hitX, hitY, 44, '#ff0044');
@@ -18815,6 +18816,17 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
                     p.gravity = 0.25;
                     p.drag = 0.94;
                 }
+                // v1.9.33 — post-impact blood pool sprite. Dark red gradient
+                // circle that expands then fades, marks the kill point and
+                // gives the bite weight beyond the spray particles.
+                if (!lowTier) {
+                    this.effects.push({
+                        type: 'blood_pool',
+                        x: hitX, y: hitY + 26,
+                        life: 36, maxLife: 36,
+                        color: '#7a0020'
+                    });
+                }
                 AudioMgr.playSound('hit');
                 this.shake(8);
                 if (this.haptic) this.haptic('heavy');
@@ -18825,24 +18837,31 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
             /* ARCANIST — three glyph runes spin around target, collapse, ignite */
             const hitX = target ? target.x : x, hitY = target ? target.y : y;
             const color = opts && opts.upgraded ? COLORS.GOLD : COLORS.PURPLE;
+            const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+            // v1.9.33 — orbiting glyphs that spin in place AND lerp inward
+            // toward the target before ignition. The previous version
+            // spawned three static glyphs at fixed offsets that vanished
+            // when the impact fired; the new path keeps them rotating
+            // around their pivot and converging so the moment reads as
+            // "ritual completes -> ignition" instead of "three flashes".
             for (let i = 0; i < 3; i++) {
                 setTimeout(() => {
                     this.effects.push({
-                        type: 'digital_sever',
-                        x: hitX + Math.cos((i / 3) * Math.PI * 2) * 70,
-                        y: hitY + Math.sin((i / 3) * Math.PI * 2) * 70,
-                        angle: (i / 3) * Math.PI * 2,
-                        life: 26, maxLife: 26,
+                        type: 'arcane_glyph_orbit',
+                        cx: hitX, cy: hitY,
+                        offsetAngle: (i / 3) * Math.PI * 2,
+                        radius: 70,
+                        life: 30, maxLife: 30,
                         color: color
                     });
                 }, i * 90);
             }
             setTimeout(() => {
-                ParticleSys.createShockwave(hitX, hitY, color, 32);
-                ParticleSys.createExplosion(hitX, hitY, 36, color);
-                ParticleSys.createSparks(hitX, hitY, '#ffffff', 18);
+                ParticleSys.createShockwave(hitX, hitY, color, 36);
+                ParticleSys.createExplosion(hitX, hitY, 44, color);
+                ParticleSys.createSparks(hitX, hitY, '#ffffff', lowTier ? 12 : 22);
                 AudioMgr.playSound('digital_sever');
-                this.shake(6);
+                this.shake(10);
                 if (this.haptic) this.haptic('hit');
                 if (onHitCallback) onHitCallback();
             }, 310);
@@ -18851,6 +18870,14 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
             /* TACTICIAN — three small pawn projectiles arc out in sequence */
             const sx = source ? source.x : x, sy = source ? source.y : y;
             const tx = target ? target.x : x, ty = target ? target.y : y;
+            const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+            // v1.9.33 — unified telegraph at the source so the volley
+            // reads as a coordinated salvo instead of three random plinks.
+            this.effects.push({
+                type: 'slash_windup',
+                x: sx, y: sy, life: 12, maxLife: 12,
+                heavy: false, color: COLORS.MANA
+            });
             for (let i = 0; i < 3; i++) {
                 setTimeout(() => {
                     this.effects.push({
@@ -18871,44 +18898,52 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
                 }, i * 110);
             }
             setTimeout(() => {
-                ParticleSys.createShockwave(tx, ty, COLORS.MANA, 22);
-                ParticleSys.createExplosion(tx, ty, 28, COLORS.MANA);
+                ParticleSys.createShockwave(tx, ty, COLORS.MANA, 28);
+                ParticleSys.createExplosion(tx, ty, 32, COLORS.MANA);
+                ParticleSys.createSparks(tx, ty, '#ffffff', lowTier ? 6 : 12);
                 if (onHitCallback) onHitCallback();
-                this.shake(4);
+                this.shake(6);
             }, 340);
         }
         else if (type === 'attack_overdrive') {
             /* ANNIHILATOR — red plasma charge then slam, big recoil */
             const sx = source ? source.x : x, sy = source ? source.y : y;
             const tx = target ? target.x : x, ty = target ? target.y : y;
-            // Charge-up pulse at player
+            const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+            // v1.9.33 — longer windup (32 frames vs 22) so the plasma
+            // charge actually reads as charging. Sound stinger backs it
+            // up. The slam itself fires unchanged so balance is intact.
             this.effects.push({
                 type: 'slash_windup', x: sx, y: sy,
-                life: 22, maxLife: 22, heavy: true, color: COLORS.ORANGE
+                life: 32, maxLife: 32, heavy: true, color: COLORS.ORANGE
             });
+            AudioMgr.playSound('siren', { playbackRate: 0.9, volume: 0.4, duration: 0.3 });
             setTimeout(() => {
-                // Beam line
+                // Beam line — bumped life to 24 so the plasma streak hangs
+                // visible an extra few frames as the impact lands.
                 this.effects.push({
                     type: 'beam',
                     sx: sx, sy: sy,
                     tx: tx, ty: ty,
                     color: COLORS.ORANGE,
-                    life: 18, maxLife: 18
+                    life: 24, maxLife: 24
                 });
                 // Impact shockwave + heavy particles
-                ParticleSys.createShockwave(tx, ty, COLORS.ORANGE, 44);
-                ParticleSys.createExplosion(tx, ty, 54, '#ff8800');
-                ParticleSys.createExplosion(tx, ty, 28, '#ffee00');
+                ParticleSys.createShockwave(tx, ty, COLORS.ORANGE, 50);
+                ParticleSys.createExplosion(tx, ty, 60, '#ff8800');
+                ParticleSys.createExplosion(tx, ty, 32, '#ffee00');
+                ParticleSys.createSparks(tx, ty, '#ffffff', lowTier ? 10 : 18);
                 AudioMgr.playSound('explosion');
-                this.shake(14);
+                this.shake(16);
                 if (this.haptic) this.haptic('warn');
                 if (onHitCallback) onHitCallback();
-            }, 260);
+            }, 380);
         }
         else if (type === 'attack_bulwark_bash') {
             /* SENTINEL — shield slam, metal ring + rumble */
             const sx = source ? source.x : x, sy = source ? source.y : y;
             const tx = target ? target.x : x, ty = target ? target.y : y;
+            const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
             this.effects.push({
                 type: 'hex_barrier',
                 x: sx, y: sy,
@@ -18916,6 +18951,18 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
                 life: 20, maxLife: 20,
                 color: '#ffffff'
             });
+            // v1.9.33 — silver sparkle trail along the slam path so the
+            // shield reads as physically swung from source to target.
+            if (!lowTier) {
+                for (let s = 0; s < 5; s++) {
+                    setTimeout(() => {
+                        const t = (s + 1) / 6;
+                        const px = sx + (tx - sx) * t;
+                        const py = sy + (ty - sy) * t;
+                        ParticleSys.createSparks(px, py, '#c0c0c0', 4);
+                    }, 60 + s * 30);
+                }
+            }
             setTimeout(() => {
                 // Big concentric shield ring at target
                 this.effects.push({
@@ -18925,6 +18972,21 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
                     life: 32, maxLife: 32,
                     color: '#ffffff'
                 });
+                // v1.9.33 — ghost ring settles after the main impact ring
+                // expands. Lower opacity, thinner stroke, longer life so
+                // the bash reads as "shield lingers in the air".
+                if (!lowTier) {
+                    setTimeout(() => {
+                        this.effects.push({
+                            type: 'hex_barrier',
+                            x: tx, y: ty,
+                            radius: 80, maxRadius: 170,
+                            life: 22, maxLife: 22,
+                            color: '#ffffff',
+                            ghost: true
+                        });
+                    }, 200);
+                }
                 ParticleSys.createShockwave(tx, ty, '#ffffff', 32);
                 ParticleSys.createExplosion(tx, ty, 28, '#c0e0ff');
                 AudioMgr.playSound('hex_barrier');
@@ -19563,7 +19625,11 @@ drawEffects() {
                 e.life--;
                 if(e.life <= 0) { this.effects.splice(i, 1); continue; }
                 e.radius += (e.maxRadius - e.radius) * 0.18;
-                const alpha = e.life / e.maxLife;
+                // v1.9.33 — `ghost` flag halves opacity for the Sentinel
+                // bash settle-ring. Carries the same hex layout but reads
+                // as an after-image rather than a fresh impact.
+                const ghostMult = e.ghost ? 0.45 : 1;
+                const alpha = (e.life / e.maxLife) * ghostMult;
 
                 ctx.save();
                 // Inner soft dome fill — sprite blit (P1). The original
@@ -20167,6 +20233,67 @@ drawEffects() {
                 ctx.lineTo(e.tx, e.ty);
                 ctx.stroke();
                 ctx.setLineDash([]);
+                ctx.restore();
+                continue;
+            }
+
+            // --- BLOOD POOL (Bloodstalker post-impact pool, fades over 36 frames) ---
+            if (e.type === 'blood_pool') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = 1 - (e.life / e.maxLife); // 0..1
+                ctx.save();
+                ctx.translate(e.x, e.y);
+                const r = 18 + 30 * p;
+                const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+                grad.addColorStop(0,   'rgba(122, 0, 32, 0.85)');
+                grad.addColorStop(0.6, 'rgba(80, 0, 20, 0.50)');
+                grad.addColorStop(1,   'rgba(40, 0, 10, 0)');
+                ctx.fillStyle = grad;
+                ctx.globalAlpha = (1 - p) * 0.9;
+                // Squashed ellipse — sells the "pool on the ground" feel
+                ctx.beginPath();
+                ctx.ellipse(0, 0, r, r * 0.45, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+                continue;
+            }
+
+            // --- ARCANE GLYPH ORBIT (Arcanist glyphs that rotate AND lerp inward) ---
+            if (e.type === 'arcane_glyph_orbit') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = 1 - (e.life / e.maxLife); // 0..1
+                // Orbit angle: rotates around centre over the lifetime.
+                // Radius shrinks from full -> 0 in the second half so the
+                // glyph collapses inward right before ignition.
+                const orbitAng = e.offsetAngle + p * Math.PI * 1.5;
+                const radius = e.radius * (1 - Math.max(0, (p - 0.5) * 2));
+                const gx = e.cx + Math.cos(orbitAng) * radius;
+                const gy = e.cy + Math.sin(orbitAng) * radius;
+                ctx.save();
+                ctx.translate(gx, gy);
+                ctx.rotate(p * Math.PI * 4);
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 22;
+                ctx.strokeStyle = e.color;
+                ctx.lineWidth = 3;
+                ctx.globalAlpha = (1 - p * 0.4) * 0.9;
+                // Diamond rune shape
+                ctx.beginPath();
+                ctx.moveTo(0, -16);
+                ctx.lineTo(14, 0);
+                ctx.lineTo(0, 16);
+                ctx.lineTo(-14, 0);
+                ctx.closePath();
+                ctx.stroke();
+                // Inner cross
+                ctx.beginPath();
+                ctx.moveTo(0, -8);
+                ctx.lineTo(0, 8);
+                ctx.moveTo(-8, 0);
+                ctx.lineTo(8, 0);
+                ctx.stroke();
                 ctx.restore();
                 continue;
             }
