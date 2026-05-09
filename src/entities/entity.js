@@ -678,6 +678,13 @@ class Entity {
             // Notify class abilities that the player just lost HP — Bloodstalker
             // uses this to fill the Blood Pool.
             ClassAbility.onEvent('damage_taken', { amount: actualDmg, source });
+            // v1.9.36 — heavy hits (≥25 dmg) swap the default shake anim
+            // for the more dramatic crush+sway 'flinch' so the player
+            // sprite reads as physically struck. Chip damage keeps the
+            // flat shake to avoid melodrama on every burn tick.
+            if (actualDmg >= 25 && typeof this.playAnim === 'function') {
+                this.playAnim('flinch');
+            }
             // Tier-aware shake (replaces flat magnitude) — scales with damage % of max HP
             if (Game.shakeFromDamage) Game.shakeFromDamage(actualDmg);
             else Game.shake(Math.min(22, 4 + actualDmg / 3));
@@ -698,6 +705,27 @@ class Entity {
             }
             // Heavier haptic the bigger the hit — feels physical.
             if (Game.haptic) Game.haptic(actualDmg >= 25 ? 'warn' : actualDmg >= 12 ? 'heavy' : 'hit');
+
+            // v1.9.36 — player CRITICAL HP state. When the player drops
+            // below 20% maxHp the body gets a `player-critical-hp` class
+            // that drives a pulsing red vignette via CSS, and a heartbeat
+            // sting fires once on the threshold cross. The class is
+            // cleared when HP recovers above 25% (small hysteresis so a
+            // self-heal doesn't immediately strip the warning the moment
+            // it crosses back). One-shot per fight via _criticalHpFired.
+            try {
+                const pct = this.currentHp / Math.max(1, this.maxHp);
+                if (this.currentHp > 0 && pct < 0.2 && !this._criticalHpFired) {
+                    this._criticalHpFired = true;
+                    if (typeof document !== 'undefined' && document.body) {
+                        document.body.classList.add('player-critical-hp');
+                    }
+                    if (typeof AudioMgr !== 'undefined' && AudioMgr.playSound) {
+                        AudioMgr.playSound('heartbeat');
+                    }
+                    ParticleSys.createFloatingText(this.x, this.y - 130, 'CRITICAL', '#ff3355');
+                }
+            } catch (_) {}
             
              // Relic: Double Edge (Reflect 30%)
              if(this.hasRelic('spike_armor')) {
@@ -1123,6 +1151,18 @@ class Entity {
             // alongside damage. Was tracked-but-never-written — dead
             // field on turnStats until now.
             if (Game.turnStats) Game.turnStats.healed += actualHeal;
+            // v1.9.36 — clear the CRITICAL HP state once HP recovers
+            // above 25% (small hysteresis above the 20% trigger so a
+            // single tick on/off doesn't strobe the vignette). Re-arms
+            // _criticalHpFired so the next dip below 20% fires the
+            // sting again.
+            const pct = this.currentHp / Math.max(1, this.maxHp);
+            if (pct >= 0.25 && this._criticalHpFired) {
+                this._criticalHpFired = false;
+                if (typeof document !== 'undefined' && document.body) {
+                    document.body.classList.remove('player-critical-hp');
+                }
+            }
         }
 
         if (overheal > 0) {

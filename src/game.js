@@ -14601,6 +14601,13 @@ async startCombat(type) {
         // OVERCHARGE VENT module — mana-spent tracker + perm bonus reset.
         this._manaSpentThisCombat = 0;
         if (this.player) this.player._overchargeVentBonus = 0;
+        // v1.9.36 — clear the player CRITICAL HP state at combat start
+        // so a fresh fight begins without the red vignette persisting
+        // from the prior fight's clutch finish.
+        if (this.player) this.player._criticalHpFired = false;
+        if (typeof document !== 'undefined' && document.body) {
+            document.body.classList.remove('player-critical-hp');
+        }
         // (`_firewallTriggersUsed` is reset earlier in setupCombat at the
         // per-combat counter block — no duplicate needed here.)
 

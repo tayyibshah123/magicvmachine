@@ -18808,3 +18808,39 @@ body.reduced-motion.reality-shift-active::before,
 body.reduced-motion.reality-shift-active::after {
     animation: none;
 }
+
+/* ===========================================================
+   v1.9.36 — PLAYER CRITICAL HP STATE
+   Pulsing red vignette + edge-tint when the player drops
+   below 20% maxHp. Mirrors the reality-shift overlay pattern
+   so the gameplay-information overlays stay visually
+   coherent. Heartbeat audio fires from entity.takeDamage on
+   the threshold cross; this CSS sustains the visual cue
+   until heal recovers HP above 25%.
+
+   Skipped on perf-low — the radial gradient + mix-blend-mode
+   are GPU-heavy and the floating CRITICAL banner alone
+   carries the warning on weak devices.
+   =========================================================== */
+body.player-critical-hp:not(.perf-low)::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9000;
+    background: radial-gradient(ellipse at center,
+        rgba(255, 0, 0, 0) 0%,
+        rgba(255, 0, 0, 0) 45%,
+        rgba(255, 30, 60, 0.45) 90%,
+        rgba(200, 0, 30, 0.75) 100%);
+    mix-blend-mode: screen;
+    animation: criticalHpPulse 1.2s ease-in-out infinite;
+}
+@keyframes criticalHpPulse {
+    0%, 100% { opacity: 0.55; }
+    50%      { opacity: 1; }
+}
+body.reduced-motion.player-critical-hp::before {
+    animation: none;
+    opacity: 0.7;
+}
