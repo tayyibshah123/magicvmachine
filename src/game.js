@@ -14801,12 +14801,55 @@ async startTurn() {
                 this.enemy.voidCrushTurns--;
                 if (this.enemy.voidCrushTurns <= 0) {
                     await this.showPhaseBanner("VOID CRUSH", "REALITY COLLAPSES", 'boss');
-                    Game.shake(40);
+                    // v1.9.32 — telegraph expansion. Three magenta hex
+                    // rings rotate inward around the boss for 800ms
+                    // before the actual crush lands so the moment reads
+                    // as a deliberate buildup, not a sudden whoosh.
+                    const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+                    if (!lowTier) {
+                        for (let r = 0; r < 3; r++) {
+                            this.effects.push({
+                                type: 'reality_aura',
+                                x: this.enemy.x, y: this.enemy.y,
+                                life: 32 - r * 4, maxLife: 32 - r * 4,
+                                color: r === 0 ? '#ff00ff' : (r === 1 ? '#bc13fe' : '#aa0088')
+                            });
+                        }
+                        if (this.triggerScreenFlash) {
+                            this.triggerScreenFlash('rgba(255, 0, 255, 0.25)', 800);
+                        }
+                    }
+                    AudioMgr.playSound('siren', { playbackRate: 0.55, volume: 0.9, duration: 0.7, fadeOut: 0.3 });
+                    await this.sleep(700);
+                    // Impact — existing payload kept intact for damage
+                    Game.shake(lowTier ? 24 : 40);
                     ParticleSys.createExplosion(this.player.x, this.player.y, 120, '#ff00ff');
                     ParticleSys.createShockwave(this.player.x, this.player.y, '#ff00ff', 80);
                     AudioMgr.playSound('grid_fracture');
+                    if (this.triggerScreenFlash) {
+                        this.triggerScreenFlash('rgba(255, 0, 255, 0.6)', 180);
+                    }
                     this.player.mana = 0;
                     if (this.player.takeDamage(100, this.enemy, false) && this.player.currentHp <= 0) { this.gameOver(); return; }
+                    // Post-impact black vortex — magenta sparkles spiraling
+                    // back into the boss as the rift closes. Reads as the
+                    // void retracting after the strike.
+                    if (!lowTier) {
+                        for (let s = 0; s < 18; s++) {
+                            const ang = (s / 18) * Math.PI * 2;
+                            const sp = 4 + Math.random() * 3;
+                            const p = ParticleSys._acquire();
+                            p.x = this.player.x + Math.cos(ang) * 80;
+                            p.y = this.player.y + Math.sin(ang) * 80;
+                            p.vx = -Math.cos(ang) * sp;
+                            p.vy = -Math.sin(ang) * sp;
+                            p.gravity = 0;
+                            p.drag = 0.96;
+                            p.life = 0.5 + Math.random() * 0.2;
+                            p.size = 3 + Math.random() * 2;
+                            p.color = s % 2 === 0 ? '#ff00ff' : '#000000';
+                        }
+                    }
                 } else {
                     ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 220, `VOID CRUSH: ${this.enemy.voidCrushTurns}`, "#ff00ff");
                     AudioMgr.playSound('siren');
@@ -18942,6 +18985,250 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
                 if (heavy) this.shake(10);
             }, 180);
         }
+        // v1.9.32 — boss-signature attack VFX. Each routes from the boss
+        // attack dispatch (game.js:21123 area) so a Compiler hit reads as
+        // an industrial slam, a Tesseract hit reads as a reality split,
+        // a Hive drone reads as a glitching swarm strike, and a
+        // Panopticon hit reads as a surveillance beam. Damage is still
+        // applied via the onHitCallback at the moment of impact, same
+        // contract as the existing slash / glitch_spike paths.
+        else if (type === 'compiler_smash') {
+            const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+            const sx = source ? source.x : x;
+            const sy = source ? source.y : y;
+            // Telegraph — orange aura climbs from the boss for 500ms while
+            // the rising-fist anticipation builds. Skipped under low tier
+            // so the per-frame shadowBlur cost is gone on weak devices.
+            this.effects.push({
+                type: 'compiler_charge',
+                x: sx, y: sy,
+                life: lowTier ? 18 : 30, maxLife: lowTier ? 18 : 30,
+                color: '#ff8800'
+            });
+            // Strike — descending arc with motion-blur trail, lands at 650ms
+            setTimeout(() => {
+                this.effects.push({
+                    type: 'compiler_smash',
+                    sx: sx, sy: sy - 220,           // start above the target
+                    tx: x,  ty: y,                  // land at the player
+                    progress: 0,
+                    speed: 0.07,
+                    life: 18, maxLife: 18,
+                    color: '#ff8800'
+                });
+                AudioMgr.playSound('siren', { playbackRate: 0.45, volume: 0.55, duration: 0.25 });
+            }, 500);
+            // Impact — ground crack + dust cloud + heavy shake at 800ms
+            setTimeout(() => {
+                AudioMgr.playSound('explosion');
+                if (this.shake) this.shake(lowTier ? 12 : 18);
+                if (this.triggerScreenFlash) {
+                    this.triggerScreenFlash('rgba(255, 100, 0, 0.55)', 240);
+                }
+                ParticleSys.createShockwave(x, y, '#ff8800', lowTier ? 32 : 56);
+                ParticleSys.createExplosion(x, y, lowTier ? 36 : 64, '#ff8800');
+                ParticleSys.createExplosion(x, y, lowTier ? 18 : 32, '#ffee00');
+                // Ground-crack shards fanning downward — gives the smash
+                // its "industrial weight". Each shard has gravity so the
+                // dust collapses naturally.
+                if (!lowTier) {
+                    for (let s = 0; s < 24; s++) {
+                        const ang = -Math.PI * 0.5 + (Math.random() - 0.5) * 1.4;
+                        const sp = 5 + Math.random() * 5;
+                        const p = ParticleSys._acquire();
+                        p.x = x + (Math.random() - 0.5) * 30;
+                        p.y = y + 20;
+                        p.vx = Math.cos(ang) * sp;
+                        p.vy = Math.sin(ang) * sp;
+                        p.gravity = 0.18;
+                        p.drag = 0.94;
+                        p.life = 0.6 + Math.random() * 0.3;
+                        p.size = 3 + Math.random() * 3;
+                        p.color = Math.random() < 0.5 ? '#ff8800' : '#ffaa44';
+                    }
+                }
+                this.effects.push({
+                    type: 'compiler_crack',
+                    x: x, y: y + 22,
+                    life: 24, maxLife: 24,
+                    color: '#ff8800'
+                });
+                if (this.haptic) this.haptic('boss_attack');
+                if (onHitCallback) onHitCallback();
+            }, 800);
+        }
+        else if (type === 'reality_shift_strike') {
+            const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+            const sx = source ? source.x : x;
+            const sy = source ? source.y : y;
+            // Prismatic aura telegraph cycles 4 boss colours for 600ms.
+            // Each colour lasts 150ms; the screen flash echoes the same
+            // palette so the player learns the cue.
+            const palette = ['#ff3355', '#bc13fe', '#00f3ff', '#ffd76a'];
+            palette.forEach((col, i) => {
+                setTimeout(() => {
+                    this.effects.push({
+                        type: 'reality_aura',
+                        x: sx, y: sy,
+                        life: 14, maxLife: 14,
+                        color: col
+                    });
+                    if (!lowTier && this.triggerScreenFlash) {
+                        const hx = col.replace('#', '');
+                        const rv = parseInt(hx.slice(0,2), 16);
+                        const gv = parseInt(hx.slice(2,4), 16);
+                        const bv = parseInt(hx.slice(4,6), 16);
+                        this.triggerScreenFlash(`rgba(${rv},${gv},${bv},0.20)`, 140);
+                    }
+                }, i * 150);
+            });
+            // First strike at 600ms — red diagonal at -45 degrees
+            setTimeout(() => {
+                this.effects.push({
+                    type: 'slash',
+                    x: x, y: y,
+                    angle: -Math.PI / 4,
+                    life: 22, maxLife: 22,
+                    length: 280, width: 38,
+                    color: '#ff3355',
+                    heavy: true
+                });
+                AudioMgr.playSound('digital_sever');
+                ParticleSys.createSparks(x, y, '#ff3355', lowTier ? 8 : 16);
+                if (this.shake) this.shake(8);
+            }, 600);
+            // Reality warp between hits — short cyan scan-line blip at 700ms
+            setTimeout(() => {
+                if (!lowTier) {
+                    this.effects.push({
+                        type: 'reality_warp',
+                        life: 14, maxLife: 14
+                    });
+                }
+                AudioMgr.playSound('glitch_attack');
+            }, 700);
+            // Second strike at 800ms — purple diagonal at +45 degrees,
+            // lands the actual damage callback so timing matches the
+            // visual emphasis of the second hit.
+            setTimeout(() => {
+                this.effects.push({
+                    type: 'slash',
+                    x: x, y: y,
+                    angle: Math.PI / 4,
+                    life: 22, maxLife: 22,
+                    length: 280, width: 38,
+                    color: '#bc13fe',
+                    heavy: true
+                });
+                AudioMgr.playSound('digital_sever');
+                ParticleSys.createSparks(x, y, '#bc13fe', lowTier ? 8 : 16);
+                ParticleSys.createShockwave(x, y, '#bc13fe', lowTier ? 28 : 44);
+                if (this.shake) this.shake(lowTier ? 10 : 14);
+                if (this.haptic) this.haptic('boss_attack');
+                if (onHitCallback) onHitCallback();
+            }, 800);
+            // Distortion ripples settle for 300ms after impact
+            if (!lowTier) {
+                setTimeout(() => {
+                    for (let r = 0; r < 4; r++) {
+                        this.effects.push({
+                            type: 'reality_ripple',
+                            x: x, y: y,
+                            radius: 30 + r * 20,
+                            maxRadius: 200 + r * 40,
+                            life: 24, maxLife: 24,
+                            color: r % 2 === 0 ? '#00f3ff' : '#bc13fe'
+                        });
+                    }
+                }, 880);
+            }
+        }
+        else if (type === 'hive_swarm_strike') {
+            const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+            const sx = source ? source.x : x;
+            const sy = source ? source.y : y;
+            // Wavy green distortion line. Reuses glitch_spike's render
+            // contract but with a sin-modulated path so a Hive Drone
+            // strike reads visually distinct from a generic enemy.
+            this.effects.push({
+                type: 'hive_swarm_strike',
+                sx: sx, sy: sy,
+                tx: x, ty: y,
+                life: 18, maxLife: 18,
+                color: '#7fff00'
+            });
+            AudioMgr.playSound('glitch_attack');
+            // Per-drone spawn pop telegraph at the source
+            ParticleSys.createSparks(sx, sy, '#7fff00', lowTier ? 6 : 10);
+            // Impact burst at the player + shake
+            setTimeout(() => {
+                ParticleSys.createShockwave(x, y, '#7fff00', lowTier ? 18 : 28);
+                ParticleSys.createExplosion(x, y, lowTier ? 14 : 22, '#7fff00');
+                if (this.shake) this.shake(4);
+                if (onHitCallback) onHitCallback();
+            }, 220);
+        }
+        else if (type === 'observer_strike') {
+            const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+            const sx = source ? source.x : x;
+            const sy = source ? source.y : y;
+            // Eye-glow telegraph at the boss for 400ms — cyan pulse.
+            this.effects.push({
+                type: 'observer_eye',
+                x: sx, y: sy,
+                life: 24, maxLife: 24,
+                color: '#00f3ff'
+            });
+            // Strike at 400ms — cyan slash + sight-line afterimage
+            setTimeout(() => {
+                this.effects.push({
+                    type: 'slash',
+                    x: x, y: y,
+                    angle: -Math.PI / 4 + (Math.random() - 0.5) * 0.3,
+                    life: 26, maxLife: 26,
+                    length: 240, width: 30,
+                    color: '#00f3ff',
+                    heavy: true
+                });
+                this.effects.push({
+                    type: 'sight_line',
+                    sx: sx, sy: sy,
+                    tx: x, ty: y,
+                    life: 22, maxLife: 22,
+                    color: '#00f3ff'
+                });
+                AudioMgr.playSound('digital_sever');
+                ParticleSys.createSparks(x, y, '#00f3ff', lowTier ? 8 : 14);
+                if (this.shake) this.shake(8);
+                if (onHitCallback) onHitCallback();
+            }, 400);
+        }
+        else if (type === 'panopticon_analyse_beam') {
+            const lowTier = (typeof Perf !== 'undefined' && Perf.tier === 'low');
+            const sx = source ? source.x : x;
+            const sy = source ? source.y : y;
+            // Sweeping surveillance beam — cyan line that rotates from
+            // -45 to +45 degrees over 800ms. Sustained cyan flash backs
+            // it up so the player feels the gaze.
+            this.effects.push({
+                type: 'analyse_sweep',
+                x: sx, y: sy,
+                tx: x, ty: y,
+                life: 48, maxLife: 48,
+                color: '#00f3ff'
+            });
+            if (!lowTier && this.triggerScreenFlash) {
+                this.triggerScreenFlash('rgba(0, 243, 255, 0.18)', 800);
+            }
+            AudioMgr.playSound('hex_barrier');
+            // Late impact tone — short electric stinger as the beam locks on
+            setTimeout(() => {
+                AudioMgr.playSound('zap');
+                ParticleSys.createShockwave(x, y, '#00f3ff', lowTier ? 22 : 36);
+                if (this.shake) this.shake(6);
+                if (onHitCallback) onHitCallback();
+            }, 700);
+        }
         else if (type === 'earthquake') {
             const sx = source ? source.x : CONFIG.CANVAS_WIDTH / 2;
             const sy = source ? source.y : y;
@@ -19626,7 +19913,10 @@ drawEffects() {
                 ctx.shadowColor = e.color;
                 ctx.shadowBlur = 30;
                 ctx.fillStyle = e.color;
-                ctx.globalAlpha = 0.35 + 0.4 * p;
+                // v1.9.33 — pulse the brightness via sin so the wind-up
+                // reads as "charging" instead of a flat opacity ramp.
+                const _pulse = 0.5 + 0.5 * Math.sin(p * Math.PI * 1.5);
+                ctx.globalAlpha = (0.35 + 0.4 * p) * (0.7 + 0.3 * _pulse);
                 ctx.beginPath();
                 ctx.arc(0, 0, 28 + 40 * p, 0, Math.PI * 2);
                 ctx.fill();
@@ -19636,6 +19926,287 @@ drawEffects() {
                 ctx.strokeStyle = '#fff';
                 ctx.beginPath();
                 ctx.arc(0, 0, 36 + 50 * p, -Math.PI/3, Math.PI/3);
+                ctx.stroke();
+                ctx.restore();
+                continue;
+            }
+
+            // --- COMPILER CHARGE (rising orange aura telegraph for the smash) ---
+            if (e.type === 'compiler_charge') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = 1 - (e.life / e.maxLife); // 0..1
+                ctx.save();
+                ctx.translate(e.x, e.y - 60 * p);   // climb upward over time
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 36;
+                ctx.fillStyle = e.color;
+                ctx.globalAlpha = 0.45 + 0.35 * Math.sin(p * Math.PI * 3);
+                ctx.beginPath();
+                ctx.arc(0, 0, 30 + 36 * p, 0, Math.PI * 2);
+                ctx.fill();
+                // Vertical heat plume — three short streaks rising
+                ctx.strokeStyle = '#ffaa44';
+                ctx.lineWidth = 3;
+                ctx.globalAlpha = 0.7;
+                for (let k = -1; k <= 1; k++) {
+                    const xo = k * 18;
+                    ctx.beginPath();
+                    ctx.moveTo(xo, 20);
+                    ctx.lineTo(xo, -28 - 24 * p);
+                    ctx.stroke();
+                }
+                ctx.restore();
+                continue;
+            }
+
+            // --- COMPILER SMASH (descending arc projectile, 18-frame impact) ---
+            if (e.type === 'compiler_smash') {
+                e.life--;
+                e.progress = Math.min(1, e.progress + e.speed);
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = e.progress;
+                // Linear x interpolation; y arcs down via gravity-like curve
+                const cx = e.sx + (e.tx - e.sx) * p;
+                const cy = e.sy + (e.ty - e.sy) * (p * p); // ease-in for "falling"
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 28;
+                // Motion-blur trail — 4 layers offset upward along the arc
+                for (let k = 0; k < 4; k++) {
+                    const tBack = Math.max(0, p - k * 0.06);
+                    const tx = e.sx + (e.tx - e.sx) * tBack;
+                    const ty = e.sy + (e.ty - e.sy) * (tBack * tBack);
+                    ctx.save();
+                    ctx.translate(tx - cx, ty - cy);
+                    ctx.globalAlpha = (0.55 - k * 0.12);
+                    ctx.fillStyle = k === 0 ? '#ffffff' : e.color;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 28 - k * 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+                ctx.restore();
+                continue;
+            }
+
+            // --- COMPILER CRACK (post-impact ground fissure overlay) ---
+            if (e.type === 'compiler_crack') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = 1 - (e.life / e.maxLife); // 0..1
+                ctx.save();
+                ctx.translate(e.x, e.y);
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 18;
+                ctx.strokeStyle = e.color;
+                ctx.lineWidth = 3;
+                ctx.globalAlpha = (1 - p) * 0.85;
+                // Three jagged crack lines fanning outward, lengths
+                // grow with progress to read as the ground splitting.
+                const lengths = [60, 80, 70];
+                const angles  = [-2.4, -Math.PI / 2, -0.7];
+                for (let k = 0; k < 3; k++) {
+                    const len = lengths[k] * (0.4 + 0.6 * p);
+                    const ang = angles[k];
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    let cx2 = 0, cy2 = 0;
+                    const segs = 4;
+                    for (let s = 1; s <= segs; s++) {
+                        const t = s / segs;
+                        cx2 = Math.cos(ang) * len * t + (Math.random() - 0.5) * 6;
+                        cy2 = Math.sin(ang) * len * t + (Math.random() - 0.5) * 6;
+                        ctx.lineTo(cx2, cy2);
+                    }
+                    ctx.stroke();
+                }
+                ctx.restore();
+                continue;
+            }
+
+            // --- REALITY AURA (Tesseract Prime telegraph swatch) ---
+            if (e.type === 'reality_aura') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = 1 - (e.life / e.maxLife); // 0..1
+                ctx.save();
+                ctx.translate(e.x, e.y);
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 32;
+                ctx.strokeStyle = e.color;
+                ctx.lineWidth = 4;
+                ctx.globalAlpha = (1 - p) * 0.85;
+                ctx.beginPath();
+                ctx.arc(0, 0, 60 + 60 * p, 0, Math.PI * 2);
+                ctx.stroke();
+                // Inner ring rotating opposite, completes the prismatic feel
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = (1 - p) * 0.55;
+                ctx.beginPath();
+                ctx.arc(0, 0, 40 + 30 * p, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+                continue;
+            }
+
+            // --- REALITY WARP (full-screen scan-line distortion blip) ---
+            if (e.type === 'reality_warp') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = 1 - (e.life / e.maxLife);
+                ctx.save();
+                ctx.globalAlpha = 0.3 * (1 - Math.abs(p - 0.5) * 2);
+                ctx.fillStyle = '#00f3ff';
+                // 4 horizontal scan bands sweeping across the canvas
+                const cw = (typeof CONFIG !== 'undefined' && CONFIG.CANVAS_WIDTH) ? CONFIG.CANVAS_WIDTH : 1080;
+                const ch = (typeof CONFIG !== 'undefined' && CONFIG.CANVAS_HEIGHT) ? CONFIG.CANVAS_HEIGHT : 1920;
+                for (let k = 0; k < 4; k++) {
+                    const yPos = ((p + k * 0.27) % 1) * ch;
+                    ctx.fillRect(0, yPos, cw, 6);
+                }
+                ctx.restore();
+                continue;
+            }
+
+            // --- REALITY RIPPLE (post-impact concentric distortion wave) ---
+            if (e.type === 'reality_ripple') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = 1 - (e.life / e.maxLife); // 0..1
+                e.radius = e.radius + (e.maxRadius - e.radius) * 0.2;
+                ctx.save();
+                ctx.translate(e.x, e.y);
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 16;
+                ctx.strokeStyle = e.color;
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = (1 - p) * 0.6;
+                ctx.beginPath();
+                ctx.arc(0, 0, e.radius, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+                continue;
+            }
+
+            // --- HIVE SWARM STRIKE (sin-modulated wavy distortion line) ---
+            if (e.type === 'hive_swarm_strike') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = 1 - (e.life / e.maxLife); // 0..1
+                const dx = e.tx - e.sx;
+                const dy = e.ty - e.sy;
+                const len = Math.sqrt(dx * dx + dy * dy);
+                const ang = Math.atan2(dy, dx);
+                ctx.save();
+                ctx.translate(e.sx, e.sy);
+                ctx.rotate(ang);
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 14;
+                ctx.strokeStyle = e.color;
+                ctx.lineWidth = 3;
+                ctx.globalAlpha = 0.85 * (1 - p * 0.4);
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                const segs = 12;
+                for (let s = 1; s <= segs; s++) {
+                    const t = s / segs;
+                    // Distortion waves perpendicular to the path
+                    const offY = Math.sin(t * Math.PI * 6 + p * 8) * 8 * (1 - t);
+                    ctx.lineTo(len * t * Math.min(1, p * 1.4), offY);
+                }
+                ctx.stroke();
+                ctx.restore();
+                continue;
+            }
+
+            // --- OBSERVER EYE (Panopticon eye-glow telegraph) ---
+            if (e.type === 'observer_eye') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = 1 - (e.life / e.maxLife); // 0..1
+                ctx.save();
+                ctx.translate(e.x, e.y);
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 28;
+                // Eye iris — three concentric circles with a pulsing pupil
+                const pulse = 0.5 + 0.5 * Math.sin(p * Math.PI * 4);
+                ctx.fillStyle = e.color;
+                ctx.globalAlpha = 0.4 + 0.4 * pulse;
+                ctx.beginPath();
+                ctx.arc(0, 0, 18 + 6 * pulse, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = e.color;
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.7;
+                ctx.beginPath();
+                ctx.arc(0, 0, 32, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(0, 0, 44 + 6 * p, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+                continue;
+            }
+
+            // --- SIGHT LINE (Panopticon trailing aim line) ---
+            if (e.type === 'sight_line') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = 1 - (e.life / e.maxLife); // 0..1
+                ctx.save();
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 12;
+                ctx.strokeStyle = e.color;
+                ctx.lineWidth = 1.5;
+                ctx.globalAlpha = (1 - p) * 0.6;
+                ctx.setLineDash([8, 6]);
+                ctx.beginPath();
+                ctx.moveTo(e.sx, e.sy);
+                ctx.lineTo(e.tx, e.ty);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+                continue;
+            }
+
+            // --- ANALYSE SWEEP (Panopticon's surveillance beam rotating across the field) ---
+            if (e.type === 'analyse_sweep') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = 1 - (e.life / e.maxLife); // 0..1
+                const dx = e.tx - e.x;
+                const dy = e.ty - e.y;
+                const baseAng = Math.atan2(dy, dx);
+                // Sweep -45 to +45 degrees across the lifetime
+                const sweepAng = baseAng + (-Math.PI / 4) + p * (Math.PI / 2);
+                const reach = Math.sqrt(dx * dx + dy * dy) + 200;
+                ctx.save();
+                ctx.translate(e.x, e.y);
+                ctx.rotate(sweepAng);
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 22;
+                // Wedge fan — cyan beam fades from boss to far edge
+                const grad = ctx.createLinearGradient(0, 0, reach, 0);
+                grad.addColorStop(0,   'rgba(0, 243, 255, 0.55)');
+                grad.addColorStop(0.4, 'rgba(0, 243, 255, 0.30)');
+                grad.addColorStop(1,   'rgba(0, 243, 255, 0)');
+                ctx.fillStyle = grad;
+                ctx.globalAlpha = 0.85 * (1 - Math.abs(p - 0.5) * 1.4);
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(reach, -16);
+                ctx.lineTo(reach, 16);
+                ctx.closePath();
+                ctx.fill();
+                // Bright leading edge line
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.95 * (1 - Math.abs(p - 0.5) * 1.4);
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(reach, 0);
                 ctx.stroke();
                 ctx.restore();
                 continue;
@@ -20625,12 +21196,13 @@ drawEffects() {
                 // when the player plays their first die next turn (see useDie).
                 this.player._panopticonNullifyFirst = true;
                 if (this.enemy) this.enemy.analyzing = true;
-                this.triggerVFX && this.triggerVFX('beam', this.enemy, this.player);
-                ParticleSys.createShockwave(this.player.x, this.player.y, '#00f3ff', 26);
+                // v1.9.32 — sweeping surveillance beam replaces the plain
+                // beam call. Cyan wedge rotates from -45 to +45 degrees over
+                // its lifetime, with a sustained background flash so the
+                // player feels the gaze as it locks on.
+                this.triggerVFX && this.triggerVFX('panopticon_analyse_beam', this.enemy, this.player);
                 ParticleSys.createFloatingText(this.player.x, this.player.y - 140, "ANALYSED", "#00f3ff");
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y + 80, "MOVE CATALOGUED", "#00f3ff");
-                AudioMgr.playSound('hex_barrier');
-                this.shake(5);
             }
             else if (intent.type === 'consume') {
                 if (this.player.minions.length > 0) {
@@ -21120,7 +21692,24 @@ drawEffects() {
                     if (validTarget === this.player) {
                         const multiplier = chainMultiplier;
 
-                        const vfxType = intent.type === 'purge_attack' ? 'orbital_strike' : 'glitch_spike';
+                        // v1.9.32 — boss-signature VFX routing. Each major
+                        // boss now ships its own attack-time visual instead
+                        // of falling back on the generic glitch_spike. The
+                        // damage callback contract is identical (called at
+                        // impact moment) so balance does not shift.
+                        let vfxType = 'glitch_spike';
+                        if (intent.type === 'purge_attack') {
+                            vfxType = 'orbital_strike';
+                        } else if (this.enemy && this.enemy.name === 'THE COMPILER') {
+                            vfxType = 'compiler_smash';
+                        } else if (this.enemy && this.enemy.name === 'TESSERACT PRIME') {
+                            vfxType = 'reality_shift_strike';
+                        } else if (this.enemy && this.enemy.name === 'HIVE PROTOCOL') {
+                            vfxType = 'hive_swarm_strike';
+                        } else if (intent._originalIntent === 'observer_strike'
+                                || (this.enemy && this.enemy.name === 'THE PANOPTICON')) {
+                            vfxType = 'observer_strike';
+                        }
                         // Capture combat generation so an in-flight enemy
                         // attack VFX can't damage the player when they
                         // open the next combat from the map screen.
