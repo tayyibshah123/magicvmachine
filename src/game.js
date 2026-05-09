@@ -18754,15 +18754,21 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
             AudioMgr.playSound('grid_fracture');
         }
         else if (type === 'orbital_strike') {
+            // v1.9.37 — wall-clock travel timing. Was: e.y += e.speed
+            // per frame, which on a 30Hz device makes the meteor fall
+            // half as fast as on 60Hz, breaking sync with the wall-
+            // clock damage timer. Now: startMs + durationMs drive
+            // progress so the meteor lands at the same wall-clock
+            // moment regardless of frame rate.
             this.effects.push({
                 type: 'orbital_strike',
                 x: x, y: -200, targetY: y,
-                speed: 18,
+                startMs: performance.now(),
+                durationMs: 620,
                 color: COLORS.PURPLE,
                 onHit: () => {
                     Game.shake(20);
                     ParticleSys.createExplosion(x, y, 80, COLORS.PURPLE);
-                    // FIX: Execute the damage callback when the meteor hits
                     if (onHitCallback) onHitCallback();
                 }
             });
@@ -19617,6 +19623,11 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
                 tx: target ? target.x : sx,
                 ty: target ? target.y : sy,
                 progress: 0,
+                // v1.9.37 — wall-clock fissure travel. Matches the
+                // earthquake VFX impactMs (480ms) so the crack reaches
+                // the target on schedule regardless of frame rate.
+                startMs: performance.now(),
+                durationMs: 480,
                 life: 60, maxLife: 60,
                 color: COLORS.ORANGE
             });
@@ -19990,7 +20001,16 @@ drawEffects() {
             }
 
             if (e.type === 'orbital_strike') {
-                e.y += e.speed;
+                // v1.9.37 — wall-clock progress. Falls back to legacy
+                // per-frame speed if startMs/durationMs aren't set
+                // (defensive against any third-party spawner).
+                if (e.startMs && e.durationMs) {
+                    const elapsed = performance.now() - e.startMs;
+                    const progress = Math.min(1, elapsed / e.durationMs);
+                    e.y = -200 + (e.targetY + 200) * progress;
+                } else {
+                    e.y += (e.speed || 18);
+                }
                 // Shadow-on-ground as it approaches (grows)
                 const proximity = Math.max(0, Math.min(1, (e.y + 200) / (e.targetY + 200)));
                 ctx.save();
@@ -20983,7 +21003,15 @@ drawEffects() {
             // --- EARTHQUAKE FISSURE (crack line from source to target with rubble) ---
             if (e.type === 'earthquake_fissure') {
                 e.life--;
-                e.progress = Math.min(1, e.progress + 0.04);
+                // v1.9.37 — wall-clock progress. Falls back to legacy
+                // per-frame increment (0.04) if startMs/durationMs
+                // aren't set.
+                if (e.startMs && e.durationMs) {
+                    const elapsed = performance.now() - e.startMs;
+                    e.progress = Math.min(1, elapsed / e.durationMs);
+                } else {
+                    e.progress = Math.min(1, e.progress + 0.04);
+                }
                 if (e.life <= 0) { this.effects.splice(i, 1); continue; }
                 const segs = 10;
                 const cx = e.sx + (e.tx - e.sx) * e.progress;
