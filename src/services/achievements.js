@@ -2,6 +2,8 @@
 // mastery, and oddball categories. Tracks unlocked set in localStorage and
 // fires a screen-corner toast on unlock.
 
+import { AudioMgr } from '../audio.js';
+
 const KEY_UNLOCKED = 'mvm_achievements_v1';
 
 // Achievement data — `sparks` field replaces the prior `frag` reward.
@@ -171,7 +173,11 @@ export const Achievements = {
         if (!ach) return false;
         const list = this.getUnlocked();
         list.push(id);
-        localStorage.setItem(KEY_UNLOCKED, JSON.stringify(list));
+        // v1.9.49 — wrap the persist in try/catch. Safari Private mode +
+        // some Capacitor WebView profiles throw QuotaExceededError on
+        // setItem. Without the guard the unlock is in-memory only and
+        // reverts on reload.
+        try { localStorage.setItem(KEY_UNLOCKED, JSON.stringify(list)); } catch (_) {}
         // Achievements pay SPARKS only now — fragments wipe at run end so
         // awarding them here did nothing. The amount is the per-entry
         // `sparks` field (1-15), small numbers scaled to the achievement
@@ -180,6 +186,11 @@ export const Achievements = {
         if (typeof window !== 'undefined' && window.Game && window.Game.grantSparks) {
             try { window.Game.grantSparks(ach.sparks || 1, 'achievement_' + id, { silent: true }); } catch (_) {}
         }
+        // v1.9.49 — audio cue on unlock. Audit found the toast was
+        // visually celebrated but silent; players on a non-muted device
+        // get no audible reward confirmation. 'upgrade' is a clean
+        // ascending tone that matches the existing celebration palette.
+        try { AudioMgr && AudioMgr.playSound && AudioMgr.playSound('upgrade'); } catch (_) {}
         _toastQueue.push(ach);
         _processQueue();
         // Spark floater on the player entity so the reward feels tactile.
@@ -202,7 +213,11 @@ export const Achievements = {
     incrementCounter(key, amount = 1) {
         const k = 'mvm_ach_ctr_' + key;
         const v = (parseInt(localStorage.getItem(k), 10) || 0) + amount;
-        localStorage.setItem(k, String(v));
+        // v1.9.49 — wrap setItem in try/catch so quota / Safari Private
+        // failures don't crash the unlock check chain. The in-memory
+        // value is still returned so the caller's threshold check works
+        // for the rest of the session.
+        try { localStorage.setItem(k, String(v)); } catch (_) {}
         return v;
     },
     getCounter(key) {

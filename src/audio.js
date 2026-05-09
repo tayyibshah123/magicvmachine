@@ -681,6 +681,11 @@ const AudioMgr = {
         dart: 25,
         defend: 25,
         click: 20,
+        // v1.9.49 — snap fires on every QTE perfect-shatter (both attack
+        // and parry paths). On a multi-hit chain with crits, the burst
+        // can stack uncomfortably without a lockout. 40ms is the same
+        // window the higher-frequency hit / attack samples use.
+        snap: 40,
     },
 
     /* Composed-sting registry. Each entry is an array of {id, delay, opts}

@@ -374,15 +374,21 @@ const Game = {
             // the player has opened in the modal at least once. Used to
             // compute the unread badge on the Intel tab. Stored as an
             // array of 1-based file ids matching INTEL_ENTRIES.id.
+            // v1.9.49 — wrap JSON.parse in try/catch. Without the guard,
+            // a single corrupted entry takes down the whole boot path
+            // (the outer try/catch swallows everything and nukes the
+            // cross-run state).
             const savedReadLore = localStorage.getItem('mvm_read_lore');
-            this.readLore = savedReadLore ? JSON.parse(savedReadLore) : [];
+            try { this.readLore = savedReadLore ? JSON.parse(savedReadLore) : []; }
+            catch (_) { this.readLore = []; }
             // v1.9.8 Intel Codex hidden tail. unlockedHiddenLore stores
             // the ids of hidden entries the player has unlocked through
             // rare actions (no-death S5, qte-perfect, S20 endless, etc).
             // cumulativeKills is a persistent counter across all runs,
             // gating entry 40 (cumulative_kills_1000).
             const savedHiddenLore = localStorage.getItem('mvm_hidden_lore');
-            this.unlockedHiddenLore = savedHiddenLore ? JSON.parse(savedHiddenLore) : [];
+            try { this.unlockedHiddenLore = savedHiddenLore ? JSON.parse(savedHiddenLore) : []; }
+            catch (_) { this.unlockedHiddenLore = []; }
             const savedCumKills = localStorage.getItem('mvm_cum_kills');
             this.cumulativeKills = savedCumKills ? parseInt(savedCumKills) : 0;
             const savedSeen = localStorage.getItem('mvm_seen');
@@ -5833,8 +5839,13 @@ startQTE(type, x, y, callback, opts) {
                 if (relic && this.player.addRelic) {
                     this.player.addRelic(relic);
                     ParticleSys.createFloatingText(540, 220, `RELIC: ${relic.name}`, '#ffd76a');
+                    // v1.9.49 — only consume the banked id when the relic
+                    // actually granted. Previously the key was removed
+                    // unconditionally, so a save that referenced a stale
+                    // id (deleted relic, fusion data unavailable) silently
+                    // lost the player's banked starter on first run.
+                    localStorage.removeItem('mvm_start_relic');
                 }
-                localStorage.removeItem('mvm_start_relic');
             }
         } catch (e) { /* ignore storage errors */ }
 
@@ -10975,7 +10986,10 @@ triggerSystemCrash() {
                         );
                     }
                     if (typeof AudioMgr !== 'undefined' && AudioMgr.playSound) {
-                        AudioMgr.playSound('error');
+                        // v1.9.49 — was 'error' which isn't registered in
+                        // SFX_IDS and silently fell back to synth. 'snap'
+                        // is the closest registered cue for a deny moment.
+                        AudioMgr.playSound('snap');
                     }
                 } catch (_) { /* defensive only */ }
             }
@@ -11169,6 +11183,15 @@ triggerSystemCrash() {
             challengeMode: !!this.challengeMode,
             archiveMode: !!this.archiveMode,
             archivistFacedThisRun: !!this._archivistFacedThisRun,
+            // v1.9.49 — persist endless-mode + custom-run modifier flags
+            // so a tab-close mid-Sector-6 / mid-custom-run resumes
+            // correctly. Without these, _endlessActive resets to false
+            // on resume (sector scaling continues but the mode flag is
+            // wrong) and customRunModifiers reverts to an empty Set
+            // (player loses negative modifiers they signed up for, AND
+            // misses positive bonuses they earned).
+            endlessActive: !!this._endlessActive,
+            customRunModifiers: this.customRunModifiers ? Array.from(this.customRunModifiers) : [],
             activePacts: this.activePacts ? Array.from(this.activePacts) : [],
             // Persist per-run rolling stats so the victory/death screen's
             // breakdown (biggest hit, rerolls used, perfect QTEs, HP lost)
@@ -11277,6 +11300,14 @@ triggerSystemCrash() {
             // archive-arena (or post-Sector-5 immediately before the gate)
             // doesn't double-route into the Archivist.
             this._archivistFacedThisRun = !!data.archivistFacedThisRun;
+            // v1.9.49 — restore endless-mode + custom-run modifier flags
+            // from the save snapshot. saveGame writes them; without these
+            // pulls the restored run reverts to false / empty, breaking
+            // sector-name labelling + custom modifier hooks.
+            this._endlessActive = !!data.endlessActive;
+            this.customRunModifiers = new Set(
+                Array.isArray(data.customRunModifiers) ? data.customRunModifiers : []
+            );
             // Keep the Challenge active flag in localStorage in sync with the
             // mode we just restored — the chip + reward bookkeeping read from
             // it, and a save loaded in a fresh tab would otherwise see the
@@ -23561,8 +23592,12 @@ drawEffects() {
             try { Unlocks.grant('daily', 'first_run_won'); } catch (_) {}
 
             // Increment Corruption Level
+            // v1.9.49 — wrap setItem in try/catch (line 1115's call has
+            // it; this one was unprotected). Quota / Safari Private
+            // failures here would silently revert a key progression
+            // milestone on next reload.
             this.corruptionLevel++;
-            localStorage.setItem('mvm_corruption', this.corruptionLevel);
+            try { localStorage.setItem('mvm_corruption', this.corruptionLevel); } catch (_) {}
 
             // Ascension promotion — clearing the run on selected level unlocks N+1
             const selected = Ascension.getSelected();
