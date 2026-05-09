@@ -19659,16 +19659,40 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
             // (Tesseract in P2/P3) override — this teaches the player the
             // palette they'll see again in the death dissolve.
             let tint = '#ff0000';
-            if (this._sourceIsEnemy(source)) {
+            const isEnemySource = this._sourceIsEnemy(source);
+            if (isEnemySource) {
                 tint = (source && source.phaseTelegraphColor) || this._sectorEnemyProjectileColor();
             }
-            this.effects.push({
-                type: 'glitch_spike',
-                sx: source.x, sy: source.y,
-                tx: target.x, ty: target.y,
-                life: 15, maxLife: 15,
-                color: tint
-            });
+            // v1.9.39 — pre-strike charge telegraph for generic enemies.
+            // Bosses already have signature telegraphs (Compiler aura,
+            // Tesseract prismatic cycle, Panopticon eye-glow) and route
+            // through their own VFX paths above. Standard non-boss enemies
+            // were striking with no wind-up at all — the spike line just
+            // appeared. The new enemy_charge effect fires at the source
+            // for ~80ms before the spike spawns so the player gets a
+            // half-beat to read "incoming" before the line lands.
+            const useCharge = isEnemySource && !(source && source.isBoss);
+            const spawnSpike = () => {
+                this.effects.push({
+                    type: 'glitch_spike',
+                    sx: source.x, sy: source.y,
+                    tx: target.x, ty: target.y,
+                    life: 15, maxLife: 15,
+                    color: tint
+                });
+                AudioMgr.playSound('glitch_attack');
+            };
+            if (useCharge) {
+                this.effects.push({
+                    type: 'enemy_charge',
+                    x: source.x, y: source.y,
+                    life: 8, maxLife: 8,
+                    color: tint
+                });
+                setTimeout(spawnSpike, 80);
+            } else {
+                spawnSpike();
+            }
             // Phase-telegraph mini flash — a soft pulse of the phase color
             // so the player can't miss the signal.
             if (source && source.phaseTelegraphColor && this.triggerScreenFlash) {
@@ -19676,8 +19700,10 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
                 const rv = parseInt(hx.slice(0,2), 16), gv = parseInt(hx.slice(2,4), 16), bv = parseInt(hx.slice(4,6), 16);
                 this.triggerScreenFlash(`rgba(${rv},${gv},${bv},0.22)`, 180);
             }
-            AudioMgr.playSound('glitch_attack');
-            if (onHitCallback) setTimeout(onHitCallback, 200);
+            // Damage callback delayed an extra 80ms when the charge fires
+            // so the impact still lands as the spike line crosses the
+            // target — preserves the spike-life-vs-damage relationship.
+            if (onHitCallback) setTimeout(onHitCallback, useCharge ? 280 : 200);
         }
         else if (type === 'nature_dart') {
             // FIX: Use Player Class Color for Projectile
@@ -20503,6 +20529,73 @@ drawEffects() {
                 ctx.globalAlpha = (1 - p) * 0.6;
                 ctx.beginPath();
                 ctx.arc(0, 0, e.radius, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+                continue;
+            }
+
+            // --- ENEMY CHARGE (pre-strike telegraph at source for generic enemies) ---
+            if (e.type === 'enemy_charge') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                const p = 1 - (e.life / e.maxLife); // 0..1
+                ctx.save();
+                ctx.translate(e.x, e.y);
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 18;
+                // Outer ring expands 6 -> 36px so the moment reads as
+                // energy gathering at the source.
+                ctx.strokeStyle = e.color;
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = (1 - p) * 0.85;
+                ctx.beginPath();
+                ctx.arc(0, 0, 6 + 30 * p, 0, Math.PI * 2);
+                ctx.stroke();
+                // Inner core dot brightens as the charge peaks
+                ctx.fillStyle = '#ffffff';
+                ctx.globalAlpha = (0.4 + 0.5 * p) * 0.9;
+                ctx.beginPath();
+                ctx.arc(0, 0, 4 + 4 * p, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+                continue;
+            }
+
+            // --- MULTI CHAIN TETHER (energy line connecting source to target across multi-hit chains) ---
+            if (e.type === 'multi_chain_tether') {
+                e.life--;
+                if (e.life <= 0) { this.effects.splice(i, 1); continue; }
+                // Wall-clock progress so the tether's pulse cadence stays
+                // consistent under low FPS. The chain's hit-cadence is
+                // wall-clock (await sleep(200)) so the visual must track
+                // the same clock or pulses will desync from impacts.
+                const elapsed = performance.now() - (e.startMs || performance.now());
+                const p = Math.min(1, elapsed / (e.durationMs || 600));
+                const dx = e.tx - e.sx;
+                const dy = e.ty - e.sy;
+                const len = Math.sqrt(dx * dx + dy * dy);
+                const ang = Math.atan2(dy, dx);
+                // Pulse cycle ~5Hz so each 200ms gap fits one pulse — the
+                // tether visually "feeds" each hit with a wave of energy.
+                const pulse = 0.5 + 0.5 * Math.sin(elapsed / 1000 * Math.PI * 5);
+                const fade = 1 - Math.pow(p, 2); // ease-out tail
+                ctx.save();
+                ctx.translate(e.sx, e.sy);
+                ctx.rotate(ang);
+                ctx.shadowColor = e.color;
+                ctx.shadowBlur = 18;
+                ctx.strokeStyle = e.color;
+                ctx.lineWidth = 1.5 + 1.5 * pulse;
+                ctx.globalAlpha = (0.35 + 0.45 * pulse) * fade;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                // Subtle wavy distortion so the line reads as energy, not a static beam
+                const segs = 12;
+                for (let s = 1; s <= segs; s++) {
+                    const t = s / segs;
+                    const offY = Math.sin(t * Math.PI * 4 + elapsed / 80) * 4 * pulse;
+                    ctx.lineTo(len * t, offY);
+                }
                 ctx.stroke();
                 ctx.restore();
                 continue;
@@ -22426,6 +22519,37 @@ drawEffects() {
                 let aegisBlockedIntent = false;
                 let thornsFiredThisIntent = false;
                 let chainBroken = false;
+                // v1.9.39 — multi-hit chain linkage. For chains of 2+ hits,
+                // spawn an energy tether from the boss to the target that
+                // pulses on each hit and persists through the inter-hit
+                // gaps so the chain reads as a single sustained assault
+                // rather than three isolated bursts. Lifetime covers the
+                // whole chain (200ms gap × hits + 200ms tail). The pulse
+                // colour matches the boss-attack signature where one
+                // applies (Compiler orange, Tesseract magenta, Hive lime,
+                // Panopticon cyan), defaulting to white for generic
+                // enemies.
+                if (hits > 1 && validTarget === this.player) {
+                    let chainColor = '#ffffff';
+                    if (this.enemy && this.enemy.name === 'THE COMPILER') chainColor = '#ff8800';
+                    else if (this.enemy && this.enemy.name === 'TESSERACT PRIME') chainColor = '#bc13fe';
+                    else if (this.enemy && this.enemy.name === 'HIVE PROTOCOL') chainColor = '#7fff00';
+                    else if (this.enemy && this.enemy.name === 'THE PANOPTICON') chainColor = '#00f3ff';
+                    const tetherLifeMs = 200 * hits + 220;
+                    const tetherFrames = Math.ceil(tetherLifeMs / 16);
+                    this.effects.push({
+                        type: 'multi_chain_tether',
+                        sx: this.enemy ? this.enemy.x : 0,
+                        sy: this.enemy ? this.enemy.y : 0,
+                        tx: validTarget.x,
+                        ty: validTarget.y,
+                        life: tetherFrames,
+                        maxLife: tetherFrames,
+                        startMs: performance.now(),
+                        durationMs: tetherLifeMs,
+                        color: chainColor
+                    });
+                }
                 for(let h=0; h<hits; h++) {
                     if (chainBroken) break;
                     if (this.enemy && this.enemy.currentHp <= 0) break;
