@@ -24,32 +24,13 @@ function _resolveEnemyKill(target) {
         return;
     }
     if (Game.enemy && Game.enemy.minions && Game.enemy.minions.includes(target)) {
-        // v1.9.0 — HIVE PROTOCOL "Assimilate": each Hive Drone death
-        // restores 5% of the boss's max HP. Boss must still be alive
-        // (otherwise we'd resurrect the boss with a stray death).
-        if (target._isHiveDrone && Game.enemy.name === 'HIVE PROTOCOL'
-            && Game.enemy.currentHp > 0 && Game.enemy.currentHp < Game.enemy.maxHp) {
-            const heal = Math.floor(Game.enemy.maxHp * 0.05);
-            Game.enemy.currentHp = Math.min(Game.enemy.maxHp, Game.enemy.currentHp + heal);
-            ParticleSys.createFloatingText(Game.enemy.x, Game.enemy.y - 130,
-                `ASSIMILATE +${heal}`, '#32cd32');
-            ParticleSys.createShockwave(Game.enemy.x, Game.enemy.y, '#32cd32', 30);
-            AudioMgr.playSound && AudioMgr.playSound('mana');
-        }
-        // v1.9.0 — TESSERACT PRIME: when the LAST fragment dies, queue
-        // a respawn 3 turns later. Storing the deadline on the boss
-        // object so startTurn() can spawn them back when the timer
-        // hits, and the boss becomes vulnerable in the meantime.
-        if (target._isTessFragment && Game.enemy.name === 'TESSERACT PRIME'
-            && Game.enemy.currentHp > 0) {
-            const remaining = Game.enemy.minions.filter(m => m !== target && m._isTessFragment && m.currentHp > 0);
-            if (remaining.length === 0) {
-                Game.enemy._fragmentResummonAt = (Game.turnCount || 0) + 3;
-                ParticleSys.createFloatingText(Game.enemy.x, Game.enemy.y - 200,
-                    'FRAGMENTS DOWN — VULNERABLE', '#ffd76a');
-                if (Game.shake) Game.shake(12);
-                AudioMgr.playSound && AudioMgr.playSound('grid_fracture');
-            }
+        // v1.9.35 — Hive Assimilate + Tesseract resummon-arming both
+        // route through the BossMinionRoster.handleMinionKill() hook.
+        // Each boss's roster config registered the appropriate
+        // onMinionKill callback at spawn time. No-op for bosses
+        // without a roster.
+        if (Game.enemy.minionRoster) {
+            Game.enemy.minionRoster.handleMinionKill(target, Game);
         }
         Game.enemy.minions = Game.enemy.minions.filter(m => m !== target);
     } else if (Game.player && Game.player.minions && Game.player.minions.includes(target)) {
@@ -85,23 +66,17 @@ class Entity {
             return false;
         }
 
-        // --- TESSERACT PRIME — fragment shield ---
-        // v1.9.0. While ANY Tesseract Fragment minion is alive, the
-        // boss takes zero damage. Player must clear the fragments
-        // before they can chip the boss. Floating-text rate-limited
-        // by tagging the boss with a frame-id so spam attacks don't
-        // flood the screen.
+        // --- BOSS-MINION SWARM SHIELD ---
+        // v1.9.35 — boss-name-agnostic invincibility gate. Each boss
+        // declares its own gating policy through its BossMinionRoster
+        // config (`invincibleWhileAnyAlive` + `invincibleFloaterText`).
+        // Tesseract Prime is the only boss using this today; the gate
+        // returns false when its fragments are alive so all damage
+        // resolves to zero. Hive / Compiler register rosters but
+        // their `invincibleWhileAnyAlive` is false so this is a no-op.
         if (Enemy && this instanceof Enemy && this === Game.enemy
-            && this.name === 'TESSERACT PRIME'
-            && Array.isArray(this.minions)
-            && this.minions.some(m => m && m._isTessFragment && m.currentHp > 0)) {
-            const now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
-            if (!this._invincibleTextAt || (now - this._invincibleTextAt) > 600) {
-                this._invincibleTextAt = now;
-                ParticleSys.createFloatingText(this.x, this.y - 140,
-                    'INVINCIBLE — DESTROY FRAGMENTS', '#ffd76a');
-                ParticleSys.createShockwave(this.x, this.y, '#ffd76a', 28);
-            }
+            && this.minionRoster && this.minionRoster.shouldGateBossDamage()) {
+            this.minionRoster.fireInvincibilityFloater();
             return false;
         }
 

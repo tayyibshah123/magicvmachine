@@ -14304,52 +14304,85 @@ async startCombat(type) {
         // Tesseract Prime Logic
         if (this.enemy.name === "TESSERACT PRIME") {
             this.enemy.invincibleTurns = 0;
-            // 3 specialised role minions. Each orb is pacifist (never
-            // attacks) and fires a unique passive in startTurn:
-            //   heart  heals boss 8% maxHp / enemy turn
-            //   aegis  +20 boss shield / enemy turn
-            //   hex    applies WEAK to player every 2 turns
-            // Defensive prune of any leftover minions so the resummon
-            // path can never inherit a corpse and end up with 4 or 5
-            // entries in the array.
-            // Hardened prune: drop any leftovers AND any non-fragment
-            // minion that may have been pushed elsewhere. Belt-and-
-            // braces against future regressions.
+            // v1.9.35 — spawn delegated to _tesseractSpawnFragments so the
+            // resummon callback can reuse the same factory. The roster
+            // config below carries every Tesseract behaviour (invincibility
+            // gate, per-turn passives, resummon scheduling) so the engine
+            // chokepoints stay boss-name-agnostic.
             this.enemy.minions = this.enemy.minions.filter(m =>
                 m && m.currentHp > 0 && m._isTessFragment);
-            const TESS_ROLES = [
-                { role: 'heart',  hp: 60, color: '#ff3355', name: 'Tesseract Heart'  },
-                { role: 'aegis',  hp: 40, color: '#3a8bff', name: 'Tesseract Aegis'  },
-                { role: 'hex',    hp: 35, color: '#bc13fe', name: 'Tesseract Hex'    },
-                { role: 'mender', hp: 50, color: '#4ade80', name: 'Tesseract Mender' }
-            ];
-            TESS_ROLES.forEach((spec, i) => {
-                const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false, 3);
-                m.name = spec.name;
-                m.maxHp = spec.hp;
-                m.currentHp = spec.hp;
-                m.dmg = 0;
-                m._isTessFragment = true;
-                m._tessRole = spec.role;
-                m._tessShapeIdx = i;
-                m._tessOrbColor = spec.color;
-                m._pacifist = true;
-                m.spawnTimer = 1.0;
-                this.enemy.minions.push(m);
-            });
+            this._tesseractSpawnFragments(this.enemy);
             this._queueBossAnnouncement(() => {
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200,
                     "INVINCIBLE WHILE ORBS LIVE", "#ffd76a");
             });
-            // BossMinionRoster registration. The hand-bolted invincibility
-            // / resummon / per-turn passive code in entity.js + startTurn
-            // remains untouched; the roster is a parallel read API for
-            // future code that wants a unified accessor instead of the
-            // _isTessFragment filter expression.
             this.enemy.minionRoster = new BossMinionRoster(this.enemy, {
                 kind: 'tesseract',
                 invincibleWhileAnyAlive: true,
-                isMember: (m) => !!(m && m._isTessFragment)
+                invincibleFloaterText: 'INVINCIBLE — DESTROY FRAGMENTS',
+                isMember: (m) => !!(m && m._isTessFragment),
+                perTurnPassive: (boss, members) => {
+                    members.forEach(m => {
+                        if (m._tessRole === 'heart') {
+                            const heal = Math.max(1, Math.floor(boss.maxHp * 0.08));
+                            boss.currentHp = Math.min(boss.maxHp, boss.currentHp + heal);
+                            ParticleSys.createFloatingText(boss.x - 60, boss.y - 110,
+                                `HEART +${heal}`, '#ff3355');
+                        } else if (m._tessRole === 'aegis') {
+                            boss.addShield(20);
+                            ParticleSys.createFloatingText(boss.x, boss.y - 110,
+                                'AEGIS +20 SHIELD', '#3a8bff');
+                        } else if (m._tessRole === 'hex') {
+                            m._hexCooldown = (m._hexCooldown || 0) - 1;
+                            if (m._hexCooldown <= 0) {
+                                m._hexCooldown = 2;
+                                if (Game.player && typeof Game.player.addEffect === 'function') {
+                                    Game.player.addEffect('weak', 2, 0.5, '🦠',
+                                        'Damage halved for 2 turns.', 'WEAK');
+                                }
+                                ParticleSys.createFloatingText(Game.player.x, Game.player.y - 90,
+                                    'HEX', '#bc13fe');
+                            }
+                        } else if (m._tessRole === 'mender') {
+                            const others = members.filter(o => o !== m);
+                            if (others.length > 0) {
+                                const healPerOrb = 8;
+                                others.forEach(o => {
+                                    const amt = Math.min(healPerOrb, o.maxHp - o.currentHp);
+                                    if (amt > 0) {
+                                        o.currentHp += amt;
+                                        ParticleSys.createFloatingText(o.x, o.y - 30,
+                                            `+${amt}`, '#4ade80');
+                                    }
+                                });
+                                ParticleSys.createFloatingText(m.x, m.y - 50,
+                                    'MEND', '#4ade80');
+                            }
+                        }
+                    });
+                },
+                onMinionKill: (boss, dead, remaining) => {
+                    if (remaining.length === 0 && boss.currentHp > 0) {
+                        boss._fragmentResummonAt = (Game.turnCount || 0) + 3;
+                        ParticleSys.createFloatingText(boss.x, boss.y - 200,
+                            'FRAGMENTS DOWN — VULNERABLE', '#ffd76a');
+                        if (Game.shake) Game.shake(12);
+                        AudioMgr.playSound && AudioMgr.playSound('grid_fracture');
+                    }
+                },
+                resummonRule: {
+                    deadlineKey: '_fragmentResummonAt',
+                    delayTurns: 3,
+                    spawn: (boss) => {
+                        boss.minions = boss.minions.filter(m =>
+                            m && m.currentHp > 0 && m._isTessFragment);
+                        Game._tesseractSpawnFragments(boss, /*announceMaterialise*/ true);
+                        ParticleSys.createFloatingText(boss.x, boss.y - 200,
+                            'ORBS RECONSTITUTED', '#ffd76a');
+                        if (Game.shake) Game.shake(10);
+                        AudioMgr.playSound && AudioMgr.playSound('grid_fracture');
+                    }
+                }
             });
 
             AudioMgr.bossSilence = true;
@@ -14397,14 +14430,29 @@ async startCombat(type) {
                 m.spawnTimer = 1.0;
                 this.enemy.minions.push(m);
             }
-            // BossMinionRoster registration for Hive Protocol. Drones
-            // are killable (no invincibility gate); the roster just
-            // surfaces a clean accessor for the existing summon_hive
-            // intent path in enemy.js.
+            // v1.9.35 — Hive Protocol roster carries the Assimilate heal
+            // (onMinionKill: drone death restores 5% boss HP) and the
+            // resummon cadence (4 turns base, 3 in phase 3). The
+            // summon_hive intent generation in enemy.js reads
+            // shouldRespawn() instead of its own counter.
             this.enemy.minionRoster = new BossMinionRoster(this.enemy, {
                 kind: 'hive',
                 invincibleWhileAnyAlive: false,
-                isMember: (m) => !!(m && m._isHiveDrone)
+                isMember: (m) => !!(m && m._isHiveDrone),
+                onMinionKill: (boss) => {
+                    if (boss.currentHp <= 0 || boss.currentHp >= boss.maxHp) return;
+                    const heal = Math.floor(boss.maxHp * 0.05);
+                    boss.currentHp = Math.min(boss.maxHp, boss.currentHp + heal);
+                    ParticleSys.createFloatingText(boss.x, boss.y - 130,
+                        `ASSIMILATE +${heal}`, '#32cd32');
+                    ParticleSys.createShockwave(boss.x, boss.y, '#32cd32', 30);
+                    AudioMgr.playSound && AudioMgr.playSound('mana');
+                },
+                resummonRule: {
+                    counterKey: '_hiveTurnCounter',
+                    cap: 5,
+                    cadenceFn: (boss) => (boss._hiveResummonEvery || 4)
+                }
             });
         }
 
@@ -14438,14 +14486,32 @@ async startCombat(type) {
                 m.spawnTimer = 1.0;
                 this.enemy.minions.push(m);
             }
-            // BossMinionRoster registration for the Compiler. Mechs
-            // feed the boss shield + 2x charge but are not gates —
-            // the boss stays vulnerable so the roster just exposes
-            // the swarm for unified queries.
+            // v1.9.35 — Compiler roster carries the per-turn shield feed
+            // (+10 per living mech) and the every-3rd-turn 2x damage
+            // charge. The Bolster Mech support tick block in startTurn
+            // is now a no-op and removed below.
             this.enemy.minionRoster = new BossMinionRoster(this.enemy, {
                 kind: 'compiler',
                 invincibleWhileAnyAlive: false,
-                isMember: (m) => !!(m && m._isBolsterMech)
+                isMember: (m) => !!(m && m._isBolsterMech),
+                perTurnPassive: (boss, members) => {
+                    if (members.length === 0) return;
+                    const shieldPerMech = 10;
+                    const totalShield = shieldPerMech * members.length;
+                    boss.addShield(totalShield);
+                    ParticleSys.createFloatingText(boss.x, boss.y - 120,
+                        `BOLSTER +${totalShield} SHIELD`, '#ff8800');
+                    members.forEach(m => {
+                        m._bolsterTickCount = (m._bolsterTickCount || 0) + 1;
+                    });
+                    const sharedTick = members[0]._bolsterTickCount;
+                    if (sharedTick % 3 === 0) {
+                        boss._bolsterDamageMult = 2;
+                        ParticleSys.createFloatingText(boss.x, boss.y - 160,
+                            `BOLSTER × ${members.length}: NEXT HIT 2×`, '#ffaa00');
+                        AudioMgr.playSound('upgrade');
+                    }
+                }
             });
         }
         // ----------------------------------------------
@@ -14738,45 +14804,13 @@ async startTurn() {
         this.recycleBinCount = 0;
         this._fluxCyclerHeal = 0;
 
-        // Tesseract Prime orb resummon. When the player killed the
-        // last orb, _resolveEnemyKill stamped a deadline turnCount+3.
-        // When it lands, restore the 3 specialised orbs and the boss
-        // returns to invincible. Defensive prune ensures no leftover
-        // corpses can produce a phantom 4th/5th minion.
-        if (this.enemy && this.enemy.name === 'TESSERACT PRIME'
-            && this.enemy.currentHp > 0
-            && typeof this.enemy._fragmentResummonAt === 'number'
-            && this.turnCount >= this.enemy._fragmentResummonAt) {
-            this.enemy._fragmentResummonAt = null;
-            this.enemy.minions = this.enemy.minions.filter(m =>
-                m && m.currentHp > 0 && m._isTessFragment);
-            const TESS_ROLES = [
-                { role: 'heart',  hp: 60, color: '#ff3355', name: 'Tesseract Heart'  },
-                { role: 'aegis',  hp: 40, color: '#3a8bff', name: 'Tesseract Aegis'  },
-                { role: 'hex',    hp: 35, color: '#bc13fe', name: 'Tesseract Hex'    },
-                { role: 'mender', hp: 50, color: '#4ade80', name: 'Tesseract Mender' }
-            ];
-            TESS_ROLES.forEach((spec, i) => {
-                const m = new Minion(this.enemy.x, this.enemy.y, this.enemy.minions.length + 1, false, 3);
-                m.name = spec.name;
-                m.maxHp = spec.hp;
-                m.currentHp = spec.hp;
-                m.dmg = 0;
-                m._isTessFragment = true;
-                m._tessRole = spec.role;
-                m._tessShapeIdx = i;
-                m._tessOrbColor = spec.color;
-                m._pacifist = true;
-                m.spawnTimer = 1.0;
-                this.enemy.minions.push(m);
-                ParticleSys.createShockwave(m.x, m.y, spec.color, 26);
-                ParticleSys.createSparks(m.x, m.y, spec.color, 12);
-                if (this.triggerVFX) this.triggerVFX('materialize', null, m);
-            });
-            ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200,
-                'ORBS RECONSTITUTED', '#ffd76a');
-            if (this.shake) this.shake(10);
-            AudioMgr.playSound('grid_fracture');
+        // v1.9.35 — Tesseract Prime resummon scheduling moved to the
+        // BossMinionRoster `resummonRule`. This single line invokes the
+        // roster's checkResummon() which reads the deadline written by
+        // the onMinionKill callback in _resolveEnemyKill and fires the
+        // configured spawn factory.
+        if (this.enemy && this.enemy.minionRoster) {
+            this.enemy.minionRoster.checkResummon(this.turnCount, this);
         }
         // Custom Run: reset the per-turn flag for the Hot Hands modifier
         // (first die played each turn costs HP).
@@ -14900,91 +14934,19 @@ async startTurn() {
 
         this.turnCount++;
 
-        // --- TESSERACT PRIME: orb passive tick ---
-        // Each living orb fires its role passive at the start of the
-        // player turn:
-        //   heart  heals boss for 8% maxHp
-        //   aegis  +20 boss shield
-        //   hex    applies WEAK to player every 2 turns
-        // The orbs are pacifist (m.dmg = 0, _pacifist = true) so they
-        // never queue an attack of their own; they only fire these
-        // passives. Boss invincibility-while-alive is handled in
-        // entity.takeDamage and isn't repeated here.
-        if (this.enemy && this.enemy.name === 'TESSERACT PRIME' && this.enemy.currentHp > 0
-            && Array.isArray(this.enemy.minions)) {
-            const liveOrbs = this.enemy.minions.filter(m => m && m.currentHp > 0 && m._isTessFragment);
-            liveOrbs.forEach(m => {
-                if (m._tessRole === 'heart') {
-                    const heal = Math.max(1, Math.floor(this.enemy.maxHp * 0.08));
-                    this.enemy.currentHp = Math.min(this.enemy.maxHp, this.enemy.currentHp + heal);
-                    ParticleSys.createFloatingText(this.enemy.x - 60, this.enemy.y - 110,
-                        `HEART +${heal}`, '#ff3355');
-                } else if (m._tessRole === 'aegis') {
-                    this.enemy.addShield(20);
-                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 110,
-                        'AEGIS +20 SHIELD', '#3a8bff');
-                } else if (m._tessRole === 'hex') {
-                    m._hexCooldown = (m._hexCooldown || 0) - 1;
-                    if (m._hexCooldown <= 0) {
-                        m._hexCooldown = 2;
-                        if (this.player && typeof this.player.addEffect === 'function') {
-                            this.player.addEffect('weak', 2, 0.5, '🦠',
-                                'Damage halved for 2 turns.', 'WEAK');
-                        }
-                        ParticleSys.createFloatingText(this.player.x, this.player.y - 90,
-                            'HEX', '#bc13fe');
-                    }
-                } else if (m._tessRole === 'mender') {
-                    // Heal each OTHER live orb (not the boss, not self)
-                    // for a flat amount each turn. Caps at maxHp. Reads
-                    // as a healing pulse the player can see clearly
-                    // when other orbs come back from low HP.
-                    const others = liveOrbs.filter(o => o !== m);
-                    if (others.length > 0) {
-                        const healPerOrb = 8;
-                        others.forEach(o => {
-                            const amt = Math.min(healPerOrb, o.maxHp - o.currentHp);
-                            if (amt > 0) {
-                                o.currentHp += amt;
-                                ParticleSys.createFloatingText(o.x, o.y - 30,
-                                    `+${amt}`, '#4ade80');
-                            }
-                        });
-                        ParticleSys.createFloatingText(m.x, m.y - 50,
-                            'MEND', '#4ade80');
-                    }
-                }
-            });
+        // v1.9.35 — Tesseract / Hive / Compiler per-turn passives all
+        // route through the BossMinionRoster.tickPassives() chokepoint.
+        // The actual mechanic logic lives in each boss's roster config
+        // (registered at spawn). No-op for bosses without a roster.
+        if (this.enemy && this.enemy.minionRoster && this.enemy.currentHp > 0) {
+            this.enemy.minionRoster.tickPassives(this.turnCount, this);
         }
 
-        // --- THE COMPILER: BOLSTER MECH support tick ---
-        // Each living Bolster Mech feeds the Compiler +10 shield every
-        // round, and on every 3rd round flags "next compiler attack
-        // deals 2× damage". The bolster mechs themselves don't attack
-        // — they're standalone bodyguards (300 HP each) the player
-        // must clear to stop the support flow.
-        if (this.enemy && this.enemy.name === 'THE COMPILER' && this.enemy.currentHp > 0
-            && Array.isArray(this.enemy.minions)) {
-            const bolsters = this.enemy.minions.filter(m => m && m._isBolsterMech && m.currentHp > 0);
-            if (bolsters.length > 0) {
-                const shieldPerMech = 10;
-                const totalShield = shieldPerMech * bolsters.length;
-                this.enemy.addShield(totalShield);
-                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120,
-                    `BOLSTER +${totalShield} SHIELD`, '#ff8800');
-                bolsters.forEach(m => {
-                    m._bolsterTickCount = (m._bolsterTickCount || 0) + 1;
-                });
-                // Every 3rd shared tick, surge the boss's next attack.
-                const sharedTick = bolsters[0]._bolsterTickCount;
-                if (sharedTick % 3 === 0) {
-                    this.enemy._bolsterDamageMult = 2;
-                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 160,
-                        `BOLSTER × ${bolsters.length}: NEXT HIT 2×`, '#ffaa00');
-                    AudioMgr.playSound('upgrade');
-                }
-            }
-        }
+        // v1.9.35 — Compiler Bolster Mech support tick migrated into the
+        // BossMinionRoster's perTurnPassive callback (registered at the
+        // Compiler spawn site). The single tickPassives() call earlier
+        // in this method now drives both Tesseract orb passives AND
+        // Compiler bolster ticks, dispatched by the roster config.
         // --- THE COMPILER: Recompile (every 3 turns, debuffs → buffs) ---
         // Converts any debuff effects on the boss into an attack buff of
         // equal magnitude. Teaches players that pressure must be sustained,
@@ -18153,6 +18115,40 @@ async startTurn() {
     // default QTE timing". Each entry is the BASE attack visual; the
     // executeAction branches re-trigger VFX for damage application,
     // suppressed via _alignedVfxFired below.
+    // v1.9.35 — shared Tesseract Prime fragment spawn factory. Used by
+    // the boss spawn site AND by the BossMinionRoster resummon rule so
+    // both paths produce orbs with identical stats / flags / pacifist
+    // gating. Set `announceMaterialise` to true to also fire the
+    // materialise VFX + sparks (used on resummon, not on initial spawn
+    // since the spawn already plays its own announcement).
+    _tesseractSpawnFragments(boss, announceMaterialise) {
+        const TESS_ROLES = [
+            { role: 'heart',  hp: 60, color: '#ff3355', name: 'Tesseract Heart'  },
+            { role: 'aegis',  hp: 40, color: '#3a8bff', name: 'Tesseract Aegis'  },
+            { role: 'hex',    hp: 35, color: '#bc13fe', name: 'Tesseract Hex'    },
+            { role: 'mender', hp: 50, color: '#4ade80', name: 'Tesseract Mender' }
+        ];
+        TESS_ROLES.forEach((spec, i) => {
+            const m = new Minion(boss.x, boss.y, boss.minions.length + 1, false, 3);
+            m.name = spec.name;
+            m.maxHp = spec.hp;
+            m.currentHp = spec.hp;
+            m.dmg = 0;
+            m._isTessFragment = true;
+            m._tessRole = spec.role;
+            m._tessShapeIdx = i;
+            m._tessOrbColor = spec.color;
+            m._pacifist = true;
+            m.spawnTimer = 1.0;
+            boss.minions.push(m);
+            if (announceMaterialise) {
+                ParticleSys.createShockwave(m.x, m.y, spec.color, 26);
+                ParticleSys.createSparks(m.x, m.y, spec.color, 12);
+                if (this.triggerVFX) this.triggerVFX('materialize', null, m);
+            }
+        });
+    },
+
     _resolveAttackVfx(type, isUpgraded) {
         // Class-specific basic attack VFX (set 1-1 with classes).
         // v1.9.34 — split into aimVfxType (the per-class CHARGE that plays

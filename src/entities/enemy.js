@@ -310,22 +310,17 @@ class Enemy extends Entity {
             }
 
             // --- HIVE PROTOCOL SPECIAL LOGIC ---
-            // v1.9.0. Boss now resummons drones every N turns (4 in
-            // phases 1-2, 3 in phase 3 — see Game._applyBossPhaseMechanic
-            // which sets `_hiveResummonEvery`). Skipped if the swarm is
-            // already at cap or boss HP is critical (so the death-spiral
-            // turn doesn't get hijacked by a swarm refresh).
-            if (this.name === "HIVE PROTOCOL") {
-                const everyN = this._hiveResummonEvery || 4;
-                this._hiveTurnCounter = (this._hiveTurnCounter || 0) + 1;
-                const livingDrones = (this.minions || []).filter(m =>
-                    m && m._isHiveDrone && m.currentHp > 0
-                ).length;
+            // v1.9.35 — resummon cadence migrated to BossMinionRoster.
+            // The roster's `cadenceFn` reads `_hiveResummonEvery` (set by
+            // Game._applyBossPhaseMechanic on phase transitions) and
+            // increments `_hiveTurnCounter` to track the cadence. The
+            // low-HP death-spiral guard stays here because it's not a
+            // swarm property — it's a boss AI safety rail.
+            if (this.name === "HIVE PROTOCOL" && this.minionRoster) {
                 const lowHp = this.currentHp < this.maxHp * 0.3;
-                if (this._hiveTurnCounter % everyN === 0 && livingDrones < 5 && !lowHp) {
+                if (!lowHp && this.minionRoster.shouldRespawn(0)) {
                     return { type: 'summon_hive', val: 0 };
                 }
-                // Otherwise fall through to the standard boss-move pick.
             }
 
             // --- TESSERACT PRIME SPECIAL LOGIC ---
