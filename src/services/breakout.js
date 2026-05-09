@@ -319,10 +319,24 @@ const ROOMS = [
                 wait: 'enemy_turn'
             },
             {
-                story: 'EXECUTE 12 incoming. Use what you learned. SHIELD up, then PARRY the ring on yourself.',
-                action: 'Defend the EXECUTE. Then ATTACK while WEAK fades.',
+                // v1.9.47 — split this synthesis beat into a defend phase
+                // (spotlight on defend die, advances when the player
+                // defends) and a strike phase (spotlight on attack die,
+                // advances when the enemy dies). Previous single-beat
+                // design left the defend spotlight stuck on the die for
+                // the entire rest of the fight because the wait was
+                // 'enemy_dies' — the spotlight never refreshed mid-beat.
+                story: 'EXECUTE 12 incoming. Use what you learned. SHIELD up first.',
+                action: 'Defend the EXECUTE. PARRY the ring on yourself.',
                 sub: 'EXECUTE INCOMING · PARRY THE RING',
                 spot: 'die:defend',
+                wait: 'die_used:defend'
+            },
+            {
+                story: 'Block landed. Now strike while WEAK fades on the cipher.',
+                action: 'ATTACK to finish the cipher.',
+                sub: 'COUNTER STRIKE · CLOSE THE GAP',
+                spot: 'die:attack',
                 wait: 'enemy_dies'
             }
         ]
@@ -485,10 +499,20 @@ const CLASS_ROOM_3 = {
                 wait: 'die_used'
             },
             {
-                story: 'It will hit hard. Defend the strike, then chain another SPARK next turn.',
-                action: 'SHIELD yourself. End turn. Then strike again.',
+                // v1.9.47 — split: defend phase advances the moment the
+                // shield die lands so the spotlight does not linger on
+                // the defend die through the rest of the fight.
+                story: 'It will hit hard. Shield yourself before the strike.',
+                action: 'SHIELD yourself, then end turn.',
                 sub: 'PROTOCOL CYCLE · DEFEND',
                 spot: 'die:defend',
+                wait: 'die_used:defend'
+            },
+            {
+                story: 'Block primed. Now chain another SPARK to close the kill.',
+                action: 'Drag SPARK onto the corrupted process.',
+                sub: 'COUNTER · GLYPH CHAIN',
+                spot: 'die:signature',
                 wait: 'enemy_dies'
             }
         ]
@@ -522,10 +546,20 @@ const CLASS_ROOM_3 = {
                 wait: 'die_used'
             },
             {
+                // v1.9.47 — split so the defend spotlight clears the
+                // moment the shield die lands instead of sticking on
+                // the die for the rest of the fight.
                 story: 'Stack a second SHIELD die for the multi-hit barrage.',
-                action: 'DEFEND for the chained strikes. End turn.',
+                action: 'DEFEND for the chained strikes.',
                 sub: 'BARRAGE INCOMING · PLATES STACKING',
                 spot: 'die:defend',
+                wait: 'die_used:defend'
+            },
+            {
+                story: 'Plates stacked. End turn and weather the barrage; finish on the rebound.',
+                action: 'End turn, then strike to drop the turret.',
+                sub: 'WALL HOLDS · TERMINATE',
+                spot: null,
                 wait: 'enemy_dies'
             }
         ]
@@ -594,10 +628,20 @@ const CLASS_ROOM_3 = {
                 wait: 'die_used'
             },
             {
-                story: 'Defend, end turn, then use the bonus reroll to find the kill shot.',
-                action: 'SHIELD up. End turn. Then REROLL to chase another VOLLEY.',
-                sub: 'CYCLE STABLE · ROLL FOR KILL',
+                // v1.9.47 — split so the defend spotlight clears as
+                // soon as the shield die lands; the reroll + finish
+                // phase runs without a stale die-highlight.
+                story: 'Defend the officer\'s strike before they reset their plan.',
+                action: 'SHIELD up.',
+                sub: 'CYCLE STABLE · DEFEND',
                 spot: 'die:defend',
+                wait: 'die_used:defend'
+            },
+            {
+                story: 'End turn, then use the bonus reroll to find the kill shot.',
+                action: 'Reroll if the hand is dry, then ATTACK.',
+                sub: 'TEMPO LOOP · TERMINATE',
+                spot: null,
                 wait: 'enemy_dies'
             }
         ]
