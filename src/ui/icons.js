@@ -31,21 +31,23 @@ export const ICONS = {
 
     // -------- CLASS ICONS --------
     classTactician: _wrap(`<path d="M12 3 Q9 3 9 6 Q9 8 11 9 L9 14 L7 14 L7 17 L17 17 L17 14 L15 14 L13 9 Q15 8 15 6 Q15 3 12 3 Z" fill="currentColor" fill-opacity="0.22"/><path d="M5 21 L19 21" stroke-width="2.4"/><circle cx="12" cy="6" r="0.9" fill="currentColor"/>`),
-    // v1.9.45 — Arcanist: hooded mage with a floating glyph crystal + arcane halo arc.
-    // Replaces the prior abstract circle+triangle which read as "glowing
-    // ball over a doorstep" rather than a caster figure. Now: peaked
-    // hooded silhouette with a dark inner hood, a single glowing eye
-    // (currentColor → tints purple in the menu palette), a floating
-    // diamond rune crystal above, a thin halo arc cradling the rune,
-    // cloak fold lines for depth, and small mana sparks at the sides.
-    classArcanist: _wrap(`<path d="M5 6 Q12 2 19 6" stroke-width="1.1" stroke-opacity="0.55" fill="none"/><path d="M12 2 L14 5 L12 8 L10 5 Z" fill="currentColor" fill-opacity="0.7"/><path d="M12 2 L14 5 L12 8 L10 5 Z" stroke-width="1.2"/><path d="M11.4 4 L12.6 5 L11.4 6 L10.4 5 Z" fill="#ffffff" fill-opacity="0.55" stroke="none"/><path d="M12 9 Q7 9 6 14 L5 22 L19 22 L18 14 Q17 9 12 9 Z" fill="currentColor" fill-opacity="0.30"/><path d="M9 12 Q12 11 15 12 L14 16 Q12 17 10 16 Z" fill="#0a0a18" stroke="none"/><circle cx="12" cy="14" r="1" fill="currentColor" stroke="none"/><path d="M8.5 16 L7.6 22 M15.5 16 L16.4 22" stroke-width="0.7" stroke-opacity="0.55" fill="none"/><circle cx="3" cy="12" r="0.7" fill="currentColor" stroke="none"/><circle cx="21" cy="12" r="0.7" fill="currentColor" stroke="none"/><path d="M3 8 L4.5 8.8 M21 8 L19.5 8.8" stroke-width="1" stroke-opacity="0.7"/>`, { sw: 1.4 }),
-    // v1.9.45 — Bloodstalker: aggressive predator mask with slanted dark
-    // eye sockets, glowing red eyes (currentColor — tints red in the
-    // class palette), a row of jagged fangs, cheek slashes, and pointed
-    // ear-tip spikes. Replaces the prior wavy fungal-blob shape that
-    // read as "biological smear" rather than the lethal vampire fantasy
-    // the class actually plays.
-    classBloodstalker: _wrap(`<path d="M5 5 L12 2 L19 5 L20 10 L18 13 L16 15 L14 17 L12 21 L10 17 L8 15 L6 13 L4 10 Z" fill="currentColor" fill-opacity="0.40"/><path d="M5 5 L12 2 L19 5 L20 10 L18 13 L16 15 L14 17 L12 21 L10 17 L8 15 L6 13 L4 10 Z" stroke-width="1.2"/><path d="M6 5 L5 1 L8 5 M18 5 L19 1 L16 5" stroke-width="1.1" stroke-opacity="0.85" fill="none"/><path d="M7 8 L11 7 L11 11 L8 12 Z" fill="#0a0a18" stroke="none"/><path d="M13 7 L17 8 L16 12 L13 11 Z" fill="#0a0a18" stroke="none"/><circle cx="9" cy="9.4" r="1.05" fill="currentColor" stroke="none"/><circle cx="15" cy="9.4" r="1.05" fill="currentColor" stroke="none"/><path d="M5 12 L7 13 M17 13 L19 12" stroke-width="0.7" stroke-opacity="0.65" fill="none"/><path d="M8 14 L9 18 L10 14 L11 19 L12 14 L13 19 L14 14 L15 18 L16 14" stroke-width="1.4" stroke-linejoin="miter" fill="none"/><path d="M8.5 14 Q12 14.6 15.5 14" stroke-width="0.9" stroke-opacity="0.55" fill="none"/>`, { sw: 1.3 }),
+    // v1.9.46 — Arcanist: open spellbook with arcane runes floating
+    // around it. Replaces the v1.9.45 hooded-mage attempt that read
+    // as a generic star/pentagram at the menu's small render size.
+    // Composition: open book V-shape with a vertical spine + page
+    // lines on each leaf, a horizontal eye-sigil rune hovering above
+    // the book, and four geometric runes orbiting the corners
+    // (triangle / hexagon / cross / diamond) — each shape is distinct
+    // so the corners don't read as a uniform pattern.
+    classArcanist: _wrap(`<path d="M3 8 Q12 5 21 8 L21 17 Q12 14 3 17 Z" fill="currentColor" fill-opacity="0.45"/><path d="M12 6 L12 16" stroke-width="1.5"/><path d="M5 10 L11 9.5 M5 12 L11 11.5 M5 13.8 L11 13.3" stroke-width="0.6" stroke-opacity="0.7" fill="none"/><path d="M13 9.5 L19 10 M13 11.5 L19 12 M13 13.3 L19 13.8" stroke-width="0.6" stroke-opacity="0.7" fill="none"/><path d="M10 2 Q12 0.8 14 2 Q12 3.2 10 2 Z" fill="currentColor" fill-opacity="0.85" stroke="none"/><circle cx="12" cy="2" r="0.55" fill="#ffffff" stroke="none"/><path d="M3 4 L5 6 L1 6 Z" fill="currentColor" fill-opacity="0.75" stroke="none"/><path d="M21 4 L22.5 5 L22.5 7 L21 8 L19.5 7 L19.5 5 Z" fill="currentColor" fill-opacity="0.75" stroke="none"/><path d="M2 20 L5 20 M3.5 18.5 L3.5 21.5" stroke-width="1.2"/><path d="M21 19 L22.5 20.5 L21 22 L19.5 20.5 Z" fill="currentColor" fill-opacity="0.75" stroke="none"/>`, { sw: 1.4 }),
+    // v1.9.46 — Bloodstalker: red shark-style teeth bite with blood
+    // dripping, per direct user spec. No face, no body — just the
+    // iconic bite shape. Upper jaw row at top with five sharp fangs
+    // pointing down, lower jaw row at bottom with five fangs pointing
+    // up offset to interlock (closed bite mid-snap), and three blood
+    // teardrops dripping below. currentColor tints the whole thing
+    // red via the class palette.
+    classBloodstalker: _wrap(`<path d="M2 3 Q12 1 22 3 L22 7 L20 12 L18 7 L16 12 L14 7 L12 13 L10 7 L8 12 L6 7 L4 12 L2 7 Z" fill="currentColor"/><path d="M2 19 Q12 21 22 19 L22 15 L20 11 L18 15 L16 10 L14 15 L12 10 L10 15 L8 11 L6 15 L4 10 L2 15 Z" fill="currentColor"/><path d="M7 19 L7.6 20.5 L6.4 20.5 Z" fill="currentColor" stroke="none"/><circle cx="7" cy="21.2" r="0.7" fill="currentColor" stroke="none"/><path d="M12 20 L12.8 21.5 L11.2 21.5 Z" fill="currentColor" stroke="none"/><circle cx="12" cy="22.3" r="0.8" fill="currentColor" stroke="none"/><path d="M17 19 L17.6 20.5 L16.4 20.5 Z" fill="currentColor" stroke="none"/><circle cx="17" cy="21.2" r="0.7" fill="currentColor" stroke="none"/>`, { sw: 1 }),
     classAnnihilator: _wrap(`<path d="M12 2 L14 8 L20 6 L17 12 L22 14 L16 15 L17 21 L12 17 L7 21 L8 15 L2 14 L7 12 L4 6 L10 8 Z" fill="currentColor" fill-opacity="0.22"/><circle cx="12" cy="13" r="2" fill="currentColor"/>`),
     classSentinel: _wrap(`<path d="M12 2 L20 5 L20 12 Q20 18 12 22 Q4 18 4 12 L4 5 Z" fill="currentColor" fill-opacity="0.18"/><path d="M12 7 L12 17 M8 12 L16 12" stroke-width="2.2"/>`),
     classSummoner: _wrap(`<path d="M12 22 L12 12"/><path d="M12 12 Q6 12 5 6 Q11 6 12 12 Z" fill="currentColor" fill-opacity="0.3"/><path d="M12 12 Q18 12 19 6 Q13 6 12 12 Z" fill="currentColor" fill-opacity="0.3"/><path d="M12 12 Q9 9 9 5" stroke-width="1.4"/><path d="M12 12 Q15 9 15 5" stroke-width="1.4"/>`),
