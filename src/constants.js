@@ -409,18 +409,18 @@ const UPGRADES_POOL = [
     { id: 'coolant_loop',    name: "Coolant Loop",    desc: "When your Shield breaks, heal 2 HP.",                                                icon: ICONS.relicCoolant },
 
     // --- V1.1 relic expansion ---
-    { id: 'aegis_cycler',    name: "Aegis Cycler",    desc: "At start of turn, convert 5 Shield into +3 DMG next attack.",                        icon: ICONS.relicShield, classLocked: 'sentinel' },
+    { id: 'aegis_cycler',    name: "Aegis Cycler",    desc: "At start of turn, convert 5 Shield into +3 DMG next attack.",                        icon: ICONS.sentAegisCycler, classLocked: 'sentinel' },
     { id: 'static_capacitor',name: "Static Capacitor",desc: "At start of turn, zap a random enemy for 10 DMG if you hold 3+ Mana.",              icon: ICONS.overcharge, rarity: 'gold' },
     { id: 'shard_reactor',   name: "Shard Reactor",   desc: "Gain +1 Mana whenever a minion dies (yours or enemy's).",                            icon: ICONS.relicBattery },
-    { id: 'swarm_beacon',    name: "Swarm Beacon",    desc: "Your minions deal +1 DMG for each minion alive.",                                   icon: ICONS.minion, classLocked: 'summoner' },
+    { id: 'swarm_beacon',    name: "Swarm Beacon",    desc: "Your minions deal +1 DMG for each minion alive.",                                   icon: ICONS.sumSwarmBeacon, classLocked: 'summoner' },
     { id: 'leyline_cache',   name: "Leyline Cache",   desc: "Gain +50% Fragments from combat rewards.",                                           icon: ICONS.relicManifest },
     { id: 'bait_drone',      name: "Bait Drone",      desc: "Summon a decoy minion each combat. HP scales with sector (so late-game drones actually survive a round).", icon: ICONS.minion },
     { id: 'retaliator',      name: "Retaliator",      desc: "After taking 20+ damage in a single hit, deal 10 DMG back.",                         icon: ICONS.thorns },
-    { id: 'dice_cache',      name: "Dice Cache",      desc: "Your first reroll each turn is free (doesn't consume a reroll).",                  icon: ICONS.metaReroll, classLocked: 'tactician' },
-    { id: 'hex_fragment',    name: "Hex Fragment",    desc: "Skill dice cost -1 Mana (minimum 0).",                                               icon: ICONS.classArcanist, classLocked: 'arcanist' },
+    { id: 'dice_cache',      name: "Dice Cache",      desc: "Your first reroll each turn is free (doesn't consume a reroll).",                  icon: ICONS.tactDiceCache, classLocked: 'tactician' },
+    { id: 'hex_fragment',    name: "Hex Fragment",    desc: "Skill dice cost -1 Mana (minimum 0).",                                               icon: ICONS.arcHexFragment, classLocked: 'arcanist' },
     { id: 'iron_lung',       name: "Iron Lung",       desc: "The first Defend die each turn grants +5 extra Shield.",                             icon: ICONS.defend },
-    { id: 'dusk_protocol',   name: "Dusk Protocol",   desc: "After turn 5, deal +10% damage per turn beyond.",                                    icon: ICONS.relicTitan,    classLocked: 'annihilator' },
-    { id: 'dawn_protocol',   name: "Dawn Protocol",   desc: "First attack of each combat deals +100% damage.",                                    icon: ICONS.relicTitan,    classLocked: 'annihilator' },
+    { id: 'dusk_protocol',   name: "Dusk Protocol",   desc: "After turn 5, deal +10% damage per turn beyond.",                                    icon: ICONS.annDuskProtocol, classLocked: 'annihilator' },
+    { id: 'dawn_protocol',   name: "Dawn Protocol",   desc: "First attack of each combat deals +100% damage.",                                    icon: ICONS.annDawnProtocol, classLocked: 'annihilator' },
     { id: 'reflection_glass',name: "Reflection Glass",desc: "Dodging an attack deals 8 DMG to the attacker.",                                     icon: ICONS.relicHologram },
     { id: 'venom_edge',      name: "Venom Edge",      desc: "Attacks apply 1 stack of Poison (2 DMG/turn for 3 turns).",                          icon: ICONS.attack },
     { id: 'kinetic_battery', name: "Kinetic Battery", desc: "Every 5 shields gained grants +1 Reroll.",                                           icon: ICONS.metaReroll, rarity: 'gold' },
@@ -429,10 +429,10 @@ const UPGRADES_POOL = [
     { id: 'warden_protocol', name: "Warden Protocol", desc: "Your minions gain +3 Shield at start of each turn.",                                 icon: ICONS.defend,        classLocked: 'sentinel' },
     { id: 'tempo_loop',      name: "Tempo Loop",      desc: "Each unused die at end of turn grants +3 Shield next turn.",                         icon: ICONS.classTactician },
     { id: 'echo_chamber',    name: "Echo Chamber",    desc: "First skill die each combat costs 0 Mana.",                                          icon: ICONS.classArcanist, rarity: 'gold', classLocked: 'arcanist' },
-    { id: 'nano_forge',      name: "Nano Forge",      desc: "At combat start, spawn a free Minion at +50% stats.",                                icon: ICONS.minion,        rarity: 'gold', classLocked: 'summoner' },
+    { id: 'nano_forge',      name: "Nano Forge",      desc: "At combat start, spawn a free Minion at +50% stats.",                                icon: ICONS.sumNanoForge,        rarity: 'gold', classLocked: 'summoner' },
     { id: 'celestial_sync',  name: "Celestial Sync",  desc: "Perfect QTEs also heal 3 HP.",                                                       icon: ICONS.intentHeal },
     { id: 'dervish_mode',    name: "Dervish Mode",    desc: "After 3 attacks in a single turn, gain +2 Mana.",                                    icon: ICONS.relicBattery },
-    { id: 'iron_vault',      name: "Iron Vault",      desc: "Shield does not decay at end of turn (max 50 carry).",                               icon: ICONS.relicShield,   rarity: 'gold', classLocked: 'sentinel' },
+    { id: 'iron_vault',      name: "Iron Vault",      desc: "Shield does not decay at end of turn (max 50 carry).",                               icon: ICONS.sentIronVault,   rarity: 'gold', classLocked: 'sentinel' },
 
     // --- Part 5 relic expansion ---
     { id: 'reinforced_shell',name: "Reinforced Shell",desc: "+20 Max HP.",                                                                        icon: ICONS.relicHull,     instant: true },
@@ -445,7 +445,7 @@ const UPGRADES_POOL = [
     // plumbs into damage / reroll / mana / shield events.
     { id: 'kindling',        name: "Kindling",        desc: "Bleed and Poison ticks deal +1 damage per stack of Kindling.",                       icon: ICONS.bldAttack },
     { id: 'last_stand',      name: "Last Stand",      desc: "Below 33% HP: +30% damage, +1 Reroll at turn start.",                                icon: ICONS.bldDefend },
-    { id: 'spark_battery',   name: "Spark Battery",   desc: "First reroll each combat grants +1 Mana.",                                           icon: ICONS.metaReroll, classLocked: 'tactician' },
+    { id: 'spark_battery',   name: "Spark Battery",   desc: "First reroll each combat grants +1 Mana.",                                           icon: ICONS.tactSparkBattery, classLocked: 'tactician' },
     { id: 'siphon_blade',    name: "Siphon Blade",    desc: "Killing an enemy heals 4 HP and refunds 1 Mana.",                                    icon: ICONS.bldAttack, rarity: 'gold' },
 
     // ── Module expansion (round 2) — synergy fillers and class-leaning
@@ -470,7 +470,7 @@ const UPGRADES_POOL = [
     { id: 'vermilion_hunger',name: "Vermilion Hunger",desc: "Each kill grants +1 extra Blood Tier.",                                              icon: ICONS.bldMana,                      classLocked: 'bloodstalker' },
     { id: 'predators_mark',  name: "Predator's Mark", desc: "Killing a Bleeding enemy heals 5 HP and grants +1 Reroll.",                          icon: ICONS.bldDefend,                    classLocked: 'bloodstalker' },
     // Arcanist (mana). hex_fragment + echo_chamber + flux_overload = 3.
-    { id: 'flux_overload',   name: "Flux Overload",   desc: "Flux Regen grants +1 extra Mana per turn.",                                          icon: ICONS.classArcanist,               classLocked: 'arcanist' },
+    { id: 'flux_overload',   name: "Flux Overload",   desc: "Flux Regen grants +1 extra Mana per turn.",                                          icon: ICONS.arcFluxOverload,               classLocked: 'arcanist' },
 
     // --- Sector 0 Breakout reward — Cellkey Shard ---
     // Awarded once, on completion of the Cage Guardian fight in the

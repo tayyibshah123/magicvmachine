@@ -285,6 +285,33 @@ export const ICONS = {
     bldMana: _wrap(`<path d="M12 3 Q7 10 7 14 Q7 20 12 20 Q17 20 17 14 Q17 10 12 3 Z" fill="currentColor" fill-opacity="0.35"/><path d="M12 8 L15 12 L12 16 L9 12 Z" stroke-width="1.2"/>`, { sw: 1.6 }),
     bldMinion: _wrap(`<path d="M6 11 Q6 5 12 5 Q18 5 18 11 L18 14 L15 14 L15 18 L9 18 L9 14 L6 14 Z" fill="currentColor" fill-opacity="0.22"/><circle cx="9" cy="10" r="1.4" fill="currentColor"/><circle cx="15" cy="10" r="1.4" fill="currentColor"/><path d="M10 14 L11 16 M14 14 L13 16" stroke-width="1.4"/>`, { sw: 1.6 }),
 
+    // -------- v1.9.43 — CLASS-LOCKED RELIC ICONS --------
+    // Each class-locked relic that previously shared a generic class icon
+    // gets a unique signature so the relic strip reads as distinct
+    // entries instead of three identical pips. Designs hint at the
+    // relic's mechanic (refresh arrow on dice_cache, sun arc on dawn,
+    // etc.) so the player learns the icon by association.
+
+    // Tactician
+    tactDiceCache:    _wrap(`<rect x="4" y="9" width="8" height="9" rx="1.5" fill="currentColor" fill-opacity="0.18"/><rect x="11" y="6" width="8" height="9" rx="1.5" fill="currentColor" fill-opacity="0.30"/><circle cx="7.5" cy="13" r="0.9" fill="currentColor"/><circle cx="14.5" cy="10" r="0.9" fill="currentColor"/><path d="M19 19 Q22 16 19 13" stroke-width="1.6"/><path d="M19 13 L17 13 L17 15" stroke-width="1.4"/>`, { sw: 1.5 }),
+    tactSparkBattery: _wrap(`<rect x="6" y="7" width="11" height="10" rx="1" fill="currentColor" fill-opacity="0.20"/><rect x="17" y="10" width="2" height="4" fill="currentColor" fill-opacity="0.35"/><path d="M11 8 L9 12 L12 12 L10 16" stroke-width="1.6" stroke="currentColor"/><path d="M14 9 L14 15" stroke-width="0.8" stroke-dasharray="1 2"/>`, { sw: 1.4 }),
+
+    // Sentinel
+    sentAegisCycler:  _wrap(`<path d="M8 3 L13 5 L13 8 Q13 12 8 14 Q3 12 3 8 L3 5 Z" fill="currentColor" fill-opacity="0.30"/><path d="M14 12 L19 12" stroke-width="1.6"/><path d="M17 10 L19 12 L17 14" stroke-width="1.4"/><path d="M20 16 L20 22 M16 18 L24 18 M18 22 L22 22" stroke-width="1.6"/>`, { sw: 1.4 }),
+    sentIronVault:    _wrap(`<path d="M12 3 L20 6 L20 12 Q20 18 12 22 Q4 18 4 12 L4 6 Z" fill="currentColor" fill-opacity="0.22"/><rect x="9" y="10" width="6" height="6" rx="0.6" fill="currentColor" fill-opacity="0.55"/><circle cx="12" cy="13" r="1.2" fill="#0a0a18"/><path d="M12 14 L12 16" stroke="#0a0a18" stroke-width="1"/><path d="M10 8 Q10 6 12 6 Q14 6 14 8 L14 10" stroke-width="1.4"/>`, { sw: 1.5 }),
+
+    // Arcanist
+    arcHexFragment:   _wrap(`<path d="M12 3 L19 7 L19 15 L12 19 L5 15 L5 7 Z" fill="currentColor" fill-opacity="0.28"/><path d="M12 3 L19 7 L19 15 L12 19 L5 15 L5 7 Z" stroke-width="1.6"/><path d="M14 11 Q11 14 11 17 Q11 19 13 19 Q15 19 15 17 Q15 14 14 11 Z" fill="currentColor" fill-opacity="0.55"/>`, { sw: 1.4 }),
+    arcFluxOverload:  _wrap(`<path d="M11 2 L5 11 L10 11 L8 18 L15 9 L11 9 Z" fill="currentColor" fill-opacity="0.35"/><path d="M16 14 Q14 17 14 20 Q14 22 16 22 Q18 22 18 20 Q18 17 16 14 Z" fill="currentColor" fill-opacity="0.45"/><path d="M14 19 L18 19" stroke-width="0.8"/>`, { sw: 1.5 }),
+
+    // Annihilator
+    annDuskProtocol:  _wrap(`<path d="M3 16 Q12 4 21 16 Z" fill="currentColor" fill-opacity="0.18"/><path d="M3 16 L21 16" stroke-width="1.8"/><path d="M3 16 L21 16" stroke-width="0.8" stroke-dasharray="2 2" stroke="currentColor" stroke-opacity="0.6"/><circle cx="12" cy="16" r="3" fill="currentColor" fill-opacity="0.5"/><path d="M6 19 L6 21 M9 20 L9 22 M12 20 L12 22 M15 20 L15 22 M18 19 L18 21" stroke-width="1.2"/>`, { sw: 1.4 }),
+    annDawnProtocol:  _wrap(`<path d="M3 16 Q12 4 21 16 Z" fill="currentColor" fill-opacity="0.35"/><path d="M3 16 L21 16" stroke-width="1.8"/><path d="M12 4 L12 1" stroke-width="1.6"/><path d="M5 8 L3 6 M19 8 L21 6 M7 12 L5 11 M17 12 L19 11" stroke-width="1.4"/><circle cx="12" cy="16" r="3.5" fill="currentColor" fill-opacity="0.6"/>`, { sw: 1.4 }),
+
+    // Summoner
+    sumSwarmBeacon:   _wrap(`<circle cx="12" cy="12" r="3" fill="currentColor" fill-opacity="0.55"/><circle cx="12" cy="12" r="6" stroke-width="1.4" stroke-opacity="0.7"/><circle cx="12" cy="12" r="9" stroke-width="1" stroke-opacity="0.5" stroke-dasharray="2 2"/><circle cx="6" cy="6" r="1.6" fill="currentColor"/><circle cx="18" cy="6" r="1.6" fill="currentColor"/><circle cx="6" cy="18" r="1.6" fill="currentColor"/><circle cx="18" cy="18" r="1.6" fill="currentColor"/>`, { sw: 1.4 }),
+    sumNanoForge:     _wrap(`<path d="M4 14 L20 14 L18 18 L6 18 Z" fill="currentColor" fill-opacity="0.30"/><rect x="9" y="6" width="6" height="3" rx="0.6" fill="currentColor" fill-opacity="0.45"/><path d="M12 3 L12 6" stroke-width="1.4"/><path d="M9 8 L7 12 M15 8 L17 12" stroke-width="1.2"/><circle cx="12" cy="11" r="1.4" fill="currentColor"/><path d="M11 13 L13 13" stroke-width="0.8"/>`, { sw: 1.4 }),
+
     // -------- ANNIHILATOR CLASS DICE (orange/explosive industrial) --------
     anhAttack: _wrap(`<path d="M13 2 L6 12 L11 12 L9 22 L18 10 L13 10 Z" fill="currentColor" fill-opacity="0.35"/><circle cx="12" cy="12" r="8" stroke-width="1.2" stroke-dasharray="3 2"/><circle cx="18" cy="6" r="2" fill="currentColor" fill-opacity="0.4"/>`, { sw: 1.6 }),
     anhDefend: _wrap(`<path d="M4 16 L8 12 L12 16 L16 12 L20 16" stroke-width="2"/><path d="M8 12 L4 8" stroke-width="1.6"/><path d="M16 12 L20 8" stroke-width="1.6"/><path d="M12 16 L12 20" stroke-width="1.4"/><circle cx="12" cy="8" r="2" stroke-width="1.4"/>`, { sw: 1.6 }),
