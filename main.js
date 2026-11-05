@@ -166,9 +166,18 @@ if (document.readyState === 'loading') {
 //      existing controller (i.e., this is an UPDATE, not a fresh
 //      install), show the #sw-update-banner
 //   4. Refresh button posts SKIP_WAITING + reloads the page
-//   5. controllerchange listener catches the case where the SW
-//      activates without our prompt (e.g., another tab triggered it)
-//      and reloads silently to keep code in sync
+//   5. controllerchange ignores the first worker claiming this page,
+//      then reloads when an existing worker is replaced (including
+//      updates triggered by another tab) to keep code in sync
+let reloadingForServiceWorkerUpdate = false;
+function reloadForServiceWorkerUpdate() {
+    // The activation event and Refresh's fallback can arrive in either
+    // order. They must share a guard so one update only reloads once.
+    if (reloadingForServiceWorkerUpdate) return;
+    reloadingForServiceWorkerUpdate = true;
+    window.location.reload();
+}
+
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./service-worker.js').then(reg => {
@@ -204,15 +213,19 @@ if ('serviceWorker' in navigator) {
             console.warn('Service worker registration failed:', err);
         });
 
-        // controllerchange fires when the active SW is replaced. We
-        // reload the page so the running JS matches the new SW's
-        // cached resources. Guard with a flag so a user-initiated
-        // refresh-via-banner doesn't double-reload.
-        let reloading = false;
+        // clients.claim() also fires controllerchange on a FIRST install.
+        // Reloading then interrupts consent/onboarding as soon as the
+        // offline download finishes. Only reload when a worker that was
+        // already controlling this page is replaced by a different one.
+        // Track the first claim so later updates in this session still
+        // reload, and guard against duplicate update notifications.
+        let currentController = navigator.serviceWorker.controller;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (reloading) return;
-            reloading = true;
-            window.location.reload();
+            const previousController = currentController;
+            currentController = navigator.serviceWorker.controller;
+            if (!previousController || !currentController
+                || previousController === currentController) return;
+            reloadForServiceWorkerUpdate();
         });
     });
 }
@@ -233,7 +246,7 @@ function showUpdateBanner(reg) {
         // Fallback: if the SW didn't respond, force a reload after
         // a short window so the player isn't stuck staring at the
         // banner.
-        setTimeout(() => window.location.reload(), 600);
+        setTimeout(reloadForServiceWorkerUpdate, 600);
     };
     const onDismiss = () => {
         banner.classList.remove('active');

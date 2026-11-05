@@ -10,9 +10,9 @@
 // "phase_shift enemy survives a damage call" test is the regression
 // guard.
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-beforeEach(() => {
+beforeEach(async () => {
     // Game.init() reads canvas + various DOM elements. Provide all of them
     // up front so the module's import-time DOM mutations don't blow up.
     document.body.innerHTML = `
@@ -26,6 +26,17 @@ beforeEach(() => {
             <div id="combat-log"></div>
         </div>
     `;
+    // These tests exercise damage and phase state without Game.init().
+    // Keep real phase mechanics, but prevent cinematic timers from outliving
+    // the fixture or reading Game.canvas, which is never initialised here.
+    const { Game } = await import('../game.js');
+    vi.spyOn(Game, 'triggerPhaseGlitch').mockResolvedValue();
+    vi.spyOn(Game, 'triggerBossZoom').mockImplementation(() => {});
+    vi.spyOn(Game, 'showPhaseBanner').mockResolvedValue();
+});
+
+afterEach(() => {
+    vi.restoreAllMocks();
 });
 
 describe('takeDamage — basic flow', () => {
