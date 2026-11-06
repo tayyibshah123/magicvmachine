@@ -1,4 +1,4 @@
-import { test, expect, storagePrefix } from './fixtures.js';
+import { test, expect, edition, storagePrefix } from './fixtures.js';
 
 test.setTimeout(90000);
 
@@ -97,7 +97,21 @@ test('first installation preserves consent and onboarding without an automatic r
     await expect(page.locator('#sw-update-banner')).toBeHidden();
     await page.locator('#onb-next-1').click();
     await expect(page.locator('#screen-char-select')).toBeVisible();
-    expect(await page.evaluate(() => window.Game.tutorialAutoRun)).toBe(true);
+    if (edition === 'guided') {
+        expect(await page.evaluate(async () => {
+            const { Learning } = await import('/src/services/learning.js');
+            return { mode: Learning.getMode(), coreComplete: Learning.coreComplete(),
+                tutorialAutoRun: Game.tutorialAutoRun };
+        })).toEqual({ mode: 'guided', coreComplete: false, tutorialAutoRun: false });
+        await expect(page.locator('.char-card:visible')).toHaveCount(2);
+        await page.locator('.char-card[data-class-id="tactician"]').click();
+        await page.locator('#btn-char-detail-confirm').click();
+        await expect.poll(() => page.evaluate(async () => {
+            const { Breakout } = await import('/src/services/breakout.js');
+            return { active: Breakout.isActive(), room: Breakout._roomIdx,
+                checkpointRoom: Game._guidedRun?.core?.roomIndex, classId: Game.player?.classId };
+        })).toEqual({ active: true, room: 0, checkpointRoom: 0, classId: 'tactician' });
+    } else expect(await page.evaluate(() => window.Game.tutorialAutoRun)).toBe(true);
     expect(navigations).toHaveLength(1);
 });
 
@@ -106,9 +120,14 @@ test('installed game cold-opens offline with HTTP cache cleared and resumes its 
     await seedOnce(context);
     let offline = false;
     const moduleResponses = [];
+    const onlineStartupPaths = new Set();
+    const origin = new URL(testInfo.project.use.baseURL).origin;
     page.on('response', response => {
-        const path = new URL(response.url()).pathname;
-        if (offline && path.endsWith('.js')) moduleResponses.push({ path, status: response.status(), worker: response.fromServiceWorker() });
+        const url = new URL(response.url());
+        const path = url.pathname;
+        if (url.origin !== origin || !/\.(?:js|css)$/.test(path)) return;
+        if (offline) moduleResponses.push({ path, status: response.status(), worker: response.fromServiceWorker() });
+        else onlineStartupPaths.add(path);
     });
     try {
         await openReturningMenu(page);
@@ -124,7 +143,14 @@ test('installed game cold-opens offline with HTTP cache cleared and resumes its 
         const cdp = await context.newCDPSession(page);
         await cdp.send('Network.clearBrowserCache');
         await cdp.detach();
-        expect(await cacheSnapshot(page), 'clearing HTTP cache must preserve worker CacheStorage').toEqual(before);
+        const afterClear = await cacheSnapshot(page);
+        for (const baseline of before) {
+            const preserved = afterClear.find(cache => cache.name === baseline.name);
+            expect(preserved, `HTTP-cache clearing preserves worker cache ${baseline.name}`).toBeDefined();
+            // Background music may add entries between snapshots. Every
+            // previously cached entry must still survive the HTTP clear.
+            expect(preserved.urls).toEqual(expect.arrayContaining(baseline.urls));
+        }
         // Leave the application document so its module graph cannot survive
         // this launch. The browser profile and installed worker remain intact.
         await page.goto('about:blank');
@@ -134,8 +160,9 @@ test('installed game cold-opens offline with HTTP cache cleared and resumes its 
         // Version metadata is consumed by the update check rather than the
         // startup module graph. Load it explicitly while still offline.
         await page.evaluate(async () => { await import('/src/version.js'); });
-        for (const path of ['/main.js', '/src/game.js', '/src/version.js', '/src/services/onboarding.js']) {
-            expect(moduleResponses, `offline module ${path} is supplied by the installed worker`).toContainEqual({ path, status: 200, worker: true });
+        expect([...onlineStartupPaths].some(path => path.endsWith('.css')), 'the baseline includes real startup stylesheets').toBe(true);
+        for (const path of new Set([...onlineStartupPaths, '/main.js', '/src/game.js', '/src/version.js', '/src/services/onboarding.js'])) {
+            expect(moduleResponses, `offline startup resource ${path} is supplied by the installed worker`).toContainEqual({ path, status: 200, worker: true });
         }
         expect(await page.evaluate(() => window.__mvmQaDocument)).not.toBe(documentId);
         expect(await page.evaluate(() => localStorage.getItem('mvm_qa_pwa_seed_count'))).toBe('1');
