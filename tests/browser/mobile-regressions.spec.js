@@ -3,7 +3,7 @@ import { openGame, configureEncounter, tap, dragDie } from './game-driver.js';
 import { STATE } from '../../src/constants.js';
 
 test('all six class controls leave every die reachable at narrow phone widths', async ({ page }, testInfo) => {
-  test.setTimeout(180000);
+  test.setTimeout(240000);
   await openGame(page, { returning: true });
   const measurements = [];
   for (const { width, accessible = false } of [{ width: 360 }, { width: 390 }, { width: 414 }, { width: 360, accessible: true }]) {
@@ -19,7 +19,7 @@ test('all six class controls leave every die reachable at narrow phone widths', 
     });
     for (const classId of ['tactician', 'sentinel', 'arcanist', 'summoner', 'bloodstalker', 'annihilator']) {
       await configureEncounter(page, { classId, autoQTE: true });
-      for (const hand of (accessible ? [6, 8] : [3, 4, 5, 6, 8])) {
+      for (const hand of (accessible ? [6, 8, 9, 10] : [3, 4, 5, 6, 8, 9, 10])) {
         await page.evaluate(hand => {
           Game.dicePool = Array.from({ length: hand }, (_, id) => ({ id,
             type: id % 2 ? 'TAC_DEFEND' : 'TAC_ATTACK', used: false, selected: false }));
@@ -73,8 +73,8 @@ test('all six class controls leave every die reachable at narrow phone widths', 
       }
     }
   }
-  expect(measurements).toHaveLength(102);
-  await testInfo.attach('102-phone-class-hand-layouts', { body: JSON.stringify(measurements, null, 2), contentType: 'application/json' });
+  expect(measurements).toHaveLength(150);
+  await testInfo.attach('150-phone-class-hand-layouts', { body: JSON.stringify(measurements, null, 2), contentType: 'application/json' });
 });
 
 test('native save and return preserves a combat checkpoint and abandon requires confirmation', async ({ page }) => {
