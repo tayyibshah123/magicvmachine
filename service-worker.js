@@ -26,11 +26,6 @@ const SHELL_ASSETS = [
     './src/styles/polish.css',
     './src/styles/bracket-screens.css',
     './src/styles/vfx.css',
-    './music/synth1.ogg',
-    './music/synth2.ogg',
-    './music/synth3.ogg',
-    './music/synth4.ogg',
-    './music/lofi.ogg',
     './intro.png',
     './icon.svg',
     './icon-maskable.svg',
@@ -84,6 +79,8 @@ const SHELL_ASSETS = [
     './src/services/perf-trace.js',
     './src/services/save-sync.js',
     './src/services/retired-upgrades.js',
+    './src/services/run-rules.js',
+    './src/services/offline-audio.js',
     './src/services/turn-digest.js',
     './src/services/ui.js',
     './src/services/vfx.js',
@@ -98,8 +95,27 @@ const SHELL_ASSETS = [
     './sfx/laser.ogg',       './sfx/mana.ogg',         './sfx/meteor.ogg',
     './sfx/orbital_strike.ogg', './sfx/overclock.ogg', './sfx/print.ogg',
     './sfx/siren.ogg',       './sfx/snap.ogg',         './sfx/ticking.ogg',
-    './sfx/upgrade.ogg',     './sfx/zap.ogg'
+    './sfx/upgrade.ogg',     './sfx/zap.ogg',
+    './sfx/attack.m4a',      './sfx/beam.m4a',         './sfx/buy.m4a',
+    './sfx/chains.m4a',      './sfx/click.m4a',        './sfx/dart.m4a',
+    './sfx/defend.m4a',      './sfx/digital_sever.m4a', './sfx/earthquake.m4a',
+    './sfx/explosion.m4a',   './sfx/glitch_attack.m4a', './sfx/grid_fracture.m4a',
+    './sfx/heartbeat.m4a',   './sfx/hex_barrier.m4a',  './sfx/hit.m4a',
+    './sfx/laser.m4a',       './sfx/mana.m4a',         './sfx/meteor.m4a',
+    './sfx/orbital_strike.m4a', './sfx/overclock.m4a', './sfx/print.m4a',
+    './sfx/siren.m4a',       './sfx/snap.m4a',         './sfx/ticking.m4a',
+    './sfx/upgrade.m4a',     './sfx/zap.m4a'
 ];
+
+// Music is large and codec-dependent. Install the playable shell first;
+// the page requests only the format selected by the real audio resolver.
+const MUSIC_ASSETS = [
+    './music/synth1.ogg', './music/synth2.ogg', './music/synth3.ogg',
+    './music/synth4.ogg', './music/lofi.ogg',
+    './music/synth1.m4a', './music/synth2.m4a', './music/synth3.m4a',
+    './music/synth4.m4a', './music/lofi.m4a'
+];
+const MUSIC_URLS = new Set(MUSIC_ASSETS.map(asset => new URL(asset, SCOPE).href));
 
 self.addEventListener('install', event => {
     // Don't auto-skipWaiting any more — the user-facing update
@@ -127,6 +143,30 @@ self.addEventListener('message', event => {
     if (event.data && event.data.type === 'SKIP_WAITING') {
         self.skipWaiting();
     }
+    if (event.data && event.data.type === 'CACHE_MUSIC') {
+        const urls = event.data.urls;
+        const valid = Array.isArray(urls) && urls.length > 0 && urls.length <= 5
+            && new Set(urls).size === urls.length && urls.every(url => MUSIC_URLS.has(url));
+        if (!valid) {
+            event.ports?.[0]?.postMessage({ type: 'MUSIC_CACHE_RESULT', ok: false, cached: [], missing: [], error: 'Invalid music request' });
+            return;
+        }
+        event.waitUntil((async () => {
+            const cached = [], missing = [];
+            try {
+                const cache = await caches.open(ACTIVE_CACHE);
+                // Serial downloads avoid competing with onboarding resources
+                // and keep peak network/memory pressure small on phones.
+                for (const url of urls) {
+                    try {
+                        if (!(await cache.match(url))) await cache.add(url);
+                        cached.push(url);
+                    } catch (_) { missing.push(url); }
+                }
+            } catch (_) { missing.push(...urls); }
+            event.ports?.[0]?.postMessage({ type: 'MUSIC_CACHE_RESULT', ok: missing.length === 0, cached, missing });
+        })());
+    }
 });
 
 self.addEventListener('activate', event => {
@@ -135,7 +175,17 @@ self.addEventListener('activate', event => {
             const sameEdition = key.startsWith(SCOPE.pathname + '|' + CACHE_PREFIX);
             const legacy = CACHE_PREFIX === 'mvm-stable-shell-v' && key.startsWith('mvm-shell-v')
                 && await (await caches.open(key)).match(new URL('index.html', SCOPE));
-            if ((sameEdition && key !== ACTIVE_CACHE) || legacy) await caches.delete(key);
+            if ((sameEdition && key !== ACTIVE_CACHE) || legacy) {
+                // Unchanged tracks can survive an app update without another
+                // large download. Never read another edition's music cache.
+                const previous = await caches.open(key);
+                const current = await caches.open(ACTIVE_CACHE);
+                for (const url of MUSIC_URLS) {
+                    const response = await previous.match(url);
+                    if (response && !(await current.match(url))) await current.put(url, response);
+                }
+                await caches.delete(key);
+            }
         }))).then(() => self.clients.claim())
     );
 });

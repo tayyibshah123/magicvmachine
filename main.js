@@ -10,6 +10,7 @@ import { Unlocks } from './src/services/unlocks.js';
 import { Gesture } from './src/services/gesture.js';
 import { NativeBack } from './src/services/native-back.js';
 import { NativeSplash } from './src/services/native-splash.js';
+import { OfflineAudio } from './src/services/offline-audio.js';
 
 // Detect device perf tier BEFORE Game.init so the game can read `Perf.tier`.
 Perf.detect();
@@ -98,6 +99,7 @@ if (consent === null) {
 
 // Expose for the Settings panel (Privacy section will wire a toggle to these).
 window.MVMConsent = { read: readConsent, write: writeConsent };
+window.MVMOfflineAudio = OfflineAudio;
 
 Hints.init();
 Unlocks.init();
@@ -199,6 +201,7 @@ function reloadForServiceWorkerUpdate() {
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./service-worker.js').then(reg => {
+            OfflineAudio.start(reg);
             // updatefound fires when a new SW is being installed.
             reg.addEventListener('updatefound', () => {
                 const newWorker = reg.installing;

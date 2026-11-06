@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFile, access } from 'node:fs/promises';
+import { readFile, access, open } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+for (const argument of process.argv.slice(2)) {
+  assert.equal(argument, '--native', 'Unknown validation option: ' + argument);
+}
 
 const root = resolve(fileURLToPath(new URL('../', import.meta.url)));
 const bundle = join(root, 'www');
@@ -19,6 +23,14 @@ for (const [, asset] of assets.matchAll(/'([^']+)'/g)) {
   assert(asset.startsWith('./') && !asset.includes('..'), 'Cache assets must remain inside the bundle');
   await access(join(bundle, asset === './' ? 'index.html' : asset));
   cachedPaths.add(new URL(asset, 'https://bundle.invalid/').pathname);
+}
+const musicAssets = worker.match(/const MUSIC_ASSETS = \[([\s\S]*?)\];/)?.[1];
+assert(musicAssets, 'Service worker must declare its allowed offline music URLs');
+const musicPaths = new Set();
+for (const [, asset] of musicAssets.matchAll(/'([^']+)'/g)) {
+  assert(/^\.\/music\/[^/]+\.(?:ogg|m4a)$/.test(asset), 'Offline music must use a local known audio path');
+  await access(join(bundle, asset));
+  musicPaths.add(new URL(asset, 'https://bundle.invalid/').pathname);
 }
 
 // Walk the actual HTML, static/literal-dynamic module imports, CSS imports
@@ -75,9 +87,40 @@ for (const path of sourceClosure) {
   assert.deepEqual(await readFile(join(bundle, path)), await readFile(join(root, path)),
     'Bundle must contain the exact tested source dependency: ' + path);
 }
+// Media URLs are chosen at runtime, so the static import walk cannot see
+// them. Exercise the real resolver for browser codec policies and native.
+const native = process.argv.includes('--native');
+const { AudioMgr } = await import(pathToFileURL(join(bundle, 'src/audio.js')).href);
+const media = [...Object.values(AudioMgr.TRACKS).flatMap(track => track.sources || [track.src]),
+  ...[...AudioMgr.SFX_IDS].map(id => './sfx/' + id + '.ogg')];
+const policies = native ? [{ name: 'native AAC', ogg: 'probably', aac: 'probably', native: true }]
+  : [{ name: 'browser Vorbis', ogg: 'probably', aac: 'probably' },
+    { name: 'AAC-only browser', ogg: '', aac: 'probably' },
+    { name: 'AAC-preferred browser', ogg: 'maybe', aac: 'probably' }];
+const audioPaths = new Set();
+for (const policy of policies) {
+  globalThis.document = { createElement: () => ({ canPlayType: mime => mime.includes('ogg') ? policy.ogg : policy.aac }) };
+  globalThis.window = { Capacitor: { isNativePlatform: () => !!policy.native } };
+  AudioMgr._preferredFmt = null;
+  for (const source of media) {
+    const url = AudioMgr._resolveTrackSrc(source);
+    const path = new URL(url, 'https://bundle.invalid/').pathname;
+    assert(cachedPaths.has(path) || musicPaths.has(path), policy.name + ' audio missing from offline cache policy: ' + url);
+    await access(join(bundle, path));
+    audioPaths.add(path);
+  }
+}
+for (const path of audioPaths) {
+  const handle = await open(join(bundle, path), 'r');
+  const header = Buffer.alloc(12);
+  try { await handle.read(header, 0, header.length, 0); } finally { await handle.close(); }
+  if (path.endsWith('.ogg')) assert.equal(header.toString('ascii', 0, 4), 'OggS', 'Invalid Vorbis container: ' + path);
+  else assert.equal(header.toString('ascii', 4, 8), 'ftyp', 'Invalid AAC/MP4 container: ' + path);
+}
 for (const excluded of ['node_modules', 'src/__tests__', 'tests', 'package.json']) {
   let exists = true;
   try { await access(join(bundle, excluded)); } catch { exists = false; }
   assert.equal(exists, false, 'Development-only path must not ship: ' + excluded);
 }
-console.log('Bundle version, offline module/CSS closure (' + bundleClosure.size + ' paths), menu stamp and development-file exclusions passed.');
+console.log('Bundle version, offline module/CSS closure (' + bundleClosure.size + ' paths), runtime audio ('
+  + audioPaths.size + ' paths), menu stamp and development-file exclusions passed.');
