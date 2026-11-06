@@ -20,6 +20,7 @@
 
 const PREFIX = 'mvm_';
 import { PLAYER_CLASSES, UPGRADES_POOL, CORRUPTED_RELICS, MODULE_FUSIONS } from '../constants.js';
+import { validRunRules } from './run-rules.js';
 const RECOVERY_KEY = 'mvm_import_recovery_v1';
 const rewardIds = new Set([...UPGRADES_POOL, ...CORRUPTED_RELICS, ...MODULE_FUSIONS].map(item => item.id));
 const plain = value => !!value && typeof value === 'object' && !Array.isArray(value)
@@ -56,7 +57,7 @@ function validate(blob) {
             try { save = JSON.parse(value); } catch (_) { return false; }
             if (!plain(save) || !plain(save.player) || typeof save.player.classId !== 'string'
                 || !PLAYER_CLASSES.some(cls => cls.id === save.player.classId)
-                || (save.v !== undefined && (!Number.isInteger(save.v) || save.v < 1 || save.v > 4))
+                || (save.v !== undefined && (!Number.isInteger(save.v) || save.v < 1 || save.v > 5))
                 || !Number.isFinite(save.player.hp) || save.player.hp < 0
                 || !Number.isFinite(save.player.maxHp) || save.player.maxHp <= 0
                 || (save.player.relics !== undefined && (!Array.isArray(save.player.relics)
@@ -71,6 +72,7 @@ function validate(blob) {
             if (nodeIds.size !== save.map.nodes.length || !nodeIds.has(save.currentIdx || 'start')
                 || !save.map.nodes.every(node => node.connections.every(id => nodeIds.has(id)))) return false;
             const pending = save.pendingReward;
+            if (save.runRules != null && !validRunRules(save.runRules)) return false;
             if (pending && (!plain(pending) || pending.v !== 1 || !['offered', 'committed'].includes(pending.status)
                 || pending.payoutState !== 'settled' || typeof pending.nodeId !== 'string'
                 || !Number.isInteger(pending.sector) || pending.sector < 1

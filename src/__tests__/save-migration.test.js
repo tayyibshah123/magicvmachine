@@ -9,7 +9,7 @@ describe('save schema migration', () => {
     it('adds an empty reward receipt to v3 checkpoints without inventing a free reward', async () => {
         const { Game } = await import('../game.js');
         const source = { v: 3, sector: 2, player: { classId: 'tactician', hp: 17, maxHp: 30, relics: [] } };
-        expect(Game._migrateSave(source)).toEqual({ ...source, v: 4, pendingReward: null });
+        expect(Game._migrateSave(source)).toEqual({ ...source, v: 5, pendingReward: null, runRules: null });
         expect(source).not.toHaveProperty('pendingReward');
     });
     it('migrates a pre-versioning (no `v`) save to current schema', async () => {
