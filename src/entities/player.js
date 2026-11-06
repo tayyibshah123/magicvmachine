@@ -108,9 +108,9 @@ class Player extends Entity {
         // recursion by short-circuiting on the second entry (_dupeMarker).
         if (Game && Game._customRelicPickDupe && !relic._dupeMarker) {
             const dupe = Object.assign({}, relic, { _dupeMarker: true });
-            // Defer the dupe to the next tick so both relics show in the
-            // list UI and synergies can check the combined set.
-            setTimeout(() => { this.addRelic(dupe); }, 0);
+            // Both pickups, their passive effects and synergy checks must
+            // settle before the caller persists its selected reward.
+            this.addRelic(dupe);
         }
         // Custom Run: Cursed Relics — picking a relic damages the player.
         // Fires once per real pickup (skip duplicated _dupeMarker entries so

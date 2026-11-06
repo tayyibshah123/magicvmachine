@@ -332,13 +332,14 @@ describe('victory continuation ownership', () => {
         expect(Game._recapPayload).toBe(replacementPayload);
     });
 
-    it('does not award rewards after quitting during a kill cinematic', async () => {
+    it('does not award rewards after confirmed abandonment during a kill cinematic', async () => {
         Game.enemy.currentHp = 0;
         const pause = deferred();
         vi.spyOn(Game, 'sleep').mockReturnValueOnce(pause.promise);
         const win = Game.winCombat();
 
-        Game.quitRun();
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        Game.abandonRun();
         pause.resolve();
         await win;
 

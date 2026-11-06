@@ -537,14 +537,6 @@ const CORRUPTED_RELICS = [
 // content/option/quality-of-life — never raw power. The Sanctuary UI
 // renders this list under the "SPARKS" tab.
 const SPARKS_UPGRADES = [
-    { id: 's_archive',      name: "Run Archive",      cost: 5,  category: 'codex',    desc: "Every completed run is saved to a Sanctuary library tab." },
-    { id: 's_corrupt_pool', name: "Corruption Index", cost: 8,  category: 'codex',    desc: "Glitch events show one extra Corrupted Module option." },
-    { id: 's_event_pool',   name: "Anomaly Detector", cost: 8,  category: 'modifier', desc: "Unlock 4 new event branches with rare narrative outcomes." },
-    { id: 's_extra_choice', name: "Foresight",        cost: 10, category: 'loadout',  desc: "Every reward screen shows one extra option to choose from." },
-    { id: 's_skill_seed',   name: "Skill Database",   cost: 10, category: 'modifier', desc: "Voodoo / Overcharge / Reckless relics appear as +1 extra option." },
-    { id: 's_dice_seed',    name: "Tactic Library",   cost: 12, category: 'loadout',  desc: "Start each run with one random Dice Upgrade pre-installed." },
-    { id: 's_class_unlock', name: "Heretic Protocol", cost: 12, category: 'modifier', desc: "Unlock the HERETIC custom-run modifier (start with 1 Corrupted Module, +25% Frags)." },
-    { id: 's_relic_pick',   name: "Curator's Choice", cost: 15, category: 'loadout',  desc: "Pick your starting Module from 3 options." },
     { id: 's_signature',    name: "Signature Forge",  cost: 20, category: 'class',    desc: "Permanently unlock Signature Tier 2 + Tier 3 evolutions." },
     { id: 's_endless',      name: "Endless Spire",    cost: 25, category: 'marquee',  desc: "After Sector 5, continue into escalating Endless Sectors with personal-best tracking." },
     { id: 's_archivist_key',name: "Archivist Key",    cost: 1000, category: 'marquee',desc: "Unlock THE ARCHIVIST as a required boss after Sector 5. Defeat to choose: continue Endless or return home." }
