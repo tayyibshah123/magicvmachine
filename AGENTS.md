@@ -76,10 +76,18 @@ Files **never** to commit: `node_modules/`, `www/` (regenerated),
 | `npm run check` | Full tests, bundle validation and browser checks with one result summary. |
 | `npm run check:comprehensive` | Also run shuffled tests to check fixture isolation. |
 | `npm run build:www` | Wipes `www/`, rebuilds the shippable web bundle. |
-| `npm run android:sync` | `build:www` then `npx cap sync android`. |
+| `npm run build:native` | Compact Android bundle with AAC music. |
+| `npm run android:sync` | `build:native` then `npx cap sync android`. |
 | `npm run compress:music` | Generates `.m4a` siblings for `.ogg` tracks. |
+| `npm run compress:audio` | Generates music and SFX AAC compatibility files. |
 
 No bundler, no transpiler. Browsers load `src/*.js` directly as ES modules.
+
+Browser publication retains both audio formats. Validate native builds with
+`node scripts/validate-build.mjs --native`; a compact native bundle must never
+be published as the browser edition. Keep required code and both small SFX
+formats in the worker shell. Music uses the acknowledged selected-format
+background download; Settings shows when offline audio is ready.
 
 There is no dev-server script. To preview locally, serve the repo root
 with any static server (e.g. `npx http-server -p 8080`) and open

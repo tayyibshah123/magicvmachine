@@ -51,6 +51,14 @@ Guided in `guided/`. Source branches remain separate; generated output is
 never committed to the source branches. Verify both public URLs after Pages
 finishes its deployment.
 
+Use `npm run build:www` for browser publication and `npm run build:native`
+for the compact wrapper. Browser output must retain Vorbis and AAC files;
+runtime codec validation is part of the build gate. Required shell files and
+both small SFX formats install first. The worker then acknowledges its
+selected-format music download, which Settings reports as ready or incomplete.
+Cold offline media checks wait for that acknowledgement, clear the HTTP cache,
+and verify real advancing music playback and decoded SFX in a new document.
+
 Use `helpers/combat-fixture.js` for reset state, clocks and explicit optional
 cosmetic stubs. Opt into real rendering through `helpers/combat-renderer.js`.
 Do not globally mock QTE, damage, death or victory: a test must choose any

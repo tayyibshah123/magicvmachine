@@ -5,9 +5,25 @@ import { AudioMgr } from '../audio.js';
 export const OfflineAudio = {
     status: { state: 'unavailable', cached: [], missing: [] },
     ready: null,
+    _showStatus() {
+        const parent = typeof document !== 'undefined' && document.querySelector?.('.settings-pane[data-pane="audio"]');
+        if (!parent) return;
+        let label = parent.querySelector('#offline-audio-status');
+        if (!label) {
+            label = document.createElement('p');
+            label.id = 'offline-audio-status';
+            label.className = 'setting-help';
+            label.setAttribute('role', 'status');
+            parent.appendChild(label);
+        }
+        label.textContent = this.status.state === 'ready' ? 'Offline audio: ready.'
+            : this.status.state === 'downloading' ? 'Offline audio: downloading. You can keep playing.'
+                : 'Offline audio is incomplete. Reopen online to finish downloading.';
+    },
     start(registration) {
         if (this.ready) return this.ready;
         this.status = { state: 'downloading', cached: [], missing: [] };
+        this._showStatus();
         this.ready = (async () => {
             try {
                 const worker = await new Promise((resolve, reject) => {
@@ -51,6 +67,7 @@ export const OfflineAudio = {
             } catch (error) {
                 this.status = { state: 'incomplete', cached: [], missing: [], error: String(error.message || error) };
             }
+            this._showStatus();
             return this.status;
         })();
         return this.ready;
