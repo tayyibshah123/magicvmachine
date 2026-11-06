@@ -36,6 +36,7 @@ test('an actual short-core checkpoint survives a cold refresh without completing
   const events = [];
   await playUntil(page, s => s.breakout && s.room === 0 && s.dice.length > 0 && !s.storyboard && !s.locked,
     { timeout: 45000, events });
+  await expect(page.locator('#btn-reroll')).toBeHidden();
   const checkpoint = await page.evaluate(() => JSON.parse(Game._readSaveRaw()));
   expect(checkpoint.guidance.core.roomIndex).toBe(0);
   await page.reload();

@@ -64,6 +64,7 @@
 .learning-rule-warning strong { color: #ffcb6b; }
 .learning-rule-danger strong { color: #ff879e; }
 body.guided-core #class-ability-widget { visibility: hidden; pointer-events: none; }
+body.learning-basic-hand .reroll-wrapper { visibility: hidden; pointer-events: none; }
 @media (max-width: 360px) {
     .learning-objective--combat { left: 70px; right: 70px; padding: 3px; }
     .learning-objective-text { font-size: .76rem; }

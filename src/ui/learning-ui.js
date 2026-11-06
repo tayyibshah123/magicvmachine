@@ -70,7 +70,7 @@ export function decorateClassDetail(game, { mode, coreComplete = false, classId 
     if (!overlay || mode !== 'guided' || coreComplete) return null;
     const selected = classId || overlay.dataset.selected;
     const text = selected === 'annihilator'
-        ? 'After core training, Guided starts Annihilator with 3 dice and 2 free rerolls per turn. Its full 6-die hand and HP-paid rerolls arrive later.'
+        ? 'After core training, Guided starts Annihilator with 3 dice. Hand control introduces locking dice and the reroll cost of 20% Max HP. Its full 6-die hand arrives later.'
         : 'Guided starts with a smaller hand. Your full kit arrives during the run.';
     const note = element('p', 'learning-class-detail-note', text);
     note.id = 'learning-class-detail-note';

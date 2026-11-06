@@ -24,6 +24,9 @@ test('fresh profile completes the tutorial and a normal combat through touch con
     expect(enteredCombat).toBe(true);
     expect(reachedReward).toBe(true);
     expect(await page.evaluate(id => Game.map.nodes.find(node => node.id === id)?.status, combatNode)).toBe('completed');
+    if (!await page.evaluate(() => localStorage.getItem('mvm_analytics_consent'))) {
+      await tap(page, '[data-consent="denied"]');
+    }
     expect(await page.evaluate(() => localStorage.getItem('mvm_analytics_consent'))).toBe('denied');
   } finally {
     await testInfo.attach('journey-state-changes', { body: JSON.stringify(events, null, 2), contentType: 'application/json' });

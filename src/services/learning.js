@@ -16,7 +16,7 @@ export const GUIDED_ROUTE = Object.freeze([
 // Existing v1 snapshots retain their original ten-node route and rules.
 export const GUIDED_ROUTE_V2 = Object.freeze([
     { type: 'combat', lesson: 'basics', title: 'Read, strike, guard' },
-    { type: 'combat', lesson: 'reroll', title: 'Keep useful dice', features: ['hpCosts'] },
+    { type: 'combat', lesson: 'reroll', title: 'Keep useful dice', features: ['reroll', 'hpCosts'] },
     { type: 'rest', lesson: 'rest', title: 'One recovery choice' },
     { type: 'combat', lesson: 'resources', title: 'Pay for a skill', features: ['mana', 'skills', 'hpCosts'] },
     { type: 'shop', lesson: 'shop', title: 'Spend run Fragments' },
@@ -210,8 +210,8 @@ export const Learning = {
             .filter(id => FEATURES.includes(id));
         return { v: 2, route: 'guided-v2', classId, sector: 1, stage: 0, lesson: 'basics', combats: 0,
             completed: [], entered: [], foundationComplete: false,
-            features: unique(['attack', 'defend', 'timing', 'endTurn', 'reroll', ...introduced,
-                ...(classId === 'summoner' ? ['minion', 'classAbility'] : [])]), core: null, finished: false };
+            features: unique(['attack', 'defend', 'timing', 'endTurn', ...introduced,
+                ...(classId === 'summoner' ? ['minion'] : [])]), core: null, finished: false };
     },
     restoreRun(value) {
         if (value === null || value === undefined) return null;

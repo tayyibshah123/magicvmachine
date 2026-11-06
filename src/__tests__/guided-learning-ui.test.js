@@ -141,7 +141,8 @@ describe('guided choices and reference UI', () => {
         decorateClassDetail(Game, { mode: 'guided', coreComplete: false, classId: 'annihilator' });
         const note = document.getElementById('learning-class-detail-note');
         expect(note.previousElementSibling).toBe(description);
-        expect(note.textContent).toContain('3 dice and 2 free rerolls per turn');
+        expect(note.textContent).toContain('3 dice');
+        expect(note.textContent).toContain('20% Max HP');
         expect(description.textContent).toBe('Full class: six dice and HP-paid rerolls.');
         decorateClassDetail(Game, { mode: 'full', classId: 'annihilator' });
         expect(document.getElementById('learning-class-detail-note')).toBeNull();

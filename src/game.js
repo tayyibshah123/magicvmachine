@@ -2212,7 +2212,7 @@ startDrag(e, die, el) {
     _canSelectDie(die) {
         // Locking a useful die is free, even when its eventual reroll will
         // cost HP or use a class token. Only rerollDice commits that cost.
-        return !!die && !die.used;
+        return !!die && !die.used && this._canGuidedFeature('reroll');
     },
 
     _cancelDrag() {
@@ -19732,6 +19732,7 @@ async startTurn() {
             || this._combatActionDepth > 0 || this.paused || document.hidden) return;
         if (this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT
             && this.currentState !== STATE.BREAKOUT) return;
+        if (!this._canGuidedFeature('reroll')) return;
         // Sector 0 Breakout — let the teaching controller know the
         // player rerolled so beats keyed on `wait: 'reroll'` can
         // advance.
@@ -26320,6 +26321,7 @@ drawEffects() {
     },
 
     _showLearningObjective() {
+        document.body.classList.toggle('learning-basic-hand', this._isGuidedRun() && !this._canGuidedFeature('reroll'));
         const combat = [STATE.COMBAT, STATE.BREAKOUT, STATE.TUTORIAL_COMBAT].includes(this.currentState);
         const rules = APP_EDITION === 'guided' && combat ? this.getBossRules() : [];
         if (rules.length && !this._practiceSession) {

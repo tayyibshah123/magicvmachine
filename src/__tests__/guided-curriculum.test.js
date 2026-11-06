@@ -33,6 +33,30 @@ function enter(lesson, sector = 1) {
 }
 
 describe('production ordinary intents and separately staged threats', () => {
+    it('keeps reroll input and die locking unavailable until their actual lesson', () => {
+        const { Game } = active;
+        Game.rollDice(3);
+        Game.rerolls = 2;
+        const hand = structuredClone(Game.dicePool);
+        expect(Game._canSelectDie(Game.dicePool[0])).toBe(false);
+        Game.rerollDice();
+        expect(Game.dicePool).toEqual(hand);
+        expect(Game.rerolls).toBe(2);
+        enter('reroll');
+        expect(Game._canSelectDie(Game.dicePool[0])).toBe(true);
+        Game.rerollDice();
+        expect(Game.rerolls).toBe(1);
+    });
+
+    it('keeps essential Spirits available before introducing the separate Grove control', () => {
+        const { Game, Learning } = active;
+        Game._guidedRun = Learning.createRun('summoner');
+        expect(Game._canGuidedFeature('minion')).toBe(true);
+        expect(Game._canGuidedFeature('classAbility')).toBe(false);
+        expect(Learning.allowDie('SUM_MINION', Game._guidedRun)).toBe(true);
+        enter('allies');
+        expect(Game._canGuidedFeature('classAbility')).toBe(true);
+    });
     it('does not smuggle a summon or low-HP heal into the first patrol through the ordinary intent fallback', () => {
         const { Game, Enemy, ENEMIES } = active;
         const drone = new Enemy(ENEMIES.find(enemy => enemy.name === 'Sentry Drone'), 1);
