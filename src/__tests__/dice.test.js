@@ -260,10 +260,12 @@ describe('sealed hand guarantees', () => {
         expect(Game.sealedDie).not.toBeNull();
         const previousPlayer = Game.player;
         stubTerminalServices();
+        Game._clearSave.mockReturnValue(true);
         // Keep actual run reset, class construction and map generation. Only
         // the subsequent screen rendering and persistence are boundaries.
         vi.spyOn(Game, 'changeState').mockImplementation(state => { Game.currentState = state; });
         localStorage.setItem('mvm_first_run_done', '1');
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
 
         Game.selectClass(PLAYER_CLASSES.find(config => config.id === classId));
 

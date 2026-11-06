@@ -28,6 +28,7 @@ import { Share } from './services/share.js';
 import { Assist } from './services/assist.js';
 import { Intel } from './services/intel.js';
 import { SaveSync } from './services/save-sync.js';
+import { RetiredUpgrades } from './services/retired-upgrades.js';
 import { Onboarding } from './services/onboarding.js';
 import { ClassBriefing } from './services/class-briefing.js';
 import { Perf } from './services/perf.js';
@@ -190,6 +191,16 @@ const Game = {
     },
 
     init() {
+        if (!SaveSync.recoverImport()) {
+            this._showErrorOverlay(new Error(SaveSync.lastImportError));
+            return;
+        }
+        const refund = RetiredUpgrades.recoverAndRefund();
+        if (!refund.ok) {
+            this._showErrorOverlay(new Error(refund.error));
+            return;
+        }
+        this._retiredRefundNotice = refund.refunded;
         // Idempotency guard — Game.init is called once at boot in
         // production, but a debug reload, hot-module replacement during
         // development, or a third-party harness re-importing the module
@@ -675,6 +686,7 @@ const Game = {
             }
             this._initiateConfirm = false;
             clearTimeout(this._initiateConfirmTimer);
+            if (haveSave) this._newRunConsent = { slot: this._activeSlot(), raw: this._readSaveRaw() };
             const startLabelEl = document.getElementById('btn-start-label');
             if (startLabelEl) startLabelEl.textContent = 'INITIATE RUN';
             const startWarnEl = document.getElementById('btn-start-warn');
@@ -690,6 +702,8 @@ const Game = {
             this.playIntro();
         });
         attachButtonEvent('btn-challenge', () => {
+            if (!this._confirmNewRun('start a Challenge')) return;
+            if (!this._clearSave()) { this.showHintToast?.('Could not replace the checkpoint. Existing progress is preserved.', 3000); return; }
             // Challenge Mode — boss rush with rest nodes between bosses. Skip
             // the storyboard / first-run tutorial since Challenge is a focused
             // attempt for returning players, not a fresh-install funnel.
@@ -703,9 +717,7 @@ const Game = {
             localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
             localStorage.setItem('mvm_first_run_done', '1');
             this.tutorialAutoRun = false;
-            // Wipe any pending prior run so the character picker starts a
-            // fresh Challenge gauntlet and doesn't resume a normal save.
-            this._clearSave();
+            // The confirmed checkpoint replacement succeeded before mode setup.
             const btnLoad = document.getElementById('btn-load-save');
             if (btnLoad) btnLoad.style.display = 'none';
             if (this.showPhaseBanner) {
@@ -770,7 +782,7 @@ const Game = {
                         ParticleSys.createFloatingText(540, 800, 'SAVE IMPORTED. RELOADING', COLORS.GOLD);
                         setTimeout(() => window.location.reload(), 900);
                     } else {
-                        ParticleSys.createFloatingText(540, 800, 'INVALID SAVE FILE', '#ff3355');
+                        ParticleSys.createFloatingText(540, 800, SaveSync.lastImportError || 'INVALID SAVE FILE', '#ff3355');
                     }
                 } catch (err) {
                     ParticleSys.createFloatingText(540, 800, 'IMPORT FAILED', '#ff3355');
@@ -820,7 +832,10 @@ const Game = {
         };
         attachButtonEvent('btn-settings', handleSettings);
         attachButtonEvent('btn-settings-main', handleSettings);
-        attachButtonEvent('btn-quit', () => this.quitRun());
+        attachButtonEvent('btn-quit', () => this.saveAndReturn());
+        attachButtonEvent('btn-map-return', () => this.saveAndReturn());
+        attachButtonEvent('btn-map-settings', handleSettings);
+        attachButtonEvent('btn-abandon-run', () => this.abandonRun());
         attachButtonEvent('btn-menu', () => this.changeState(STATE.MENU));
         attachButtonEvent('btn-retry-class', () => this.retrySameClass());
         attachButtonEvent('btn-combat-log', () => CombatLog.toggle());
@@ -3880,7 +3895,12 @@ startQTE(type, x, y, callback, opts) {
 
         switch(newState) {
             case STATE.MENU:
+                this._newRunConsent = null;
                 activate('screen-start');
+                if (this._retiredRefundNotice > 0) {
+                    this.showHintToast?.(`${this._retiredRefundNotice} Sparks refunded for retired upgrades. Permanent earnings are unchanged.`, 6500);
+                    this._retiredRefundNotice = 0;
+                }
                 Unlocks.applyMenuVisibility();
                 // Ascension tile (Roadmap Part 28.2) — gated separately
                 // from the Unlocks map since it shares the FIRST_RUN_COMPLETE
@@ -4432,8 +4452,6 @@ startQTE(type, x, y, callback, opts) {
               ids: ['m_greed', 'm_discount'] },
             { title: 'DICE TUNING', accent: '#bc13fe',
               ids: ['m_bias_attack', 'm_bias_defend', 'm_bias_mana', 'm_bias_minion'] },
-            { title: 'RUN OPTIONS', accent: '#00f3ff',
-              ids: ['s_archive', 's_corrupt_pool', 's_event_pool', 's_extra_choice', 's_skill_seed', 's_dice_seed', 's_class_unlock', 's_relic_pick'] },
             { title: 'ENDGAME', accent: '#ffd76a',
               ids: ['s_signature', 's_endless'] },
         ];
@@ -5780,6 +5798,8 @@ startQTE(type, x, y, callback, opts) {
     },
 
     selectClass(cls) {
+        if (!this._confirmNewRun('start a new run')) return;
+        if (!this._clearSave()) { this.showHintToast?.('Could not replace the checkpoint. Existing progress is preserved.', 3000); return; }
         AudioMgr.playSound('click');
         // Diag — run start event for the dump's gameplay log.
         try { Diag.event('run_start', { classId: cls && cls.id, asc: (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0 }); } catch (_) {}
@@ -5797,8 +5817,10 @@ startQTE(type, x, y, callback, opts) {
             localStorage.setItem('mvm_runs_started', String(n + 1));
         } catch (_) {}
 
-        // Wipe the active run save
-        this._clearSave();
+        // The confirmed checkpoint replacement succeeded before run setup.
+        this._newRunConsent = null;
+        this.pendingReward = null;
+        this._rewardContext = null;
         document.getElementById('btn-load-save').style.display = "none";
         
         // --- FIX: RESET ALL SEEN FLAGS ---
@@ -10132,6 +10154,7 @@ triggerSystemCrash() {
     },
 
     visitNode(node) {
+        if (this.pendingReward) { this.changeState(STATE.REWARD); return; }
         AudioMgr.playSound('click');
 
         if (node.type === 'start') return;
@@ -10975,7 +10998,7 @@ triggerSystemCrash() {
     // older files run through _migrateSave() before being consumed. Keeps
     // mid-run saves forward-compatible across class-rework / new-feature
     // deploys without forcing the player to restart.
-    SAVE_SCHEMA_VERSION: 3,
+    SAVE_SCHEMA_VERSION: 4,
 
     // ─── Save slots ────────────────────────────────────────────────
     // Three named slots (A / B / C) stored under per-slot keys. The
@@ -11030,26 +11053,14 @@ triggerSystemCrash() {
             // Reset the warned-flag on a successful write so the toast
             // re-fires if quota becomes a problem again later in the run.
             this._saveQuotaWarned = false;
+            return true;
         } catch (e) {
             console.warn('[saveGame] failed:', e);
             // Audit 2026-05 — quota / blocked-storage failures used to
             // pass silently. On long endless runs the run-state can hit
             // the ~5MB localStorage quota and the player would lose
-            // progress on next reload. Try to recover by pruning the
-            // oldest non-active slot once, then re-attempt the write.
-            // If it still fails, surface a toast so the player knows.
-            const isQuotaFail = e && (
-                e.name === 'QuotaExceededError' ||
-                e.code === 22 || e.code === 1014 // FF / iOS variants
-            );
-            if (isQuotaFail && !this._saveQuotaPrunedOnce) {
-                this._saveQuotaPrunedOnce = true;
-                this._pruneOldestSaveSlot(key);
-                try {
-                    localStorage.setItem(key, json);
-                    return; // recovered silently
-                } catch (_) { /* fall through to toast */ }
-            }
+            // progress on next reload. Preserve every named slot and let
+            // the player export or explicitly remove an old checkpoint.
             // Once-per-session toast — don't badger the player every save tick.
             if (!this._saveQuotaWarned) {
                 this._saveQuotaWarned = true;
@@ -11057,7 +11068,7 @@ triggerSystemCrash() {
                     if (typeof ParticleSys !== 'undefined' && ParticleSys.createFloatingText) {
                         ParticleSys.createFloatingText(
                             CONFIG.CANVAS_WIDTH / 2, 80,
-                            'STORAGE FULL — DELETE OLD SLOTS', '#ff3355'
+                            'SAVE FAILED. EXPORT OR MANAGE SAVE SLOTS', '#ff3355'
                         );
                     }
                     if (typeof AudioMgr !== 'undefined' && AudioMgr.playSound) {
@@ -11068,48 +11079,20 @@ triggerSystemCrash() {
                     }
                 } catch (_) { /* defensive only */ }
             }
-        }
-    },
-    // Audit 2026-05 quota recovery — drop the oldest non-active save
-    // slot so a fresh write has room. Reads the SAVE_SLOTS list, finds
-    // entries other than the active one, picks whichever has the
-    // smallest stored size as the "oldest" proxy (slots without a
-    // timestamp can't be sorted by date; size is a reasonable
-    // approximation since older saves tend to be smaller pre-endless).
-    _pruneOldestSaveSlot(activeKey) {
-        try {
-            const slots = (this.SAVE_SLOTS || ['A', 'B', 'C']).map(s => `mvm_save_v1__${s}`);
-            const candidates = slots.filter(k => k !== activeKey);
-            if (!candidates.length) return;
-            let pickKey = null;
-            let pickLen = Infinity;
-            for (const k of candidates) {
-                try {
-                    const raw = localStorage.getItem(k);
-                    if (raw && raw.length < pickLen) {
-                        pickKey = k;
-                        pickLen = raw.length;
-                    }
-                } catch (_) {}
-            }
-            if (pickKey) {
-                try { localStorage.removeItem(pickKey); } catch (_) {}
-                console.warn('[saveGame] quota recovery — pruned slot:', pickKey);
-            }
-        } catch (e) {
-            console.warn('[saveGame] prune failed:', e);
+            return false;
         }
     },
     _clearSave(slot) {
-        try { localStorage.removeItem(this._saveKey(slot)); } catch (_) {}
         // Also clear the legacy single-slot key on a wipe of slot A so a
         // stale blob can't resurrect on the next slot-A read. Previous
         // version called `this._clearSave()` here recursively, which
         // (a) never touched the legacy key it was meant to remove and
         // (b) re-entered itself with no args until the stack blew.
         if ((slot || this._activeSlot()) === 'A') {
-            try { localStorage.removeItem('mvm_save_v1'); } catch (_) {}
+            try { localStorage.removeItem('mvm_save_v1'); } catch (_) { return false; }
         }
+        try { localStorage.removeItem(this._saveKey(slot)); } catch (_) { return false; }
+        return true;
     },
     // Lightweight per-slot metadata for the picker. Reads each slot once.
     _listSaveSlots() {
@@ -11269,6 +11252,7 @@ triggerSystemCrash() {
         const data = {
             v: this.SAVE_SCHEMA_VERSION,
             combatRecovery: this._combatRecoverySnapshot(),
+            pendingReward: this.pendingReward || null,
             fragments: this.techFragments,
             meta: this.metaUpgrades,
             encrypted: this.encryptedFiles,
@@ -11306,7 +11290,7 @@ triggerSystemCrash() {
         };
         // Slot-aware write. Quota / blocked-storage errors are swallowed
         // by _writeSaveRaw so a save call from a UI flow can't bubble.
-        this._writeSaveRaw(JSON.stringify(data));
+        return this._writeSaveRaw(JSON.stringify(data));
     },
 
     // Save-data migration registry. Each entry runs IN ORDER and bumps
@@ -11343,6 +11327,12 @@ triggerSystemCrash() {
                     data.combatRecovery = typeof data.player?.hp === 'number' && data.player.hp <= 0
                         ? { outcome: 'death', enemy: null, encounterType: null } : null;
                 }
+            }
+        },
+        {
+            from: 3, to: 4,
+            migrate(data) {
+                data.pendingReward = null;
             }
         }
         // Future migrations append here. Example:
@@ -11422,6 +11412,7 @@ triggerSystemCrash() {
             // run as a normal one.
             Challenge.markActive(this.challengeMode);
             this.activePacts = new Set(Array.isArray(data.activePacts) ? data.activePacts : []);
+            this.pendingReward = data.pendingReward || null;
             this._renderPactPills && this._renderPactPills();
 
             const classConfig = PLAYER_CLASSES.find(c => c.id === (data.player && data.player.classId))
@@ -11471,6 +11462,14 @@ triggerSystemCrash() {
             if (this.player.currentHp <= 0
                 || ['death', 'revive', 'breakout'].includes(recovery?.outcome)) {
                 this._restoreCombatRecovery(recovery || { outcome: 'death' });
+                return;
+            }
+
+            if (this.pendingReward) {
+                this.bossDefeated = this.pendingReward.encounterType === 'boss';
+                this._lastBossKillName = this.pendingReward.encounterType === 'boss' ? this.pendingReward.killName : '';
+                if (this.pendingReward.status === 'committed') this._finishPendingReward();
+                else this.changeState(STATE.REWARD);
                 return;
             }
 
@@ -14249,6 +14248,7 @@ updateHexBreach(dt) {
     },
 
 async startCombat(type) {
+        if (this.pendingReward) { this.changeState(STATE.REWARD); return; }
         // Keep the entry scene inert until its first player hand is ready.
         // A map-node release can otherwise reach End Turn during briefing.
         this.inputLocked = true;
@@ -23789,6 +23789,9 @@ drawEffects() {
         // Single-flight via this flag; reset in finally so next combat is clean.
         if (this._winCombatRunning) return;
         this._winCombatRunning = true;
+        let finishWin;
+        const completion = new Promise(resolve => { finishWin = resolve; });
+        this._winCombatCompletion = completion;
         this.inputLocked = true;
         try {
         // BREAKOUT — Sector 0 prologue rooms terminate here. The Breakout
@@ -23891,6 +23894,22 @@ drawEffects() {
         // the cinematic plays while frags/rewards resolve in the background.
         if (this.enemy && this.enemy.isBoss && this.currentState !== STATE.TUTORIAL_COMBAT) {
             try { await this._runBossDeathDissolve(this.enemy); } catch (e) { /* swallow */ }
+            if (!continueWin()) return;
+        }
+        // Complete the kill presentation before permanent payouts. From the
+        // payout below to the ordinary reward receipt there are no awaits,
+        // so returning during a cinematic cannot bank a replayable payout.
+        if (this.currentState !== STATE.TUTORIAL_COMBAT && this.enemy) {
+            if (this.enemy.isBoss) {
+                this.triggerSlowMo(0.35, 0.7);
+                await this.sleep(700);
+            } else if (this.enemy.isElite) {
+                this.triggerSlowMo(0.55, 0.35);
+                await this.sleep(300);
+            } else {
+                this.triggerSlowMo(0.7, 0.18);
+                await this.sleep(150);
+            }
             if (!continueWin()) return;
         }
         // Achievements: boss + run-completion checks (eligible only outside tutorial)
@@ -24100,22 +24119,6 @@ drawEffects() {
                 return;
             }
             return;
-        }
-
-        // Kill-blow slow-mo cinematic — scaled by enemy tier for game-feel impact.
-        if (this.enemy && this.enemy.isBoss) {
-            this.triggerSlowMo(0.35, 0.7);
-            await this.sleep(700);
-            if (!continueWin()) return;
-        } else if (this.enemy && this.enemy.isElite) {
-            this.triggerSlowMo(0.55, 0.35);
-            await this.sleep(300);
-            if (!continueWin()) return;
-        } else if (this.enemy) {
-            // Normal mob kills get a brief slow-mo so every victory lands.
-            this.triggerSlowMo(0.7, 0.18);
-            await this.sleep(150);
-            if (!continueWin()) return;
         }
 
         // --- ARCHIVIST KILL — Sector X gauntlet ends here. Awards a fixed
@@ -24496,6 +24499,12 @@ drawEffects() {
             tier: wasBoss ? 'boss' : (wasElite ? 'elite' : 'normal')
         };
 
+        const skipReward = wasElite && this._ascEffects?.noEliteRewards;
+        this.pendingReward = null;
+        if (!skipReward) {
+            this._rewardContext = { encounterType: wasBoss ? 'boss' : (wasElite ? 'elite' : 'combat'), killName };
+            this.generateRewards({ prepareOnly: true });
+        } else this.completeCurrentNode();
         this.saveGame();
 
         // Persist only the boss name for the reward screen's "DESTROYED"
@@ -24511,6 +24520,8 @@ drawEffects() {
         this.showCombatWin({ frags, droppedFile, wasBoss, wasElite, killName });
         } finally {
             if ((this._combatGen || 0) === gen) this._winCombatRunning = false;
+            if (this._winCombatCompletion === completion) this._winCombatCompletion = null;
+            finishWin();
         }
     },
 
@@ -24624,7 +24635,8 @@ drawEffects() {
                 ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
                     'DARK CONTRACT. NO REWARD', '#ff3355');
                 AudioMgr.playSound('defend');
-                this.completeCurrentNode();
+                const node = this.map.nodes.find(candidate => candidate.id === this.map.currentIdx);
+                if (node?.status !== 'completed') this.completeCurrentNode();
                 this.changeState(STATE.MAP);
                 return;
             }
@@ -24632,10 +24644,13 @@ drawEffects() {
         }, dwell);
     },
 
-    generateRewards() {
-        const container = document.getElementById('reward-options');
-        container.innerHTML = '';
-        
+    generateRewards({ prepareOnly = false } = {}) {
+        const container = prepareOnly ? null : document.getElementById('reward-options');
+        if (container) container.innerHTML = '';
+        if (this.pendingReward?.status === 'committed') { if (!prepareOnly) this._finishPendingReward(); return; }
+        let options;
+        let _fusionOnThisScreen = null;
+        if (!this.pendingReward) {
         let choices = 3;
         if(this.player.hasRelic('manifestor')) choices = 4;
         
@@ -24737,7 +24752,7 @@ drawEffects() {
         }
 
         // Select Options
-        const options = pool.slice(0, choices);
+        options = pool.slice(0, choices);
 
         // ── MODULE FUSIONS (Hades-style Duos). When the player owns BOTH
         // source modules of any unfired fusion, surface the fusion as
@@ -24746,7 +24761,6 @@ drawEffects() {
         // optionally take. Picking it consumes both source modules and
         // installs the fusion (handled in the card.onclick below).
         this.firedFusions = this.firedFusions || new Set();
-        let _fusionOnThisScreen = null;
         if (typeof MODULE_FUSIONS !== 'undefined') {
             const ownedSet = new Set((this.player.relics || []).map(r => r.id));
             for (const fusion of MODULE_FUSIONS) {
@@ -24759,6 +24773,28 @@ drawEffects() {
                 break; // one fusion offer per reward screen so UX stays focused
             }
         }
+        const context = this._rewardContext || {};
+        this.pendingReward = { v: 1, id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            status: 'offered', payoutState: 'settled', sector: this.sector,
+            nodeId: this.map.currentIdx, encounterType: context.encounterType || (this.bossDefeated ? 'boss' : 'combat'),
+            killName: context.killName || '', options: options.map(item => item.id),
+            relicHpCost: this._ascEffects?.relicHpCost || 0,
+            sectorCrossDamage: this._ascEffects?.sectorCrossDamage || 0,
+            fragDrainPerSector: this._customFragDrainPerSector || 0 };
+        this._rewardContext = null;
+        } else {
+            const catalog = [...UPGRADES_POOL, ...CORRUPTED_RELICS, ...MODULE_FUSIONS];
+            options = this.pendingReward.options.map(id => {
+                const item = catalog.find(candidate => candidate.id === id);
+                if (!item) throw new Error('Unknown saved reward: ' + id);
+                const fusion = MODULE_FUSIONS.some(candidate => candidate.id === id);
+                return { ...item, ...(fusion ? { _isFusion: true } : {}) };
+            });
+            _fusionOnThisScreen = options.find(item => item._isFusion);
+        }
+        if (prepareOnly) return options;
+        // Keep exact offers durable even if this was a legacy direct entry.
+        this.saveGame();
         // Audit 2026-05 — restore a sting + first-time hint for Module
         // Fusions so the system stops launching silent. The hint fires
         // once per install (Hints handles dedupe). The shockwave + SFX
@@ -24790,31 +24826,14 @@ drawEffects() {
         // sweetener so the kill still feels rewarding, and complete the
         // node so the run advances.
         if (options.length === 0) {
-            const consolation = 25;
-            this.techFragments += consolation;
-            ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
-                `RELICS MAXED. +${consolation} FRAG`, COLORS.GOLD);
-            this.completeCurrentNode();
-            const wasBoss = this.bossDefeated;
-            if (wasBoss && !this.challengeMode && !this.archiveMode) {
-                this.bossDefeated = false;
-                this.sector++;
-                // Diag — sector clear is a milestone event for the dump.
-                try { Diag.event && Diag.event('sector_clear', { sector: this.sector }); } catch (_) {}
-                // v1.9.8 hidden-lore trigger: reaching Sector 20 in
-                // Endless mode unlocks entry 35 (Beyond the Spire).
-                if (typeof this._checkHiddenLoreTriggers === 'function') {
-                    this._checkHiddenLoreTriggers('sector_enter');
-                }
-                this.generateMap();
-                const sectorDisplay = document.getElementById('sector-display');
-                if (sectorDisplay) sectorDisplay.innerText = `SECTOR ${this.sector}`;
-                this.playSectorIntro && this.playSectorIntro(this.sector);
-                this.saveGame();
-            } else if (wasBoss) {
-                this.bossDefeated = false;
+            if (!this.pendingReward.consolationApplied) {
+                this.techFragments += 25;
+                this.pendingReward.consolationApplied = true;
+                ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
+                    'RELICS MAXED. +25 FRAG', COLORS.GOLD);
             }
-            this.changeState(STATE.MAP);
+            this.pendingReward.status = 'committed';
+            this._finishPendingReward();
             return;
         }
 
@@ -24925,6 +24944,11 @@ drawEffects() {
             `;
             
             card.onclick = () => {
+                const receipt = this.pendingReward;
+                if (!receipt || receipt.status !== 'offered' || this.currentState !== STATE.REWARD
+                    || !receipt.options.includes(item.id)) return;
+                receipt.status = 'committed';
+                receipt.selectedId = item.id;
                 AudioMgr.playSound('click');
                 // Tier 5 acquired sting — upgrade chime layered on the click so
                 // the pick feels like adding something to your deck, not just
@@ -25007,71 +25031,54 @@ drawEffects() {
                     this.player.addRelic(item);
                 }
                 // Ascension 11 (Hungry Relics): pay HP per pickup.
-                if (this._ascEffects && this._ascEffects.relicHpCost > 0 && this.player) {
-                    const cost = this._ascEffects.relicHpCost;
+                if (receipt.relicHpCost > 0 && this.player) {
+                    const cost = receipt.relicHpCost;
                     this.player.takeDamage(cost, null, false, /*bypassShield*/ true);
                     ParticleSys.createFloatingText(this.player.x, this.player.y - 130, `HUNGRY RELIC -${cost} HP`, '#ff0055');
                 }
                 Analytics.emit('relic_picked', { id: item.id, rarity: item.rarity || 'common' });
                 Hints.trigger('first_relic');
-
-                this.completeCurrentNode();
-
-                if (this.bossDefeated && this.challengeMode) {
-                    // Challenge Mode pre-builds the entire boss-rest chain in
-                    // _generateChallengeMap, so don't clobber it with a fresh
-                    // sector map. Sector advance happens when the player taps
-                    // the next boss node (visitNode reads node.nodeSector).
-                    this.bossDefeated = false;
-                    this.changeState(STATE.MAP);
-                    return;
-                }
-
-                if (this.bossDefeated) {
-                    this.bossDefeated = false;
-                    this.sector++;
-                    if (typeof this._checkHiddenLoreTriggers === 'function') {
-                        this._checkHiddenLoreTriggers('sector_enter');
-                    }
-                    this.generateMap();
-                    // Ascension 12 (Heat Debt): crossing a sector boundary
-                    // burns flat true damage. Bypasses shield so the cost
-                    // is inescapable.
-                    if (this._ascEffects && this._ascEffects.sectorCrossDamage > 0 && this.player) {
-                        const cost = this._ascEffects.sectorCrossDamage;
-                        this.player.takeDamage(cost, null, false, /*bypassShield*/ true);
-                        ParticleSys.createFloatingText(this.player.x, this.player.y - 130, `HEAT DEBT -${cost}`, '#ff6600');
-                    }
-
-                    // Custom Run: Tax Man — drain a fixed percentage of the
-                    // player's fragments at each sector transition. Drives
-                    // the "expensive decisions get more expensive" fantasy.
-                    if (this._customFragDrainPerSector && this.techFragments > 0) {
-                        const drained = Math.floor(this.techFragments * this._customFragDrainPerSector);
-                        if (drained > 0) {
-                            this.techFragments -= drained;
-                            ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
-                                `TAX MAN -${drained}`, '#ffaa00');
-                        }
-                    }
-
-                    const sectorDisplay = document.getElementById('sector-display');
-                    if(sectorDisplay) sectorDisplay.innerText = `SECTOR ${this.sector}`;
-
-                    // Single unified cinematic — playSectorIntro now drives
-                    // the collapse overlay internally and folds in the
-                    // sector mechanic blurb, so callers don't need to fire
-                    // both anymore.
-                    this.playSectorIntro(this.sector);
-
-                    this.saveGame();
-                }
-
-                this.changeState(STATE.MAP); 
+                this._finishPendingReward();
             };
 
             container.appendChild(card);
         });
+    },
+
+    _finishPendingReward() {
+        const receipt = this.pendingReward;
+        if (!receipt || receipt.status !== 'committed') return false;
+        // Persist selection and receipt together before advancing. A cold
+        // load can finish a transition without granting the module again.
+        if (this.saveGame() === false) return false;
+        const node = this.map.nodes.find(candidate => candidate.id === receipt.nodeId);
+        if (node && node.status !== 'completed') this.completeCurrentNode();
+        if (receipt.encounterType === 'boss' && this.sector === receipt.sector) {
+            this.bossDefeated = false;
+            if (!this.challengeMode && !this.archiveMode) {
+                this.sector++;
+                this._checkHiddenLoreTriggers?.('sector_enter');
+                this.generateMap();
+                if (receipt.sectorCrossDamage) {
+                    this.player.takeDamage(receipt.sectorCrossDamage, null, false, true);
+                    ParticleSys.createFloatingText(this.player.x, this.player.y - 130,
+                        `HEAT DEBT -${receipt.sectorCrossDamage}`, '#ff6600');
+                }
+                if (receipt.fragDrainPerSector && this.techFragments > 0) {
+                    const drained = Math.floor(this.techFragments * receipt.fragDrainPerSector);
+                    this.techFragments -= drained;
+                    if (drained > 0) ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
+                        `TAX MAN -${drained}`, '#ffaa00');
+                }
+                const display = document.getElementById('sector-display');
+                if (display) display.innerText = `SECTOR ${this.sector}`;
+                this.playSectorIntro?.(this.sector);
+            }
+        }
+        this.pendingReward = null;
+        if (this.saveGame() === false) { this.pendingReward = receipt; return false; }
+        this.changeState(STATE.MAP);
+        return true;
     },
 
     _scheduleReviveTurn({ restartEncounter = false } = {}) {
@@ -25761,7 +25768,58 @@ drawEffects() {
         this.selectClass(cls);
     },
 
-    quitRun() {
+    _confirmNewRun(label) {
+        const raw = this._readSaveRaw();
+        if (!raw) return true;
+        const slot = this._activeSlot();
+        if (this._newRunConsent?.slot === slot && this._newRunConsent.raw === raw) return true;
+        if (!window.confirm(`Replace the run in save slot ${slot} to ${label}? Sparks and permanent upgrades remain.`)) return false;
+        this._newRunConsent = { slot, raw };
+        return true;
+    },
+
+    saveAndReturn() {
+        // Keep the full victory presentation and its receipt together. A
+        // menu request during it saves only after the earned choice exists.
+        const completion = this._winCombatRunning && this._winCombatCompletion;
+        if (completion) {
+            if (this._returnAfterWin?.completion === completion) return this._returnAfterWin.promise;
+            const gen = this._combatGen || 0;
+            const player = this.player;
+            const request = { completion };
+            request.promise = completion.then(() => {
+                if (this._returnAfterWin === request) this._returnAfterWin = null;
+                const ownsCombat = (this._combatGen || 0) === gen;
+                const ownsReward = (this._combatGen || 0) === gen + 1
+                    && [STATE.COMBAT_WIN, STATE.REWARD, STATE.MAP].includes(this.currentState);
+                if (this.player !== player || (!ownsCombat && !ownsReward)
+                    || !this._isInActiveRun()) return false;
+                return this.saveAndReturn();
+            });
+            this._returnAfterWin = request;
+            return request.promise;
+        }
+        if (this.player && this._isInActiveRun()) {
+            if (this.saveGame() === false) return false;
+        }
+        AudioMgr.bossSilence = false;
+        AudioMgr.clearSectorMusic && AudioMgr.clearSectorMusic();
+        this.restoreCombatButtons();
+        ClassAbility.endCombat();
+        this._newRunConsent = null;
+        this.changeState(STATE.MENU);
+        return true;
+    },
+
+    abandonRun() {
+        if (!this._isInActiveRun() && !this._readSaveRaw()) return false;
+        const slot = this._activeSlot();
+        if (!window.confirm(`Abandon the run in save slot ${slot}? Its checkpoint, modules and Fragments will be removed. Sparks and permanent upgrades remain.`)) return false;
+        if (!this._clearSave(slot)) {
+            this.showHintToast?.('Could not remove the checkpoint. The run is still open.', 3000);
+            return false;
+        }
+        this._logRunHistory('abandoned');
         AudioMgr.bossSilence = false;
         AudioMgr.clearSectorMusic && AudioMgr.clearSectorMusic();
         this.restoreCombatButtons();
@@ -25773,10 +25831,16 @@ drawEffects() {
         this._archivistFacedThisRun = false;
         this.activePacts = new Set();
         this._renderPactPills && this._renderPactPills();
-        // Quitting mid-run still ends the run for currency purposes —
-        // wipe run-only fragments. Sparks earned this run stay banked.
+        this.pendingReward = null;
+        this._newRunConsent = null;
         this._resetRunCurrency();
         this.changeState(STATE.MENU);
+        return true;
+    },
+
+    // Compatibility for native-back and existing internal callers.
+    quitRun() {
+        return this.saveAndReturn();
     },
     
     // Camera shake. Foundational for damage feedback; everything in

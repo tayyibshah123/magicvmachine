@@ -103,7 +103,7 @@ describe('save slot isolation and failures', () => {
         expect(ParticleSys.createFloatingText).toHaveBeenCalledTimes(1);
     });
 
-    it('retries quota failure once and never prunes the active slot', () => {
+    it('preserves every slot when a write reaches quota', () => {
         const { Game } = active;
         Game._setActiveSlot('B');
         localStorage.setItem(Game._saveKey('A'), JSON.stringify(V2_SAVE));
@@ -118,11 +118,11 @@ describe('save slot isolation and failures', () => {
         });
         const remove = vi.spyOn(Storage.prototype, 'removeItem');
         Game.saveGame();
-        expect(attempts).toBe(2);
-        expect(remove).not.toHaveBeenCalledWith(Game._saveKey('B'));
-        expect(localStorage.getItem(Game._saveKey('A'))).toBeNull();
+        expect(attempts).toBe(1);
+        expect(remove).not.toHaveBeenCalled();
+        expect(localStorage.getItem(Game._saveKey('A'))).toBe(JSON.stringify(V2_SAVE));
         expect(localStorage.getItem(Game._saveKey('C'))).toBeTruthy();
-        expect(JSON.parse(Game._readSaveRaw()).player.hp).toBe(30);
+        expect(Game._readSaveRaw()).toBe('last good checkpoint');
     });
 
     it.each(['{', 'null', '[]', '{"v":3,"player":{"relics":{}}}'])('recovers corrupt snapshot %s without wiping another slot', raw => {
