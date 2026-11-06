@@ -1,17 +1,7 @@
-// Scripted 5-stage onboarding (§1.1).
-//
-// Runs ONCE on a fresh install, between the intro splash and the main menu.
-// Stages:
-//   1. Welcome / name entry    (~15s)
-//   2. Combat tutorial primer  (~90s)  — delegates to existing scripted tutorial
-//   3. Rigged first real combat (~60s) — played via the tutorial-combat path
-//   4. Sector 1 map reveal      (~30s)  — free play starts here
-// Players can skip from stage 2 onwards. A 20-second idle auto-advance keeps
-// a stuck player from churning.
-//
-// Storage key mvm_onboarding_done — once set, the entire onboarding flow is
-// bypassed on subsequent launches. Settings → Gameplay has a "Replay tutorial"
-// button that clears it.
+// Optional callsign entry before character selection and the Breakout.
+// The player advances explicitly. A slow reader or mobile keyboard must
+// never trigger an automatic deployment. Legacy primer renderers below
+// remain unused; the current handoff is renderStage1 -> onStartTutorial.
 
 import { Analytics } from './analytics.js';
 
@@ -94,11 +84,6 @@ export const Onboarding = {
             state.stageStart = performance.now();
         };
 
-        const resetIdle = (nextStage) => {
-            clearTimeout(state.idleTimer);
-            state.idleTimer = setTimeout(() => nextStage && nextStage(), 20000);
-        };
-
         // ---- Stage 1: Welcome + name entry ----
         // Stage 2 (the long combat primer) was moved to *after* the tutorial
         // — see Game.openPostTutorial() — so first-time players land in
@@ -115,7 +100,9 @@ export const Onboarding = {
             root.innerHTML = `
                 <div class="onb-card onb-card-minimal">
                     <h1 class="onb-title onb-title-question">Who Are You?</h1>
-                    <input type="text" id="onb-name" class="onb-input" maxlength="16" placeholder="OPERATOR" value="${state.name === 'OPERATOR' ? '' : state.name}" autofocus>
+                    <label for="onb-name" class="onb-name-label">CALLSIGN (OPTIONAL)</label>
+                    <input type="text" id="onb-name" class="onb-input" maxlength="16" placeholder="OPERATOR" autocomplete="off">
+                    <p class="onb-name-help">Leave this blank to play as OPERATOR. Continue when you are ready.</p>
                     <div class="onb-actions onb-actions-single">
                         <button class="btn primary onb-next" id="onb-next-1">START</button>
                     </div>
@@ -134,6 +121,7 @@ export const Onboarding = {
             // Enter-key on the input commits the same as tapping START.
             const nameInput = document.getElementById('onb-name');
             if (nameInput) {
+                nameInput.value = state.name === 'OPERATOR' ? '' : state.name;
                 nameInput.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') {
                         state.name = this.setName(nameInput.value);
@@ -141,11 +129,6 @@ export const Onboarding = {
                     }
                 });
             }
-            resetIdle(() => {
-                state.name = this.setName(document.getElementById('onb-name').value);
-                emitStage('1_welcome_idle');
-                handoffToTutorial();
-            });
         };
 
         // ---- Stage 2: Primer (text lesson) ----
@@ -174,7 +157,6 @@ export const Onboarding = {
                 state.stage = 3;
                 renderStage3();
             };
-            resetIdle(() => { emitStage('2_primer_idle'); state.stage = 3; renderStage3(); });
         };
 
         // ---- Stage 3: Hand off to the scripted tutorial combat ----

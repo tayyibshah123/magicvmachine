@@ -132,13 +132,13 @@ const ROOMS = [
             // reads the rule before the action happens.
             {
                 story: 'When you ATTACK, a TIMING RING appears on the target.',
-                action: 'Tap inside the GREEN INNER ZONE the moment the ring lands. PERFECT timing = CRITICAL HIT (+60% damage).',
+                action: 'Tap anywhere when the ring reaches the INNER TIMING BAND. PERFECT timing = CRITICAL HIT (+60% damage).',
                 sub: 'TIMING PROTOCOL · CRITICAL WINDOW',
                 spot: 'enemy',
                 wait: 'tap'
             },
             {
-                story: 'Drag the ATTACK die now. A ring will shrink. Tap GREEN to crit.',
+                story: 'Drag the ATTACK die now. Tap anywhere as the ring reaches its inner timing band.',
                 action: 'Drag the ATTACK die ONTO the drone.',
                 sub: 'OFFENSIVE PROTOCOL · STRIKE AUTHORIZED',
                 spot: 'die:attack',
@@ -158,13 +158,13 @@ const ROOMS = [
             // QTE only fires during the enemy phase.
             {
                 story: 'When you END TURN, the drone will strike. A RING will appear ON YOU.',
-                action: 'Tap inside the GREEN ZONE to PARRY. Halves the hit AND reflects 50% damage back.',
+                action: 'Tap anywhere at the INNER TIMING BAND to PARRY. It halves the hit and counterattacks.',
                 sub: 'PARRY PROTOCOL · COUNTER-WINDOW',
                 spot: 'player',
                 wait: 'tap'
             },
             {
-                story: 'Press END TURN now. Watch for the parry ring on yourself. Tap green.',
+                story: 'Press END TURN now. Watch the parry ring on yourself, then tap anywhere at the timing band.',
                 action: 'Press the END TURN button on the right.',
                 sub: 'YIELD TO ENEMY · STAY ALERT',
                 spot: 'end_turn',
@@ -172,7 +172,8 @@ const ROOMS = [
             },
             // ── FINISH ──
             {
-                story: 'You parried. Now drop the drone.',
+                story: 'Now finish the drone.',
+                defenceFeedback: true,
                 action: 'ATTACK to finish. Time the ring again for a critical kill.',
                 sub: 'TARGET DEGRADED · TERMINATE',
                 spot: null,
@@ -227,7 +228,7 @@ const ROOMS = [
                 wait: 'tap'
             },
             {
-                story: 'MANA dice charge your reserves. Skill and signature dice spend mana.',
+                story: 'MANA dice charge your reserves for paid skills. Your class signature costs no mana.',
                 action: 'Drag the MANA die ONTO YOURSELF. Watch your mana pip fill.',
                 sub: 'MANA STREAM · ELEVATED',
                 spot: 'die:mana',
@@ -249,14 +250,14 @@ const ROOMS = [
             },
             {
                 story: 'End the turn. Your minion will fight while the hive spawns its brood.',
-                action: 'Press END TURN.',
+                action: 'Press END TURN. Your ally gets a short timing prompt: Perfect +30%, Good +10%, rounded up. A miss keeps base damage.',
                 sub: 'TURN PHASE · MINION DEPLOYED',
                 spot: 'end_turn',
                 wait: 'enemy_turn'
             },
             {
                 story: 'Multiple enemies on the field. ATTACK dice can target either one.',
-                action: 'Finish the hive. Drop them both.',
+                action: 'Finish the hive and brood. Short defensive prompts block hostile minions: Perfect prevents the hit; Good reduces it.',
                 sub: 'CLEANUP PROTOCOL ACTIVE',
                 spot: null,
                 wait: 'enemy_dies'
@@ -333,7 +334,15 @@ const ROOMS = [
                 wait: 'die_used:defend'
             },
             {
-                story: 'Block landed. Now strike while WEAK fades on the cipher.',
+                story: 'Your defensive action is ready. The EXECUTE happens when you end the turn.',
+                action: 'Press END TURN, then time the defensive ring.',
+                sub: 'EXECUTE INCOMING',
+                spot: 'end_turn',
+                wait: 'enemy_turn'
+            },
+            {
+                story: 'Now strike as WEAK fades from your own damage.',
+                defenceFeedback: true,
                 action: 'ATTACK to finish the cipher.',
                 sub: 'COUNTER STRIKE · CLOSE THE GAP',
                 spot: 'die:attack',
@@ -586,7 +595,7 @@ const CLASS_ROOM_3 = {
             },
             {
                 story: 'The Plated Guard has 12 SHIELD. Normal hits stop on it. BLAST does not.',
-                action: 'Drag BLAST onto the plated guard. Watch the shield drop to zero.',
+                action: 'Drag BLAST onto the plated guard. It bypasses shield to damage HP.',
                 sub: 'TARGET: PLATED · ARMOR BREACH AUTHORIZED',
                 spot: 'die:signature',
                 wait: 'die_used'
@@ -735,15 +744,15 @@ const CLASS_GLYPH_BEAT = {
         wait: 'tap'
     },
     sentinel: {
-        story: 'AEGIS PLATES — every shield you gain stacks one plate.',
-        action: 'At 3 plates, tap the widget to PRIME. Next enemy attack is fully nullified.',
+        story: 'AEGIS PLATES: every 6 shield gained banks one plate.',
+        action: 'At 3 plates, AEGIS primes automatically. It nullifies the next enemy attack, including its whole multi-hit chain.',
         sub: 'SENTINEL PROTOCOL · PLATING ACTIVE',
         spot: 'class_widget',
         wait: 'tap'
     },
     arcanist: {
         story: 'GLYPH CYCLE — Fire, Ice, Lightning rotate on your widget.',
-        action: 'Play a die when its glyph is lit for a bonus effect. One per turn.',
+        action: 'Tap the widget when your chosen glyph is lit. One activation per turn.',
         sub: 'ARCANIST PROTOCOL · GLYPH ATTUNED',
         spot: 'class_widget',
         wait: 'tap'
@@ -775,6 +784,20 @@ function classDice(classId) {
 function roomFor(roomIdx, classId) {
     const r = ROOMS[roomIdx];
     if (!r) return null;
+    if (r.id === 'first-strike') {
+        const sequence = r.sequence.map(beat => ({ ...beat }));
+        const defence = sequence.find(beat => beat.wait === 'die_used:defend');
+        defence.action = 'Drag your DEFEND die ONTO YOURSELF (the player at the bottom).';
+        if (classId === 'bloodstalker') {
+            defence.story = 'SANGUINE PACT heals HP instead of adding shield. At full HP, overflow feeds your Blood Pool.';
+        } else if (classId === 'annihilator') {
+            defence.story = 'RICOCHET PLATE reduces incoming damage by 20% next turn instead of adding shield. Three stacks grant immunity.';
+        }
+        if (classId === 'sentinel') {
+            sequence[4].action = 'Tap anywhere at the INNER TIMING BAND. Sentinel PERFECT timing blocks the incoming attack completely.';
+        }
+        return { ...r, sequence };
+    }
     if (r.id === 'class-fantasy') {
         const spec = CLASS_ROOM_3[classId] || ROOM_3_FALLBACK;
         const cd = classDice(classId);
@@ -814,6 +837,16 @@ function roomFor(roomIdx, classId) {
         // Insert just before the final free-combat beat (last beat).
         seq.splice(seq.length - 1, 0, glyphBeat);
         return Object.assign({}, r, { sequence: seq });
+    }
+    if (r.id === 'glitch-cipher' && ['bloodstalker', 'annihilator'].includes(classId)) {
+        const sequence = r.sequence.map(beat => ({ ...beat }));
+        for (const beat of sequence.filter(beat => beat.wait === 'die_used:defend')) {
+            beat.story = classId === 'bloodstalker'
+                ? 'SANGUINE PACT restores HP; it does not block the hit or prevent WEAK. Time the incoming ring as well.'
+                : 'RICOCHET PLATE reduces incoming damage; it does not prevent WEAK. Time the incoming ring as well.';
+            beat.action = 'Drag your DEFEND die onto yourself.';
+        }
+        return { ...r, sequence };
     }
     return r;
 }
@@ -985,6 +1018,7 @@ export const Breakout = {
         // spotlight + waitFor advancement.
         this._room = room;
         this._beatIdx = 0;
+        this._lastDefenceOutcome = 'none';
         this._tapAdvanceArmed = false;
 
         // Sector 0 — light-weight spawn. We deliberately bypass the
@@ -1026,7 +1060,7 @@ export const Breakout = {
         const sub = document.getElementById('breakout-warden-sub');
         const tapHint = document.getElementById('breakout-tap-hint');
         if (pane) pane.classList.remove('hidden');
-        if (story) story.textContent = beat.story || '';
+        if (story) story.textContent = (beat.defenceFeedback ? this._defenceFeedback() + ' ' : '') + (beat.story || '');
         if (action) action.textContent = beat.action || '';
         if (sub) sub.textContent = beat.sub || '';
         // Tap-to-continue hint — only when the beat waits on a tap.
@@ -1103,6 +1137,7 @@ export const Breakout = {
      * complete, so they advance immediately. */
     notify(event, data) {
         if (!this._active || !this._room) return;
+        if (event === 'enemy_turn') this._lastDefenceOutcome = data && data.defenceOutcome || 'none';
         const seq = this._room.sequence;
         if (!Array.isArray(seq)) return;
         // Match against the CURRENT beat first.
@@ -1115,16 +1150,8 @@ export const Breakout = {
         };
         const beat = seq[this._beatIdx];
         if (matchesBeat(beat)) {
-            const delayMs = (event === 'die_used') ? 1200 : 0;
-            if (delayMs > 0) {
-                const expectedIdx = this._beatIdx;
-                setTimeout(() => {
-                    if (!this._active || this._beatIdx !== expectedIdx) return;
-                    this._advanceBeat();
-                }, delayMs);
-            } else {
-                this._advanceBeat();
-            }
+            if (event === 'die_used') this._afterAction(() => this._advanceBeat());
+            else this._advanceBeat();
             return;
         }
         // Out-of-order forgiveness — the player did something this beat
@@ -1138,7 +1165,6 @@ export const Breakout = {
         for (let i = this._beatIdx + 1; i < seq.length; i++) {
             if (matchesBeat(seq[i])) {
                 const target = i + 1; // advance PAST the matched beat
-                const delayMs = (event === 'die_used') ? 1200 : 0;
                 const jump = () => {
                     if (!this._active) return;
                     // Hide tap hint immediately so the prompt doesn't
@@ -1153,11 +1179,42 @@ export const Breakout = {
                         this._runBeat(target);
                     }
                 };
-                if (delayMs > 0) setTimeout(jump, delayMs);
+                if (event === 'die_used') this._afterAction(jump);
                 else jump();
                 return;
             }
         }
+    },
+
+    _defenceFeedback() {
+        switch (this._lastDefenceOutcome) {
+            case 'perfect': return 'Perfect defensive timing.';
+            case 'good': return 'Good defensive timing.';
+            case 'miss': return 'The timing missed. You can try again on the next attack.';
+            default: return 'The enemy phase is complete.';
+        }
+    },
+
+    _afterAction(continueLesson) {
+        const game = this._game;
+        const room = this._room;
+        const beatIdx = this._beatIdx;
+        const gen = game && game._combatGen;
+        const ready = () => {
+            if (!this._active || this._room !== room || this._beatIdx !== beatIdx
+                || game && game._combatGen !== gen) return;
+            if (game && (game.paused || game.qte && game.qte.active
+                || game.inputLocked || game._combatActionDepth > 0)) {
+                schedule();
+                return;
+            }
+            continueLesson();
+        };
+        const schedule = () => {
+            if (game && game.setTimer) game.setTimer(ready, 30);
+            else setTimeout(ready, 30);
+        };
+        schedule();
     },
 
     /* Re-apply the current beat's spotlight. Game.renderDiceUI calls

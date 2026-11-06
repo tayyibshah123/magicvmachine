@@ -54,7 +54,7 @@ const COPY = {
     summoner: {
         headline: 'SUMMONER',
         pillars: 'Swarm scaling. Free Spirits while minions live.',
-        ability: 'SACRED GROVE plots tick Seed, Sprout, Bloom while a minion lives. Tap a Bloomed plot for a free Spirit, or APEX x2 every minion when the grove is full and 4 minions are out.',
+        ability: 'Four SACRED GROVE plots tick Seed, Sprout, Bloom while a minion lives. Tap a Bloomed plot for a free Spirit, or APEX x2 every minion when all four plots bloom and 4 minions are out.',
         signature: 'Call: summon a Spirit and 4 damage.'
     }
 };
@@ -106,7 +106,7 @@ export const ClassBriefing = {
                         <div class="cb-section-body">${copy.ability}</div>
                     </div>
                     <div class="cb-section">
-                        <div class="cb-section-label">Signature Die</div>
+                        <div class="cb-section-label">Signature Die (0 mana)</div>
                         <div class="cb-section-body">${copy.signature}</div>
                     </div>
                     <button class="btn primary cb-dismiss" id="cb-dismiss">FIGHT</button>

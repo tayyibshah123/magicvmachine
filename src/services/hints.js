@@ -9,6 +9,7 @@
 import { Analytics } from './analytics.js';
 
 const STORAGE_KEY = 'mvm_hints_seen';
+const PENDING_KEY = 'mvm_hints_pending_v1';
 
 // Hint library. Keep copy under 8 words per the roadmap.
 const HINTS = {
@@ -21,16 +22,18 @@ const HINTS = {
     elite_jammer:     { title: "JAMMER",      body: "Steals one of your dice each turn." },
     first_relic:      { title: "MODULE",      body: "Passive upgrade. Stacks with others." },
     first_shop:       { title: "SHOP",        body: "Trade Fragments for modules and heals." },
-    first_rest:       { title: "REST",        body: "Heal, upgrade skill, or earn rerolls." },
+    first_reward:     { title: "REWARD",      body: "Pick one module for this run. Check its effect and synergies." },
+    first_event:      { title: "EVENT",       body: "Read each choice and its cost before committing." },
+    first_rest:       { title: "REST",        body: "Choose healing, rerolls, a skill upgrade or a run module." },
     first_boss:       { title: "BOSS AHEAD",  body: "Check their intents. Prepare shields." },
-    first_death:      { title: "DEFEAT",      body: "Fragments carry over. Try a new class." },
+    first_death:      { title: "DEFEAT",      body: "Fragments reset. Sparks and permanent upgrades stay banked." },
     first_ascension:  { title: "ASCENSION",   body: "Harder runs. Better rewards." },
-    first_qte:        { title: "CRITICAL",    body: "Tap the gold ring for bonus damage." },
+    first_qte:        { title: "CRITICAL",    body: "Tap anywhere as the ring reaches the inner timing band." },
     first_synergy:    { title: "SYNERGY",     body: "Combining modules unlocks bonuses." },
     combo_double:     { title: "COMBO",       body: "Two of a kind grants a bonus." },
     first_heal:       { title: "HEAL",        body: "Restores HP up to your maximum." },
     first_shield_break:{ title: "SHIELD DOWN",body: "Barrier collapsed. Raw damage next." },
-    first_crit:       { title: "CRITICAL",    body: "Perfect timing doubles damage." },
+    first_crit:       { title: "CRITICAL",    body: "Perfect attack timing adds 60% damage." },
     // Sector signature rules — fires once per install on first entry to each
     // affected sector so the player isn't surprised by a silent mechanic.
     sector_rule_2:    { title: "FROST FIELD",      body: "Cryo hostiles carry +6 Shield." },
@@ -46,13 +49,13 @@ const HINTS = {
     first_blood_pool:      { title: "BLOOD POOL",     body: "Tribute blood for a bonus." },
     first_shield_wall:     { title: "SHIELD WALL",    body: "Next enemy attack is nullified." },
     first_grove_bloom:     { title: "GROVE BLOOM",    body: "Tap a bloomed plot for a spirit." },
-    first_arcanist_glyph:  { title: "GLYPH CYCLE",    body: "Play a die on the active glyph." },
+    first_arcanist_glyph:  { title: "GLYPH CYCLE",    body: "Tap the widget when your chosen glyph is lit." },
 
     // Jargon stubs — first time each mechanic hits the player so the
     // vocabulary is taught at point of use, not via wiki or death.
     // (first_boss + combo_double already exist above — don't duplicate.)
     first_nullified_die:   { title: "NULLIFIED",      body: "The boss analysed your first die. It's gone." },
-    first_mana_spent:      { title: "MANA",           body: "Spend it on powerful dice. Refills each turn." },
+    first_mana_spent:      { title: "MANA",           body: "Paid skills spend mana. You gain more each turn." },
     first_shield_decay:    { title: "SHIELD DECAYS",  body: "Shield fades each turn. Renew with Defend." },
 
     // Endgame-mode discoverability (audit feedback F2/F3).
@@ -67,7 +70,7 @@ const HINTS = {
     first_sanctuary_spend:  { title: "SANCTUARY",        body: "Tap a node to install. Costs Sparks." },
     // Combat depth onboarding — fires once for each new mechanic.
     first_chain:            { title: "CHAIN HIT",        body: "Each wave matters. Worst tap caps the chain." },
-    first_momentum:         { title: "MOMENTUM",         body: "Combos and parries fill it. Apex auto-crits." },
+    first_momentum:         { title: "MOMENTUM",         body: "Combos and parries fill it. Apex gives your next attack x1.5." },
     // Module Fusions (Hades-style Duos). Fires on the FIRST reward
     // screen that surfaces a fusion offer — owning both source
     // modules unlocks a prismatic-bordered combined relic. Audit
@@ -97,44 +100,46 @@ export const Hints = {
 
     init() {
         this._seen = readSeen();
+        try {
+            const pending = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
+            this._queue = [...new Set(Array.isArray(pending) ? pending : [])]
+                .filter(id => HINTS[id] && !this._seen.has(id));
+        } catch (_) { this._queue = []; }
+        if (!this._visibilityHandler) {
+            this._visibilityHandler = () => this.resume();
+            document.addEventListener('visibilitychange', this._visibilityHandler);
+        }
+    },
+
+    _persistPending() {
+        const pending = [...new Set([this._activeId, ...this._queue].filter(Boolean))];
+        try { localStorage.setItem(PENDING_KEY, JSON.stringify(pending)); } catch (_) {}
+    },
+
+    _canShow() {
+        const game = typeof window !== 'undefined' && window.Game;
+        return !document.hidden && !(game && game.tutorialHintsEnabled === false)
+            && !document.body.classList.contains('breakout-active')
+            && !document.getElementById('intro-overlay')
+            && !document.getElementById('onboarding-overlay');
+    },
+
+    resume() {
+        if (this._active && !this._closing && !this._canShow()) this._dismiss(false);
+        else if (!this._active && this._canShow()) this._showNext();
     },
 
     // Call this from game code when a condition is first met.
     trigger(id) {
         if (!this._seen) this.init();
-        // Respect the Accessibility "Tutorial hints" toggle — when off, we
-        // still mark the hint as seen so it doesn't queue up for later, but
-        // we skip the overlay render. Without this check the `chk-tutorial-hints`
-        // setting only gated showHintOnce, not the dedicated Hints service.
-        if (typeof window !== 'undefined' && window.Game && window.Game.tutorialHintsEnabled === false) {
-            if (!this._seen.has(id)) {
-                this._seen.add(id);
-                writeSeen(this._seen);
-            }
-            return;
-        }
-        // Suppress hints during the Sector 0 Breakout prologue. The
-        // breakout already drives a beat-by-beat teaching sequence —
-        // popping a hint modal on top adds redundant + competing
-        // information. Mark seen so it doesn't queue up for later;
-        // the player will encounter these mechanics naturally in real
-        // combat after the prologue completes. Detection via the
-        // `breakout-active` body class avoids a circular import.
-        if (typeof document !== 'undefined' && document.body && document.body.classList.contains('breakout-active')) {
-            if (!this._seen.has(id)) {
-                this._seen.add(id);
-                writeSeen(this._seen);
-            }
-            return;
-        }
         if (this._seen.has(id)) return;
         if (!HINTS[id]) return;
-        // Mark seen immediately so re-triggers don't queue duplicates.
-        this._seen.add(id);
-        writeSeen(this._seen);
-        this._queue.push(id);
-        Analytics.emit('tooltip_shown', { id });
-        if (!this._active) this._showNext();
+        // Suppressed teaching stays eligible for the next relevant action;
+        // do not drain a backlog of obsolete combat tips onto the first map.
+        if (!this._canShow()) return;
+        if (this._activeId !== id && !this._queue.includes(id)) this._queue.push(id);
+        this._persistPending();
+        this.resume();
     },
 
     // Clear a seen flag (useful for re-tutorial setting).
@@ -150,10 +155,14 @@ export const Hints = {
     },
 
     _showNext() {
+        if (!this._canShow()) return;
         if (this._queue.length === 0) { this._active = false; return; }
         this._active = true;
         const id = this._queue.shift();
+        this._activeId = id;
+        this._persistPending();
         const hint = HINTS[id];
+        Analytics.emit('tooltip_shown', { id });
         this._render(hint);
     },
 
@@ -178,7 +187,7 @@ export const Hints = {
             // the mobile-shaped canvas frame.
             const parent = document.getElementById('game-container') || document.body;
             parent.appendChild(this._root);
-            this._root.addEventListener('click', () => this._dismiss());
+            this._root.addEventListener('click', () => this._dismiss(true));
         }
         this._root.querySelector('.hint-toast-title').textContent = hint.title;
         this._root.querySelector('.hint-toast-body').textContent = hint.body;
@@ -187,19 +196,29 @@ export const Hints = {
         // Auto-dismiss after a generous reading window. Body copy is
         // ~8 words so 4 seconds is comfortable.
         if (this._dismissTimer) clearTimeout(this._dismissTimer);
-        this._dismissTimer = setTimeout(() => this._dismiss(), 4000);
+        this._dismissTimer = setTimeout(() => this._dismiss(this._canShow()), 4000);
     },
 
-    _dismiss() {
-        if (!this._root) return;
+    _dismiss(acknowledged = true) {
+        if (!this._root || this._closing) return;
+        this._closing = true;
         if (this._dismissTimer) {
             clearTimeout(this._dismissTimer);
             this._dismissTimer = null;
         }
+        const id = this._activeId;
+        if (id && acknowledged) {
+            this._seen.add(id);
+            writeSeen(this._seen);
+        } else if (id && !this._queue.includes(id)) this._queue.unshift(id);
+        this._activeId = null;
+        this._persistPending();
         this._root.classList.remove('open');
         setTimeout(() => {
             this._root.classList.add('hidden');
-            this._showNext();
+            this._closing = false;
+            this._active = false;
+            this.resume();
         }, 180);
     }
 };
