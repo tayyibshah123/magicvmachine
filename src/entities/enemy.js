@@ -126,8 +126,34 @@ class Enemy extends Entity {
         return { raw, mods, final: Math.max(0, dmg) };
     }
 
+    tryArmSelfDestruct() {
+        const inCombat = Game.currentState === STATE.COMBAT
+            || Game.currentState === STATE.TUTORIAL_COMBAT || Game.currentState === STATE.BREAKOUT;
+        if (this.kind !== 'detonator' || this._armedDetonate || this._detonated
+            || this.currentHp <= 0 || this.currentHp >= this.maxHp * 0.3
+            || !inCombat || Game._endTurnRunning) return false;
+
+        this._armedDetonate = true;
+        this._detonateOnPlayerTurn = (Game.turnCount || 0) + 1;
+        // Replace the queued attack immediately. This is a warning for a
+        // turn-start event, not an AI action or an invulnerability state.
+        this.decideTurn();
+        ParticleSys.createFloatingText(this.x, this.y - 140, 'SELF-DESTRUCT ARMED', '#7fff00');
+        if (!Game._isReducedMotion()) ParticleSys.createShockwave(this.x, this.y, '#7fff00', 36);
+        AudioMgr.playSound('siren');
+        return true;
+    }
+
     decideTurn() {
         this.nextIntents = [];
+        // A pending blast has its own deadline. Stun and random AI moves
+        // must not hide the warning or postpone that deadline.
+        if (this._armedDetonate && !this._detonated && this.currentHp > 0) {
+            this.nextIntents.push({ type: 'self_destruct', val: Math.max(8, Math.floor(this.maxHp / 3)), target: Game.player });
+            this.updateIntentValues();
+            this.intentRefreshedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+            return;
+        }
         // Archivist rewind cooldown resets at the start of each round so the
         // boss can rewind once per player turn, not once per fight.
         this._rewindUsedThisTurn = false;
@@ -532,18 +558,8 @@ class Enemy extends Entity {
             return { type: 'attack', val: this.baseDmg, target: getTarget() };
         }
         if (this.kind === 'detonator') {
-            // v1.8.3 — once armed (player damaged the carrier to 0 HP and
-            // the entity clamped itself to 1 HP), the next enemy turn
-            // fires a self-destruct intent. Damage = ~maxHp/3, capped at
-            // a sensible floor so the smallest detonators still threaten.
-            // Resolver in game.js handles VFX + player damage + setting
-            // currentHp to 0 + winCombat (if player survives).
-            if (this._armedDetonate) {
-                const boom = Math.max(8, Math.floor(this.maxHp / 3));
-                return { type: 'self_destruct', val: boom, target: Game.player };
-            }
-            // Pre-armed: low HP, mid attack — the real threat is the
-            // self-destruct cycle once the player breaks through.
+            // Before arming and after its one blast, the carrier attacks
+            // normally. Arming never prevents an ordinary lethal hit.
             return { type: 'attack', val: this.baseDmg, target: getTarget() };
         }
         if (this.kind === 'buffer') {

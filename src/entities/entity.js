@@ -531,41 +531,11 @@ class Entity {
             }
         }
 
-        // v1.8.3 — Detonator self-destruct rework. Was an on-death
-        // explosion (Phage Pod / Parasite Carrier blew up the moment HP
-        // hit 0, no warning, easy to die to). Now: first damage that
-        // would drop a detonator to 0 HP clamps it to 1 HP and arms a
-        // self-destruct timer. The detonator's NEXT enemy turn fires
-        // a `self_destruct` intent (resolver in game.js) which deals
-        // ~maxHp/3 damage to the player and kills the enemy. Player
-        // gets one turn to defend / heal / break through.
-        if (Enemy && this instanceof Enemy && this.kind === 'detonator'
-            && this.currentHp <= 0 && !this._armedDetonate && !this._detonated) {
-            this._armedDetonate = true;
-            this.currentHp = 1; // HP-locked at 1 until self-destruct fires
-            this.shield = 0;    // strip shield so the visual reads "primed"
-            ParticleSys.createExplosion(this.x, this.y, 24, "#7fff00");
-            ParticleSys.createShockwave(this.x, this.y, "#7fff00", 36);
-            ParticleSys.createFloatingText(this.x, this.y - 140, "ARMED", "#7fff00");
-            AudioMgr.playSound('siren');
-            if (Game.shake) Game.shake(8);
-            // Fire the on-screen warning banner — same dramatic banner the
-            // boss phase transitions use, scoped to this enemy by name.
-            if (Game.showPhaseBanner) {
-                const nm = (this.name || 'ENEMY').toUpperCase();
-                Game.showPhaseBanner(
-                    'WARNING — DETONATION IMMINENT',
-                    `${nm} WILL EXPLODE NEXT TURN`,
-                    'warning'
-                );
-            }
-        }
-        // Once armed, further hits don't reduce HP — the carrier is
-        // committed to its self-destruct cycle. Without this clamp a
-        // second player die in the same turn could push HP below 1
-        // and trigger an unintended kill path before the warning lands.
-        if (Enemy && this instanceof Enemy && this._armedDetonate && this.currentHp < 1) {
-            this.currentHp = 1;
+        // Only HP damage during the player's phase can arm a surviving
+        // carrier. No survival clamp: killing it cancels the pending blast.
+        if (Enemy && this instanceof Enemy && this.kind === 'detonator') {
+            if (this.currentHp <= 0) this._armedDetonate = false;
+            else if (actualDmg > 0) this.tryArmSelfDestruct();
         }
 
         if (this instanceof Player && Game.haptic) {
@@ -877,7 +847,10 @@ class Entity {
         }
 
         // Elite affix: Vampiric — heals for 50% of damage it deals.
-        if (source instanceof Enemy && source.affixes && source.affixes.includes('Vampiric') && actualDmg > 0) {
+        // Retaliation may already have killed the attacker. Lifesteal is
+        // healing for a survivor, never an implicit resurrection.
+        if (source instanceof Enemy && source.currentHp > 0
+            && source.affixes && source.affixes.includes('Vampiric') && actualDmg > 0) {
             const heal = Math.max(1, Math.floor(actualDmg * 0.5));
             source.currentHp = Math.min(source.maxHp, source.currentHp + heal);
             ParticleSys.createFloatingText(source.x, source.y - 120, `VAMPIRIC +${heal}`, "#ff2255");

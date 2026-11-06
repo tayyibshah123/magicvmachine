@@ -7622,10 +7622,10 @@ triggerPhaseGlitch() {
             'Sentinel Orb':     'high burst damage in bursts.',
             'Phase Stalker':    'phases mid-strike. 35% of incoming hits pass through.',
             'Hive Warden':      'shields its allies.',
-            'Phage Pod':        'detonates, damaging nearby enemies AND you.',
+            'Phage Pod':        'arms below 30% HP. Kill it before the next player turn to stop the blast.',
             'Keeper':           'buffs nearby hostiles.',
             'Hive Conduit':     'amplifies the rest of the hive.',
-            'Parasite Carrier': 'explosive on death.',
+            'Parasite Carrier': 'arms below 30% HP. Blasts at the next player turn, then drops to 1 HP.',
             'Queen Node':       'restores the hive every turn.',
             'Code Fragment':    'unstable syntax. Expect glitches.',
             'Fatal Error':      'critical signal. Lands HARD.',
@@ -7636,7 +7636,7 @@ triggerPhaseGlitch() {
             'Glitch Shard':     'creates a duplicate on hit.',
             'Echo Phantom':     'mirrors damage back onto you.',
             'Paradox Loop':     'dies, returns for one final attack.',
-            'Maintenance Spike':'tiny chassis, fatal cargo. Detonates when killed.',
+            'Maintenance Spike':'arms below 30% HP. Blasts at the next player turn, then drops to 1 HP.',
             'Cryo Lord':        'frosts allies with a layered shield each turn.',
             'Foundry Bulwark':  'shields the line. Crack the captain first.',
             'Hive Stalker':     'burrows mid-fight. Resurfaces with a heavy strike.',
@@ -7656,7 +7656,7 @@ triggerPhaseGlitch() {
             immolate:     'self-destructs for AoE damage.',
             healer:       'heals allies each turn.',
             shielder:     'shields nearby allies.',
-            detonator:    'explodes on death.',
+            detonator:    'arms below 30% HP. Blasts at the next player turn, then drops to 1 HP.',
             buffer:       'amplifies nearby hostiles.',
             shield_break: 'strips shields on hit.',
             chaotic:      'random actions. Never predictable.',
@@ -8352,7 +8352,7 @@ triggerSystemCrash() {
                 break;
             case 'self_destruct':
                 label = `☠ SELF-DESTRUCT`;
-                body  = `Primed to detonate next turn — <strong>${val} damage</strong> to the player. Kill it first or wall up.`;
+                body  = `At the start of your next turn: <strong>${val} damage</strong> to you, then this enemy has <strong>1 HP</strong>. Shields block the blast. Kill it now to cancel it.`;
                 break;
             case 'dispel':
                 label = `${ICONS.intentDispel} CLEANSE`;
@@ -14955,9 +14955,66 @@ async startCombat(type) {
         this.startTurn();
     },
 
+    _resolvePendingSelfDestruct() {
+        const enemy = this.enemy;
+        if (!enemy || !enemy._armedDetonate || enemy._detonated) return true;
+        if (enemy.currentHp <= 0) {
+            enemy._armedDetonate = false;
+            return true;
+        }
+        const inCombat = () => this.currentState === STATE.COMBAT
+            || this.currentState === STATE.TUTORIAL_COMBAT || this.currentState === STATE.BREAKOUT;
+        if (!inCombat() || !this.player) return false;
+        if ((this.turnCount || 0) + 1 < enemy._detonateOnPlayerTurn) return true;
+
+        const player = this.player;
+        const boom = enemy.getEffectiveDamage(Math.max(8, Math.floor(enemy.maxHp / 3)));
+        // Commit the one-shot state before damage can trigger retaliation.
+        // No HP floor remains, so a reflected hit can kill the carrier.
+        enemy._armedDetonate = false;
+        enemy._detonated = true;
+        enemy._detonateOnPlayerTurn = null;
+        enemy._detonatedOnPlayerTurn = (this.turnCount || 0) + 1;
+        enemy.currentHp = 1;
+        enemy.shield = 0;
+        enemy.nextIntents = [];
+        ParticleSys.createFloatingText(enemy.x, enemy.y - 140, 'DETONATING', '#7fff00');
+        if (!this._isReducedMotion()) {
+            ParticleSys.createExplosion(enemy.x, enemy.y, 60, '#7fff00');
+            ParticleSys.createShockwave(player.x, player.y, '#7fff00', 60);
+        }
+        AudioMgr.playSound('explosion');
+        this.shake(16);
+        this.triggerScreenFlash('rgba(127, 255, 0, 0.30)', 260);
+
+        // Resolve before shield decay. Retaliation must not award a win
+        // before we know whether the same blast also killed the player.
+        this._resolvingSelfDestruct = true;
+        try {
+            if (boom > 0) player.takeDamage(boom, enemy);
+        } finally {
+            this._resolvingSelfDestruct = false;
+        }
+        // Vampiric damage may heal the attacker during takeDamage. The
+        // blast still leaves a survivor at 1 HP, but never revives a kill.
+        if (enemy.currentHp > 0) enemy.currentHp = 1;
+        if (player.currentHp <= 0) {
+            this.gameOver();
+            return false;
+        }
+        if (enemy.currentHp <= 0) {
+            this.winCombat();
+            return false;
+        }
+        return this.enemy === enemy && this.player === player && inCombat();
+    },
+
 async startTurn() {
       try {
         this.inputLocked = true;
+        // Resolve the pending blast before new-turn healing, DoTs, shield
+        // decay or dice. Its timing is independent of the enemy AI queue.
+        if (!this._resolvePendingSelfDestruct()) return;
         this.recycleBinCount = 0;
         this._fluxCyclerHeal = 0;
 
@@ -15440,7 +15497,8 @@ async startTurn() {
              if (got > 0) ParticleSys.createFloatingText(this.player.x, this.player.y - 80, `SOLAR (+${got})`, COLORS.GOLD);
         }
         
-        if (this.enemy && this.enemy.glitchMod && this.enemy.glitchMod.id === 'regen') {
+        if (this.enemy && this.enemy.glitchMod && this.enemy.glitchMod.id === 'regen'
+            && this.enemy._detonatedOnPlayerTurn !== this.turnCount) {
             const healAmt = Math.floor(this.enemy.maxHp * 0.05);
             this.enemy.heal(healAmt);
             ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 150, "GLITCH REGEN", "#00ff00");
@@ -15462,7 +15520,11 @@ async startTurn() {
         
         if(this.enemy) {
              this.enemy.updateEffects();
-             if (this.enemy.affixes && this.enemy.affixes.includes('Shielded')) {
+             // A DoT can finish a carrier immediately after its blast.
+             // updateEffects already resolves that win; don't roll a new hand.
+             if (this.enemy.currentHp <= 0) return;
+             if (this.enemy.affixes && this.enemy.affixes.includes('Shielded')
+                 && this.enemy._detonatedOnPlayerTurn !== this.turnCount) {
                  if (this.enemy.shield <= 0) {
                      const ratio = (this.sector === 1) ? 0.1 : 0.2;
                      const regen = Math.floor(this.enemy.maxHp * ratio);
@@ -22496,36 +22558,9 @@ drawEffects() {
             // others mutate into a standard 'attack' so the shared attack block handles
             // damage, VFX, hit-stop, and QTEs uniformly.
             else if (intent.type === 'self_destruct') {
-                // v1.8.3 — Parasite Carrier-style detonator self-destruct.
-                // Armed when the player drops the enemy to 0 HP; the
-                // takeDamage clamp set HP to 1 and fired a "WARNING —
-                // DETONATION IMMINENT" banner last turn. This intent is
-                // the explosion: small explosion VFX, player takes the
-                // intent.val (~maxHp/3, 30 for Parasite Carrier), then
-                // the enemy dies and combat ends if the player survived.
-                const boom = (intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val) || 30;
-                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, "DETONATING", "#7fff00");
-                ParticleSys.createShockwave(this.enemy.x, this.enemy.y, "#7fff00", 60);
-                AudioMgr.playSound('siren');
-                await this.sleep(450);
-                ParticleSys.createExplosion(this.enemy.x, this.enemy.y, 80, "#7fff00");
-                ParticleSys.createExplosion(this.player.x, this.player.y, 60, "#7fff00");
-                ParticleSys.createShockwave(this.player.x, this.player.y, "#7fff00", 70);
-                ParticleSys.createFloatingText(this.player.x, this.player.y - 140, `DETONATE -${boom}`, "#7fff00");
-                AudioMgr.playSound('explosion');
-                AudioMgr.playSound('grid_fracture');
-                if (this.shake) this.shake(20);
-                if (this.triggerScreenFlash) this.triggerScreenFlash('rgba(127, 255, 0, 0.30)', 260);
-                // Player damage — bypasses shield (it's a self-destruct
-                // burst, not a directed attack). gameOver if it kills.
-                const playerDied = this.player.takeDamage(boom, this.enemy, false, /*bypassShield*/ true);
-                // Carrier dies regardless (self-destruct consumes it).
-                this.enemy.currentHp = 0;
-                this.enemy._armedDetonate = false;
-                this.enemy._detonated = true;
-                if (playerDied && this.player.currentHp <= 0) { this.gameOver(); return; }
-                this.winCombat();
-                return;
+                // Warning only: the blast belongs to the next player
+                // turn, and replaces this enemy phase's ordinary attack.
+                continue;
             }
             else if (intent.type === 'aoe_sweep') {
                 // Riot Suppressor: single QTE then damage everyone player-side.
@@ -23184,6 +23219,10 @@ drawEffects() {
     },
 
     async winCombat() {
+        // A self-destruct hit can trigger a shield counter before the
+        // remaining damage reaches player HP. Its resolver settles both
+        // deaths together, prioritising a lethal hit over rewards.
+        if (this._resolvingSelfDestruct) return;
         // v1.9.0 — wipe Archivist Time Control on combat end so the
         // overlay disappears immediately and the budget resets for the
         // next fight. Calling with keepBudget:false also clears the
@@ -24483,6 +24522,23 @@ drawEffects() {
         });
     },
 
+    _scheduleReviveTurn() {
+        const enemy = this.enemy;
+        const player = this.player;
+        const gen = this._combatGen;
+        this.setTimer(() => {
+            const inCombat = this.currentState === STATE.COMBAT
+                || this.currentState === STATE.TUTORIAL_COMBAT || this.currentState === STATE.BREAKOUT;
+            if (!inCombat || this._combatGen !== gen || this.enemy !== enemy
+                || this.player !== player || !enemy || !player || player.currentHp <= 0) return;
+            // Retaliation can kill the carrier in the same blast that
+            // consumed the revive. Settle that win instead of starting
+            // a locked turn against a corpse.
+            if (enemy.currentHp <= 0) this.winCombat();
+            else this.startTurn();
+        }, 1000);
+    },
+
     gameOver() {
         // BREAKOUT death-shield. Sector 0 rooms must never end the run;
         // the prologue is meant to teach, not punish. If the player's HP
@@ -24557,7 +24613,7 @@ drawEffects() {
             this.player.playAnim('pulse');
             this.renderRelics();
             this.updateHUD();
-            setTimeout(() => { this.startTurn(); }, 1000);
+            this._scheduleReviveTurn();
             return;
         }
         const revive = this.player.relics.findIndex(r => r.id === 'second_life');
@@ -24571,9 +24627,7 @@ drawEffects() {
             this.renderRelics();
             this.updateHUD();
 
-            setTimeout(() => {
-                this.startTurn();
-            }, 1000);
+            this._scheduleReviveTurn();
 
             return;
         }
