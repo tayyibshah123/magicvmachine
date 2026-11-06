@@ -465,10 +465,40 @@ export const ClassAbility = {
         e.preventDefault(); e.stopPropagation();
         if (AudioMgr.ctx && AudioMgr.ctx.state === 'suspended') AudioMgr.ctx.resume();
         AudioMgr.playSound('click');
-        this._activate(action, t);
+        const result = this._activate(action, t);
+        if (result && typeof result.catch === 'function') {
+            result.catch(error => Game._recoverFromCombatError('class ability', error, false));
+        }
     },
 
     _activate(action, el) {
+        const player = Game && Game.player;
+        if (!state || !player || player.currentHp <= 0 || !Game.enemy || Game.enemy.currentHp <= 0
+            || Game.inputLocked || Game.qte?.active || Game._endTurnRunning || Game.paused || document.hidden) return;
+        const glyphAttack = classId === 'arcanist' && action === 'arc-tap'
+            && !state.usedThisTurn && state.activeGlyph === 0;
+        const tributeCost = this._tributeCost(action);
+        const tributeAttack = classId === 'bloodstalker' && state.ready
+            && (action === 'tribute-major' || action === 'tribute-grand') && player.currentHp > tributeCost;
+        const ventAttack = classId === 'annihilator' && action === 'heat-vent'
+            && state.heat >= CFG.annihilator.redMin
+            && (player.currentHp > CFG.annihilator.redSelfDmg || state._redVentArmed);
+        if (glyphAttack || tributeAttack || ventAttack) {
+            return Game._runCombatAction(() => this._applyActivation(action, el), null,
+                { minimumPresentationMs: 1200 });
+        }
+        // Utility actions remain synchronous and responsive. Damage actions
+        // above own their full presentation before victory, death or unlock.
+        return this._applyActivation(action, el);
+    },
+
+    _tributeCost(action) {
+        const pct = { 'tribute-minor': CFG.bloodstalker.minorPct,
+            'tribute-major': CFG.bloodstalker.majorPct, 'tribute-grand': CFG.bloodstalker.grandPct }[action];
+        return pct && Game?.player ? Math.max(1, Math.floor(Game.player.maxHp * pct)) : null;
+    },
+
+    _applyActivation(action, el) {
         const p = Game && Game.player;
         if (!p) return;
         switch (classId) {
@@ -524,13 +554,8 @@ export const ClassAbility = {
 
             case 'bloodstalker': {
                 if (!state.ready) return;
-                let pct = 0;
-                if      (action === 'tribute-minor') pct = CFG.bloodstalker.minorPct;
-                else if (action === 'tribute-major') pct = CFG.bloodstalker.majorPct;
-                else if (action === 'tribute-grand') pct = CFG.bloodstalker.grandPct;
-                else return;
-
-                const cost = Math.max(1, Math.floor(p.maxHp * pct));
+                const cost = this._tributeCost(action);
+                if (cost === null) return;
                 if (p.currentHp <= cost) {
                     ParticleSys.createFloatingText(p.x, p.y - 100, "NOT ENOUGH HP", "#ff3333");
                     return;
@@ -634,8 +659,8 @@ export const ClassAbility = {
                     const dmg = Game.calculateCardDamage(CFG.annihilator.redAoeDmg, 'EARTHQUAKE');
                     // Snapshot the minion list before damage — takeDamage may mutate it.
                     const targets = Game.enemy && Game.enemy.minions ? [...Game.enemy.minions] : [];
-                    if (Game.enemy && Game.enemy.currentHp > 0) Game.enemy.takeDamage(dmg);
-                    targets.forEach(m => { if (m && m.currentHp > 0) m.takeDamage(dmg); });
+                    if (Game.enemy && Game.enemy.currentHp > 0) Game.enemy.takeDamage(dmg, p);
+                    targets.forEach(m => { if (m && m.currentHp > 0) m.takeDamage(dmg, p); });
                     // Softlock guard: a fatal red-vent self-hit must end
                     // the run via gameOver. Previous code dropped the
                     // takeDamage return; on a 0-HP player, the turn loop
