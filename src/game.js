@@ -16595,17 +16595,6 @@ async startTurn() {
             dmg = Math.floor(dmg * 0.5);
         }
         
-        if (target && (target instanceof Enemy || target instanceof Minion)) {
-            const overcharge = target.hasEffect('overcharge');
-            if (overcharge) {
-                const modifier = overcharge.val > 0 ? 2.0 : 1.5;
-                dmg = Math.floor(dmg * modifier);
-            }
-            if (target.hasEffect('frail')) {
-                dmg = Math.floor(dmg * 1.3);
-            }
-        }
-
         // Tactician INTEL DEBUFF: enemy is "Exposed" — player attacks deal bonus flat damage.
         if (this._dieSlot(type) === 'attack' && this.enemy && this.enemy.intelDebuff > 0) {
             dmg += this.enemy.intelDebuff;
@@ -16675,6 +16664,16 @@ async startTurn() {
             }
         }
 
+        // Live casts carry outgoing power only. Entity.takeDamage owns
+        // incoming statuses, so a target-aware widget cannot apply them twice.
+        // A read-only preview applies them after outgoing bonuses, in the
+        // same order as the receiver, before shield/timing/chance outcomes.
+        if (peek && target && (target instanceof Enemy || target instanceof Minion)) {
+            if (target === this.enemy && target.minionRoster?.shouldGateBossDamage()) return 0;
+            const overcharge = target.hasEffect('overcharge');
+            if (overcharge) dmg = Math.floor(dmg * (overcharge.val > 0 ? 2 : 1.5));
+            if (target.hasEffect('frail')) dmg = Math.floor(dmg * 1.5);
+        }
         return dmg;
     },
 
@@ -17761,11 +17760,17 @@ async startTurn() {
                     let modNote = '';
                     if (delta > 0)      modNote = ` <span style="color:#0f0;">(+${delta})</span>`;
                     else if (delta < 0) modNote = ` <span style="color:#f55;">(${delta})</span>`;
-                    desc += `\n\n<span style="color:#ffd700;font-family:'Orbitron';">⚡ PREDICTED: ${finalDmg}${modNote}</span>`;
+                    desc += `\n\n<span style="color:#ffd700;font-family:'Orbitron';">⚡ POWER BEFORE TIMING: ${finalDmg}${modNote}</span>`;
                     if (this.enemy && this.enemy.shield > 0) {
                         const piercing = Math.max(0, finalDmg - this.enemy.shield);
-                        desc += `\n<span style="color:#888;font-size:0.85em;">vs ${this.enemy.shield} shield → ${piercing} HP loss</span>`;
+                        const conditional = this.enemy.kind === 'phase_shift' || this.enemy.kind === 'armored'
+                            || this.enemy.armorPlating > 0 || this.enemy.blindProtocol;
+                        desc += conditional
+                            ? `\n<span style="color:#888;font-size:0.85em;">${this.enemy.shield} shield. Armor or misses can reduce HP damage further.</span>`
+                            : `\n<span style="color:#888;font-size:0.85em;">Before timing or critical bonuses: ${piercing} HP damage after ${this.enemy.shield} shield.</span>`;
                     }
+                    if (this.enemy?.kind === 'phase_shift') desc += '\n35% chance this attack misses entirely.';
+                    if (target?.minionRoster?.shouldGateBossDamage()) desc += '\nInvulnerable while its fragments live. Target fragments first.';
                 }
 
                 el.dataset.dieId = String(die.id);
