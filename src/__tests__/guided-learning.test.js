@@ -420,4 +420,15 @@ describe('cold checkpoints, mode separation and harmless rehearsal', () => {
         expect(Game._readSaveRaw()).toBe(checkpoint);
         expect(Game.currentState).toBe(STATE.COMBAT);
     });
+
+    it('does not leave first-return guidance covering a newly selected practice drill', async () => {
+        const { Game, Breakout } = await game();
+        Game._learningUI = await import('../ui/learning-ui.js');
+        Game.openPracticeLibrary();
+        document.querySelector('[data-lesson-id="basics"]').click();
+        expect(Game._practiceSession).toBeTruthy();
+        expect(document.getElementById('learning-return-guidance')).toBeNull();
+        expect(document.getElementById('learning-practice-library')).toBeNull();
+        Breakout.cancel({ returnToMenu: true });
+    });
 });

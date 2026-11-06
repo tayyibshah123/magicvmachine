@@ -3751,6 +3751,8 @@ startQTE(type, x, y, callback, opts) {
         this._learningReadClose?.();
         this._learningUI?.hideBossRules?.();
         this._learningUI?.hidePracticeLibrary?.();
+        this._learningUI?.hideReturnGuidance?.();
+        this._learningUI?.hideModeBriefing?.();
         this._learningHUDSignature = null;
         const transition = this._screenTransitionGen = (this._screenTransitionGen || 0) + 1;
         // Stop the menu beat-pulse rAF whenever we leave MENU. The tick
