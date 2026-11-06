@@ -4,6 +4,7 @@ import { Enemy } from '../entities/enemy.js';
 import { Minion } from '../entities/minion.js';
 import { BOSS_DATA, STATE } from '../constants.js';
 import { ParticleSys } from '../effects/particles.js';
+import { ClassAbility } from '../ui/class-ability.js';
 import { getBossRules } from '../ui/boss-rules.js';
 import { setupCombatFixture, teardownCombatFixture } from './helpers/combat-fixture.js';
 import { renderFor } from './helpers/combat-renderer.js';
@@ -200,6 +201,51 @@ describe('guided routine banner timing', () => {
         const boss = vi.spyOn(Game, '_showDramaticBanner').mockResolvedValue();
         await Game.showPhaseBanner('BOSS', 'Phase 2', 'boss');
         expect(boss).toHaveBeenCalledWith('BOSS', 'Phase 2', 'boss', { variant: 'boss' });
+    });
+});
+
+describe('introduced class abilities', () => {
+    it('does not build hidden heat or shields, then initializes the introduced mechanic once', () => {
+        for (const method of ['endCombat', 'onTurnStart', 'onTurnEnd', 'onEvent', 'consumeAttackBlock']) {
+            ClassAbility[method].mockRestore();
+        }
+        document.getElementById('game-container').insertAdjacentHTML('beforeend',
+            '<div id="class-ability-widget" class="hidden"></div>');
+        const original = Game._canGuidedFeature;
+        let introduced = false;
+        Game._canGuidedFeature = () => introduced;
+        ClassAbility.init(Game);
+        try {
+            Game.player.classId = 'annihilator';
+            ClassAbility.startCombat();
+            for (let die = 0; die < 12; die++) ClassAbility.onEvent('dice_used', { type: 'ANH_ATTACK' });
+            ClassAbility.onTurnEnd();
+            ClassAbility._activate('heat-vent');
+            expect(ClassAbility.getHeat()).toBe(0);
+            expect(Game.player.currentHp).toBe(100);
+            expect(document.getElementById('class-ability-widget').classList.contains('hidden')).toBe(true);
+            introduced = true;
+            ClassAbility.onEvent('dice_used', { type: 'ANH_ATTACK' });
+            expect(ClassAbility.getHeat()).toBe(10);
+            introduced = false;
+            ClassAbility.onTurnStart();
+            expect(ClassAbility.getHeat()).toBe(0);
+
+            Game.player.classId = 'sentinel';
+            ClassAbility.startCombat();
+            ClassAbility.onEvent('shield_gained', { amount: 18 });
+            expect(ClassAbility.getPlates()).toBe(0);
+            expect(ClassAbility.consumeAttackBlock()).toBe(false);
+            introduced = true;
+            ClassAbility.onEvent('shield_gained', { amount: 18 });
+            expect(ClassAbility.getPlates()).toBe(3);
+            expect(ClassAbility.consumeAttackBlock()).toBe(true);
+            expect(ClassAbility.consumeAttackBlock()).toBe(false);
+        } finally {
+            ClassAbility.endCombat();
+            if (original) Game._canGuidedFeature = original;
+            else delete Game._canGuidedFeature;
+        }
     });
 });
 
