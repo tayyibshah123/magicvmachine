@@ -7,7 +7,8 @@ import { join } from 'node:path';
 export async function sourceFingerprint(root) {
   const files = ['index.html', 'main.js', 'style.css', 'manifest.json', 'service-worker.js',
     'icon.svg', 'icon-maskable.svg', 'intro.png', 'package.json', 'package-lock.json',
-    'vitest.config.js', 'playwright.config.js'];
+    'vitest.config.js', 'playwright.config.js', 'mockup-menu.html',
+    'mockup-menu-a1.html', 'mockup-menu-a2.html', 'mockup-menu-a3.html', 'mockup-menu-a4.html'];
   for (const optional of ['playwright.editions.config.js']) {
     try { await readFile(join(root, optional)); files.push(optional); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
@@ -25,6 +26,26 @@ export async function sourceFingerprint(root) {
     let bytes = await readFile(join(root, file));
     if (/\.(?:js|mjs|json|css|html|svg|sh)$/.test(file)) bytes = Buffer.from(bytes.toString('utf8').replaceAll('\r\n', '\n'));
     hash.update(file).update('\0').update(bytes).update('\0');
+  }
+  return hash.digest('hex');
+}
+
+export async function bundleFingerprint(root) {
+  const files = [];
+  async function collect(directory, prefix = '') {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (entry.isSymbolicLink()) throw new Error('A tested bundle cannot contain linked files');
+      const name = prefix + entry.name;
+      if (entry.isDirectory()) await collect(join(directory, entry.name), name + '/');
+      else files.push(name);
+    }
+  }
+  await collect(root);
+  const hash = createHash('sha256');
+  for (const name of files.sort()) {
+    let bytes = await readFile(join(root, name));
+    if (/\.(?:js|json|css|html|svg)$/.test(name)) bytes = Buffer.from(bytes.toString('utf8').replaceAll('\r\n', '\n'));
+    hash.update(name).update('\0').update(bytes).update('\0');
   }
   return hash.digest('hex');
 }

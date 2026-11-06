@@ -4,7 +4,7 @@ import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { resolve, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TEST_GROUPS, groupFor } from './test-groups.mjs';
-import { sourceFingerprint } from './source-fingerprint.mjs';
+import { sourceFingerprint, bundleFingerprint } from './source-fingerprint.mjs';
 
 const root = resolve(fileURLToPath(new URL('../', import.meta.url)));
 const args = process.argv.slice(2);
@@ -89,6 +89,7 @@ if (!area) {
   const built = await run('Web bundle', ['scripts/build-www.mjs']);
   const valid = built && await run('Bundle contracts', ['scripts/validate-build.mjs']);
   if (valid) {
+    report.bundleFingerprint = await bundleFingerprint(join(root, 'www'));
     await rm(join(output, 'browser/results.json'), { force: true });
     await run('Mobile browser journeys and regressions', ['node_modules/@playwright/test/cli.js', 'test'], { MVM_BROWSER_OUTPUT_DIR: join(output, 'browser') });
     try {
@@ -121,6 +122,8 @@ const finalFingerprint = await sourceFingerprint(root);
 report.phases.push({ name: 'Frozen source and test inputs',
   status: finalFingerprint === report.sourceFingerprint ? 'passed' : 'failed',
   ...(finalFingerprint === report.sourceFingerprint ? {} : { message: 'Source or checks changed during this run. Verify the final inputs again.' }) });
+if (report.bundleFingerprint) report.phases.push({ name: 'Frozen tested web bundle',
+  status: report.bundleFingerprint === await bundleFingerprint(join(root, 'www')) ? 'passed' : 'failed' });
 const executedChecks = Object.values(report.areas).reduce((n, a) => n + a.passed + a.failed, 0)
   + (report.browser?.passed || 0) + (report.browser?.failed || 0);
 if (!executedChecks) report.phases.push({ name: 'Executed checks', status: 'failed', message: 'No test cases executed.' });

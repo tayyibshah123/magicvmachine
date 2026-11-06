@@ -160,6 +160,18 @@ self.addEventListener('fetch', event => {
                 caches.open(ACTIVE_CACHE).then(c => c.put(req, copy));
             }
             return resp;
-        }).catch(() => caches.open(ACTIVE_CACHE).then(cache => cache.match(req)))
+        }).catch(async () => {
+            const cache = await caches.open(ACTIVE_CACHE);
+            const exact = await cache.match(req);
+            if (exact) return exact;
+            // The manifest launch URL includes ?src=pwa. A first offline
+            // launch has only the precached canonical HTML, not that query.
+            // Restrict this fallback to this edition's document navigation.
+            if (req.mode === 'navigate' && (url.pathname === SCOPE.pathname
+                || url.pathname === new URL('index.html', SCOPE).pathname)) {
+                return cache.match(new URL('index.html', SCOPE), { ignoreSearch: true });
+            }
+            return undefined;
+        })
     );
 });

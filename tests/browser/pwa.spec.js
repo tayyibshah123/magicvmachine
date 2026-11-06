@@ -70,8 +70,8 @@ async function readProfile(page) {
     return page.evaluate(keys => Object.fromEntries(keys.map(key => [key, localStorage.getItem(key)])), Object.keys(profile));
 }
 
-async function openReturningMenu(page) {
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+async function openReturningMenu(page, path = '/') {
+    await page.goto(path, { waitUntil: 'domcontentloaded' });
     await waitForGame(page);
     await page.locator('#intro-overlay').click();
     await expect(page.locator('#intro-overlay')).toHaveCount(0);
@@ -113,6 +113,10 @@ test('installed game cold-opens offline with HTTP cache cleared and resumes its 
     try {
         await openReturningMenu(page);
         await waitForInstalledWorker(page);
+        const manifestStart = await page.evaluate(async () => {
+            const manifest = await (await fetch('./manifest.json')).json();
+            return new URL(manifest.start_url, document.baseURI).href;
+        });
         const before = await cacheSnapshot(page);
         expect(before.some(cache => cache.urls.includes('/index.html'))).toBe(true);
         await testInfo.attach('pwa-cache-before-offline', { body: JSON.stringify(before, null, 2), contentType: 'application/json' });
@@ -126,7 +130,7 @@ test('installed game cold-opens offline with HTTP cache cleared and resumes its 
         await page.goto('about:blank');
         await context.setOffline(true);
         offline = true;
-        await openReturningMenu(page);
+        await openReturningMenu(page, manifestStart);
         // Version metadata is consumed by the update check rather than the
         // startup module graph. Load it explicitly while still offline.
         await page.evaluate(async () => { await import('/src/version.js'); });

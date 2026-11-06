@@ -1,32 +1,17 @@
 import { test as base, expect } from '@playwright/test';
 import { APP_EDITION } from '../../src/version.js';
+import { captureBrowserErrors } from '../helpers/browser-errors.js';
 
 export const edition = APP_EDITION;
 export const storagePrefix = edition === 'guided' ? 'mvm-edition:guided:' : '';
 
 export const test = base.extend({
   browserErrors: [async ({ page, context }, use, testInfo) => {
-    const errors = [];
     const origin = new URL(testInfo.project.use.baseURL).origin;
-    const required = request => {
-      const url = new URL(request.url());
-      return url.origin === origin && (['script', 'document', 'stylesheet'].includes(request.resourceType())
-        || url.pathname.endsWith('/service-worker.js'));
-    };
-    page.on('pageerror', error => errors.push(error.message));
-    context.on('response', response => {
-      if (response.status() >= 400 && required(response.request())) {
-        errors.push(response.status() + ' ' + response.url());
-      }
-    });
-    context.on('requestfailed', request => {
-      if (required(request)) errors.push((request.failure()?.errorText || 'Request failed') + ' ' + request.url());
-    });
+    const { errors, collectUnhandled } = await captureBrowserErrors(context, origin);
     await page.addInitScript(() => {
-      window.__qaUnhandled = [];
       window.__qaTouches = [];
       window.__qaPointers = [];
-      window.addEventListener('unhandledrejection', event => window.__qaUnhandled.push(String(event.reason?.stack || event.reason)));
       document.addEventListener('pointerdown', event => {
         window.__qaPointers.push({ time: performance.now(), x: event.clientX, y: event.clientY,
           tag: event.target.tagName, id: event.target.id, className: String(event.target.className?.baseVal || event.target.className || '') });
@@ -55,13 +40,13 @@ export const test = base.extend({
             return localStorage.getItem('mvm_save_v1__' + slot);
           } catch { return null; }
         });
-        errors.push(...state.unhandled);
         await testInfo.attach('final-state', { body: JSON.stringify(state, null, 2), contentType: 'application/json' });
         await testInfo.attach('checkpoint', { body: checkpoint || 'null', contentType: 'application/json' });
       } catch (error) {
         errors.push('Could not inspect the final browser state: ' + error.message);
       }
     }
+    await collectUnhandled();
     await testInfo.attach('browser-errors', { body: JSON.stringify(errors, null, 2), contentType: 'application/json' });
     expect(errors, 'Uncaught errors and failed required application resources').toEqual([]);
   }, { auto: true }]

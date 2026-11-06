@@ -6,6 +6,7 @@ import { resolve, join, relative, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { bundleFingerprint } from './source-fingerprint.mjs';
 
 const root = resolve(fileURLToPath(new URL('../', import.meta.url)));
 const args = process.argv.slice(2);
@@ -31,7 +32,8 @@ for (const id of ['stable', 'guided']) {
   assert(version && cachePrefix, 'Edition metadata must be complete');
   execFileSync(process.execPath, [join(checkout, 'scripts/validate-build.mjs')], { cwd: checkout, stdio: 'inherit' });
   const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: checkout, encoding: 'utf8' }).trim();
-  editions[id] = { checkout, version, cachePrefix, commit, path: id === 'stable' ? './' : './guided/' };
+  editions[id] = { checkout, version, cachePrefix, commit,
+    bundleFingerprint: await bundleFingerprint(join(checkout, 'www')), path: id === 'stable' ? './' : './guided/' };
 }
 assert.notEqual(editions.stable.cachePrefix, editions.guided.cachePrefix, 'Edition caches must be independent');
 assert.notEqual(editions.stable.version, editions.guided.version, 'Release versions must identify both editions');

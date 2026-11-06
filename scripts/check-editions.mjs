@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { sourceFingerprint } from './source-fingerprint.mjs';
+import { sourceFingerprint, bundleFingerprint } from './source-fingerprint.mjs';
 
 const root = resolve(fileURLToPath(new URL('../', import.meta.url)));
 const args = process.argv.slice(2);
@@ -36,7 +36,8 @@ for (const [edition, checkout] of Object.entries(sources)) {
     try {
       summary = JSON.parse(await readFile(existing, 'utf8'));
       if (!summary.passed || !summary.shuffledAreas || !summary.browser?.passed
-        || summary.sourceFingerprint !== await sourceFingerprint(checkout)) throw new Error('Evidence does not match the unchanged complete source and checks');
+        || summary.sourceFingerprint !== await sourceFingerprint(checkout)
+        || summary.bundleFingerprint !== await bundleFingerprint(join(checkout, 'www'))) throw new Error('Evidence does not match the unchanged complete source, checks and tested bundle');
       report.phases.push({ name: edition + ' existing comprehensive evidence', passed: true, reused: existing });
     } catch (error) {
       report.phases.push({ name: edition + ' existing evidence', passed: false, message: error.message });
@@ -66,6 +67,12 @@ if (report.phases.every(phase => phase.passed) && Object.values(report.editions)
       }
     } catch (error) { report.phases.push({ name: 'Independent browser evidence', passed: false, message: error.message }); }
   }
+}
+for (const [edition, checkout] of Object.entries(sources)) {
+  const matches = report.editions[edition]?.sourceFingerprint === await sourceFingerprint(checkout);
+  report.phases.push({ name: edition + ' final source and check fingerprint', passed: matches });
+  report.phases.push({ name: edition + ' final tested bundle fingerprint',
+    passed: report.editions[edition]?.bundleFingerprint === await bundleFingerprint(join(checkout, 'www')) });
 }
 report.finishedAt = new Date().toISOString();
 report.passed = Object.keys(report.editions).length === 2 && report.phases.every(phase => phase.passed)

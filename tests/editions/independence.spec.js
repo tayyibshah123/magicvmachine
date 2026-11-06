@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 const frozenRun = JSON.parse(await readFile(new URL('../browser/returning-save.json', import.meta.url), 'utf8'));
 const expected = {
@@ -35,8 +35,8 @@ test.beforeEach(async ({ page, context }) => {
     }, { frozenRun, expected });
 });
 
-async function open(page, edition) {
-    await page.goto(edition === 'stable' ? '/' : '/guided/', { waitUntil: 'domcontentloaded' });
+async function open(page, edition, path) {
+    await page.goto(path || (edition === 'stable' ? '/' : '/guided/'), { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => !!window.Game?.ctx);
     await page.locator('#intro-overlay').tap();
     await page.locator('#intro-overlay').waitFor({ state: 'detached' });
@@ -58,7 +58,7 @@ async function profile(page) {
         'mvm_analytics_consent'].map(key => [key, localStorage.getItem(key)])));
 }
 
-test('two independently installed games retain different saves and a reset cannot erase the other edition', async ({ page: stable, context }) => {
+for (const resetEdition of ['stable', 'guided']) test(`${resetEdition} reset cannot erase the other independently installed game`, async ({ page: stable, context }) => {
     const guided = await context.newPage();
     const navigations = [];
     guided.on('framenavigated', frame => { if (frame === guided.mainFrame()) navigations.push(frame.url()); });
@@ -67,42 +67,50 @@ test('two independently installed games retain different saves and a reset canno
     expect(navigations, 'first child-worker installation must not refresh the nested edition').toHaveLength(1);
     expect(await resume(stable)).toEqual(expected.stable);
     expect(await resume(guided)).toEqual(expected.guided);
-    const guideBefore = await profile(guided);
-    await stable.evaluate(() => localStorage.clear());
-    expect(await profile(guided)).toEqual(guideBefore);
-    expect(await stable.evaluate(() => localStorage.getItem('mvm_sparks'))).toBeNull();
-    await open(stable, 'stable');
-    await expect(stable.locator('#btn-load-save')).toBeHidden();
-    expect(await profile(guided)).toEqual(guideBefore);
+    const [reset, other] = resetEdition === 'stable' ? [stable, guided] : [guided, stable];
+    const before = await profile(other);
+    await reset.evaluate(() => localStorage.clear());
+    expect(await profile(other)).toEqual(before);
+    expect(await reset.evaluate(() => localStorage.getItem('mvm_sparks'))).toBeNull();
+    await open(reset, resetEdition);
+    await expect(reset.locator('#btn-load-save')).toBeHidden();
+    expect(await profile(other)).toEqual(before);
 });
 
-test('updating Stable preserves Guided control, cache and profile without reloading its page', async ({ page: stable, context }) => {
+for (const updateEdition of ['stable', 'guided']) test(`updating ${updateEdition} preserves the other game's controller, cache and profile`, async ({ page: stable, context }) => {
     const guided = await context.newPage();
     await open(stable, 'stable');
     await open(guided, 'guided');
-    const before = await profile(guided);
-    const controller = await guided.evaluate(() => navigator.serviceWorker.controller.scriptURL);
-    let guidedReloads = 0;
-    guided.on('framenavigated', frame => { if (frame === guided.mainFrame()) guidedReloads++; });
-    expect((await stable.request.post('/.__qa__/revision', { data: { revision: 'isolation', edition: 'stable' } })).ok()).toBe(true);
-    await stable.evaluate(async () => { await (await navigator.serviceWorker.getRegistration()).update(); });
-    await expect(stable.locator('#sw-update-banner')).toBeVisible({ timeout: 45000 });
-    await expect.poll(() => stable.evaluate(async () => !!(await navigator.serviceWorker.getRegistration()).waiting)).toBe(true);
-    await Promise.all([stable.waitForNavigation({ waitUntil: 'domcontentloaded' }), stable.locator('#btn-sw-refresh').tap()]);
-    await stable.waitForFunction(() => !!window.Game?.ctx);
-    await expect.poll(() => stable.evaluate(async () => (await caches.keys()).some(key => key.endsWith('-isolation')))).toBe(true);
-    expect(await profile(guided)).toEqual(before);
-    expect(await guided.evaluate(() => navigator.serviceWorker.controller.scriptURL)).toBe(controller);
-    expect(guidedReloads).toBe(0);
-    const cachesNow = await guided.evaluate(() => caches.keys());
-    expect(cachesNow.some(key => key.includes('|mvm-guided-shell-v'))).toBe(true);
-    expect(cachesNow.some(key => key.includes('|mvm-stable-shell-v') && key.endsWith('-isolation'))).toBe(true);
+    const [update, other] = updateEdition === 'stable' ? [stable, guided] : [guided, stable];
+    const otherEdition = updateEdition === 'stable' ? 'guided' : 'stable';
+    const before = await profile(other);
+    const controller = await other.evaluate(() => navigator.serviceWorker.controller.scriptURL);
+    let otherReloads = 0;
+    other.on('framenavigated', frame => { if (frame === other.mainFrame()) otherReloads++; });
+    expect((await update.request.post('/.__qa__/revision', { data: { revision: 'isolation', edition: updateEdition } })).ok()).toBe(true);
+    await update.evaluate(async () => { await (await navigator.serviceWorker.getRegistration()).update(); });
+    await expect(update.locator('#sw-update-banner')).toBeVisible({ timeout: 45000 });
+    await expect.poll(() => update.evaluate(async () => !!(await navigator.serviceWorker.getRegistration()).waiting)).toBe(true);
+    await Promise.all([update.waitForNavigation({ waitUntil: 'domcontentloaded' }), update.locator('#btn-sw-refresh').tap()]);
+    await update.waitForFunction(() => !!window.Game?.ctx);
+    await expect.poll(() => update.evaluate(async () => (await caches.keys()).some(key => key.endsWith('-isolation')))).toBe(true);
+    expect(await profile(other)).toEqual(before);
+    expect(await other.evaluate(() => navigator.serviceWorker.controller.scriptURL)).toBe(controller);
+    expect(otherReloads).toBe(0);
+    const cachesNow = await other.evaluate(() => caches.keys());
+    expect(cachesNow.some(key => key.includes(`|mvm-${otherEdition}-shell-v`) && !key.endsWith('-isolation'))).toBe(true);
+    expect(cachesNow.some(key => key.includes(`|mvm-${updateEdition}-shell-v`) && key.endsWith('-isolation'))).toBe(true);
 });
 
 test('both editions cold-open offline from their own caches after the HTTP cache is cleared', async ({ page: stable, context }) => {
     const guided = await context.newPage();
     await open(stable, 'stable');
     await open(guided, 'guided');
+    const launchURL = page => page.evaluate(async () => {
+        const manifest = await (await fetch('./manifest.json')).json();
+        return new URL(manifest.start_url, document.baseURI).href;
+    });
+    const starts = { stable: await launchURL(stable), guided: await launchURL(guided) };
     const cdp = await context.newCDPSession(stable);
     await cdp.send('Network.clearBrowserCache');
     await cdp.detach();
@@ -110,8 +118,8 @@ test('both editions cold-open offline from their own caches after the HTTP cache
     await guided.goto('about:blank');
     await context.setOffline(true);
     try {
-        await open(stable, 'stable');
-        await open(guided, 'guided');
+        await open(stable, 'stable', starts.stable);
+        await open(guided, 'guided', starts.guided);
         expect(await resume(stable)).toEqual(expected.stable);
         expect(await resume(guided)).toEqual(expected.guided);
         expect(await stable.evaluate(async () => (await import('./src/version.js')).APP_EDITION)).toBe('stable');
