@@ -30,6 +30,7 @@ import { Assist } from './services/assist.js';
 import { Intel } from './services/intel.js';
 import { SaveSync } from './services/save-sync.js';
 import { RetiredUpgrades } from './services/retired-upgrades.js';
+import { makeRunRules, validRunRules } from './services/run-rules.js';
 import { Onboarding } from './services/onboarding.js';
 import { Learning } from './services/learning.js';
 import { APP_EDITION } from './version.js';
@@ -1693,6 +1694,7 @@ const Game = {
      *     (manual opt-in, persists until they switch to OPERATOR/ASCENDANT).
      * Read by Entity.takeDamage to apply a 15% incoming-damage cushion. */
     _isNewcomer() {
+        if (validRunRules(this._runRules)) return this._runRules.newcomer;
         try {
             const tier = localStorage.getItem('mvm_difficulty') || 'operator';
             if (tier === 'initiate') return true;
@@ -1709,6 +1711,31 @@ const Game = {
     _getDifficultyTier() {
         try { return localStorage.getItem('mvm_difficulty') || 'operator'; }
         catch (_) { return 'operator'; }
+    },
+
+    _captureRunRules({ starting = false, origin = 'selected' } = {}) {
+        const difficulty = this._getDifficultyTier();
+        let runs = 0;
+        try { runs = parseInt(localStorage.getItem('mvm_runs_started') || '0', 10) || 0; } catch (_) {}
+        if (starting) runs++;
+        this._runRules = makeRunRules({ ascension: Ascension.getSelected(), difficulty,
+            corruption: this.corruptionLevel || 0, newcomer: difficulty === 'initiate'
+                || difficulty === 'operator' && runs > 0 && runs <= 3,
+            disabledMeta: [], origin });
+        this._ascEffects = Ascension.activeEffects(this._runRules.ascension);
+        return this._runRules;
+    },
+
+    _getRunAscension() {
+        return validRunRules(this._runRules) ? this._runRules.ascension : Ascension.getSelected();
+    },
+
+    _getRunCorruption() {
+        return validRunRules(this._runRules) ? this._runRules.corruption : (this.corruptionLevel || 0);
+    },
+
+    _getRunDifficultyTier() {
+        return validRunRules(this._runRules) ? this._runRules.difficulty : this._getDifficultyTier();
     },
 
     /* Wire click handlers on the difficulty frame buttons. Persists
@@ -5857,9 +5884,10 @@ startQTE(type, x, y, callback, opts) {
     selectClass(cls) {
         if (!this._confirmNewRun('start a new run')) return;
         if (!this._clearSave()) { this.showHintToast?.('Could not replace the checkpoint. Existing progress is preserved.', 3000); return; }
+        this._captureRunRules({ starting: true });
         AudioMgr.playSound('click');
         // Diag — run start event for the dump's gameplay log.
-        try { Diag.event('run_start', { classId: cls && cls.id, asc: (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0 }); } catch (_) {}
+        try { Diag.event('run_start', { classId: cls && cls.id, asc: this._getRunAscension() }); } catch (_) {}
         // Unlock the SAVES menu surface — once a run has been started,
         // the save-slot picker becomes meaningful.
         try { Unlocks.grant && Unlocks.grant('saves', 'first_run_started'); } catch (_) {}
@@ -5898,12 +5926,13 @@ startQTE(type, x, y, callback, opts) {
         // mana / thorn / relic perks; with the disabled set populated up
         // front, those checks already see the curse on the first frame.
         this._disabledMetaThisRun = new Set();
-        const ascSelected = (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0;
+        const ascSelected = this._getRunAscension();
         const ascNow = (typeof Ascension !== 'undefined' && Ascension.activeEffects) ? Ascension.activeEffects(ascSelected) : null;
         if (ascNow && ascNow.loseOneMeta && this.metaUpgrades && this.metaUpgrades.length > 0) {
             const owned = this.metaUpgrades.slice();
             const drop = owned[Math.floor(Math.random() * owned.length)];
             this._disabledMetaThisRun.add(drop);
+            this._runRules.disabledMeta = [...this._disabledMetaThisRun];
             const meta = (typeof META_UPGRADES !== 'undefined') ? META_UPGRADES.find(m => m.id === drop) : null;
             const label = meta ? meta.name : drop;
             // Defer the floating text so it lands once the combat scene is
@@ -6001,7 +6030,7 @@ startQTE(type, x, y, callback, opts) {
 
         Analytics.emit('run_start', {
             class: cls.id,
-            ascension: (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0,
+            ascension: this._getRunAscension(),
             daily: !!this.isDailyRun
         });
 
@@ -9877,8 +9906,7 @@ triggerSystemCrash() {
                     ? PLAYER_CLASSES.find(c => c.id === saveBlob.player.classId) : null;
                 const className = saveCls ? saveCls.name.toUpperCase()
                     : String(saveBlob.player.classId || '').toUpperCase();
-                const ascLvl = (typeof Ascension !== 'undefined' && Ascension.getSelected)
-                    ? Ascension.getSelected() : 0;
+                const ascLvl = validRunRules(saveBlob.runRules) ? saveBlob.runRules.ascension : Ascension.getSelected();
                 if (resumeMeta) resumeMeta.textContent = 'RESUME RUN';
                 if (resumeSub) {
                     const segments = [];
@@ -10710,7 +10738,7 @@ triggerSystemCrash() {
         html += '</div>';
 
         // --- Active modifiers (Ascension + Custom Run + Pacts) ---------------
-        const ascSel = (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0;
+        const ascSel = this._getRunAscension();
         const ascTw  = (typeof Ascension !== 'undefined' && Ascension.twist) ? Ascension.twist(ascSel) : null;
         const pacts = this.activePacts ? Array.from(this.activePacts) : [];
         const customMods = Array.isArray(this._customRunActive) ? this._customRunActive.map(m => m.id) : [];
@@ -11108,7 +11136,7 @@ triggerSystemCrash() {
     // older files run through _migrateSave() before being consumed. Keeps
     // mid-run saves forward-compatible across class-rework / new-feature
     // deploys without forcing the player to restart.
-    SAVE_SCHEMA_VERSION: 5,
+    SAVE_SCHEMA_VERSION: 6,
 
     // ─── Save slots ────────────────────────────────────────────────
     // Three named slots (A / B / C) stored under per-slot keys. The
@@ -11359,12 +11387,14 @@ triggerSystemCrash() {
     saveGame() {
         if (this._practiceSession) return true;
         if (!this.map.currentIdx) this.map.currentIdx = 'start';
+        if (!validRunRules(this._runRules)) this._captureRunRules();
 
         const data = {
             v: this.SAVE_SCHEMA_VERSION,
             combatRecovery: this._combatRecoverySnapshot(),
             pendingReward: this.pendingReward || null,
             guidance: APP_EDITION === 'guided' ? (this._guidedRun || null) : null,
+            runRules: { ...this._runRules, disabledMeta: [...this._runRules.disabledMeta] },
             fragments: this.techFragments,
             meta: this.metaUpgrades,
             encrypted: this.encryptedFiles,
@@ -11450,6 +11480,12 @@ triggerSystemCrash() {
         {
             from: 4, to: 5,
             migrate(data) { data.guidance = null; }
+        },
+        {
+            from: 5, to: 6,
+            // Older checkpoints never recorded these choices. Adopt the
+            // current preferences once on load, then freeze future changes.
+            migrate(data) { data.runRules ??= null; data.guidance ??= null; }
         }
         // Future migrations append here. Example:
         // { from: 2, to: 3, migrate(data) { data.player.bloodTier = data.player.bloodTier || 0; } }
@@ -11498,6 +11534,12 @@ triggerSystemCrash() {
             // save and route through the catch block's recovery path rather
             // than dereferencing null below.
             if (!data) throw new Error('save migration returned null');
+            if (data.runRules != null && !validRunRules(data.runRules)) throw new Error('invalid saved run rules');
+            const adoptedRunRules = !validRunRules(data.runRules);
+            this._runRules = adoptedRunRules ? this._captureRunRules({ origin: 'legacy' })
+                : { ...data.runRules, disabledMeta: [...data.runRules.disabledMeta] };
+            this._ascEffects = Ascension.activeEffects(this._getRunAscension());
+            this._disabledMetaThisRun = new Set(this._runRules.disabledMeta);
 
             this.sector = data.sector || 1;
             this.map = data.map || { nodes: [], currentIdx: 'start' };
@@ -11593,6 +11635,7 @@ triggerSystemCrash() {
 
             this.changeState(STATE.MAP);
             this.renderMap();
+            if (adoptedRunRules) this.saveGame();
 
             ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH/2, CONFIG.CANVAS_HEIGHT/2, "SYSTEM RESTORED", COLORS.GOLD);
         } catch (e) {
@@ -11733,8 +11776,7 @@ triggerSystemCrash() {
                 // Ascension reward scaling — positive fragment gains scale
                 // with the selected ascension so A20 events don't feel like
                 // A0 events. +5% per level, capped at +100% at A20.
-                const ascLevel = (typeof Ascension !== 'undefined' && Ascension.getSelected)
-                    ? Ascension.getSelected() : 0;
+                const ascLevel = this._getRunAscension();
                 const ascScale = 1 + Math.min(1, ascLevel * 0.05);
                 const fragDelta = (this.techFragments || 0) - beforeFrags;
                 if (fragDelta > 0 && ascScale > 1) {
@@ -14440,6 +14482,7 @@ updateHexBreach(dt) {
 
 async startCombat(type) {
         if (this.pendingReward) { this.changeState(STATE.REWARD); return; }
+        if (!validRunRules(this._runRules)) this._captureRunRules();
         // Keep the entry scene inert until its first player hand is ready.
         // A map-node release can otherwise reach End Turn during briefing.
         this.inputLocked = true;
@@ -14545,10 +14588,10 @@ async startCombat(type) {
         let sectorMult = 1.0 + ((this.sector - 1) * 0.2);
 
         // Ascension Scaling — player-facing ladder (legacy corruptionLevel kept as fallback)
-        const ascLevel = (Ascension.getSelected() || 0);
+        const ascLevel = this._getRunAscension();
         const ascEffects = Ascension.activeEffects(ascLevel);
         // Combine the legacy +20% and the new ladder's enemyHpMult; ladder takes precedence
-        const ascensionMult = ascEffects.enemyHpMult * (1 + (this.corruptionLevel * 0.2));
+        const ascensionMult = ascEffects.enemyHpMult * (1 + (this._getRunCorruption() * 0.2));
         const ascensionDmgMult = ascEffects.enemyDmgMult;
         // Cache for use elsewhere this combat
         this._ascEffects = ascEffects;
@@ -14594,7 +14637,7 @@ async startCombat(type) {
         // (Roadmap Part 24.2). Applied after construction so the standard
         // sector multiplier doesn't compound onto the Sector X bracket.
         if (this.enemy.name === 'THE ARCHIVIST') {
-            const ascSelArch = (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0;
+            const ascSelArch = this._getRunAscension();
             const baseHp = 500 + 150 * ascSelArch;
             this.enemy.maxHp = baseHp;
             this.enemy.currentHp = baseHp;
@@ -14828,7 +14871,7 @@ async startCombat(type) {
         // silently drop boss HP 10% and flag the boss so the UI can render
         // a visible "adaptive" badge. Never hidden from the player.
         if (this.enemy.isBoss && !this.assistDisabled) {
-            const ascLevel = (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0;
+            const ascLevel = this._getRunAscension();
             const mult = Assist.hpMultiplier(this.sector, ascLevel);
             if (mult !== 1.0) {
                 this.enemy.maxHp = Math.floor(this.enemy.maxHp * mult);
@@ -15086,8 +15129,8 @@ async startCombat(type) {
         }
 
         // Apply Glitch Modifiers
-        if (this.corruptionLevel > 0 && !isBoss && this._canGuidedFeature('advanced')) {
-            if (Math.random() < (0.3 + this.corruptionLevel * 0.1)) {
+        if (this._getRunCorruption() > 0 && !isBoss && this._canGuidedFeature('advanced')) {
+            if (Math.random() < (0.3 + this._getRunCorruption() * 0.1)) {
                 const mod = GLITCH_MODIFIERS[Math.floor(Math.random() * GLITCH_MODIFIERS.length)];
                 this.enemy.affixes.push(mod.id);
                 this.enemy.glitchMod = mod; 
@@ -23924,7 +23967,7 @@ drawEffects() {
                     m.spawnTimer = 1.0;
 
                     // Apply sector scaling to summons
-                    const ascensionMult = 1 + (this.corruptionLevel * 0.2);
+                    const ascensionMult = 1 + (this._getRunCorruption() * 0.2);
                     m.maxHp = Math.floor(m.maxHp * ascensionMult);
                     m.currentHp = m.maxHp;
                     m.dmg = Math.floor(m.dmg * ascensionMult);
@@ -24261,7 +24304,7 @@ drawEffects() {
         // Track the kill so the next time the player meets this enemy the
         // briefing shows "Encountered N times" and achievements can fire.
         if (this.enemy && this.enemy.name && this.currentState !== STATE.TUTORIAL_COMBAT) {
-            const _asc = (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0;
+            const _asc = this._getRunAscension();
             Intel.recordKill(this.enemy.name, this.sector, _asc);
             // Also log any enemy-side minion kills for regular combats so
             // the total-kill counter climbs realistically.
@@ -24349,7 +24392,7 @@ drawEffects() {
                     // adds proportional bonus. Challenge Mode multiplies
                     // this 3× on the final boss as well. Custom Run net%
                     // also applies (audit 2026-05).
-                    const ascLevel = (Ascension && Ascension.getSelected) ? Ascension.getSelected() : 0;
+                    const ascLevel = this._getRunAscension();
                     const baseWinSparks = 15 + Math.max(0, ascLevel) * 3;
                     const winSparks = Math.max(1, Math.round(baseWinSparks * challengeMult * customMult));
                     this.grantSparks(winSparks, 'run_win_asc' + ascLevel + (isChallengeFinal ? '_chal3x' : ''));
@@ -24462,7 +24505,7 @@ drawEffects() {
                         if (firstAll) this.grantSparks(50, 'all_classes_s5');
                     }
                     // Ascension-tier achievements
-                    const sel = Ascension.getSelected();
+                    const sel = this._getRunAscension();
                     if (sel >= 10) Achievements.unlock('ASC_10');
                     if (sel >= 5) Achievements.unlock('ASC_5');
                     if (sel >= 1) Achievements.unlock('ASC_1');
@@ -24525,7 +24568,7 @@ drawEffects() {
             // Track the highest Ascension level the player has ever cleared
             // the Archivist on — drives the cosmetic frame tier on the
             // main-menu title (Roadmap Part 24.2 cosmetic reward).
-            const ascSelArch = (typeof Ascension !== 'undefined' && Ascension.getSelected) ? Ascension.getSelected() : 0;
+            const ascSelArch = this._getRunAscension();
             try {
                 const prev = parseInt(localStorage.getItem('mvm_archivist_best_asc') || '-1', 10);
                 if (ascSelArch > prev) {
@@ -24582,7 +24625,7 @@ drawEffects() {
             try { localStorage.setItem('mvm_corruption', this.corruptionLevel); } catch (_) {}
 
             // Ascension promotion — clearing the run on selected level unlocks N+1
-            const selected = Ascension.getSelected();
+            const selected = this._getRunAscension();
             const promoted = Ascension.onRunVictory(selected);
             if (promoted) {
                 // Audit F4 — promotion was previously a quiet flag flip, so a
@@ -24660,7 +24703,7 @@ drawEffects() {
             // Archivist's victory hook (`_archivistVictoryChoice`) presents
             // the continue-Endless / return-home decision after the kill.
             const requiresArchivist = !!(this._ascEffects?.forceArchivist
-                || Ascension.activeEffects(Ascension.getSelected() || 0).forceArchivist);
+                || Ascension.activeEffects(this._getRunAscension()).forceArchivist);
             if (!wasChallenge && !this._archivistFacedThisRun
                 && (requiresArchivist || this.hasMetaUpgrade('s_archivist_key'))) {
                 this._archivistFacedThisRun = true;
@@ -25064,7 +25107,7 @@ drawEffects() {
         // --- ADD CORRUPTED RELICS (If Ascended) ---
         // Gated entries require minimum corruption level.
         const rewardCorruption = this._isGuidedRun() && this._guidedRun.v === 2
-            ? Math.max(this.corruptionLevel || 0, Ascension.getSelected() || 0) : this.corruptionLevel;
+            ? Math.max(this._getRunCorruption(), this._getRunAscension()) : this._getRunCorruption();
         if (rewardCorruption > 0 && typeof CORRUPTED_RELICS !== 'undefined' && this._canGuidedFeature('corrupted')) {
             const level = rewardCorruption;
             const eligible = CORRUPTED_RELICS.filter(r => !r.minAscension || level >= r.minAscension);
@@ -26240,7 +26283,7 @@ drawEffects() {
         if (this._canGuidedFeature('synergies') && MODULE_FUSIONS.some(fusion => fusion.ids.every(id => owned.has(id)))) Learning.queue('fusions');
         const practised = Learning.profile()?.shared.practised || [];
         if (node?.type === 'shop' && practised.includes('shopBuy') && this.techFragments >= 100) Learning.queue('shopHack');
-        if (this.corruptionLevel > 0 || Ascension.getSelected() > 0) Learning.queue('corrupted');
+        if (this._getRunCorruption() > 0 || this._getRunAscension() > 0) Learning.queue('corrupted');
         if (practised.includes('events')) Learning.queue('eventVariety');
     },
 

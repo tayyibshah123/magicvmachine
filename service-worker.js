@@ -17,6 +17,7 @@ const SHELL_ASSETS = [
     './src/version.js',
     './src/services/edition-storage.js',
     './src/services/learning.js',
+    './src/services/run-rules.js',
     './src/ui/learning-ui.js',
     './src/ui/boss-rules.js',
     './src/styles/learning.css',

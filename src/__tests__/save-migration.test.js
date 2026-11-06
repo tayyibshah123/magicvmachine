@@ -6,10 +6,18 @@ import { describe, it, expect } from 'vitest';
 import { LEGACY_V1_SAVE, V2_SAVE, saveFixture } from './helpers/save-fixtures.js';
 
 describe('save schema migration', () => {
+    it('preserves an existing v5 Guided route while adding run-rule recovery', async () => {
+        const { Game } = await import('../game.js');
+        const guidance = { v: 2, route: 'guided-v2', classId: 'arcanist', stage: 3,
+            core: { roomIndex: 1, actions: ['attack'] } };
+        const source = { v: 5, guidance, player: { classId: 'arcanist', hp: 17 } };
+        expect(Game._migrateSave(source)).toEqual({ ...source, v: 6, runRules: null });
+        expect(source).not.toHaveProperty('runRules');
+    });
     it('adds an empty reward receipt to v3 checkpoints without inventing a free reward', async () => {
         const { Game } = await import('../game.js');
         const source = { v: 3, sector: 2, player: { classId: 'tactician', hp: 17, maxHp: 30, relics: [] } };
-        expect(Game._migrateSave(source)).toEqual({ ...source, v: 5, pendingReward: null, guidance: null });
+        expect(Game._migrateSave(source)).toEqual({ ...source, v: 6, pendingReward: null, guidance: null, runRules: null });
         expect(source).not.toHaveProperty('pendingReward');
     });
     it('migrates a pre-versioning (no `v`) save to current schema', async () => {

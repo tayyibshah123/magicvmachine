@@ -266,7 +266,7 @@ describe('cold checkpoints, mode separation and harmless rehearsal', () => {
         Game.generateRewards({ prepareOnly: true });
         Game.saveGame();
         const raw = JSON.parse(Game._readSaveRaw());
-        expect(raw.v).toBe(5);
+        expect(raw.v).toBe(6);
         Learning.setMode('full');
         abandonSession(active);
         const fresh = await freshSession(active);
@@ -291,7 +291,7 @@ describe('cold checkpoints, mode separation and harmless rehearsal', () => {
         expect(Game._canGuidedFeature('allyTiming')).toBe(true);
     });
 
-    it('round-trips its real v5 export and rejects malformed guidance before replacing it', async () => {
+    it('round-trips its real v6 export and rejects malformed guidance before replacing it', async () => {
         const { Game } = await game();
         const { SaveSync } = await import('../services/save-sync.js');
         Game.saveGame();
