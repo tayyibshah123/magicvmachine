@@ -123,6 +123,13 @@ session re-discover them.
    throwaway — the canonical state lives at `origin/main`. Every commit
    is followed by `git push`. Never leave commits unpushed.
 
+9. **Settle damage before attack presentation.** Use
+   `Game._runCombatAction` for damage and its subsequent animation.
+   Finish committed multi-hit visuals even after a lethal first hit.
+   VFX callbacks must not change HP or settle victory/death. Collect
+   timing input first, then resolve damage and play cosmetic effects.
+   After awaits, verify combat generation, state and entity identity.
+
 ---
 
 ## Versioning + ship checklist

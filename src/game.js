@@ -1353,7 +1353,7 @@ const Game = {
 
              for (let i = this.effects.length - 1; i >= 0; i--) {
                  const eff = this.effects[i];
-                 if (eff.type === 'micro_laser' && !eff.parried) {
+                 if (eff.type === 'micro_laser' && !eff.parried && !eff.settledDamage) {
                      const _pdx = this.mouseX - eff.x, _pdy = this.mouseY - eff.y;
                      const _pr = eff.radius + 30;
                      if (_pdx * _pdx + _pdy * _pdy < _pr * _pr) {
@@ -1369,7 +1369,7 @@ const Game = {
                          return; 
                      }
                  }
-                 if (eff.type === 'nature_dart' && !eff.empowered) {
+                 if (eff.type === 'nature_dart' && !eff.empowered && !eff.settledDamage) {
                      const _ndx = this.mouseX - eff.x, _ndy = this.mouseY - eff.y;
                      if (_ndx * _ndx + _ndy * _ndy < 3600 /* 60² */) {
                          eff.empowered = true;
@@ -2558,15 +2558,50 @@ startQTE(type, x, y, callback, opts) {
         this._alignedAttackVfxFired = null;
         return new Promise(resolve => {
             const now = Date.now();
+            const qteId = this._qteSequence = (this._qteSequence || 0) + 1;
+            const gen = this._combatGen;
+            const player = this.player;
+            const enemy = this.enemy;
+            let completed = false;
+            const complete = async multiplier => {
+                if (completed) return;
+                completed = true;
+                const stillLive = this._combatGen === gen && this.player === player
+                    && this.enemy === enemy && (this.currentState === STATE.COMBAT
+                        || this.currentState === STATE.TUTORIAL_COMBAT || this.currentState === STATE.BREAKOUT);
+                try {
+                    if (stillLive && callback) await callback(multiplier);
+                } catch (err) {
+                    this._recoverFromCombatError('QTE action', err, false);
+                } finally {
+                    resolve(multiplier);
+                    this._tryResolveExpiredTurn();
+                }
+            };
             this.inputCooldown = 0.6;
 
             // Accessibility: auto-QTE resolves at 'good' tier without player input.
             if (this.autoQTE) {
-                const cb = callback || resolve;
+                this.qte = { id: qteId, active: true, type, phase: 'auto', callback: complete };
                 // Mimic resolveQTE('good') multipliers — tracks the tier
                 // values in resolveQTE: attack=1.15, defend=0.6.
-                const mult = this._dieSlot(type) === 'attack' ? 1.15 : 0.6;
-                setTimeout(() => cb(mult), 300);
+                const mult = opts?.minionBoost ? 1.1 : (this._dieSlot(type) === 'attack' ? 1.15 : 0.6);
+                this.sleep(300).then(() => {
+                    if (this.qte.id !== qteId) { resolve(mult); return; }
+                    this.qte.active = false;
+                    this.qte.callback = null;
+                    if (this._combatGen === gen && this.player === player && this.enemy === enemy
+                        && (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT
+                            || this.currentState === STATE.BREAKOUT) && opts?.onWave) {
+                        try {
+                            const waves = this._qtePatternFor(type, opts).waves || 1;
+                            for (let wave = 0; wave < waves; wave++) opts.onWave('good', wave, mult);
+                        } catch (err) {
+                            this._recoverFromCombatError('automatic QTE waves', err, false);
+                        }
+                    }
+                    return complete(mult);
+                });
                 return;
             }
 
@@ -2598,7 +2633,7 @@ startQTE(type, x, y, callback, opts) {
             // not a flicker. The player has time to identify the pattern
             // before the strike commits. Wave breaks use a shorter
             // telegraph (0.4s) since the player is already in rhythm.
-            const TELEGRAPH = 0.9;
+            const TELEGRAPH = opts?.shortTiming ? 0.25 : 0.9;
 
             // Aligned-VFX path: the actual attack animation plays during
             // the active phase, and the ring shrink speed is tuned so its
@@ -2630,12 +2665,14 @@ startQTE(type, x, y, callback, opts) {
             }
 
             this.qte = {
-                id: now,
+                id: qteId,
                 active: true,
                 phase: 'warmup',
                 startTime: now,
                 elapsed: 0,
                 type: type,
+                shortTiming: !!opts?.shortTiming,
+                minionBoost: !!opts?.minionBoost,
                 pattern: pat.pattern,
                 waveTotal: (() => {
                     // First-time multi-wave QTE → fire the chain hint so
@@ -2676,7 +2713,7 @@ startQTE(type, x, y, callback, opts) {
                 // call sites that don't pass it fall back to the legacy
                 // baseDmg-based reflect formula.
                 incomingDamage: (opts && typeof opts.incomingDamage === 'number') ? opts.incomingDamage : null,
-                callback: callback || resolve
+                callback: complete
             };
 
             if (this._dieSlot(type) === 'attack') {
@@ -2705,22 +2742,22 @@ startQTE(type, x, y, callback, opts) {
                 // than failsafeMs would auto-fail the QTE while the
                 // player was away. Re-checks once per second until
                 // the game is no longer paused.
-                if (this.paused) {
-                    setTimeout(tryFailsafe, 1000);
+                if (this.paused || document.hidden) {
+                    this.setTimer(tryFailsafe, 1000);
                     return;
                 }
-                if (this.qte.active && this.qte.id === now &&
+                if (this.qte.active && this.qte.id === qteId &&
                    (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT || this.currentState === STATE.BREAKOUT)) {
                     console.log("QTE Failsafe Triggered");
                     this.resolveQTE('fail');
                 }
             };
-            setTimeout(tryFailsafe, failsafeMs);
+            this.setTimer(tryFailsafe, failsafeMs);
         });
     },
 
     updateQTE(dt) {
-        if (!this.qte.active) return;
+        if (!this.qte.active || this.qte.phase === 'auto') return;
 
         this.qte.elapsed = (this.qte.elapsed || 0) + dt;
         const scale = this.qte.qteScale || 1;
@@ -3224,6 +3261,7 @@ startQTE(type, x, y, callback, opts) {
     },
 
     resolveQTE(quality) {
+        if (!this.qte || !this.qte.active) return;
         // Multi-wave handling — store the wave's quality and advance to
         // the next wave instead of finalising. Only the LAST wave (or a
         // failure / early on any wave) finalises the QTE and fires the
@@ -3352,7 +3390,7 @@ startQTE(type, x, y, callback, opts) {
             ParticleSys.createSparks(this.qte.targetX, this.qte.targetY, c, quality === 'perfect' ? 14 : 8);
         }
 
-        if (quality !== 'fail' && quality !== 'early') {
+        if (quality !== 'fail' && quality !== 'early' && !this.qte.minionBoost) {
              if (this.qte.type === 'ATTACK') {
                  if (quality === 'perfect') {
                      // Perfect crit reward bumped 1.3 → 1.6 to match the
@@ -3433,7 +3471,7 @@ startQTE(type, x, y, callback, opts) {
                      // reflects 50% of what the player just took back at
                      // the attacker. The hit gets split — half lands on
                      // the player, a quarter of the original bounces back.
-                     multiplier = 0.5;
+                     multiplier = this.qte.shortTiming ? 0 : 0.5;
                      msg = "PERFECT PARRY!";
                      color = COLORS.GOLD;
                      // Composed riposte sting — perfect_parry layers chime
@@ -3477,7 +3515,7 @@ startQTE(type, x, y, callback, opts) {
                      // Skipped during scripted tutorial combat: the dummy
                      // is sized for the lesson, and a 2 HP riposte chip
                      // per parry would derail the choreographed pacing.
-                     if (this.enemy && this.enemy.currentHp > 0
+                     if (this.enemy && this.enemy.currentHp > 0 && !this.qte.shortTiming
                          && this.currentState !== STATE.TUTORIAL_COMBAT) {
                          let reflect;
                          if (typeof this.qte.incomingDamage === 'number' && this.qte.incomingDamage > 0) {
@@ -3514,6 +3552,12 @@ startQTE(type, x, y, callback, opts) {
              ParticleSys.createExplosion(this.qte.targetX, this.qte.targetY, 20, color);
         }
 
+        if (this.qte.minionBoost) {
+            multiplier = quality === 'perfect' ? 1.3 : (quality === 'good' ? 1.1 : 1);
+            msg = quality === 'perfect' ? 'DART +30%' : (quality === 'good' ? 'DART +10%' : 'DART READY');
+            color = quality === 'perfect' ? COLORS.GOLD : COLORS.NATURE_LIGHT;
+            if (quality === 'perfect' && this.runStats) this.runStats.perfectQTEs = (this.runStats.perfectQTEs || 0) + 1;
+        }
         ParticleSys.createFloatingText(this.qte.targetX, this.qte.targetY - 50, msg, color);
 
         } catch (err) {
@@ -3528,7 +3572,9 @@ startQTE(type, x, y, callback, opts) {
             try { Diag.event && Diag.event('qte_resolve_crash', { qteType: this.qte && this.qte.type, error: String(err && err.message || err) }); } catch (_) {}
         } finally {
             if (cb) {
-                try { cb(multiplier); }
+                try { return Promise.resolve(cb(multiplier)).catch(cbErr => {
+                    try { console.error('[QTE] resolveQTE callback rejected', cbErr); } catch (_) {}
+                }); }
                 catch (cbErr) { try { console.error('[QTE] resolveQTE callback threw', cbErr); } catch (_) {} }
             }
         }
@@ -3619,6 +3665,12 @@ startQTE(type, x, y, callback, opts) {
         // fight.
         const COMBAT_LIKE = new Set([STATE.COMBAT, STATE.TUTORIAL_COMBAT, STATE.REWARD, STATE.COMBAT_WIN, STATE.BREAKOUT]);
         if (COMBAT_LIKE.has(prev) && !COMBAT_LIKE.has(newState)) {
+            // Sleeping turns and delayed cinematic callbacks belong to the
+            // combat being left, including when the player explicitly quits.
+            this._combatGen = (this._combatGen || 0) + 1;
+            this._endTurnRunning = false;
+            this._winCombatRunning = false;
+            this._combatActionDepth = 0;
             this.clearTrackedTimers();
         }
         let direction = 'up';
@@ -11318,6 +11370,10 @@ triggerSystemCrash() {
 
             const classConfig = PLAYER_CLASSES.find(c => c.id === (data.player && data.player.classId))
                 || PLAYER_CLASSES[0];
+            // Constructor relics are replaced by the snapshot below. Prevent
+            // pickup-only rules from queuing a duplicate or charging a curse.
+            this._customRelicPickDupe = false;
+            this._customRelicPickDmg = 0;
             this.player = new Player(classConfig);
 
             this.player.maxHp = typeof data.player.maxHp === 'number' ? data.player.maxHp : this.player.maxHp;
@@ -11343,6 +11399,10 @@ triggerSystemCrash() {
             this.player.signatureTier = data.player.signatureTier || 1;
 
             this.player.minions = [];
+            // Restore ongoing rules without repeating starting HP changes
+            // or the starter relic grant already included in this snapshot.
+            this._applyCustomRunModifiers({ restore: true });
+            this._challengeTwist = this.challengeMode ? Challenge.todayTwist() : null;
 
             // Rehydrate runStats from save. Defensive merge — missing fields
             // default to 0 so older saves without the new counters still load.
@@ -13157,14 +13217,8 @@ triggerSystemCrash() {
        points where they bite (rest handler, reroll gate, damage calc,
        shop pricing, boss spawn, relic add, turn start). Stat edits that
        only matter at run-start are applied here directly. */
-    _applyCustomRunModifiers() {
-        if (!this.customRunModifiers || !this.customRunModifiers.size) {
-            // Reset payout multiplier on a no-modifier run so a previous
-            // custom-run setting doesn't leak.
-            this._customPayoutMult = 1;
-            return;
-        }
-        const active = Array.from(this.customRunModifiers)
+    _applyCustomRunModifiers({ restore = false } = {}) {
+        const active = Array.from(this.customRunModifiers || [])
             .map(id => CUSTOM_RUN_MODIFIERS.find(m => m.id === id))
             .filter(Boolean);
         this._customRunActive = active;
@@ -13177,13 +13231,14 @@ triggerSystemCrash() {
         active.forEach(m => { payoutDelta += (m.payoutBonus || 0); });
         const netPct = Math.max(5, 100 + payoutDelta);
         this._customPayoutMult = netPct / 100;
-        if (!this.player) return;
         // Reset transient flags so replaying a run without some modifiers
         // doesn't inherit their effects from the previous attempt.
         this._customDisableRest = false;
         this._customDisableReroll = false;
         this._customDmgOutMult = 1;
         this._customDmgInMult = 1;
+        this._customBaseDmgOutMult = 1;
+        this._customBaseDmgInMult = 1;
         this._customBossHpMult = 1;
         this._customShopDiscount = 0;
         this._customFragDrainPerSector = 0;
@@ -13193,8 +13248,11 @@ triggerSystemCrash() {
         this._customCritVariance = null;
         this._customDisableLore = false;
         this._customRelicPickDupe = false;
+        document.body.classList.remove('custom-hide-intents');
+        if (!this.player) return;
+        this.player._customExtraRerolls = 0;
         active.forEach(m => {
-            if (m.startHpPct && this.player.maxHp) {
+            if (!restore && m.startHpPct && this.player.maxHp) {
                 this.player.currentHp = Math.max(1, Math.floor(this.player.maxHp * m.startHpPct));
             }
             if (m.diceCount && this.player.traits) {
@@ -13220,7 +13278,7 @@ triggerSystemCrash() {
             // Excludes 'instant' items (consumables that just stat-bump),
             // corrupted-tier entries, and gold-rarity relics so the starter
             // set stays to "common / neutral" as the modifier implies.
-            if (m.startRelicCount && typeof UPGRADES_POOL !== 'undefined') {
+            if (!restore && m.startRelicCount && typeof UPGRADES_POOL !== 'undefined') {
                 const cidStart = this.player && this.player.classId;
                 const eligible = UPGRADES_POOL.filter(r =>
                     r && !r.instant && r.rarity !== 'gold' && r.rarity !== 'red' && r.rarity !== 'corrupted'
@@ -13233,12 +13291,21 @@ triggerSystemCrash() {
                 }
             }
         });
+        this._customBaseDmgOutMult = this._customDmgOutMult;
+        this._customBaseDmgInMult = this._customDmgInMult;
         if (this._customDisableReroll) this.rerolls = 0;
         if (this._customHideIntentNumbers) {
             document.body.classList.add('custom-hide-intents');
         } else {
             document.body.classList.remove('custom-hide-intents');
         }
+    },
+
+    // Compose from the run baseline each fight so a Challenge twist never
+    // compounds with its own value from the previous enemy.
+    _applyChallengeDamageMultipliers(twist) {
+        this._customDmgOutMult = (this._customBaseDmgOutMult || 1) * ((twist && twist.dmgOutMult) || 1);
+        this._customDmgInMult = (this._customBaseDmgInMult || 1) * ((twist && twist.dmgInMult) || 1);
     },
 
     startHexBreach() {
@@ -13952,6 +14019,8 @@ updateHexBreach(dt) {
         // dice/turn counters/effects don't leak between rooms.
         this._combatGen = (this._combatGen || 0) + 1;
         this._endTurnRunning = false;
+        this._winCombatRunning = false;
+        this._combatActionDepth = 0;
         this.effects = [];
         ParticleSys.clear();
         if (CombatLog && CombatLog.clear) CombatLog.clear();
@@ -14105,6 +14174,8 @@ async startCombat(type) {
         // ended through an early-return path (enemy died mid-phase via
         // reflect/thorns/bomb), the flag might still be stuck `true`.
         this._endTurnRunning = false;
+        this._winCombatRunning = false;
+        this._combatActionDepth = 0;
         this.enemy = null;
         this.effects = [];
         ParticleSys.clear();
@@ -14245,6 +14316,9 @@ async startCombat(type) {
         // mechanic effects. Skipped during the tutorial so the scripted
         // beat stays predictable.
         const twist = (this.challengeMode && this._challengeTwist) ? this._challengeTwist : null;
+        this._applyChallengeDamageMultipliers(
+            this.currentState !== STATE.TUTORIAL_COMBAT ? twist : null
+        );
         if (twist && this.currentState !== STATE.TUTORIAL_COMBAT) {
             if (twist.enemyShieldBonus && !this.enemy.isBoss) {
                 this.enemy.shield = (this.enemy.shield || 0) + twist.enemyShieldBonus;
@@ -14260,11 +14334,6 @@ async startCombat(type) {
             if (twist.bonusMana && this.player) {
                 this.gainMana(twist.bonusMana, { silent: true });
             }
-            // dmg-out / dmg-in stack onto the customRun multipliers so a
-            // player running both layers takes the combined hit. _customXxx
-            // is reset every run by _applyCustomRunModifiers so no leak risk.
-            if (twist.dmgOutMult) this._customDmgOutMult = (this._customDmgOutMult || 1) * twist.dmgOutMult;
-            if (twist.dmgInMult)  this._customDmgInMult  = (this._customDmgInMult  || 1) * twist.dmgInMult;
             // Reroll delta — applied on top of base/extra rerolls. Clamped
             // at zero so a -1 twist on a 2-reroll baseline lands at 1.
             if (twist.rerollDelta) {
@@ -14955,6 +15024,139 @@ async startCombat(type) {
         this.startTurn();
     },
 
+    async _runCombatAction(resolveDamage, present, { minimumPresentationMs = 0 } = {}) {
+        const gen = this._combatGen;
+        const player = this.player;
+        const enemy = this.enemy;
+        const current = () => this._combatGen === gen && this.player === player && this.enemy === enemy
+            && (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT
+                || this.currentState === STATE.BREAKOUT);
+        if (!current()) return false;
+        if (!(this._combatActionDepth > 0)) this._combatActionInputWasLocked = this.inputLocked;
+        this._combatActionDepth = (this._combatActionDepth || 0) + 1;
+        this.inputLocked = true;
+        let survived = false;
+        try {
+            // Resolve all logical hits before starting the presentation.
+            // winCombat/gameOver defer terminal transitions until it finishes.
+            const queued = [];
+            const previousQueue = this._settledCombatVfx;
+            let resolved;
+            try {
+                // Only synchronous resolution collects effects. An awaited
+                // QTE keeps its live aiming animation and input feedback.
+                this._settledCombatVfx = present ? previousQueue : queued;
+                resolved = resolveDamage();
+            } finally {
+                this._settledCombatVfx = previousQueue;
+            }
+            await resolved;
+            if (current() && present) await present(current);
+            else if (current() && queued.length) {
+                for (let i = 0; i < queued.length; i++) {
+                    if (i > 0) await this.sleep(200 * (this.combatPaceMult || 1));
+                    if (!current()) break;
+                    const effect = queued[i];
+                    this.triggerVFX(effect.type, effect.source, effect.target, null, effect.opts);
+                }
+                if (current()) await this.sleep(1200 * (this.combatPaceMult || 1));
+            } else if (current() && minimumPresentationMs > 0) {
+                // Class signatures create effect descriptors directly,
+                // rather than queueing triggerVFX calls.
+                await this.sleep(minimumPresentationMs * (this.combatPaceMult || 1));
+            }
+        } finally {
+            // A quit or new encounter owns its own lock and action counter.
+            if (current()) {
+                this._combatActionDepth = Math.max(0, this._combatActionDepth - 1);
+                survived = player.currentHp > 0 && enemy.currentHp > 0;
+                if (this._combatActionDepth === 0) {
+                    this.inputLocked = !!this._combatActionInputWasLocked;
+                    if (player.currentHp <= 0) this.gameOver();
+                    else if (enemy.currentHp <= 0) this.winCombat();
+                    else this._tryResolveExpiredTurn?.();
+                }
+            }
+        }
+        return survived;
+    },
+
+    async _presentCombatHits(type, source, target, count, current, opts = {}) {
+        // VFX callbacks are deliberately absent. Even a lethal first hit
+        // gets the complete committed animation, with no later HP mutation.
+        for (let hit = 0; hit < count; hit++) {
+            if (!current()) return;
+            if (hit > 0) await this.sleep(200 * (this.combatPaceMult || 1));
+            if (!current()) return;
+            this.triggerVFX(type, source, target, null, opts);
+        }
+        // Signature effects use real-time impact timers up to 1.1 seconds.
+        // Keep the encounter visible until the final effect has landed.
+        if (count > 0) await this.sleep(1200 * (this.combatPaceMult || 1));
+    },
+
+    async _resolveEnemyAreaStrike(intent) {
+        const enemy = this.enemy;
+        const player = this.player;
+        const gen = this._combatGen;
+        const current = () => this._combatGen === gen && this.enemy === enemy && this.player === player
+            && (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT
+                || this.currentState === STATE.BREAKOUT);
+        if (!enemy || !player || !current()) return false;
+        const frost = intent.type === 'frost_aoe';
+        const immolate = intent.type === 'immolate';
+        const minionRatio = frost ? 0.6 : (immolate ? 0.8 : 1);
+        const color = frost ? '#88eaff' : (immolate ? '#ff6600' : '#ff3355');
+        const label = frost ? 'CRYO FIELD' : (immolate ? 'IMMOLATE!' : 'SWEEP ARC');
+        const minions = (player?.minions || []).filter(m => m && m.currentHp > 0);
+        return this._runCombatAction(async () => {
+            let damage = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
+            if (!frost && !immolate && enemy.name === 'THE COMPILER' && enemy._bolsterDamageMult) {
+                damage = Math.floor(damage * enemy._bolsterDamageMult);
+                ParticleSys.createFloatingText(enemy.x, enemy.y - 200,
+                    `BOLSTER × ${enemy._bolsterDamageMult}`, '#ffaa00');
+                enemy._bolsterDamageMult = 0;
+            }
+            if (!immolate) {
+                await this.sleep(300);
+                if (!current()) return;
+                ParticleSys.createFloatingText(enemy.x, enemy.y - 140, label, color);
+                const mult = await this.startQTE('DEFEND', player.x, player.y, null,
+                    { pattern: frost ? 'pulse' : 'accelerate', incomingDamage: damage });
+                if (!current()) return;
+                damage = Math.floor(damage * mult);
+            }
+            // A parry may already have killed the attacker during the QTE.
+            // Its committed visual still plays, but no ghost damage lands.
+            if (!current() || enemy.currentHp <= 0 || player.currentHp <= 0) return;
+            if (damage > 0) player.takeDamage(damage, enemy, true);
+            if (frost && player.currentHp > 0) {
+                player.addEffect('weak', 2, 0, '🥶', 'Deals 50% less DMG.');
+            }
+            const minionDamage = Math.floor(damage * minionRatio);
+            for (const minion of minions) {
+                if (minionDamage > 0 && minion.currentHp > 0 && player.minions.includes(minion)) {
+                    minion.takeDamage(minionDamage, enemy);
+                }
+            }
+            this._cullPlayerMinions();
+            if (immolate) enemy.currentHp = 0;
+        }, async live => {
+            if (!live()) return;
+            if (immolate) ParticleSys.createFloatingText(enemy.x, enemy.y - 140, label, color);
+            if (immolate) ParticleSys.createExplosion(enemy.x, enemy.y, 80, color);
+            // Every target gets a visual even if the resolved strike killed
+            // it. Impact callbacks never own the already committed damage.
+            for (const target of [player, ...minions]) {
+                this.triggerVFX('glitch_spike', enemy, target, null);
+            }
+            ParticleSys.createShockwave(player.x, player.y, color, 60);
+            AudioMgr.playSound(frost ? 'grid_fracture' : 'explosion');
+            this.shake(immolate ? 24 : 10);
+            await this.sleep(1200 * (this.combatPaceMult || 1));
+        });
+    },
+
     _resolvePendingSelfDestruct() {
         const enemy = this.enemy;
         if (!enemy || !enemy._armedDetonate || enemy._detonated) return true;
@@ -15010,6 +15212,23 @@ async startCombat(type) {
     },
 
 async startTurn() {
+      const gen = this._combatGen || 0;
+      const player = this.player;
+      const enemy = this.enemy;
+      const stillLive = () => (this._combatGen || 0) === gen
+          && this.player === player && this.enemy === enemy && !!player && !!enemy
+          && (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT
+              || this.currentState === STATE.BREAKOUT);
+      // A turn must never restart a departed combat or interrupt the
+      // presentation of an action whose logical damage has already landed.
+      if (!stillLive() || this._combatActionDepth > 0) return;
+      const settleDeath = () => {
+          if (!stillLive()) return true;
+          if (player.currentHp <= 0) { this.gameOver(); return true; }
+          if (enemy.currentHp <= 0) { this.winCombat(); return true; }
+          return false;
+      };
+      if (settleDeath()) return;
       try {
         this.inputLocked = true;
         // Resolve the pending blast before new-turn healing, DoTs, shield
@@ -15035,6 +15254,7 @@ async startTurn() {
         this._pulseHammerUsedThisTurn = false;
 
         await this.showPhaseBanner("PLAYER PHASE", "COMMAND LINK ESTABLISHED", 'player');
+        if (settleDeath()) return;
 
         // --- PANOPTICON ANALYSE ---
         // The cooldown-driven analyse used to fire here invisibly; the
@@ -15045,6 +15265,7 @@ async startTurn() {
         if (this.player && this.player._panopticonNullifyFirst) {
             AudioMgr.playSound('hex_barrier');
             await this.showPhaseBanner("ANALYSED", "FIRST ACTION WILL BE NULLIFIED", 'warning');
+            if (settleDeath()) return;
         }
 
         // --- NULL_POINTER: Void mechanics ---
@@ -15061,6 +15282,7 @@ async startTurn() {
                 this.enemy.voidCrushTurns--;
                 if (this.enemy.voidCrushTurns <= 0) {
                     await this.showPhaseBanner("VOID CRUSH", "REALITY COLLAPSES", 'boss');
+                    if (settleDeath()) return;
                     // v1.9.32 — telegraph expansion. Three magenta hex
                     // rings rotate inward around the boss for 800ms
                     // before the actual crush lands so the moment reads
@@ -15081,6 +15303,7 @@ async startTurn() {
                     }
                     AudioMgr.playSound('siren', { playbackRate: 0.55, volume: 0.9, duration: 0.7, fadeOut: 0.3 });
                     await this.sleep(700);
+                    if (settleDeath()) return;
                     // Impact — existing payload kept intact for damage
                     Game.shake(lowTier ? 24 : 40);
                     ParticleSys.createExplosion(this.player.x, this.player.y, 120, '#ff00ff');
@@ -15285,11 +15508,13 @@ async startTurn() {
         if (this.player.hasRelic('c_blood_pact')) {
             this.player.takeDamage(2);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "BLOOD PACT", "#ff0000");
+            if (settleDeath()) return;
         }
 
         if (this.player.hasRelic('c_overclock')) {
             this.player.takeDamage(3);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 100, "OVERCLOCK", "#ff4400");
+            if (settleDeath()) return;
         }
 
         const shieldStacks = this.stackCount('nano_shield');
@@ -15516,13 +15741,16 @@ async startTurn() {
             rerollStacks += 1;
         }
 
-        this.player.updateEffects();
+        await this.player.updateEffects();
+        if (!stillLive()) return;
+        if (settleDeath()) return;
         
         if(this.enemy) {
-             this.enemy.updateEffects();
+             await this.enemy.updateEffects();
+             if (!stillLive()) return;
              // A DoT can finish a carrier immediately after its blast.
              // updateEffects already resolves that win; don't roll a new hand.
-             if (this.enemy.currentHp <= 0) return;
+             if (settleDeath()) return;
              if (this.enemy.affixes && this.enemy.affixes.includes('Shielded')
                  && this.enemy._detonatedOnPlayerTurn !== this.turnCount) {
                  if (this.enemy.shield <= 0) {
@@ -15688,9 +15916,106 @@ async startTurn() {
         // the player's next END TURN press can fire.
         this._endTurnRunning = false;
       } catch (err) {
+        if (!stillLive()) return;
         this._endTurnRunning = false;
         this._recoverFromCombatError('startTurn', err, false);
       }
+    },
+
+    _resolvePlayerMinionStrike(minion, target) {
+        const player = this.player;
+        const enemy = this.enemy;
+        const gen = this._combatGen;
+        return this._runCombatAction(async () => {
+            const multiplier = await this.startQTE('ATTACK', target.x, target.y, null,
+                { shortTiming: true, minionBoost: true, pattern: 'steady', waves: 1 });
+            const inCombat = this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT
+                || this.currentState === STATE.BREAKOUT;
+            if (!inCombat || this._combatGen !== gen || this.player !== player || this.enemy !== enemy || minion.currentHp <= 0
+                || target.currentHp <= 0 || player.currentHp <= 0) return;
+            let swarmBonus = 0;
+            if (player.hasRelic('swarm_beacon')) {
+                swarmBonus = player.minions.filter(m => m && m.currentHp > 0).length * this.stackCount('swarm_beacon');
+            }
+            const base = typeof minion.getEffectiveDamage === 'function'
+                ? minion.getEffectiveDamage(minion.dmg) : minion.dmg;
+            const hunger = this.hasPact?.('hunger') ? 2 : 1;
+            target.takeDamage(Math.floor((base + swarmBonus) * multiplier * hunger), minion);
+            if (target !== enemy && target.currentHp <= 0) {
+                enemy.minions = enemy.minions.filter(m => m !== target);
+                if (player.hasRelic('brutalize') && !target.isPlayerSide) this.triggerBrutalize(target);
+            }
+        }, current => this._presentCombatHits('nature_dart', minion, target, 1, current, { settledDamage: true }));
+    },
+
+    _resolveEnemyMinionStrike(minion, target, { mirror = false, voidDrain = false, multiplier = null } = {}) {
+        const player = this.player;
+        const enemy = this.enemy;
+        const gen = this._combatGen;
+        const current = () => this._combatGen === gen && this.player === player && this.enemy === enemy
+            && (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT
+                || this.currentState === STATE.BREAKOUT);
+        if (!minion || minion.currentHp <= 0 || !target || target.currentHp <= 0) return Promise.resolve(true);
+        return this._runCombatAction(async () => {
+            let damage;
+            if (mirror) {
+                const percent = ({ 1: 0.5, 2: 0.75, 3: 1.0, 4: 1.5, 5: 2.0 })[this.sector || 1] || 0.5;
+                damage = Math.max(4, Math.floor((minion._lastPlayerSideHitDmg || minion.dmg) * percent));
+            } else {
+                damage = typeof minion.getEffectiveDamage === 'function'
+                    ? minion.getEffectiveDamage(minion.dmg) : minion.dmg;
+            }
+            const block = multiplier ?? await this.startQTE('DEFEND', target.x, target.y, null, {
+                shortTiming: true, pattern: 'steady', incomingDamage: damage,
+                attackerX: minion.x, attackerY: minion.y
+            });
+            if (!current() || enemy.currentHp <= 0 || player.currentHp <= 0 || target.currentHp <= 0) return;
+            // A perfect block cancels the strike and its secondary effects.
+            damage = Math.floor(damage * block);
+            if (damage <= 0) return;
+            if (!voidDrain && minion.tier >= 2 && enemy.currentHp > 0) {
+                enemy.heal(2);
+                ParticleSys.createFloatingText(enemy.x, enemy.y, 'LEECH', '#00ff00');
+            }
+            target.takeDamage(damage, minion);
+            if (voidDrain && player.currentHp > 0 && player.mana > 0) {
+                player.mana = Math.max(0, player.mana - 1);
+                ParticleSys.createFloatingText(player.x, player.y - 80, 'MANA DRAIN -1', '#bc13fe');
+            }
+            if (target !== player && target.currentHp <= 0) {
+                if (player.traits.maxMinions === 4 && Math.random() < 0.3) {
+                    target.currentHp = Math.floor(target.maxHp / 2);
+                    ParticleSys.createFloatingText(target.x, target.y, 'REVIVED!', '#00ff99');
+                } else {
+                    const bombX = target.x, bombY = target.y;
+                    player.minions = player.minions.filter(m => m !== target);
+                    this.deadMinionsThisTurn++;
+                    if (player.traits.minionName === 'Bomb Bot') this._detonateBombBot(target, bombX, bombY);
+                }
+            }
+        }, current => this._presentCombatHits('micro_laser', minion, target, 1, current, { settledDamage: true }));
+    },
+
+    _finishPlayerTurnStatuses() {
+        const shift = this.player && this.player.hasEffect('reality_shift');
+        if (!shift) return;
+        shift.duration--;
+        this.player.effects = this.player.effects.filter(e => e !== shift || e.duration > 0);
+        if (!this.player.hasEffect('reality_shift')) document.body.classList.remove('reality-shift-active');
+    },
+
+    _tryResolveExpiredTurn() {
+        if (!this._archivistTurnExpired) return false;
+        if (this.currentState !== STATE.COMBAT || this._archivistClockEnemy !== this.enemy
+            || this._archivistClockGen !== this._combatGen) {
+            this._stopArchivistTimeControl({ keepBudget: true });
+            return false;
+        }
+        if (this.paused || document.hidden || this.inputLocked || this.qte?.active
+            || this._combatActionDepth > 0 || this._endTurnRunning) return false;
+        this._stopArchivistTimeControl({ keepBudget: true });
+        this.endTurn();
+        return true;
     },
 
     /* THE ARCHIVIST — Time Control. Enables a turn-budget countdown and
@@ -15701,18 +16026,30 @@ async startTurn() {
         // The budget is stored across turns on the Game so the same boss
         // instance keeps tightening the screw between combats (combat
         // start re-initialises via setupCombat path).
-        if (typeof this._archivistTimerBudget !== 'number') {
+        if (typeof this._archivistTimerBudget !== 'number'
+            || this._archivistClockGen !== this._combatGen || this._archivistClockEnemy !== this.enemy) {
             this._archivistTimerBudget = 30000;
         } else {
             this._archivistTimerBudget = Math.max(10000, this._archivistTimerBudget - 1000);
         }
         const budget = this._archivistTimerBudget;
-        const deadline = performance.now() + budget;
-        this._archivistTimerDeadline = deadline;
-
         // Stop any prior loop / overlay so back-to-back turns don't
         // accumulate intervals.
         this._stopArchivistTimeControl({ keepBudget: true });
+        this._archivistClockGen = this._combatGen;
+        this._archivistClockEnemy = this.enemy;
+        this._archivistTimerRemaining = budget;
+        this._archivistTimerSampleAt = performance.now();
+        this._archivistTimerDeadline = this._archivistTimerSampleAt + budget;
+        this._archivistClockSuspended = !!this.paused || document.hidden;
+        if (!this._archivistVisibilityBound) {
+            this._archivistVisibilityBound = true;
+            document.addEventListener('visibilitychange', () => {
+                // Background browsers may suspend intervals completely.
+                this._archivistTimerSampleAt = performance.now();
+                this._archivistClockSuspended = !!this.paused || document.hidden;
+            });
+        }
 
         // Build / show overlay.
         let overlay = document.getElementById('turn-timer-overlay');
@@ -15739,30 +16076,38 @@ async startTurn() {
         // free in the loop. Force-end at deadline.
         this._archivistTimerLoopId = this.setLoop(() => {
             const now = performance.now();
-            const remaining = Math.max(0, this._archivistTimerDeadline - now);
+            const suspended = !!this.paused || document.hidden;
+            if (!suspended && !this._archivistClockSuspended) {
+                this._archivistTimerRemaining = Math.max(0, this._archivistTimerRemaining
+                    - Math.max(0, now - this._archivistTimerSampleAt));
+            }
+            this._archivistTimerSampleAt = now;
+            this._archivistClockSuspended = suspended;
+            const remaining = this._archivistTimerRemaining;
+            this._archivistTimerDeadline = now + remaining;
             const sec = Math.ceil(remaining / 1000);
             const node = document.getElementById('turn-timer-overlay');
             if (node) {
                 node.textContent = sec;
                 node.dataset.health = sec <= 3 ? 'crit' : (sec <= 7 ? 'warn' : 'good');
             }
-            if (remaining <= 0) {
-                // Force end-of-turn.
-                this._stopArchivistTimeControl({ keepBudget: true });
+            if (remaining <= 0 && !this._archivistTurnExpired) {
+                // Expiry waits for the active QTE and its presentation.
+                this._archivistTurnExpired = true;
                 if (this.player) {
                     ParticleSys.createFloatingText(this.player.x, this.player.y - 160,
                         'TIME EXPIRED', '#ff0055');
                 }
                 AudioMgr.playSound && AudioMgr.playSound('siren');
                 if (this.shake) this.shake(12);
-                if (this.currentState === STATE.COMBAT && !this._endTurnRunning) {
-                    this.endTurn();
-                }
             }
+            this._tryResolveExpiredTurn();
         }, 100);
     },
 
     _stopArchivistTimeControl(opts) {
+        this._archivistTurnExpired = false;
+        this._archivistTimerRemaining = 0;
         if (this._archivistTimerLoopId) {
             this.clearLoop(this._archivistTimerLoopId);
             this._archivistTimerLoopId = null;
@@ -15775,6 +16120,8 @@ async startTurn() {
         if (!opts || !opts.keepBudget) {
             this._archivistTimerBudget = undefined;
             this._archivistTimerDeadline = 0;
+            this._archivistClockGen = null;
+            this._archivistClockEnemy = null;
         }
     },
 
@@ -16119,9 +16466,8 @@ async startTurn() {
         });
     },
 
-    // Bomb Bot detonation — flies a missile from the bomb's position to the
-    // boss enemy and applies AoE damage on impact. Resolves after the
-    // explosion lands (or immediately if there's no valid enemy to hit).
+    // Resolve the blast before presenting the missile. Its animation has no
+    // damage callback, so pausing or leaving combat cannot delay the hit.
     // Caller may pre-capture the bomb's launch coordinates (useful when the
     // bomb is being removed from `player.minions` in the same tick — its
     // index changes, and the next render frame's `updateMinionPositions`
@@ -16130,35 +16476,16 @@ async startTurn() {
         if (!bomb) return Promise.resolve();
         const enemy = this.enemy;
         if (!enemy || enemy.currentHp <= 0) return Promise.resolve();
-        // Capture the combat generation at launch. If the player closes
-        // this combat (winCombat / gameOver) before the missile lands,
-        // the callback aborts cleanly instead of splashing damage onto
-        // whatever enemy loaded in the next combat.
-        const gen = this._combatGen || 0;
         const launchX = (typeof sx === 'number') ? sx : bomb.x;
         const launchY = (typeof sy === 'number') ? sy : bomb.y;
         const launchSource = { x: launchX, y: launchY };
-        return new Promise(resolve => {
-            this.triggerVFX('bomb_missile', launchSource, enemy, () => {
-                if (this._combatGen !== gen) { resolve(); return; }
-                // Use the captured `enemy` reference, not `this.enemy`,
-                // so we never hit the new combat's boss even if the gen
-                // guard was bumped in the same frame.
-                if (enemy === this.enemy && enemy.currentHp > 0) {
-                    const dead = enemy.takeDamage(10);
-                    if (dead && enemy.currentHp <= 0) {
-                        this.winCombat();
-                        resolve();
-                        return;
-                    }
-                }
-                if (enemy === this.enemy) {
-                    this._enemyMinions().forEach(em => { if (em && em.currentHp > 0) em.takeDamage(10); });
-                    if (this.enemy) this.enemy.minions = this.enemy.minions.filter(em => em.currentHp > 0);
-                }
-                resolve();
+        const targets = [enemy, ...this._enemyMinions()];
+        return this._runCombatAction(() => {
+            targets.forEach(target => {
+                if (target && target.currentHp > 0) target.takeDamage(10);
             });
-        });
+            if (enemy === this.enemy) this._cullEnemyMinions();
+        }, current => this._presentCombatHits('bomb_missile', launchSource, enemy, 1, current));
     },
 
     _shadow(base) { return Perf.shadowBlur(base); },
@@ -17281,6 +17608,7 @@ async startTurn() {
     },
 
     useDie(die, el, target) {
+        if (this.inputLocked || this._endTurnRunning || this.qte?.active || this._combatActionDepth > 0) return;
         if(die.used) return;
         const data = DICE_TYPES[die.type];
         const isUpgraded = this.player.hasDiceUpgrade(die.type);
@@ -17418,7 +17746,7 @@ async startTurn() {
         const finalEnemy = (target instanceof Enemy || (target instanceof Minion && !target.isPlayerSide)) ? target : this.enemy;
         const finalSelf = (target instanceof Player || (target instanceof Minion && target.isPlayerSide)) ? target : this.player;
 
-        const executeAction = async (qteMultiplier = 1.0) => {
+        const resolveAction = (qteMultiplier = 1.0) => {
             // ... (Tutorial Logic Removed for brevity, keep if existing) ...
 
             // Corrupted: UNSTABLE CORE — 25% chance skill dice fizzle (mana still spent).
@@ -17552,6 +17880,9 @@ async startTurn() {
                     this.triggerVFX(_vfxKey, this.player, finalEnemy, null, { upgraded: isUpgraded });
                 }
                 if (!isUpgraded) AudioMgr.playSound('attack');
+                // A committed Double Strike keeps its second visual even
+                // when the first logical hit is lethal.
+                if (doubleActive) this.triggerVFX(_vfxKey, this.player, finalEnemy, null, { upgraded: isUpgraded });
                 
                 // Class-aware base damage
                 let dmg;
@@ -18126,20 +18457,14 @@ async startTurn() {
                 }
             }
             else if (type === 'EARTHQUAKE') {
-                // Skip the duplicate trigger when the QTE already fired
-                // earthquake at active-phase start. Damage timing stays
-                // on its existing 500ms setTimeout (matches the original
-                // earthquake-ring expansion); since the QTE-fired and
-                // executeAction-fired earthquakes share the same 480ms
-                // visual impact, the AoE lands within ~20ms of the
-                // visual rings. Close enough that no further deferral
-                // is needed.
+                // The QTE may already have shown its aiming rings. Apply
+                // the complete AoE now; any remaining rings are cosmetic.
                 if (this._alignedAttackVfxFired === 'earthquake') {
                     this._alignedAttackVfxFired = null;
                 } else {
                     this.triggerVFX('earthquake', this.player, this.enemy);
                 }
-                setTimeout(() => {
+                {
                     const targets = [this.enemy, ...this._enemyMinions()];
                     let deadEnemy = false;
                     targets.forEach(t => {
@@ -18163,7 +18488,7 @@ async startTurn() {
                     });
                     if (this.enemy && this.enemy.currentHp > 0) this.enemy.updateIntentValues();
                     if(deadEnemy) { this.winCombat(); return; }
-                }, 500);
+                }
 
             } else if (type === 'METEOR') {
                 // Upgraded METEOR (Starfall) is a 3-part chain handled by the
@@ -18186,19 +18511,10 @@ async startTurn() {
                             }
                         }
                     };
-                    // Aligned-VFX path: orbital_strike was already fired at
-                    // QTE active-phase start; the meteor is mid-flight. Skip
-                    // the duplicate trigger and schedule the damage callback
-                    // to coincide with the visual impact (remaining flight
-                    // time = total impact time minus what's already elapsed).
-                    if (this._alignedAttackVfxFired === 'orbital_strike') {
-                        const elapsed = Date.now() - (this._alignedAttackVfxStart || Date.now());
-                        const remaining = Math.max(0, (this._alignedAttackVfxImpactMs || 600) - elapsed);
-                        this._alignedAttackVfxFired = null;
-                        setTimeout(onMeteorHit, remaining);
-                    } else {
-                        this.triggerVFX('orbital_strike', this.player, finalEnemy, onMeteorHit);
-                    }
+                    // Resolve this hit now. The queued meteor carries no
+                    // damage callback when its settled result is presented.
+                    this._alignedAttackVfxFired = null;
+                    this.triggerVFX('orbital_strike', this.player, finalEnemy, onMeteorHit);
                 }
 
             } else if (type === 'CONSTRICT') {
@@ -18261,18 +18577,19 @@ async startTurn() {
             }
         };
 
+        const executeAction = (multiplier = 1) => this._isAttackSlot(type)
+            ? this._runCombatAction(() => resolveAction(multiplier), null, { minimumPresentationMs: 1200 })
+            : resolveAction(multiplier);
+
         if (this.currentState === STATE.TUTORIAL_COMBAT && this.tutorialStep === 5 && this._dieSlot(type) === 'attack') {
             this.tutorialStep = 6;
             this.updateTutorialStep();
         }
 
         if (this._isAttackSlot(type)) {
-             // Starfall (upgraded METEOR) — chain QTE with N parts, each
-             // part fires its own meteor + damage. A missed part deals 0
-             // damage AND breaks the chain (no further parts), mirroring
-             // the rule that every link in the chain matters. Per-part
-             // base 30 × 3 = 90 ceiling beats the old single-hit 60, so
-             // a clean Starfall lands harder than a clean Meteor.
+             // Starfall collects the chain's timing results first. A miss
+             // breaks further input; successful waves then settle damage
+             // together and each retain their full meteor animation.
              if (type === 'METEOR' && isUpgraded) {
                  const STARFALL_WAVES = 3;
                  const STARFALL_PER_HIT = 30;
@@ -18283,29 +18600,30 @@ async startTurn() {
                  // and the Starfall branch there is already a no-op.
                  const starfallChargeMult = this.player.nextAttackMult || 1;
                  this.player.nextAttackMult = 1;
-                 this.startQTE('ATTACK', finalEnemy.x, finalEnemy.y, executeAction, {
+                 const starfallSource = this.player;
+                 const starfallTarget = finalEnemy;
+                 const waveMultipliers = [];
+                 this.startQTE('ATTACK', finalEnemy.x, finalEnemy.y, () => this._runCombatAction(() => {
+                     // All successful waves settle before the first meteor
+                     // is presented. A lethal early hit does not cancel
+                     // the other committed meteor animations.
+                     for (const waveMult of waveMultipliers) {
+                         if (starfallTarget.currentHp <= 0 || starfallSource.currentHp <= 0) break;
+                         const dmg = Math.floor(this.calculateCardDamage(STARFALL_PER_HIT, type)
+                             * waveMult * starfallChargeMult);
+                         if (starfallTarget.takeDamage(dmg, starfallSource) && starfallTarget !== this.enemy) {
+                             this.enemy.minions = this.enemy.minions.filter(m => m !== starfallTarget);
+                             if (starfallSource.hasRelic('brutalize') && !starfallTarget.isPlayerSide) {
+                                 this.triggerBrutalize(starfallTarget);
+                             }
+                         }
+                     }
+                 }, current => this._presentCombatHits('orbital_strike', starfallSource,
+                     starfallTarget, waveMultipliers.length, current)), {
                      pattern: 'multi',
                      waves: STARFALL_WAVES,
                      onWave: (quality, waveIdx, waveMult) => {
-                         if (waveMult <= 0) return;
-                         if (!finalEnemy || finalEnemy.currentHp <= 0) return;
-                         const targetRef = finalEnemy;
-                         this.triggerVFX('orbital_strike', this.player, targetRef, () => {
-                             if (!targetRef || targetRef.currentHp <= 0) return;
-                             let dmg = STARFALL_PER_HIT;
-                             dmg = this.calculateCardDamage(dmg, type);
-                             dmg = Math.floor(dmg * waveMult * starfallChargeMult);
-                             if (targetRef.takeDamage(dmg)) {
-                                 if (targetRef === this.enemy) {
-                                     this.winCombat();
-                                 } else {
-                                     if (this.enemy) this.enemy.minions = this.enemy.minions.filter(m => m !== targetRef);
-                                     if (this.player.hasRelic('brutalize') && !targetRef.isPlayerSide) {
-                                         this.triggerBrutalize(targetRef);
-                                     }
-                                 }
-                             }
-                         });
+                         if (waveMult > 0) waveMultipliers.push(waveMult);
                      }
                  });
                  return;
@@ -18548,7 +18866,7 @@ async startTurn() {
         const name = (data && data.signatureName) || 'SIGNATURE';
         const classId = this.player && this.player.classId;
         const label = COLORS.GOLD;
-        const applyDmg = (base) => {
+        const applyDmg = (base, bypassShield = false) => {
             if (!finalEnemy || finalEnemy.currentHp <= 0) return false;
             let dmg = this.calculateCardDamage(base, 'ATTACK');
             dmg = Math.floor(dmg * qteMultiplier * chargeMult);
@@ -18560,7 +18878,7 @@ async startTurn() {
             // Pass source so Mirror enemies can reflect, runStats picks up
             // the hit, and on-hit relics (lifesteal etc) trigger correctly.
             const beforeHp = finalEnemy.currentHp;
-            const dead = finalEnemy.takeDamage(dmg, this.player);
+            const dead = finalEnemy.takeDamage(dmg, this.player, false, bypassShield);
             // Honour the Bloodstalker "Lifesteal 2 HP on every hit" promise
             // on signature strikes too — the per-class signature heals at
             // the bottom of each branch are class-specific, but the basic
@@ -18619,10 +18937,9 @@ async startTurn() {
             if (tier === 3 && finalEnemy && finalEnemy.currentHp > 0) finalEnemy.addEffect('frail', 2, 0, '💢', '+50% Dmg Taken.', 'FRAIL');
         } else if (classId === 'annihilator') {
             const base = [12, 18, 28][tier - 1];
-            // Shield-ignoring hit: bypass the enemy's shield by adding the shield
-            // value as bonus flat damage, leaving shield untouched afterwards.
-            const shieldToPierce = finalEnemy ? (finalEnemy.shield || 0) : 0;
-            applyDmg(base + shieldToPierce);
+            // Pierce the shield reservoir without turning its size into
+            // bonus damage that would be amplified by QTEs and relics.
+            applyDmg(base, true);
             if (tier >= 2 && finalEnemy && finalEnemy.currentHp > 0) finalEnemy.addEffect('weak', 2, 0, '🦠', '50% less Dmg.', 'WEAK');
             if (tier === 3 && finalEnemy && finalEnemy.currentHp > 0) finalEnemy.addEffect('stun', 1, 0, '💫', 'Skips Turn.', 'STUN');
         } else if (classId === 'sentinel') {
@@ -18688,6 +19005,10 @@ async startTurn() {
     },
 
     rerollDice() {
+        if (this.inputLocked || this._endTurnRunning || this.qte?.active
+            || this._combatActionDepth > 0 || this.paused || document.hidden) return;
+        if (this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT
+            && this.currentState !== STATE.BREAKOUT) return;
         // Sector 0 Breakout — let the teaching controller know the
         // player rerolled so beats keyed on `wait: 'reroll'` can
         // advance.
@@ -18936,6 +19257,13 @@ async startTurn() {
     },
 
 triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
+        if (this._settledCombatVfx) {
+            this._settledCombatVfx.push({ type, source, target, opts });
+            // Damage belongs to the settled action. The later animation
+            // receives no callback and cannot change HP or grant rewards.
+            if (onHitCallback) onHitCallback();
+            return;
+        }
         const x = target ? target.x : (source ? source.x : CONFIG.CANVAS_WIDTH/2);
         const y = target ? target.y : (source ? source.y : CONFIG.CANVAS_HEIGHT/2);
 
@@ -19953,6 +20281,7 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
                 frequency: 10, 
                 color: pColor, // Use dynamic color
                 onHit: onHitCallback,
+                settledDamage: !!opts.settledDamage,
                 empowered: false, 
                 dmgMultiplier: 1.0 
             });
@@ -19973,6 +20302,7 @@ triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
                 maxLife: 100,
                 color: '#ff0055',
                 parried: false,
+                settledDamage: !!opts.settledDamage,
                 onHit: onHitCallback // Ensure callback is passed
             });
             AudioMgr.playSound('laser');
@@ -21967,7 +22297,8 @@ drawEffects() {
       // mobile bug where the same tap that picked the map node leaked
       // through to the newly-positioned END TURN button, auto-skipping
       // turn 1 and kicking the enemy phase before the player could act.
-      if (this._endTurnRunning) return;
+      if (this._endTurnRunning || this.inputLocked || this.qte?.active
+          || this._combatActionDepth > 0 || this.paused || document.hidden) return;
       if (this._combatStartedAt && (Date.now() - this._combatStartedAt) < 500) return;
       if (this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT && this.currentState !== STATE.BREAKOUT) return;
       this._endTurnRunning = true;
@@ -21983,7 +22314,11 @@ drawEffects() {
       // loops below will check `_combatGen !== gen` and bail — keeps the
       // prior combat's leftover intents from firing into the new combat.
       const gen = this._combatGen || 0;
-      const stillLive = () => (this._combatGen === gen);
+      const turnPlayer = this.player;
+      const turnEnemy = this.enemy;
+      const stillLive = () => this._combatGen === gen && this.player === turnPlayer && this.enemy === turnEnemy
+          && (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT
+              || this.currentState === STATE.BREAKOUT);
       try {
         // v1.8.4 — sample combat-metric counters once per turn (zero
         // overhead when CombatMetrics._active is false). Snapshot
@@ -22102,12 +22437,15 @@ drawEffects() {
             this.updateTutorialStep(); 
             if (this.enemy) this.enemy.playAnim('lunge');
             await this.sleep(2000);
+            if (!stillLive()) return;
             this.qte.radius = 100;
             const tutorialDmg = 5;
             const multiplier = await this.startQTE('DEFEND', this.player.x, this.player.y, null, { incomingDamage: tutorialDmg });
+            if (!stillLive()) return;
             let dmg = Math.floor(tutorialDmg * multiplier);
             this.player.takeDamage(dmg, this.enemy, true);
             await this.sleep(1000);
+            if (!stillLive()) return;
             this.tutorialStep = 10;
             this.updateTutorialStep();
             this.startTurn();
@@ -22125,6 +22463,7 @@ drawEffects() {
         }
 
         await this.showPhaseBanner("ENEMY PHASE", "INCOMING DATA STREAM", 'enemy');
+        if (!stillLive()) return;
 
         // --- PLAYER MINION PHASE ---
         // Iterate right-to-left by screen x, and off a snapshot of the array.
@@ -22135,12 +22474,8 @@ drawEffects() {
         // from the wrong position. Right-to-left order + snapshot makes
         // removal order match the rendered layout and avoids the skip.
         const minionOrder = this.player.minions.slice().sort((a, b) => b.x - a.x);
-        // Track in-flight player-minion attacks (darts) so the enemy phase
-        // doesn't begin until every attack has hit and damage/kills are
-        // committed. Without this, an enemy minion could queue and fire its
-        // own attack while a fatal dart is still mid-flight, "ghost-striking"
-        // from beyond the grave.
-        const inFlightAttacks = [];
+        // Each minion's input, settled damage and full visual presentation
+        // finish before the next action or enemy phase can begin.
         for (const m of minionOrder) {
             if (!stillLive()) return; // new combat started — abandon this phase
             if(!this.enemy || this.enemy.currentHp <= 0) break;
@@ -22169,65 +22504,12 @@ drawEffects() {
                     }
                     await this._detonateBombBot(m, launchX, launchY);
                 } else {
-                    // Capture combat generation in the VFX callback so a
-                    // dart in flight when the combat ends can't damage the
-                    // next combat's enemy when its onHit fires.
-                    const callbackGen = this._combatGen || 0;
-                    const attackP = new Promise(resolve => {
-                        let settled = false;
-                        const finish = () => { if (!settled) { settled = true; resolve(); } };
-                        this.triggerVFX('nature_dart', m, t, (multiplier = 1.0) => {
-                            try {
-                                if (this._combatGen !== callbackGen) return;
-                                // Relic: SWARM BEACON — player minions deal +1 DMG per alive minion.
-                                let swarmBonus = 0;
-                                if (this.player.hasRelic('swarm_beacon')) {
-                                    const aliveCount = this.player.minions.filter(mm => mm && mm.currentHp > 0).length;
-                                    const stacks = this.stackCount('swarm_beacon');
-                                    swarmBonus = aliveCount * stacks;
-                                }
-                                // Apply the minion's own Constrict/Weak before the swarm bonus
-                                // and QTE multiplier so debuffs scale the base attack, not the
-                                // boosted total (keeps swarm stacking predictable).
-                                const effBase = (typeof m.getEffectiveDamage === 'function') ? m.getEffectiveDamage(m.dmg) : m.dmg;
-                                // Pact of Hunger — minion attacks deal ×2 in
-                                // exchange for one-turn lifespan (death applied
-                                // in endTurn). Layered after debuff scaling.
-                                const hungerMult = (this.hasPact && this.hasPact('hunger')) ? 2 : 1;
-                                const dmg = Math.floor((effBase + swarmBonus) * multiplier * hungerMult);
-                                if (t.takeDamage(dmg, m) && t === this.enemy) { this.winCombat(); return; }
-                                if (t !== this.enemy && t.currentHp <= 0) {
-                                     // Blood Thrall kills no longer heal the player — the
-                                     // thrall's value now comes from siphoning damage it
-                                     // takes back to the player as healing (see the heal
-                                     // hook in Entity.takeDamage). Per-hit lifesteal on
-                                     // the player's own attacks is still on.
-                                     if (this.enemy) this.enemy.minions = this.enemy.minions.filter(min => min !== t);
-                                     if(this.player.hasRelic('brutalize') && !t.isPlayerSide) {
-                                         this.triggerBrutalize(t);
-                                         if(this.enemy && this.enemy.currentHp <= 0) { this.winCombat(); return; }
-                                     }
-                                }
-                            } finally { finish(); }
-                        });
-                        // Safety net — if the dart never lands (combat ended,
-                        // VFX system hiccup), unblock the enemy phase after a
-                        // bounded wait. Dart speed=0.017/frame ≈ 970ms; 2s gives
-                        // headroom for slower devices without leaving the player
-                        // staring at a frozen screen.
-                        setTimeout(finish, 2000);
-                    });
-                    inFlightAttacks.push(attackP);
+                    const continued = await this._resolvePlayerMinionStrike(m, t);
+                    if (!continued || !stillLive()) return;
                 }
             }
             await this.sleep(500);
-        }
-
-        // Wait for every in-flight player-minion attack to land before the
-        // enemy gets to act. Otherwise an enemy could queue an intent for a
-        // unit that's about to die from a dart still in flight.
-        if (inFlightAttacks.length) {
-            await Promise.all(inFlightAttacks);
+            if (!stillLive()) return;
         }
 
         // Pact of Hunger — minions burn out one turn after spawning. Done
@@ -22247,6 +22529,8 @@ drawEffects() {
         }
 
         if(!this.enemy || this.enemy.currentHp <= 0) { this.winCombat(); return; }
+
+        this._finishPlayerTurnStatuses();
 
         // --- ENEMY INTENT PHASE ---
         for (const intent of this.enemy.nextIntents) {
@@ -22276,10 +22560,16 @@ drawEffects() {
             // turn-start via the standard updateEffects pass so the enemy
             // recovers next round automatically.
             if (intent.type === 'stunned') {
+                const stun = this.enemy.hasEffect('stun');
+                if (stun) {
+                    stun.duration--;
+                    this.enemy.effects = this.enemy.effects.filter(e => e !== stun || e.duration > 0);
+                }
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "STUNNED", "#bc13fe");
                 ParticleSys.createSparks(this.enemy.x, this.enemy.y - 30, "#bc13fe", 12);
                 try { AudioMgr.playSound && AudioMgr.playSound('defend'); } catch (_) {}
                 await this.sleep(700);
+                if (!stillLive()) return;
                 continue;
             }
 
@@ -22304,6 +22594,7 @@ drawEffects() {
                     ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 120, `EMPOWERED +${dmgGain} DMG`, "#ff00ff");
                     AudioMgr.playSound('upgrade');
                     await this.sleep(400);
+                    if (!stillLive()) return;
                 } else if (intent.secondary.type === 'debuff') {
                     const id = intent.secondary.id;
                     const duration = isImproved ? 3 : 2;
@@ -22314,6 +22605,7 @@ drawEffects() {
                     ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "SYSTEM HACKED", "#00ff00");
                     AudioMgr.playSound('attack');
                     await this.sleep(400);
+                    if (!stillLive()) return;
                 }
             }
 
@@ -22330,6 +22622,7 @@ drawEffects() {
                 
                 if (dmgVal > 0) {
                     const multiplier = await this.startQTE('DEFEND', this.player.x, this.player.y, null, { incomingDamage: dmgVal });
+                    if (!stillLive()) return;
                     let dmg = Math.floor(dmgVal * multiplier);
                     if (this.player.takeDamage(dmg, this.enemy, true) && this.player.currentHp <= 0) { this.gameOver(); return; }
                 }
@@ -22369,6 +22662,7 @@ drawEffects() {
                     AudioMgr.playSound('chains', { playbackRate: 0.55, volume: 1.0 });
                     this.triggerVFX('beam', this.enemy, snack);
                     await this.sleep(300);
+                    if (!stillLive()) return;
                     this.player.minions.shift();
                     
                     // UPDATED: Restore 30% HP, bypassing modifiers (Constrict/Rot)
@@ -22562,71 +22856,17 @@ drawEffects() {
                 // turn, and replaces this enemy phase's ordinary attack.
                 continue;
             }
-            else if (intent.type === 'aoe_sweep') {
-                // Riot Suppressor: single QTE then damage everyone player-side.
-                // The sweep arc telegraphs as a fast wind-up; accelerate
-                // pattern matches the visual cue.
-                let dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
-                // Bolster Mech 2× charge — consume the flag if the
-                // Compiler is the attacker. Only the first attack of
-                // the turn gets the multiplier; the flag is one-shot.
-                if (this.enemy && this.enemy.name === 'THE COMPILER' && this.enemy._bolsterDamageMult) {
-                    dmg = Math.floor(dmg * this.enemy._bolsterDamageMult);
-                    ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 200,
-                        `BOLSTER × ${this.enemy._bolsterDamageMult}`, '#ffaa00');
-                    this.enemy._bolsterDamageMult = 0;
-                }
-                await this.sleep(300);
-                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, "SWEEP ARC", "#ff3355");
-                const mult = await this.startQTE('DEFEND', this.player.x, this.player.y, null, { pattern: 'accelerate', incomingDamage: dmg });
-                const finalDmg = Math.floor(dmg * mult);
-                {
-                    const sweepGen = this._combatGen || 0;
-                    this.triggerVFX('glitch_spike', this.enemy, this.player, () => {
-                        if (this._combatGen !== sweepGen) return;
-                        if (this.player.takeDamage(finalDmg, this.enemy, true) && this.player.currentHp <= 0) { this.gameOver(); return; }
-                    });
-                }
-                this.player.minions.forEach(m => m.takeDamage(finalDmg, this.enemy));
-                this._cullPlayerMinions();
-                AudioMgr.playSound('explosion');
-                if (this.shake) this.shake(10);
+            else if (intent.type === 'aoe_sweep' || intent.type === 'frost_aoe' || intent.type === 'immolate') {
+                const continued = await this._resolveEnemyAreaStrike(intent);
+                if (!continued || !stillLive()) return;
                 continue;
-            }
-            else if (intent.type === 'frost_aoe') {
-                // Frost field telegraphs slow & steady but the freeze pulse
-                // is twitchy — pulse pattern catches the unstable cadence.
-                const dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
-                await this.sleep(300);
-                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, "CRYO FIELD", "#88eaff");
-                const mult = await this.startQTE('DEFEND', this.player.x, this.player.y, null, { pattern: 'pulse', incomingDamage: dmg });
-                const finalDmg = Math.floor(dmg * mult);
-                if (this.player.takeDamage(finalDmg, this.enemy, true) && this.player.currentHp <= 0) { this.gameOver(); return; }
-                this.player.addEffect('weak', 2, 0, '🥶', 'Deals 50% less DMG.');
-                this.player.minions.forEach(m => m.takeDamage(Math.floor(finalDmg * 0.6), this.enemy));
-                this._cullPlayerMinions();
-                continue;
-            }
-            else if (intent.type === 'immolate') {
-                // Self-destruct: massive AoE and the Slag Geyser dies.
-                const dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
-                ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, "IMMOLATE!", "#ff6600");
-                ParticleSys.createExplosion(this.enemy.x, this.enemy.y, 80, "#ff6600");
-                if (this.shake) this.shake(24);
-                AudioMgr.playSound('explosion');
-                if (this.player.takeDamage(dmg, this.enemy, true) && this.player.currentHp <= 0) { this.gameOver(); return; }
-                this.player.minions.forEach(m => m.takeDamage(Math.floor(dmg * 0.8), this.enemy));
-                this._cullPlayerMinions();
-                // Geyser consumes itself — force a combat win.
-                this.enemy.currentHp = 0;
-                this.winCombat();
-                return;
             }
             else if (intent.type === 'charging_immolate' || intent.type === 'burrow_idle' || intent.type === 'observer_wait') {
                 const label = intent.type === 'charging_immolate' ? "CHARGING..." :
                               intent.type === 'burrow_idle' ? "BURROWED" : "OBSERVING...";
                 ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, label, "#ffaa00");
                 await this.sleep(300);
+                if (!stillLive()) return;
                 continue;
             }
             else if (intent.type === 'heal_ally') {
@@ -22762,6 +23002,7 @@ drawEffects() {
                 }
 
                 await this.sleep(400);
+                if (!stillLive()) return;
 
                 // Multi-hit chain QTE — Clair-Obscur style. ONE QTE with N
                 // waves up front; the final multiplier (worst-of-waves)
@@ -22781,31 +23022,6 @@ drawEffects() {
                 //   shield_strip_attack → accelerate (ramping threat)
                 //   chaotic_act         → pulse  (random buff into hit)
                 let chainMultiplier = 1.0;
-                if (validTarget === this.player && hits > 0) {
-                    let qteOpts = null;
-                    if (hits > 1) {
-                        qteOpts = { pattern: 'multi', waves: Math.min(4, hits) };
-                    } else {
-                        const orig = intent._originalIntent;
-                        if (orig === 'mirror_attack')         qteOpts = { pattern: 'pulse' };
-                        else if (orig === 'observer_strike')  qteOpts = { pattern: 'pulse' };
-                        else if (orig === 'burrow_resurge')   qteOpts = { pattern: 'pulse' };
-                        else if (orig === 'shield_strip_attack') qteOpts = { pattern: 'accelerate' };
-                        else if (orig === 'chaotic_act')      qteOpts = { pattern: 'pulse' };
-                    }
-                    // Plumb total chain damage so a perfect parry's riposte
-                    // scales to the WHOLE attack the player just parried.
-                    // For a 3×5 chain that's 15 incoming → reflect 25% × 15
-                    // = 3-4 dmg, which feels proportional to "you parried
-                    // the entire chain". Passing per-hit instead would
-                    // surface a 1-dmg pity riposte after eating 3 hits.
-                    const _perHit = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
-                    const _qteIncoming = (typeof _perHit === 'number' && _perHit > 0) ? _perHit * Math.max(1, hits) : 0;
-                    if (_qteIncoming > 0) {
-                        qteOpts = Object.assign({}, qteOpts || {}, { incomingDamage: _qteIncoming });
-                    }
-                    chainMultiplier = await this.startQTE('DEFEND', this.player.x, this.player.y, null, qteOpts);
-                }
                 // Per-intent state for the chain. These flags ensure once-
                 // per-attack-intent semantics so a 4-hit chain doesn't burn
                 // 4 Aegis blocks, fire 4 thorn reflects, or stack ricochet
@@ -22814,53 +23030,9 @@ drawEffects() {
                 let aegisBlockedIntent = false;
                 let thornsFiredThisIntent = false;
                 let chainBroken = false;
-                // v1.9.39 — multi-hit chain linkage. For chains of 2+ hits,
-                // spawn an energy tether from the boss to the target that
-                // pulses on each hit and persists through the inter-hit
-                // gaps so the chain reads as a single sustained assault
-                // rather than three isolated bursts. Lifetime covers the
-                // whole chain (200ms gap × hits + 200ms tail). The pulse
-                // colour matches the boss-attack signature where one
-                // applies (Compiler orange, Tesseract magenta, Hive lime,
-                // Panopticon cyan), defaulting to white for generic
-                // enemies.
-                if (hits > 1 && validTarget === this.player) {
-                    let chainColor = '#ffffff';
-                    if (this.enemy && this.enemy.name === 'THE COMPILER') chainColor = '#ff8800';
-                    else if (this.enemy && this.enemy.name === 'TESSERACT PRIME') chainColor = '#bc13fe';
-                    else if (this.enemy && this.enemy.name === 'HIVE PROTOCOL') chainColor = '#7fff00';
-                    else if (this.enemy && this.enemy.name === 'THE PANOPTICON') chainColor = '#00f3ff';
-                    const tetherLifeMs = 200 * hits + 220;
-                    const tetherFrames = Math.ceil(tetherLifeMs / 16);
-                    this.effects.push({
-                        type: 'multi_chain_tether',
-                        sx: this.enemy ? this.enemy.x : 0,
-                        sy: this.enemy ? this.enemy.y : 0,
-                        tx: validTarget.x,
-                        ty: validTarget.y,
-                        life: tetherFrames,
-                        maxLife: tetherFrames,
-                        startMs: performance.now(),
-                        durationMs: tetherLifeMs,
-                        color: chainColor
-                    });
-                }
-                for(let h=0; h<hits; h++) {
-                    if (chainBroken) break;
-                    if (this.enemy && this.enemy.currentHp <= 0) break;
-                    if (this.player && this.player.currentHp <= 0) break;
-                    // Slight delay between multi-hits
-                    if (h > 0) await this.sleep(200);
-
-                    if (validTarget === this.player) {
-                        const multiplier = chainMultiplier;
-
-                        // v1.9.32 — boss-signature VFX routing. Each major
-                        // boss now ships its own attack-time visual instead
-                        // of falling back on the generic glitch_spike. The
-                        // damage callback contract is identical (called at
-                        // impact moment) so balance does not shift.
-                        let vfxType = 'glitch_spike';
+                const attackSource = this.enemy;
+                let vfxType = 'glitch_spike';
+                if (validTarget === this.player) {
                         if (intent.type === 'purge_attack') {
                             vfxType = 'orbital_strike';
                         } else if (this.enemy && this.enemy.name === 'THE COMPILER') {
@@ -22873,12 +23045,11 @@ drawEffects() {
                                 || (this.enemy && this.enemy.name === 'THE PANOPTICON')) {
                             vfxType = 'observer_strike';
                         }
-                        // Capture combat generation so an in-flight enemy
-                        // attack VFX can't damage the player when they
-                        // open the next combat from the map screen.
-                        const cbGen = this._combatGen || 0;
-                        this.triggerVFX(vfxType, this.enemy, validTarget, () => {
-                            if (this._combatGen !== cbGen) return;
+
+                }
+                const resolveHit = () => {
+                    const multiplier = chainMultiplier;
+                    if (validTarget === this.player) {
                             // Ensure using effectiveVal (includes Weak/Constrict)
                             let dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
                             dmg = Math.floor(dmg * multiplier);
@@ -22945,12 +23116,8 @@ drawEffects() {
                                 }
                             }
                             if (validTarget.takeDamage(dmg, this.enemy, true) && validTarget === this.player) { chainBroken = true; this.gameOver(); return; }
-                        });
+
                     } else {
-                        // Minion Target
-                        const minCbGen = this._combatGen || 0;
-                        this.triggerVFX('glitch_spike', this.enemy, validTarget, () => {
-                            if (this._combatGen !== minCbGen) return;
                             let dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
                             if (validTarget.takeDamage(dmg, this.enemy)) {
                                  if (this.player.traits.maxMinions === 4 && Math.random() < 0.3) {
@@ -22968,12 +23135,81 @@ drawEffects() {
                                      }
                                  }
                             }
-                        });
+
                     }
+                };
+                const continued = await this._runCombatAction(async () => {
+                if (validTarget === this.player && hits > 0) {
+                    let qteOpts = null;
+                    if (hits > 1) {
+                        qteOpts = { pattern: 'multi', waves: Math.min(4, hits) };
+                    } else {
+                        const orig = intent._originalIntent;
+                        if (orig === 'mirror_attack')         qteOpts = { pattern: 'pulse' };
+                        else if (orig === 'observer_strike')  qteOpts = { pattern: 'pulse' };
+                        else if (orig === 'burrow_resurge')   qteOpts = { pattern: 'pulse' };
+                        else if (orig === 'shield_strip_attack') qteOpts = { pattern: 'accelerate' };
+                        else if (orig === 'chaotic_act')      qteOpts = { pattern: 'pulse' };
+                    }
+                    // Plumb total chain damage so a perfect parry's riposte
+                    // scales to the WHOLE attack the player just parried.
+                    // For a 3×5 chain that's 15 incoming → reflect 25% × 15
+                    // = 3-4 dmg, which feels proportional to "you parried
+                    // the entire chain". Passing per-hit instead would
+                    // surface a 1-dmg pity riposte after eating 3 hits.
+                    const _perHit = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
+                    const _qteIncoming = (typeof _perHit === 'number' && _perHit > 0) ? _perHit * Math.max(1, hits) : 0;
+                    if (_qteIncoming > 0) {
+                        qteOpts = Object.assign({}, qteOpts || {}, { incomingDamage: _qteIncoming });
+                    }
+                    chainMultiplier = await this.startQTE('DEFEND', this.player.x, this.player.y, null, qteOpts);
+                    if (!stillLive()) return;
                 }
+                    if (!stillLive()) return;
+                    for (let hit = 0; hit < hits; hit++) {
+                        if (chainBroken || attackSource.currentHp <= 0 || this.player.currentHp <= 0
+                            || validTarget.currentHp <= 0) break;
+                        resolveHit();
+                    }
+                }, async current => {
+                // v1.9.39 — multi-hit chain linkage. For chains of 2+ hits,
+                // spawn an energy tether from the boss to the target that
+                // pulses on each hit and persists through the inter-hit
+                // gaps so the chain reads as a single sustained assault
+                // rather than three isolated bursts. Lifetime covers the
+                // whole chain (200ms gap × hits + 200ms tail). The pulse
+                // colour matches the boss-attack signature where one
+                // applies (Compiler orange, Tesseract magenta, Hive lime,
+                // Panopticon cyan), defaulting to white for generic
+                // enemies.
+                if (hits > 1 && validTarget === this.player) {
+                    let chainColor = '#ffffff';
+                    if (this.enemy && this.enemy.name === 'THE COMPILER') chainColor = '#ff8800';
+                    else if (this.enemy && this.enemy.name === 'TESSERACT PRIME') chainColor = '#bc13fe';
+                    else if (this.enemy && this.enemy.name === 'HIVE PROTOCOL') chainColor = '#7fff00';
+                    else if (this.enemy && this.enemy.name === 'THE PANOPTICON') chainColor = '#00f3ff';
+                    const tetherLifeMs = 200 * hits + 220;
+                    const tetherFrames = Math.ceil(tetherLifeMs / 16);
+                    this.effects.push({
+                        type: 'multi_chain_tether',
+                        sx: this.enemy ? this.enemy.x : 0,
+                        sy: this.enemy ? this.enemy.y : 0,
+                        tx: validTarget.x,
+                        ty: validTarget.y,
+                        life: tetherFrames,
+                        maxLife: tetherFrames,
+                        startMs: performance.now(),
+                        durationMs: tetherLifeMs,
+                        color: chainColor
+                    });
+                }
+                    await this._presentCombatHits(vfxType, attackSource, validTarget, hits, current);
+                });
+                if (!continued || !stillLive()) return;
             } 
             else if (intent.type === 'heal') {
                 await this.sleep(300);
+                if (!stillLive()) return;
                 // Post-sleep enemy guard — a prior intent's VFX callback,
                 // a Bomb Bot detonation, or a thorns/reflect chain can
                 // null `this.enemy` during the 300ms wait. Without this
@@ -22984,6 +23220,7 @@ drawEffects() {
             }
             else if (intent.type === 'summon') {
                 await this.sleep(300);
+                if (!stillLive()) return;
                 // Same null guard — the summon path reads enemy.x/.y/.minions
                 // and would crash if the enemy died during the sleep.
                 if (!this.enemy || this.enemy.currentHp <= 0) continue;
@@ -23013,6 +23250,7 @@ drawEffects() {
             }
             
             await this.sleep(1200);
+            if (!stillLive()) return;
         }
 
         // Combat may have ended mid-intent (e.g. Bomb Bot killed the boss). Bail before
@@ -23056,18 +23294,24 @@ drawEffects() {
             if (min.isVoidSpawn) {
                 min.playAnim('lunge');
                 await this.sleep(300);
+                if (!stillLive()) return;
+                if (!stillLive()) return;
                 if (this.player.minions.length > 0) {
                     const victim = this.player.minions[0];
                     const healAmt = Math.max(1, victim.currentHp);
                     this.triggerVFX('void_tendril', min, victim);
                     // Reach + wrap phase.
                     await this.sleep(420);
+                    if (!stillLive()) return;
+                    if (!stillLive()) return;
                     victim.currentHp = 0;
                     ParticleSys.createFloatingText(victim.x, victim.y, "CONSUMED", "#bc13fe");
                     ParticleSys.createShockwave(victim.x, victim.y, '#1a0025', 40);
                     this.player.minions = this.player.minions.filter(m => m !== victim);
                     // Retract phase drags essence back into the boss.
                     await this.sleep(360);
+                    if (!stillLive()) return;
+                    if (!stillLive()) return;
                     // Post-sleep guard — the void spawn's consume animation
                     // takes ~1080ms across three sleep stages. During that
                     // window a Bomb Bot detonation, thorns reflect, or
@@ -23080,21 +23324,18 @@ drawEffects() {
                         AudioMgr.playSound('mana');
                     }
                 } else {
-                    this.triggerVFX('micro_laser', min, this.player, () => {
-                        const dmgOut = (typeof min.getEffectiveDamage === 'function') ? min.getEffectiveDamage(min.dmg) : min.dmg;
-                        if (this.player.takeDamage(dmgOut, min) && this.player.currentHp <= 0) { this.gameOver(); return; }
-                        if (this.player.mana > 0) {
-                            this.player.mana = Math.max(0, this.player.mana - 1);
-                            ParticleSys.createFloatingText(this.player.x, this.player.y - 80, "MANA DRAIN -1", "#bc13fe");
-                        }
-                    });
+                    const continued = await this._resolveEnemyMinionStrike(min, this.player, { voidDrain: true });
+                    if (!continued || !stillLive()) return;
                 }
                 await this.sleep(600);
+                if (!stillLive()) return;
                 continue;
             }
 
             min.playAnim('lunge');
             await this.sleep(300);
+            if (!stillLive()) return;
+            if (!stillLive()) return;
             // Mirror minion override — when the parent enemy is mirror-kind,
             // the minion always strikes the player and deals a sector-scaled
             // reflect of the last hit it took from the player OR a player-side
@@ -23109,47 +23350,11 @@ drawEffects() {
                 ParticleSys.createFloatingText(min.x, min.y - 100, "REFLECT", "#88eaff");
             }
             if(t) {
-                this.triggerVFX('micro_laser', min, t, () => {
-                    // Null-safe leech: triggerVFX callbacks fire after a
-                    // VFX-specific delay, during which combat can end via
-                    // a chain reaction. Guard the enemy ref before reading
-                    // .currentHp — was previously checked but assumed
-                    // .enemy itself was non-null.
-                    if (min.tier >= 2 && this.enemy && this.enemy.currentHp > 0) {
-                        this.enemy.heal(2);
-                        ParticleSys.createFloatingText(this.enemy.x, this.enemy.y, "LEECH", "#00ff00");
-                    }
-                    // If the target died on a prior callback in this same
-                    // tick (chained kills via Bomb Bot, lifesteal, etc.),
-                    // bail before invoking takeDamage on a dead entity.
-                    if (!t || t.currentHp <= 0) return;
-                    let dmgOut;
-                    if (_mirrorMinion) {
-                        const _mirrorPctMap = { 1: 0.5, 2: 0.75, 3: 1.0, 4: 1.5, 5: 2.0 };
-                        const _pct = _mirrorPctMap[this.sector || 1] || 0.5;
-                        const _src = min._lastPlayerSideHitDmg || min.dmg;
-                        dmgOut = Math.max(4, Math.floor(_src * _pct));
-                    } else {
-                        dmgOut = (typeof min.getEffectiveDamage === 'function') ? min.getEffectiveDamage(min.dmg) : min.dmg;
-                    }
-                    if (t.takeDamage(dmgOut, min) && t === this.player) { this.gameOver(); return; }
-                    if (t !== this.player && t.currentHp <= 0) {
-                         if (this.player.traits.maxMinions === 4 && Math.random() < 0.3) {
-                             t.currentHp = Math.floor(t.maxHp / 2);
-                             ParticleSys.createFloatingText(t.x, t.y, "REVIVED!", "#00ff99");
-                         } else {
-                            // Capture launch coords before removal — see _detonateBombBot.
-                            const bombX = t.x, bombY = t.y;
-                            this.player.minions = this.player.minions.filter(m => m !== t);
-                            this.deadMinionsThisTurn++;
-                            if (this.player.traits.minionName === "Bomb Bot") {
-                                this._detonateBombBot(t, bombX, bombY);
-                            }
-                         }
-                    }
-                });
+                const continued = await this._resolveEnemyMinionStrike(min, t, { mirror: !!_mirrorMinion });
+                if (!continued || !stillLive()) return;
             }
             await this.sleep(600);
+            if (!stillLive()) return;
         }
 
         // Combat may have ended inside a minion callback (kill via lifesteal/brutalize/etc).
@@ -23176,6 +23381,7 @@ drawEffects() {
         while (this.effects.some(e => e.type === 'micro_laser' && !e.parried)) {
             if (!stillLive()) return;
             await this.sleep(100);
+            if (!stillLive()) return;
         }
 
         if (!stillLive()) return;
@@ -23214,15 +23420,28 @@ drawEffects() {
         // true and every subsequent END TURN press is silently dropped, with
         // no in-game indication that the run has soft-locked. startTurn also
         // clears the flag on the happy path, so re-clearing here is safe.
-        this._endTurnRunning = false;
+        if (this._combatGen === gen) this._endTurnRunning = false;
       }
     },
 
     async winCombat() {
+        const gen = this._combatGen || 0;
+        const enemy = this.enemy;
+        const player = this.player;
+        const stillCurrent = () => (this._combatGen || 0) === gen
+            && this.enemy === enemy && this.player === player && !!enemy && !!player
+            && (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT
+                || this.currentState === STATE.BREAKOUT);
+        if (!stillCurrent()) return;
+        const continueWin = () => {
+            if (!stillCurrent()) return false;
+            if (player.currentHp <= 0) { this.gameOver(); return false; }
+            return true;
+        };
         // A self-destruct hit can trigger a shield counter before the
         // remaining damage reaches player HP. Its resolver settles both
         // deaths together, prioritising a lethal hit over rewards.
-        if (this._resolvingSelfDestruct) return;
+        if (this._resolvingSelfDestruct || this._combatActionDepth > 0) return;
         // v1.9.0 — wipe Archivist Time Control on combat end so the
         // overlay disappears immediately and the budget resets for the
         // next fight. Calling with keepBudget:false also clears the
@@ -23255,6 +23474,7 @@ drawEffects() {
         // Single-flight via this flag; reset in finally so next combat is clean.
         if (this._winCombatRunning) return;
         this._winCombatRunning = true;
+        this.inputLocked = true;
         try {
         // BREAKOUT — Sector 0 prologue rooms terminate here. The Breakout
         // service drives room→room transitions; we just need to play
@@ -23275,11 +23495,11 @@ drawEffects() {
                 AudioMgr.playSound('upgrade');
                 this.shake(enemyRef.isBoss ? 18 : 8);
             }
-            this._winCombatRunning = false;
             // Boss-only dissolve cinematic. Awaited so the storyboard
             // outro doesn't pop on top of the in-progress shatter.
             if (enemyRef && enemyRef.isBoss && enemyRef.name === 'CAGE GUARDIAN') {
                 try { await this._runBossDeathDissolve(enemyRef); } catch (e) { /* swallow */ }
+                if (!continueWin()) return;
                 AudioMgr.playSting && AudioMgr.playSting('boss_kill');
             }
             try { Breakout.onCombatWin(); } catch (e) { console.warn('breakout advance failed', e); }
@@ -23356,6 +23576,7 @@ drawEffects() {
         // the cinematic plays while frags/rewards resolve in the background.
         if (this.enemy && this.enemy.isBoss && this.currentState !== STATE.TUTORIAL_COMBAT) {
             try { await this._runBossDeathDissolve(this.enemy); } catch (e) { /* swallow */ }
+            if (!continueWin()) return;
         }
         // Achievements: boss + run-completion checks (eligible only outside tutorial)
         if (this.currentState !== STATE.TUTORIAL_COMBAT && this.enemy) {
@@ -23555,7 +23776,12 @@ drawEffects() {
                 ParticleSys.createShockwave(this.enemy.x, this.enemy.y, COLORS.GOLD, 32);
                 AudioMgr.playSound('explosion');
                 this.enemy = null;
-                setTimeout(() => this.openPostTutorial(), 600);
+                this.setTimer(() => {
+                    if ((this._combatGen || 0) === gen && this.player === player
+                        && this.enemy === null && this.currentState === STATE.TUTORIAL_COMBAT) {
+                        this.openPostTutorial();
+                    }
+                }, 600);
                 return;
             }
             return;
@@ -23565,13 +23791,16 @@ drawEffects() {
         if (this.enemy && this.enemy.isBoss) {
             this.triggerSlowMo(0.35, 0.7);
             await this.sleep(700);
+            if (!continueWin()) return;
         } else if (this.enemy && this.enemy.isElite) {
             this.triggerSlowMo(0.55, 0.35);
             await this.sleep(300);
+            if (!continueWin()) return;
         } else if (this.enemy) {
             // Normal mob kills get a brief slow-mo so every victory lands.
             this.triggerSlowMo(0.7, 0.18);
             await this.sleep(150);
+            if (!continueWin()) return;
         }
 
         // --- ARCHIVIST KILL — Sector X gauntlet ends here. Awards a fixed
@@ -23608,6 +23837,7 @@ drawEffects() {
             ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2 + 60,
                 '+500 FRAG · +1 FILE', '#ffd76a');
             await this.sleep(2200);
+            if (!continueWin()) return;
             this.archiveMode = false;
             // Hand off to the post-Archivist choice overlay. The helper
             // wires CONTINUE (Endless, gated on s_endless) and RETURN HOME
@@ -23618,10 +23848,12 @@ drawEffects() {
 
         // --- UPDATED: VICTORY SEQUENCE FOR TESSERACT PRIME ---
         if (this.enemy && this.enemy.name === "TESSERACT PRIME") {
+            const wasChallenge = !!this.challengeMode;
             // Chronicle entry for the win (Roadmap Part 27).
             this._logRunHistory('win', { defeatedBy: null });
             // 1. Cinematic Crash
             await this.triggerSystemCrash();
+            if (!continueWin()) return;
 
             // 2. Set Data
             localStorage.setItem('mvm_gameCompleted', 'true');
@@ -23665,7 +23897,7 @@ drawEffects() {
                 }
             }
             // Challenge Mode completion bookkeeping
-            if (Challenge.isActive()) {
+            if (wasChallenge) {
                 Challenge.markComplete({
                     fragments: this.techFragments,
                     turns: (this.runStats && this.runStats.turns) || 0,
@@ -23716,7 +23948,7 @@ drawEffects() {
             // the ending cinematic OR the endless prompt fires. The
             // Archivist's victory hook (`_archivistVictoryChoice`) presents
             // the continue-Endless / return-home decision after the kill.
-            if (!this.challengeMode && !this._archivistFacedThisRun
+            if (!wasChallenge && !this._archivistFacedThisRun
                 && this.hasMetaUpgrade('s_archivist_key')) {
                 this._archivistFacedThisRun = true;
                 // Run isn't ending — restore the frag balance we just wiped.
@@ -23751,7 +23983,7 @@ drawEffects() {
             // beats (Daily clear / Archivist Slain banner) and the canon
             // ending only makes narrative sense for a standard run. Route
             // straight to the Victory recap card instead.
-            if (this.challengeMode || this.archiveMode) {
+            if (wasChallenge || this.archiveMode) {
                 this.changeState(STATE.VICTORY);
                 return;
             }
@@ -23963,11 +24195,15 @@ drawEffects() {
 
         this.showCombatWin({ frags, droppedFile, wasBoss, wasElite, killName });
         } finally {
-            this._winCombatRunning = false;
+            if ((this._combatGen || 0) === gen) this._winCombatRunning = false;
         }
     },
 
     showCombatWin({ frags, droppedFile, wasBoss, wasElite, killName }) {
+        const gen = this._combatGen || 0;
+        const player = this.player;
+        const stillCurrent = () => (this._combatGen || 0) === gen
+            && this.player === player && this.currentState === STATE.COMBAT_WIN;
         const titleEl = document.getElementById('combat-win-title');
         const subEl = document.getElementById('combat-win-sub');
         if (titleEl) {
@@ -24032,7 +24268,7 @@ drawEffects() {
         const skipEliteReward = wasElite && !wasBoss
             && this._ascEffects && this._ascEffects.noEliteRewards;
         setTimeout(async () => {
-            if (this.currentState !== STATE.COMBAT_WIN) return;
+            if (!stillCurrent()) return;
             // Day 4 — recap card plays between COMBAT_WIN dwell and the
             // reward screen. Skipped in tutorial / breakout (their pacing
             // is scripted and a recap would intrude). Skipped on the
@@ -24061,13 +24297,14 @@ drawEffects() {
                         droppedFile: !!_payload.droppedFile,
                         droppedFileReason: _payload.droppedFileReason || ''
                     });
+                    if (!stillCurrent()) return;
                     this._recapPayload = null;
                 } catch (_) { /* never block reward on recap failure */ }
             }
             // Re-check state — a player could have left COMBAT_WIN via
             // some other path (gameOver from a deferred death) while the
             // recap was on screen.
-            if (this.currentState !== STATE.COMBAT_WIN) return;
+            if (!stillCurrent()) return;
             if (skipEliteReward) {
                 ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
                     'DARK CONTRACT. NO REWARD', '#ff3355');
@@ -24540,6 +24777,7 @@ drawEffects() {
     },
 
     gameOver() {
+        if (this._combatActionDepth > 0) return;
         // BREAKOUT death-shield. Sector 0 rooms must never end the run;
         // the prologue is meant to teach, not punish. If the player's HP
         // crosses zero in a Breakout room, restore HP and reset the

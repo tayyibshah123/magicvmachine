@@ -1314,6 +1314,14 @@ class Entity {
         // the attack resolves. Without this, `effectiveVal` was computed
         // before the debuff landed and the enemy hits at full strength.
         if (Enemy && this instanceof Enemy && typeof this.updateIntentValues === 'function') {
+            if (id === 'stun') {
+                // A stun must replace the action already previewed this turn.
+                // Its duration is consumed when that enemy phase is skipped.
+                if (!this._armedDetonate) {
+                    this.nextIntents = [{ type: 'stunned', val: 0, target: null }];
+                    this.updateIntentValues();
+                }
+            }
             if (id === 'weak' || id === 'constrict' || id === 'frail') {
                 this.updateIntentValues();
             }
@@ -1321,9 +1329,13 @@ class Entity {
     }
 
     updateEffects() {
+        const pendingActions = [];
         for (let i = this.effects.length - 1; i >= 0; i--) {
             const e = this.effects[i];
-            e.duration--;
+            // These statuses belong to completed action phases. Expiring at
+            // turn entry would remove a one-turn effect before it can act.
+            if (!(Enemy && this instanceof Enemy && e.id === 'stun')
+                && !(Player && this instanceof Player && e.id === 'reality_shift')) e.duration--;
 
             // Damage-over-time ticks. DoTs no longer multi-stack — tick
             // damage is plain `val`. Re-applying bleed/poison extends
@@ -1353,11 +1365,9 @@ class Entity {
             }
 
             if (e.id === 'voodoo' && e.duration <= 0) {
-                // Trigger Visual
-                Game.triggerVFX('voodoo_hit', null, this);
-                
-                // Delay damage to sync with visual
-                setTimeout(() => {
+                // Commit the curse now. Presentation cannot apply damage to
+                // this entity after the player has left the encounter.
+                pendingActions.push(Game._runCombatAction(() => {
                     let dmg = e.val;
                     if (dmg === 0) { 
                         // FIX: Updated Base to 150
@@ -1374,17 +1384,18 @@ class Entity {
                     ParticleSys.createFloatingText(this.x, this.y, "CURSE TRIGGERED!", "#f00");
 
                     if (isDead) {
-                        if (this === Game.enemy) {
-                            Game.winCombat();
-                        } 
-                        else if (Game.enemy && Game.enemy.minions.includes(this)) {
+                        if (Game.enemy && Game.enemy.minions.includes(this)) {
                             Game.enemy.minions = Game.enemy.minions.filter(m => m !== this);
                         } 
                         else if (Game.player && Game.player.minions.includes(this)) {
                             Game.player.minions = Game.player.minions.filter(m => m !== this);
                         }
                     }
-                }, 300);
+                }, async current => {
+                    if (!current()) return;
+                    Game.triggerVFX('voodoo_hit', null, this);
+                    await Game.sleep(300 * (Game.combatPaceMult || 1));
+                }).catch(error => Game._recoverFromCombatError('voodoo', error, false)));
             }
         }
         this.effects = this.effects.filter(e => e.duration > 0);
@@ -1400,6 +1411,7 @@ class Entity {
                 document.body.classList.remove('reality-shift-active');
             }
         }
+        if (pendingActions.length) return Promise.all(pendingActions);
     }
 
     hasEffect(id) {

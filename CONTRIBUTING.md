@@ -96,6 +96,21 @@ because by the time the sleep resolves, combat may have ended.
 
 ---
 
+## Combat damage and presentation
+
+Use `Game._runCombatAction(resolveDamage, present)` for attacks. Complete
+timing prompts before applying damage, then present the settled result.
+Committed multi-hit animations finish even if an early hit is lethal;
+remaining visual hits must not apply damage or change the outcome.
+
+The action boundary locks input and defers victory/death until presentation
+finishes. Synchronous VFX calls inside the default damage resolver collect
+pure visuals; their damage callbacks execute once during resolution, never
+again at visual impact. After any awaited input or delay, check combat
+generation, state and captured entities before mutating gameplay state.
+
+---
+
 ## Modals positioned with `position: fixed` MUST live at body level
 
 `.screen` containers have `transform`, `filter`, and `will-change` set, all
