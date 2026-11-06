@@ -716,30 +716,7 @@ const Game = {
             localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
             this.playIntro();
         });
-        attachButtonEvent('btn-challenge', () => {
-            if (!this._confirmNewRun('start a Challenge')) return;
-            if (!this._clearSave()) { this.showHintToast?.('Could not replace the checkpoint. Existing progress is preserved.', 3000); return; }
-            // Challenge Mode — boss rush with rest nodes between bosses. Skip
-            // the storyboard / first-run tutorial since Challenge is a focused
-            // attempt for returning players, not a fresh-install funnel.
-            Challenge.markActive(true);
-            this.challengeMode = true;
-            // Snapshot today's twist on the run so the leaderboard records
-            // which mod was active. todayTwist is deterministic per UTC date
-            // so every leaderboard entry on a given day has the same flavour.
-            this._challengeTwist = Challenge.todayTwist();
-            this.seenFlags['intro_cinematic'] = true;
-            localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
-            localStorage.setItem('mvm_first_run_done', '1');
-            this.tutorialAutoRun = false;
-            // The confirmed checkpoint replacement succeeded before mode setup.
-            const btnLoad = document.getElementById('btn-load-save');
-            if (btnLoad) btnLoad.style.display = 'none';
-            if (this.showPhaseBanner) {
-                this.showPhaseBanner('CHALLENGE', 'BOSS GAUNTLET', 'player');
-            }
-            this.changeState(STATE.CHAR_SELECT);
-        });
+        attachButtonEvent('btn-challenge', () => this.startChallenge());
         attachButtonEvent('btn-back-char', () => this.changeState(STATE.MENU));
         attachButtonEvent('btn-char-detail-back', () => this.closeCharDetail());
         attachButtonEvent('btn-char-detail-confirm', () => this.confirmCharDetail());
@@ -4520,7 +4497,7 @@ startQTE(type, x, y, callback, opts) {
             { title: 'DICE TUNING', accent: '#bc13fe',
               ids: ['m_bias_attack', 'm_bias_defend', 'm_bias_mana', 'm_bias_minion'] },
             { title: 'ENDGAME', accent: '#ffd76a',
-              ids: ['s_signature', 's_endless'] },
+              ids: ['s_signature', 's_endless', 's_archivist_key'] },
         ];
 
         for (const sec of SECTIONS) {
@@ -26186,6 +26163,43 @@ drawEffects() {
         this.selectClass(cls);
     },
 
+    startChallenge({ acknowledged = false } = {}) {
+        const briefing = this._learningUI?.showModeBriefing;
+        if (APP_EDITION === 'guided' && this._isIntroductoryLearning() && !acknowledged
+            && !Learning.isAcknowledged('mode:challenge') && typeof briefing === 'function') {
+            briefing({ title: 'CHALLENGE: BOSS GAUNTLET',
+                text: 'Fight the five sector bosses in a row, with Rest stops between them. Ordinary fights and shops are skipped. The daily twist adds its displayed rule.',
+                consequence: 'This is an optional harder run. Starting it replaces the current checkpoint only after confirmation. Sparks and permanent upgrades remain banked.',
+                onStart: () => { Learning.acknowledge('mode:challenge'); this.startChallenge({ acknowledged: true }); },
+                onCancel: () => {} });
+            return false;
+        }
+        if (!this._confirmNewRun('start a Challenge')) return;
+        if (!this._clearSave()) { this.showHintToast?.('Could not replace the checkpoint. Existing progress is preserved.', 3000); return; }
+        // Challenge Mode — boss rush with rest nodes between bosses. Skip
+        // the storyboard / first-run tutorial since Challenge is a focused
+        // attempt for returning players, not a fresh-install funnel.
+        Challenge.markActive(true);
+        this.challengeMode = true;
+        // Snapshot today's twist on the run so the leaderboard records
+        // which mod was active. todayTwist is deterministic per UTC date
+        // so every leaderboard entry on a given day has the same flavour.
+        this._challengeTwist = Challenge.todayTwist();
+        this.seenFlags['intro_cinematic'] = true;
+        try {
+            localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
+            localStorage.setItem('mvm_first_run_done', '1');
+        } catch (_) {}
+        this.tutorialAutoRun = false;
+        // The confirmed checkpoint replacement succeeded before mode setup.
+        const btnLoad = document.getElementById('btn-load-save');
+        if (btnLoad) btnLoad.style.display = 'none';
+        if (this.showPhaseBanner) {
+            this.showPhaseBanner('CHALLENGE', 'BOSS GAUNTLET', 'player');
+        }
+        this.changeState(STATE.CHAR_SELECT);
+    },
+
     _confirmNewRun(label) {
         const raw = this._readSaveRaw();
         if (!raw) return true;
@@ -26306,6 +26320,10 @@ drawEffects() {
     _isIntroductoryLearning() {
         return APP_EDITION === 'guided' && !this._practiceSession
             && (Learning.isIntroductory?.() ?? (Learning.getMode() === 'guided' && !Learning.profile()?.legacy));
+    },
+
+    _shouldPromoteChallenge() {
+        return !this._isIntroductoryLearning() || Achievements.isUnlocked('CLEAR_SECTOR_1');
     },
 
     _showLearningOutcome(kind) {
@@ -29165,6 +29183,8 @@ drawEffects() {
         if (APP_EDITION === 'guided' && (!this._learningHUDAt || timestamp - this._learningHUDAt >= 250)) {
             this._learningHUDAt = timestamp;
             this._showLearningObjective();
+            const help = document.querySelector('#learning-objective .learning-objective-help');
+            if (help) help.disabled = !this._canReadLearningPanel();
         }
         // Bump the per-frame memo key so caches like _collectStatusDisplay
         // know they're seeing a fresh frame and rebuild on the first call.

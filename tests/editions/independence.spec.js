@@ -58,7 +58,7 @@ async function profile(page) {
         'mvm_analytics_consent'].map(key => [key, localStorage.getItem(key)])));
 }
 
-for (const resetEdition of ['stable', 'guided']) test(`${resetEdition} reset cannot erase the other independently installed game`, async ({ page: stable, context }) => {
+for (const resetEdition of ['stable', 'guided']) test(`abandoning and clearing ${resetEdition} cannot erase the other independently installed game`, async ({ page: stable, context }) => {
     const guided = await context.newPage();
     const navigations = [];
     guided.on('framenavigated', frame => { if (frame === guided.mainFrame()) navigations.push(frame.url()); });
@@ -69,6 +69,13 @@ for (const resetEdition of ['stable', 'guided']) test(`${resetEdition} reset can
     expect(await resume(guided)).toEqual(expected.guided);
     const [reset, other] = resetEdition === 'stable' ? [stable, guided] : [guided, stable];
     const before = await profile(other);
+    // End the run through its real action before clearing its profile.
+    // Clearing storage alone during a live run would correctly be undone
+    // by that run's page-hide checkpoint save on the next navigation.
+    await reset.locator('#btn-map-settings').tap();
+    reset.once('dialog', dialog => dialog.accept());
+    await reset.locator('#btn-abandon-run').tap();
+    await expect(reset.locator('#screen-start')).toBeVisible();
     await reset.evaluate(() => localStorage.clear());
     expect(await profile(other)).toEqual(before);
     expect(await reset.evaluate(() => localStorage.getItem('mvm_sparks'))).toBeNull();
@@ -125,4 +132,25 @@ test('both editions cold-open offline from their own caches after the HTTP cache
         expect(await stable.evaluate(async () => (await import('./src/version.js')).APP_EDITION)).toBe('stable');
         expect(await guided.evaluate(async () => (await import('./src/version.js')).APP_EDITION)).toBe('guided');
     } finally { await context.setOffline(false); }
+});
+
+for (const importEdition of ['stable', 'guided']) test(`${importEdition} profile export and import cannot read or replace the other edition`, async ({ page: stable, context }) => {
+    const guided = await context.newPage();
+    await open(stable, 'stable');
+    await open(guided, 'guided');
+    const [target, other] = importEdition === 'stable' ? [stable, guided] : [guided, stable];
+    const before = await profile(other);
+    const result = await target.evaluate(async () => {
+        const { SaveSync } = await import('./src/services/save-sync.js');
+        const exported = SaveSync.exportAll();
+        const operator = exported.data.operator_name;
+        exported.data.operator_name = operator + ' IMPORTED';
+        return { operator, imported: SaveSync.importAll(exported),
+            after: localStorage.getItem('mvm_operator_name'), keys: Object.keys(exported.data) };
+    });
+    expect(result.operator).toBe(importEdition.toUpperCase());
+    expect(result.imported).toBe(true);
+    expect(result.after).toBe(importEdition.toUpperCase() + ' IMPORTED');
+    expect(result.keys.some(key => key.includes('mvm-edition:'))).toBe(false);
+    expect(await profile(other)).toEqual(before);
 });

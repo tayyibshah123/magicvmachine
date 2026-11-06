@@ -14,6 +14,12 @@ async function touchSession(page) {
 export async function tap(page, selector) {
   const element = page.locator(selector).first();
   await expect(element).toBeVisible();
+  if (selector.includes('.char-card')) await page.waitForFunction(selector => {
+    const card = document.querySelector(selector);
+    const rect = card?.getBoundingClientRect();
+    return !!rect && getComputedStyle(card).opacity > 0.95
+      && card.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+  }, selector);
   if (!/#btn-(end-turn|reroll)|#dice-container|\.char-card|\.reward-card|#breakout-storyboard|#cb-dismiss/.test(selector)) {
     await element.tap();
     return;

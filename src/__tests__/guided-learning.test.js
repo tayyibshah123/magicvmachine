@@ -400,4 +400,24 @@ describe('cold checkpoints, mode separation and harmless rehearsal', () => {
         expect(Game.player.currentHp).toBe(0);
         expect(profileKeys()).toEqual(before);
     });
+
+    it('explains the Challenge before it can replace a Guided checkpoint', async () => {
+        const { Game, Learning, STATE } = await game();
+        Game.saveGame();
+        const checkpoint = Game._readSaveRaw();
+        const briefing = vi.fn();
+        Game._learningUI = { showModeBriefing: briefing };
+        expect(Game.startChallenge()).toBe(false);
+        expect(briefing).toHaveBeenCalledOnce();
+        expect(Game._readSaveRaw()).toBe(checkpoint);
+        const options = briefing.mock.calls[0][0];
+        options.onCancel();
+        expect(Learning.isAcknowledged('mode:challenge')).toBe(false);
+        expect(Game._readSaveRaw()).toBe(checkpoint);
+        vi.spyOn(window, 'confirm').mockReturnValue(false);
+        options.onStart();
+        expect(Learning.isAcknowledged('mode:challenge')).toBe(true);
+        expect(Game._readSaveRaw()).toBe(checkpoint);
+        expect(Game.currentState).toBe(STATE.COMBAT);
+    });
 });

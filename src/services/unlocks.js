@@ -113,7 +113,10 @@ export const Unlocks = {
         this._pending ||= [];
         const game = typeof window !== 'undefined' && window.Game;
         if (document.hidden || game && game.currentState !== STATE.MENU) return;
-        const key = this._pending.find(key => map[key] && document.getElementById(map[key]));
+        // Keep Challenge available without presenting a harder boss rush as
+        // the recommended response to a new Guided player's first defeat.
+        const key = this._pending.find(key => map[key] && document.getElementById(map[key])
+            && !(key === 'daily' && game?._shouldPromoteChallenge?.() === false));
         if (!key) return;
         this._announcing = key;
         const el = document.getElementById(map[key]);
