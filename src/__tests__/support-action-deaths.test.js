@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { setupCombatFixture, teardownCombatFixture } from './helpers/combat-fixture.js';
+import { createCombatPlayer, setupCombatFixture, teardownCombatFixture } from './helpers/combat-fixture.js';
 import { Game } from '../game.js';
 import { Minion } from '../entities/minion.js';
 import { STATE } from '../constants.js';
@@ -198,6 +198,9 @@ describe('lethal costs before support resolution', () => {
         Game.player.currentHp = 1;
         Game._customHotHandsDmg = 2;
         Game.player._panopticonNullifyFirst = true;
+        // Exercise an accepted action: Voodoo's real cost must be affordable
+        // before a first-play HP fee can be committed.
+        Game.player.mana = type === 'VOODOO' ? 9 : 0;
         const manaBefore = Game.player.mana;
 
         const die = play(type, type === 'VOODOO' ? Game.enemy : Game.player);
@@ -227,5 +230,94 @@ describe('lethal costs before support resolution', () => {
         expect(Game._runCombatAction).not.toHaveBeenCalled();
         await vi.advanceTimersByTimeAsync(1000);
         expect(Game.rollDice).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('Hot Hands commits only an accepted first play', () => {
+    beforeEach(() => {
+        createCombatPlayer('tactician', { hp: 50 });
+        Game.player.mana = 0;
+        Game._customHotHandsDmg = 3;
+        Game._hotHandsUsedThisTurn = false;
+        Game._echoChamberUsedThisCombat = false;
+    });
+
+    it.each([
+        ['TAC_ATTACK', 'self'],
+        ['TAC_DEFEND', 'enemy'],
+        ['CONSTRICT', 'enemy'],
+        ['VOODOO', 'enemy']
+    ])('does not charge an invalid or unaffordable %s drop on %s', (type, side) => {
+        Game.player._panopticonNullifyFirst = true;
+        const die = play(type, side === 'self' ? Game.player : Game.enemy);
+        expect(die.used).toBe(false);
+        expect(Game.player.currentHp).toBe(50);
+        expect(Game.player.mana).toBe(0);
+        expect(Game.player._panopticonNullifyFirst).toBe(true);
+        expect(Game._hotHandsUsedThisTurn).toBe(false);
+        expect(Game._runCombatAction).not.toHaveBeenCalled();
+        expect(Game.gameOver).not.toHaveBeenCalled();
+    });
+
+    it('charges exactly once across two actual valid support actions', async () => {
+        const receive = vi.spyOn(Game.player, 'takeDamage');
+        expect(play('TAC_DEFEND').used).toBe(true);
+        await settleActions();
+        expect(play('TAC_DEFEND').used).toBe(true);
+        await settleActions();
+        expect(Game.player.currentHp).toBe(47);
+        expect(Game.player.shield).toBe(10);
+        expect(receive).toHaveBeenCalledTimes(1);
+        expect(receive).toHaveBeenCalledWith(3, null, false, true);
+        expect(Game._hotHandsUsedThisTurn).toBe(true);
+    });
+
+    it('charges a legal nullified play without spending mana or its Echo Chamber charge', () => {
+        Game.player.relics.push({ id: 'echo_chamber' });
+        Game.invalidateStackCache();
+        Game.player._panopticonNullifyFirst = true;
+        const die = play('VOODOO', Game.enemy);
+        expect(die.used).toBe(true);
+        expect(Game.player.currentHp).toBe(47);
+        expect(Game.player.mana).toBe(0);
+        expect(Game.player._panopticonNullifyFirst).toBe(false);
+        expect(Game._hotHandsUsedThisTurn).toBe(true);
+        expect(Game._echoChamberUsedThisCombat).toBe(false);
+        expect(Game.enemy.hasEffect('voodoo')).toBeFalsy();
+        expect(Game._runCombatAction).not.toHaveBeenCalled();
+    });
+
+    it('settles a lethal accepted fee before paid effects, mana or nullification', () => {
+        Game.player.currentHp = 2;
+        Game.player.mana = 3;
+        Game.player._panopticonNullifyFirst = true;
+        const die = play('CONSTRICT', Game.enemy);
+        expect(Game.player.currentHp).toBe(0);
+        expect(Game.currentState).toBe(STATE.GAMEOVER);
+        expect(Game.gameOver).toHaveBeenCalledTimes(1);
+        expect(Game.player.mana).toBe(3);
+        expect(die.used).toBe(false);
+        expect(Game.player._panopticonNullifyFirst).toBe(true);
+        expect(Game.enemy.hasEffect('constrict')).toBeFalsy();
+        expect(Game._runCombatAction).not.toHaveBeenCalled();
+    });
+
+    it('preserves the free skill and original die when its accepted fee consumes a real revive', async () => {
+        Game.player.currentHp = 2;
+        Game.player.relics.push({ id: 'echo_chamber' }, { id: 'second_life' });
+        Game.invalidateStackCache();
+        const die = play('VOODOO', Game.enemy);
+        expect(Game.player.currentHp).toBe(50);
+        expect(Game.gameOver).toHaveBeenCalledTimes(1);
+        expect(Game.player.hasRelic('second_life')).toBeFalsy();
+        expect(Game._echoChamberUsedThisCombat).toBe(false);
+        expect(die.used).toBe(false);
+        expect(Game.player.mana).toBe(0);
+        expect(Game.inputLocked).toBe(true);
+        expect(Game._revivePending).not.toBeNull();
+        expect(Game._runCombatAction).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(Game.rollDice).toHaveBeenCalledTimes(1);
+        expect(Game.gameOver).toHaveBeenCalledTimes(1);
     });
 });
