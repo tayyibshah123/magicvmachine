@@ -20,6 +20,7 @@
 
 const PREFIX = 'mvm_';
 import { PLAYER_CLASSES, UPGRADES_POOL, CORRUPTED_RELICS, MODULE_FUSIONS } from '../constants.js';
+import { Learning } from './learning.js';
 const RECOVERY_KEY = 'mvm_import_recovery_v1';
 const rewardIds = new Set([...UPGRADES_POOL, ...CORRUPTED_RELICS, ...MODULE_FUSIONS].map(item => item.id));
 const plain = value => !!value && typeof value === 'object' && !Array.isArray(value)
@@ -56,7 +57,7 @@ function validate(blob) {
             try { save = JSON.parse(value); } catch (_) { return false; }
             if (!plain(save) || !plain(save.player) || typeof save.player.classId !== 'string'
                 || !PLAYER_CLASSES.some(cls => cls.id === save.player.classId)
-                || (save.v !== undefined && (!Number.isInteger(save.v) || save.v < 1 || save.v > 4))
+                || (save.v !== undefined && (!Number.isInteger(save.v) || save.v < 1 || save.v > 5))
                 || !Number.isFinite(save.player.hp) || save.player.hp < 0
                 || !Number.isFinite(save.player.maxHp) || save.player.maxHp <= 0
                 || (save.player.relics !== undefined && (!Array.isArray(save.player.relics)
@@ -71,6 +72,8 @@ function validate(blob) {
             if (nodeIds.size !== save.map.nodes.length || !nodeIds.has(save.currentIdx || 'start')
                 || !save.map.nodes.every(node => node.connections.every(id => nodeIds.has(id)))) return false;
             const pending = save.pendingReward;
+            if (save.guidance != null && (!Learning.restoreRun(save.guidance)
+                || save.guidance.classId !== save.player.classId)) return false;
             if (pending && (!plain(pending) || pending.v !== 1 || !['offered', 'committed'].includes(pending.status)
                 || pending.payoutState !== 'settled' || typeof pending.nodeId !== 'string'
                 || !Number.isInteger(pending.sector) || pending.sector < 1
@@ -81,6 +84,17 @@ function validate(blob) {
                 || (pending.selectedId && !pending.options.includes(pending.selectedId)))) return false;
         }
         if (key === 'active_slot' && !['A', 'B', 'C'].includes(value)) return false;
+        if (key === 'learning_v1') {
+            let profile;
+            try { profile = JSON.parse(value); } catch (_) { return false; }
+            if (!plain(profile) || profile.v !== 1 || !['guided', 'full'].includes(profile.mode)
+                || typeof profile.coreComplete !== 'boolean' || !plain(profile.classes)
+                || !Array.isArray(profile.queue) || !profile.queue.every(id => typeof id === 'string')) return false;
+            for (const bucket of [profile.shared, ...Object.values(profile.classes)]) {
+                if (!plain(bucket) || !['available', 'introduced', 'practised', 'skipped'].every(key =>
+                    Array.isArray(bucket[key]) && bucket[key].every(id => typeof id === 'string'))) return false;
+            }
+        }
         if (['sparks', 'sparks_lifetime', 'encrypted'].includes(key) && (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)))) return false;
         if (['upgrades', 'meta_disabled', 'lore', 'hidden_lore', 'read_lore', 'achievements_v1', 'custom_run',
             'run_history', 'challenge_history', 'archive_history', 'cosmetics_owned', 'streak_milestones'].includes(key)) {

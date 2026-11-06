@@ -68,7 +68,8 @@ class Player extends Entity {
         // to classConfig.id which DOES carry the picked class.
         if(Game.hasMetaUpgrade('m_relic')) {
             const cid = this.classId || (classConfig && classConfig.id);
-            const pool = UPGRADES_POOL.filter(r => !r.classLocked || r.classLocked === cid);
+            const allowed = UPGRADES_POOL.filter(r => !r.classLocked || r.classLocked === cid);
+            const pool = Game._guidedPool ? Game._guidedPool(allowed, 'modules') : allowed;
             const randomRelic = pool[Math.floor(Math.random() * pool.length)];
             this.addRelic(randomRelic);
         }
