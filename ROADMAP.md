@@ -32,6 +32,373 @@ shipped, removed during this consolidation:
 - ✅ Intel Cipher + Chronicle tabs (collapsed back into the unified
   Intel screen. see `_renderIntelCipher` in game.js:12477)
 
+## Proposed experience and onboarding plan (awaiting approval)
+
+### Baseline and scope
+
+- Reviewed source: v1.9.55, commit `56435c416137368781c88af931b986710cf0f31b`.
+- Frozen stable branch: `codex/stable-v1.9.55`. Annotated tag:
+  `stable-v1.9.55`. Both point to that same existing release commit.
+- Proposal branch: `codex/progressive-onboarding-plan`. This proposal changes
+  documentation only. The live game, main branch and stable snapshot retain
+  their existing gameplay. Approval is required before implementation.
+- Existing release evidence remains 381 normal checks, 381 shuffled checks
+  and nine browser cases. This exploratory review found additional gaps;
+  passing the existing gate does not invalidate the findings below.
+
+### What was actually tested
+
+- A fresh live profile, optional-data prompt, idle callsign screen, class
+  selection, and all five Tactician Breakout encounters. Used real touch
+  input, deliberately dropped an attack on the wrong target and missed
+  attack/parry timing. Started at 390px and continued at 360px.
+- First real map and its forced opening Rest layout, maintenance choices
+  and the first module offer. A controlled post-tutorial checkpoint then
+  exercised full-health Sleep, a normal Cyber Arachnid fight, its reward
+  selection and return to map. The normal fight completed at turn seven
+  with 31/33 HP. This was an exploratory input strategy, not an optimal
+  build or a novice completion-time benchmark.
+- Six-die hit targets at 360, 390 and 414px. The blocked die was recovered
+  through its exposed corner, then the ordinary fight continued at 390px.
+- Native Sanctuary purchase, reload, actual reward generation, Challenge
+  entry with an existing checkpoint, and Abort Run checkpoint behavior.
+  Controlled profiles used fictional Sparks and saves, not player data.
+- The actual Tesseract fragment factory plus minion strike resolver, and
+  the actual friendly minion resolver with a native Perfect timing input.
+  These were isolated encounter probes, not claimed full boss victories.
+- A controlled storage-write failure against the actual save import method.
+- Additional staged native-touch checks covered shop entry, the directional
+  hacking game and its natural timeout, Intel/Cipher entry and two wrong
+  inputs, and refresh/resume before selecting a real combat reward.
+- Staged actual boss introductions were inspected for all five sectors.
+  Sector 1's phase-two presentation was exercised with a controlled HP
+  threshold. These were entry/presentation probes, not boss playthroughs
+  or victories; Sector 2 was sampled during entry rather than readiness.
+- All six class detail panels were opened and closed with native touch at
+  360px, and their confirmation centres were hittable. Longer content can
+  require scrolling; that alone is not treated as inaccessibility.
+- Settings at 140% text size at 360, 414 and 768px. Footer actions remained
+  within the viewport and there was no document horizontal overflow.
+- Read-only review of all six class kits, all five sectors, boss rules,
+  learning flags, reward/shop pools, currencies, saves and advanced modes.
+
+The browser work used Chromium touch emulation. Physical iPhone Safari,
+Android wrapper behavior, audio quality, mobile keyboard behavior and
+human learning/retention were not measured. Later-sector balance findings
+are source-derived and require matched-build playtests. One exploration
+script used an incorrect screen selector and lost its temporary browser
+session; subsequent checks used an explicitly staged checkpoint. That
+automation error is excluded from game defects.
+
+Local screenshots and JSON observations are in the ignored directory
+`test-results/experience-v1.9.55/`. They are deliberately not shipped.
+Retain the working shop risk disclosure, scrollable Intel exit, reachable
+large-text settings actions, class choice and full attack presentation.
+
+### Confirmed failures and friction to address first
+
+1. **A sixth die is covered at 360px.** The unused rightmost die's centre
+   hits `btn-end-turn` rather than the die. Native centre drags failed;
+   grabbing its exposed corner worked. The same hand was unobstructed at
+   390 and 414px. Reserve separate control and dice zones, with an
+   unobstructed touch target for every die at the maximum hand size.
+   Also enlarge Tactician's three ability actions, measured at 24 by 44px.
+
+2. **Purchases can charge for missing benefits.** A native Foresight
+   purchase reduced Sparks from 102 to 92, remained owned/enabled after
+   reload, but actual reward generation still produced three choices.
+   Eight Run Options IDs have definitions and purchase UI but no gameplay
+   consumers found: Run Archive, Corruption Index, Anomaly Detector,
+   Foresight, Skill Database, Tactic Library, Heretic Protocol and
+   Curator's Choice. See `constants.js:540` and `game.js:4388`.
+   Preferred first fix: withdraw these offers and refund owned entries
+   once at their published v1.9.55 prices. The total for all eight is
+   80 Sparks. Preserve earned lifetime totals and working upgrades. There
+   is no durable purchase ledger, so describe this as a refund at those
+   published prices, not a reconstruction of historical receipts. New
+   implementations of these systems should be separate design work.
+
+3. **Challenge silently deletes a checkpoint.** One native Challenge tap
+   erased the active slot before character selection, without a discard
+   confirmation. Initiate Run already protects this case. Apply one
+   consistent new-run/mode-switch confirmation before any destructive
+   action. Cancelling must preserve the exact old checkpoint.
+
+4. **Exit and resume labels are unclear.** Native Abort Run returned to
+   the menu, reset runtime Fragments and kept the old checkpoint resumable.
+   Provide distinct Save and Return and Abandon Run actions. Describe
+   checkpoint restoration honestly rather than implying an exact frozen
+   turn. Add visible settings/help/return navigation to the map, where
+   the current screen offers no visible menu button.
+
+5. **Save import can erase data and report success.** With controlled
+   write failures, `SaveSync.importAll()` removed existing game keys,
+   failed to write replacements, and returned true. Validate the entire
+   input first, preserve recoverable originals, expose write failure and
+   verify restoration before reporting success. Quota recovery also
+   silently deletes another slot based on its size; replace that policy
+   with an explicit export/delete decision. See `save-sync.js:110` and
+   `game.js:11035`.
+
+6. **The opening advances without the player.** Callsign entry progressed
+   to character selection after 20 seconds without input. Consent and
+   callsign requests also share the opening screen. Remove automatic
+   lesson advancement, keep the callsign optional and sequence optional
+   diagnostics at a safe point with wording matching the local logging
+   implementation. No new network collection is part of this plan.
+
+7. **Tutorial praise can contradict the action.** After deliberately
+   missing a defensive timing input and taking damage, the first room
+   still said 'You parried'. Branch feedback from the resolved outcome.
+   Keep instructions readable until the relevant action and presentation
+   finish. The status drill also took eight turns in this run; teach a
+   first status in a shorter controlled exchange before longer practice.
+
+8. **Successful early minion timing can do nothing.** A native Perfect
+   result produced multiplier 1.3 on a one-damage spirit and still dealt
+   one damage. For otherwise unmodified minions, Good adds no integer
+   damage below base damage ten; Perfect adds none at base damage one to
+   three. The Summoner's advertised
+   starting 40% stat increase also floors 2 HP/1 damage back to 2 HP/1
+   damage. Make advertised improvements visible in the final numbers.
+
+9. **Passive orbs request defensive timing.** An actual Tesseract Heart
+   with damage zero and `_pacifist=true` opened a defensive prompt with
+   incoming damage zero. Resolving it changed no HP. Reserve defensive
+   prompts for real threats; show the four passive roles in one clear
+   passive-resolution beat. Preserve genuine attack animations.
+
+10. **Early decision density needs testing.** All six class
+    panels introduce minions, abilities, signatures and combos. Five
+    compulsory training fights then introduce almost the entire combat
+    vocabulary. Free play begins with two forced Rest nodes before a
+    normal fight. Full-health Sleep consumes the choice with no HP gain.
+    The first observed module offer combined dodge chance, shield-break
+    healing, a mana-spend threshold and an unfinished synergy. Use a
+    guided route and small, concrete offer pool for new guided runs.
+    These screens are observed facts; whether their decision density is
+    too high is a design hypothesis to validate with first-time players.
+
+11. **Learning records confuse suppression with understanding.** Hints
+    suppressed during Breakout or disabled settings are marked seen;
+    queued hints are marked seen before display. Separate per-run hints
+    can then repeat basics on every run. Introduce one ordered learning
+    queue with acknowledgement and action evidence. Multiple unlocks
+    must not overwrite a single 'new unlock' announcement.
+
+12. **Basic instructions disagree with the rules.** Correct the complete
+    reference set together, including:
+    - Fragments reset with the run; Sparks fund permanent upgrades.
+    - Ordinary Perfect attack timing is +60%, not double damage.
+    - Timing taps work anywhere, rather than requiring target aiming.
+    - Current signature dice cost zero mana; paid skills demonstrate mana.
+    - Arcanist taps the current glyph; it cycles in real time, not per turn.
+    - Sentinel's third plate primes its block automatically.
+    - Summoner has four plots, not three.
+    - Frail currently increases incoming damage 50%, not the described 30%.
+    - Signature evolution requires its unlock and specified boss milestones.
+    - Tesseract's removed double-hit mechanic remains in a phase banner.
+    - Ordinary rewards still say SECTOR CLEARED, even after a normal enemy.
+    - Meditate's 'permanent' benefit should explicitly say it lasts this run.
+    Derive numeric descriptions from rule data where practical. Review
+    signatures' tier-specific critical claims against the common resolver.
+
+13. **Phase and recovery explanations need clearer consequences.** The
+    enemy-phase banner appears before friendly minions act. Tooltips on
+    touch still use 'Left Click'. First defensive ally/minion prompts are
+    different from ordinary parries without a distinct introduction.
+    Use consistent touch language, ALLIES ACT and ENEMY ACTS labels,
+    persistent effect counters and a death recap that explains actual
+    damage sources, shield bypass and what remains banked.
+
+14. **Several advanced promises need reconciliation.** Hive respawn
+    advances its counter per intent instead of per round; a production
+    roster probe became eligible on the second decision round rather
+    than the described fourth. Its low-HP mercy rule also bypasses the
+    advertised faster final-phase cadence. Define and test one rule.
+    A20's required-Archivist flag has no Game consumer found, while actual
+    entry depends on the 1,000-Spark key. Put that goal in Endgame rather
+    than OTHER and distinguish Chronicle, Run Archive and Sector X names.
+
+15. **Pending combat rewards do not survive refresh.** In a staged normal
+    victory, Fragments increased from 100 to 197 and three module choices
+    appeared. Reloading before selection restored the map, kept all 197
+    Fragments and offered the same encounter node again. Entering it
+    spawned a different enemy. Persist the offered IDs, already-awarded
+    payout and encounter completion as one recoverable receipt. Resume
+    the actual pending choice and settle it once. Historical saves cannot
+    reliably reveal whether a reward was pending, so migration must not
+    invent free rewards for every old combat checkpoint.
+
+16. **Cipher exposes its failure cost after the loss.** First entry began
+    the memory sequence without a cost/reward/risk briefing. Two wrong
+    native inputs consumed a file, from two to one, and awarded no Sparks.
+    Explain that before the first attempt and offer harmless practice.
+    The sequence waited for input rather than timing out after 32 seconds;
+    that waiting is not a softlock. Shop hacking, by contrast, already
+    disclosed its discount and doubled-price failure outcome. Its natural
+    12-second timeout doubled all six prices and kept Fragments unchanged.
+    Preserve that clear risk disclosure and introduce the optional game
+    after ordinary purchasing is understood.
+
+### Proposed slower introduction of systems
+
+Spread learning across more encounters. Keep the opening practical and
+reduce routine waiting between meaningful actions. The exact encounter
+counts below are proposed design choices, not proven balance targets.
+
+| Stage | Trigger | What becomes part of the guided experience |
+|---|---|---|
+| Arrival | New profile chooses guidance | Optional callsign; Initiate selected by default; Tactician and Sentinel foregrounded with plain role descriptions. More Operators keeps all six available. Timing/reading assistance is immediately accessible. |
+| Core drill | First deployment | One attack, the selected class's defensive action, enemy intent, timing and End Turn. Use a small hand and forgiving enemy. Wrong inputs get specific feedback; no perfect result is required. |
+| First ordinary victory | Core actions demonstrated | Repeat the same loop independently, then choose a simple run-only module whose benefit is visible in the next fight. Show where the checkpoint was saved. |
+| Hand control | Next suitable encounter | Reroll one unwanted die and demonstrate keeping useful dice. Introduce no enemy gimmick in the same lesson. |
+| Mana and a paid skill | Basic loop established | Show the skill's cost, current mana and resulting effect together. Use one paid skill; do not use a free signature to teach spending. |
+| Ally and class identity | Relevant to the selected class | One summon, one meaningful ally action, then the class's real signature rhythm and one ability payoff. Summoner receives its essential minions earlier; HP-cost classes receive their warning before spending HP. |
+| First maintenance and shop | At least two ordinary victories | One preparation stop, a clear health/build trade-off and Fragment spending. Avoid the current double opening Rest. Offer simple, useful purchases; introduce hacking separately. |
+| Late Sector 1 | Fundamentals practised | Introduce one status, one hostile-minion priority and one multi-wave attack in separate suitable encounters before the boss uses them together. |
+| First boss and first return | Relevant run outcome | Pin the boss's current rule and counter. Explain Sparks versus Fragments and offer one relevant permanent purchase. A loss retains learned fundamentals and offers retry/refresher choices. |
+| Sector 2 onward | Existing progression plus relevant actions | Introduce sector rules, first useful combo, momentum, deeper synergies, corruption, fusion and hacking in context. Advanced modes get a short purpose/consequence briefing when unlocked. |
+
+Class essentials override the generic order, including the core drill.
+Bloodstalker's defensive die heals, and Annihilator's provides Ricochet
+reduction, rather than ordinary shield. Give the former a safe prior wound
+and the latter a previewed reduced hit. Do not remove a Summoner's identity
+to satisfy a universal late minion gate. Do not require a manual Perfect
+result to unlock anything. Offer Full Rules immediately to confident
+players, and make individual prison drills replayable instead of requiring
+the entire five-fight prologue before every new learning path.
+
+Challenge may remain available after a defeat, but should not be promoted
+as the recommended next step to a struggling beginner. Introduce Intel at
+the first file with an explicit Cipher cost, success reward and failure
+consequence. Sanctuary's first view should foreground a few affordable,
+working choices and the selected class; Browse All retains the full catalog.
+
+### Combat flow and difficulty proposals
+
+- The two routine phase banners currently add 5.6 seconds per round before
+  attack presentation. Trial shorter routine labels, keeping deliberate
+  first-time boss and phase explanations. Remove redundant spacers only
+  after the actual effects have completed.
+- Prefer one optional friendly-volley boost with an explicit integer
+  payoff. If no damage can change, resolve the base attacks automatically.
+  Teach ally boosts separately from defensive timing. Evaluate this simple
+  volley first; defer additional interaction modes until evidence supports
+  a meaningful benefit.
+- All timing decisions finish before logical damage. Every committed hit
+  and projectile still animates fully, including after an early lethal
+  hit. For each committed action or volley, victory/defeat transitions
+  wait for those presentations. Explicit quit or encounter replacement
+  still cancels stale actions immediately.
+- Enemy previews should say exactly when an effect happens and how to
+  respond. Self-destruct needs a player-turn countdown; orb roles,
+  invulnerability, shield charges, support regeneration and Reality Shift
+  need visible rules and counters, not only short floating text.
+- Trial separate guided enemy pools. First normal opponent is basic;
+  target priority, detonation, reflection and other rules enter one at a
+  time. Reward, rest, shop and event pools must follow the same curriculum.
+  Hiding a button while still rolling its mechanic would not simplify play.
+
+Source-derived normal enemy spawn values at Ascension 0/corruption 0:
+
+| Sector | HP range | Mean HP | Base hit range |
+|---|---|---|---|
+| 1 | 34 to 114 | 79.0 | 4 to 13 |
+| 2 | 110 to 220 | 158.8 | 10 to 21 |
+| 3 | 159 to 481 | 327.2 | 0 to 37 |
+| 4 | 220 to 659 | 438.3 | 14 to 51 |
+| 5 | 496 to 1,033 | 705.2 | 23 to 72 |
+
+These include constructor and normal-enemy sector multipliers. They are
+not effective DPS, boss values or predictions of player difficulty. The
+Sector 3 zero is the charging Slag Geyser. Test Sector 1 to 2 and 2 to 3
+transitions with plausible weak, average and synergistic builds before
+choosing HP reductions or additional upgrade guarantees. Test heat against
+minion builds, Compiler armor/support/chip damage, Hive healing/respawn and
+Tesseract's orb/vulnerability/reversal rules as separate balance scenarios.
+
+### Learning persistence and existing players
+
+- Keep access entitlements separate from explanation, practice and skipped
+  lessons. Use stable shared and per-class milestone IDs, plus an ordered
+  introduction queue. Learning survives death and harmless restarts.
+- Hints disabled or suppressed remain eligible for later explanation.
+  Skipping guidance never removes access or pretends a Perfect was learned.
+- Keep Initiate as an explicit persistent choice. Do not silently end help
+  after three class confirmations or aborted attempts.
+- Treat meaningful legacy saves/unlocks as returning-player evidence.
+  Preserve earned content, wallets, achievements, accessibility choices
+  and active runs. Offer a voluntary refresher; never force a new funnel.
+- Apply new routes and pools only at new-run creation. Save their version
+  with that run so a refresh cannot silently change its rules or choices.
+  Label Guided rules clearly; do not silently rewrite a chosen difficulty
+  or an existing Challenge run.
+- A profile guidance key can be versioned independently. If lesson state,
+  route versions or pending choices enter slot snapshots, bump the run
+  schema and append the required migration. Resume the current short
+  lesson/checkpoint instead of restarting all training.
+- Keep future preview and stable game on different origins or ports.
+  Branches alone do not isolate browser storage or service workers.
+
+### Proposed implementation order and approval gates
+
+1. **Correctness and control foundations.** Fix the verified purchase,
+   save/import, destructive navigation, hit-target and teaching-truth
+   failures. Withdraw/refund unwired purchases before recommending them.
+   Keep this package separate from map and balance changes.
+2. **Guided first-sector prototype.** Implement the learning record,
+   returning-player migration, small core drill, class-aware curriculum,
+   guided route and beginner offer pools. Make guidance optional. Review
+   the playable first sector before committing to later-sector tuning.
+3. **Pacing and decision clarity.** Meaningful ally timing, passive orb
+   resolution, shorter routine banners, contextual rules, consistent
+   mobile language, explicit outcome/persistence labels and useful recaps.
+4. **Difficulty validation and rollout.** Compare all six classes with
+   matched builds/seeds; tune measured transitions, then validate the full
+   campaign and advanced modes. Publish only an approved, fully checked
+   candidate. Keep the frozen v1.9.55 tag and branch unchanged.
+
+Extend the existing seven check areas and shared fixtures, rather than
+adding separate overlapping suites. Required new acceptance cases:
+
+- Four-, five- and six-die hands at 360/390/414px, including large targets,
+  handedness and text-size settings. Native drags must reach every die.
+- Every offered permanent purchase changes its promised real gameplay
+  caller. Refunds settle once across reloads and partial-write failures.
+- Challenge/new-run cancellation preserves an existing checkpoint. Save
+  and Return and Abandon have distinct, tested consequences.
+- Failed import preserves recoverable data and reports failure. Quota
+  pressure never silently deletes another named run.
+- Each teaching outcome follows the actual action. Wrong drops, missed
+  timing, assisted timing, skipping and death/retry remain valid paths.
+- Every class can complete the guided route. Its actual ordinary attack
+  rhythm is practised before training ends. Essential costs are taught
+  before the player can pay them.
+- Hidden/unintroduced mechanics cannot enter early offer or enemy pools.
+  One new concept is introduced at a safe boundary, never during a QTE.
+- A successful advertised ally boost changes damage; passive zero-damage
+  orbs produce no defensive prompts. Full multi-hit animations and settled
+  damage remain covered by the existing regression checks.
+- Reload, backgrounding, worker updates, slot changes and returning-profile
+  migration preserve learning, rules and pending choices without duplicate
+  rewards. Refresh at REWARD restores the same offer and never repeats
+  payout or the won fight. Existing later-sector saves remain on their
+  original rules.
+- Match runtime behavior to descriptions for currencies, statuses, class
+  abilities, signatures, boss phases and advanced-mode requirements.
+- Run the consolidated release gate on the final candidate, then inspect
+  the public source and fresh/update/offline launches after publication.
+
+Suggested human validation: five first-time players and two returning
+players, then revise and repeat. Candidate goals are four of five novices
+performing the core loop without a moderator, explaining that timing taps
+work anywhere, identifying the next threat and distinguishing Sparks from
+Fragments. Record misunderstanding, retries, optional help and time spent
+deciding versus waiting. These are proposed targets, not measured results.
+Include physical iPhone Safari and Android testing before rollout. Keep
+all such observations local or manually supplied; add no telemetry.
+
 ## Buckets
 
 Six buckets, ordered roughly by priority. Asset-bound work (Bucket 4)
