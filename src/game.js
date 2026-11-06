@@ -2182,6 +2182,12 @@ startDrag(e, die, el) {
         } catch (e) { /* swallow */ }
     },
 
+    _canSelectDie(die) {
+        // Locking a useful die is free, even when its eventual reroll will
+        // cost HP or use a class token. Only rerollDice commits that cost.
+        return !!die && !die.used;
+    },
+
     _cancelDrag() {
         this._cancelDragFrame?.();
         const drag = this.dragState;
@@ -2259,7 +2265,7 @@ startDrag(e, die, el) {
             // Tap, not drag — toggle selection. Snap ghost back since no use happened.
             snapBackGhost();
             const die = this.dragState.die;
-            if(die && (!this.player.traits.noRerolls || (this.player.qteRerolls || 0) > 0)) {
+            if (this._canSelectDie(die)) {
                 die.selected = !die.selected;
                 this.renderDiceUI();
                 AudioMgr.playSound('click');
@@ -6821,7 +6827,7 @@ triggerPhaseGlitch() {
                 // Number keys → toggle die selection
                 const idx = parseInt(e.key, 10) - 1;
                 const die = this.dicePool && this.dicePool[idx];
-                if (die && !die.used && (!this.player.traits.noRerolls || (this.player.qteRerolls || 0) > 0)) {
+                if (this._canSelectDie(die)) {
                     die.selected = !die.selected;
                     this.renderDiceUI();
                 }
@@ -18018,7 +18024,7 @@ async startTurn() {
 
                 el.oncontextmenu = (e) => {
                     e.preventDefault();
-                    if((!this.player.traits.noRerolls || (this.player.qteRerolls || 0) > 0)) {
+                    if (this._canSelectDie(die)) {
                         die.selected = !die.selected;
                         this.renderDiceUI();
                     }
