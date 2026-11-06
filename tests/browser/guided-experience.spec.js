@@ -22,8 +22,15 @@ test('a fresh player can choose Full Rules without mandatory training or a chang
 
 test('an actual short-core checkpoint survives a cold refresh without completing or resetting training', async ({ page }, info) => {
   test.setTimeout(150000);
+  await page.setViewportSize({ width: 360, height: 800 });
   await openGame(page);
   await tap(page, '#onb-next-1');
+  await expect(page.locator('.char-card:visible')).toHaveCount(2);
+  await expect(page.getByText('Flexible attacks and rerolls', { exact: true })).toBeVisible();
+  await expect(page.getByText('Shield and automatic protection', { exact: true })).toBeVisible();
+  await page.waitForFunction(() => [...document.querySelectorAll('.char-card.learning-recommended')]
+    .every(card => getComputedStyle(card).opacity > 0.99));
+  await info.attach('guided-recommended-operators-360', { body: await page.screenshot(), contentType: 'image/png' });
   await tap(page, '.char-card[data-class-id="tactician"]');
   await tap(page, '#btn-char-detail-confirm');
   const events = [];
