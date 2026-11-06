@@ -135,6 +135,7 @@ for (const codec of [{ name: 'native Chromium Vorbis', extension: '.ogg', forceA
             await expect.poll(() => page.evaluate(() => window.MVMOfflineAudio?.status.state), {
                 timeout: 90000, message: 'the worker acknowledges the selected-format background music cache'
             }).toBe('ready');
+            await expect(page.locator('#offline-audio-status')).toHaveText('Offline audio: ready.');
             const ready = await page.evaluate(() => window.MVMOfflineAudio.status);
             expect(ready.cached).toHaveLength(5);
             expect(ready.cached.every(url => url.endsWith(codec.extension))).toBe(true);
