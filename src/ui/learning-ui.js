@@ -4,6 +4,7 @@ import { META_UPGRADES } from '../constants.js';
 let closeLibrary = null;
 let closeRules = null;
 let closeReturn = null;
+let closeMode = null;
 
 function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -17,23 +18,34 @@ export function decorateClassSelection(game, profile = {}) {
     if (!grid) return;
     const guided = profile.mode === 'guided';
     const introductory = guided && !profile.coreComplete;
+    grid.closest('#screen-char-select')?.classList.toggle('learning-introductory-select', introductory);
     let expanded = !!(profile.showAllOperators || game && game._showAllLearningOperators);
     const cards = [...grid.querySelectorAll('.char-card')];
     const recommended = new Set(['tactician', 'sentinel']);
+    const roles = { tactician: 'Flexible attacks and rerolls', sentinel: 'Shield and automatic protection' };
     for (const card of cards) {
         card.querySelector('.learning-recommended-badge')?.remove();
+        card.querySelector('.learning-operator-role')?.remove();
         const recommendedHere = introductory && recommended.has(card.dataset.classId);
         card.classList.toggle('learning-recommended', recommendedHere);
-        if (recommendedHere) card.appendChild(element('span', 'learning-recommended-badge', 'RECOMMENDED'));
+        if (recommendedHere) {
+            card.appendChild(element('span', 'learning-recommended-badge', 'RECOMMENDED'));
+            card.appendChild(element('span', 'learning-operator-role', roles[card.dataset.classId]));
+        }
     }
     document.getElementById('btn-more-operators')?.remove();
+    document.getElementById('learning-hand-notice')?.remove();
     const apply = () => {
+        grid.classList.toggle('learning-recommended-grid', introductory && !expanded);
         for (const card of cards) {
             card.classList.toggle('learning-advanced-hidden', introductory && !expanded && !recommended.has(card.dataset.classId));
         }
     };
     apply();
     if (!introductory) return;
+    const notice = element('p', 'learning-hand-notice', 'Guided starts with a smaller hand. Your full kit arrives during the run.');
+    notice.id = 'learning-hand-notice';
+    grid.before(notice);
     const more = element('button', 'btn secondary learning-more-operators');
     more.id = 'btn-more-operators';
     more.type = 'button';
@@ -50,6 +62,22 @@ export function decorateClassSelection(game, profile = {}) {
     };
     label();
     grid.after(more);
+}
+
+export function decorateClassDetail(game, { mode, coreComplete = false, classId } = {}) {
+    document.getElementById('learning-class-detail-note')?.remove();
+    const overlay = document.getElementById('char-detail-overlay');
+    if (!overlay || mode !== 'guided' || coreComplete) return null;
+    const selected = classId || overlay.dataset.selected;
+    const text = selected === 'annihilator'
+        ? 'After core training, Guided starts Annihilator with 3 dice and 2 free rerolls per turn. Its full 6-die hand and HP-paid rerolls arrive later.'
+        : 'Guided starts with a smaller hand. Your full kit arrives during the run.';
+    const note = element('p', 'learning-class-detail-note', text);
+    note.id = 'learning-class-detail-note';
+    const description = overlay.querySelector('.char-detail-desc');
+    if (description) description.after(note);
+    else overlay.querySelector('.char-detail-content')?.appendChild(note);
+    return note;
 }
 
 // Keep the first visit small without duplicating purchase or toggle logic.
@@ -295,6 +323,40 @@ export function hideReturnGuidance() {
     closeReturn = null;
 }
 
+export function showModeBriefing({ title = 'OPTIONAL MODE', text = '', consequence = '', onStart, onCancel } = {}) {
+    hideModeBriefing();
+    let settled = false;
+    const view = modal({ id: 'learning-mode-briefing', title, onClose: () => {
+        if (settled) return;
+        settled = true;
+        closeMode = null;
+        onCancel?.();
+    } });
+    closeMode = view.close;
+    const body = element('p', 'learning-modal-intro', text);
+    const warning = element('p', 'learning-mode-consequence', consequence);
+    const actions = element('div', 'learning-mode-actions');
+    view.button.textContent = 'BACK';
+    const start = element('button', 'btn primary learning-mode-start', 'START');
+    start.type = 'button';
+    start.onclick = () => {
+        if (settled) return;
+        settled = true;
+        view.close(false);
+        closeMode = null;
+        onStart?.();
+    };
+    view.panel.append(body, warning, actions);
+    actions.append(view.button, start);
+    view.button.focus();
+    return view.close;
+}
+
+export function hideModeBriefing() {
+    closeMode?.();
+    closeMode = null;
+}
+
 export function showPracticeLibrary({ lessons = [], onSelect, onClose } = {}) {
     closeLibrary?.(false);
     const view = modal({ id: 'learning-practice-library', title: 'PRACTICE DRILLS', onClose });
@@ -351,6 +413,7 @@ export function hideBossRules() {
 }
 
 export function dismissLearningOverlay() {
+    if (document.getElementById('learning-mode-briefing')) { hideModeBriefing(); return true; }
     if (document.getElementById('learning-return-guidance')) { hideReturnGuidance(); return true; }
     if (document.getElementById('learning-boss-rules')) { closeRules?.(); return true; }
     if (document.getElementById('learning-practice-library')) { hidePracticeLibrary(); return true; }
