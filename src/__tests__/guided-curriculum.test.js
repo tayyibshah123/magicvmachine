@@ -100,6 +100,23 @@ describe('production ordinary intents and separately staged threats', () => {
 });
 
 describe('later introductions remain tied to actual context', () => {
+    it.each(['tactician', 'sentinel', 'arcanist', 'bloodstalker', 'annihilator', 'summoner'])
+        ('adds %s signature without removing the learned ally or paid skill', async classId => {
+            const { Game, Learning, Player, PLAYER_CLASSES } = active;
+            const cls = PLAYER_CLASSES.find(item => item.id === classId);
+            Game.player = new Player(cls);
+            Game.player.classId = classId;
+            Game._guidedRun = Learning.createRun(classId);
+            Game._syncSignatureDie();
+            enter('signature');
+            Game.rollDice(6);
+            await vi.advanceTimersByTimeAsync(600);
+            expect(Game.dicePool.map(die => die.type)).toEqual(expect.arrayContaining([
+                cls.classDice.attack, cls.classDice.defend, cls.classDice.mana,
+                cls.classDice.minion, 'CONSTRICT', 'SIGNATURE'
+            ]));
+            expect(Game.dicePool).toHaveLength(6);
+        });
     it('keeps combos and momentum out of the opening hand and introduces their real effects separately', () => {
         const { Game, Learning } = active;
         Game.rollDice(6);

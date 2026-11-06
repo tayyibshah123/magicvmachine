@@ -329,14 +329,16 @@ export const Learning = {
         }
         const resources = this.canFeature('mana', run) && this.canFeature('skills', run);
         const allies = this.canFeature('minion', run);
-        const count = resources ? (allies ? 5 : 4) : 3;
+        const fullKit = run.v === 2 && resources && allies && this.canFeature('signature', run);
+        const count = fullKit ? 6 : resources ? (allies ? 5 : 4) : 3;
         const hand = [cd.attack, cd.defend];
         if (classId === 'summoner') hand.push(cd.minion);
         if (resources) hand.push(cd.mana, this.canFeature('status', run) ? 'CONSTRICT' : 'EARTHQUAKE');
         if (allies && !hand.includes(cd.minion)) hand.push(cd.minion);
-        // The guaranteed resource skill stays present; signature takes a
-        // later slot, never the player's attack or defence safety floor.
-        if (this.canFeature('signature', run)) hand[hand.length - 1] = 'SIGNATURE';
+        // Keep the ally and paid skill the player has already learned,
+        // then add its newly introduced tool in the final introductory hand.
+        if (fullKit) hand.push('SIGNATURE');
+        else if (this.canFeature('signature', run)) hand[hand.length - 1] = 'SIGNATURE';
         while (hand.length < count) hand.push(cd.attack);
         return hand.slice(0, count);
     },
@@ -413,7 +415,9 @@ export const Learning = {
                 sentinel: 'Deploy a Guardian. Shield gains fill Aegis plates; three ready plates cancel the next enemy attack.',
                 arcanist: 'Deploy your Glyph. Read the rotating element and activate its lit class control for that element\'s payoff.',
                 summoner: 'Call a Spirit and let it act. Summons grow the Grove; a ready plot can produce another Spirit.' })[classId],
-            allyTiming: 'A friendly volley now offers one optional boost. Read its integer bonus. Missing keeps base ally damage and every strike still animates.',
+            allyTiming: classId === 'annihilator'
+                ? 'Bomb Bots act automatically and spend a charge for 10 raw area damage. Their fixed blast has no boost prompt.'
+                : 'A friendly volley now offers one optional boost. Read its integer bonus. Missing keeps base ally damage and every strike still animates.',
             status: 'Constrict costs 3 Mana. Apply it, read its remaining duration, and compare the changed enemy intent before ending a turn.',
             hostile: 'One hostile Bot has its own HP and intent. Try targeting it before the main enemy. Removing a support changes how many threats remain.',
             multiwave: 'This enemy previews two hits. Read both waves and prepare defence. A missed timing input still resolves the ordinary incoming attack.',
@@ -433,7 +437,8 @@ export const Learning = {
             review: 'Use the tools you have introduced. Nothing here requires a Perfect result or a particular build choice.'
         };
         const enemyLesson = lesson.startsWith('enemy_') ? KIND_LESSONS[lesson.slice(6)] : null;
-        return { title: enemyLesson?.[0] || (lesson === step.lesson ? step.title : lesson === 'shopHack' ? 'Optional shop hack' : lesson === 'fusions' ? 'A fusion opportunity' : 'A new build option'),
+        return { title: lesson === 'allyTiming' && classId === 'annihilator' ? 'Bomb Bot charges'
+            : enemyLesson?.[0] || (lesson === step.lesson ? step.title : lesson === 'shopHack' ? 'Optional shop hack' : lesson === 'fusions' ? 'A fusion opportunity' : 'A new build option'),
             text: enemyLesson?.[1] || texts[lesson] || texts.review, progress: `${run.stage + 1} / ${steps.length}` };
     },
     lessons(classId) {

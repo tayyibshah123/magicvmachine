@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile, access } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const root = resolve(fileURLToPath(new URL('../', import.meta.url)));
 const bundle = join(root, 'www');
@@ -72,7 +73,8 @@ const bundleClosure = await offlineClosure(bundle);
 assert.deepEqual([...bundleClosure].sort(), [...sourceClosure].sort(), 'Source and bundle startup dependency paths must match');
 for (const path of bundleClosure) assert(cachedPaths.has(path), 'Startup dependency missing from offline cache: ' + path);
 for (const path of sourceClosure) {
-  assert.deepEqual(await readFile(join(bundle, path)), await readFile(join(root, path)),
+  const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+  assert.equal(digest(await readFile(join(bundle, path))), digest(await readFile(join(root, path))),
     'Bundle must contain the exact tested source dependency: ' + path);
 }
 for (const excluded of ['node_modules', 'src/__tests__', 'tests', 'package.json']) {

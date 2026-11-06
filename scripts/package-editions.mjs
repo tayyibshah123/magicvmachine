@@ -30,6 +30,8 @@ for (const id of ['stable', 'guided']) {
   const cachePrefix = source.match(/APP_CACHE_PREFIX = '([^']+)'/)?.[1];
   assert.equal(edition, id, 'Source checkout has the wrong edition');
   assert(version && cachePrefix, 'Edition metadata must be complete');
+  assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: checkout, encoding: 'utf8' }).trim(), '',
+    'Commit the tested edition source before publication packaging');
   execFileSync(process.execPath, [join(checkout, 'scripts/validate-build.mjs')], { cwd: checkout, stdio: 'inherit' });
   const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: checkout, encoding: 'utf8' }).trim();
   editions[id] = { checkout, version, cachePrefix, commit,
