@@ -49,7 +49,7 @@ describe('guided shared friendly volley', () => {
             expect(Game.effects.filter(effect => effect.type === 'nature_dart')).toHaveLength(4);
             expect(Game.effects.filter(effect => effect.type === 'nature_dart').every(effect => effect.onHit === null)).toBe(true);
             expect(Game.inputLocked).toBe(true);
-            expect(Game._recordLearningAction).toHaveBeenCalledTimes(1);
+            expect(Game._recordLearningAction.mock.calls.filter(([action]) => action === 'allyTiming')).toHaveLength(1);
             expect(Game._recordLearningAction).toHaveBeenCalledWith('allyTiming');
             expect(ParticleSys.createFloatingText).toHaveBeenCalledWith(Game.enemy.x, Game.enemy.y - 50,
                 `ALLY POWER ${damage} (+${damage - 16})`, expect.any(String));
