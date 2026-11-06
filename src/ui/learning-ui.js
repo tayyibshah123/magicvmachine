@@ -1,3 +1,5 @@
+import { META_UPGRADES } from '../constants.js';
+
 // Presentation only. Learning policy and persistence stay with the caller.
 let closeLibrary = null;
 let closeRules = null;
@@ -47,6 +49,141 @@ export function decorateClassSelection(game, profile = {}) {
     };
     label();
     grid.after(more);
+}
+
+// Keep the first visit small without duplicating purchase or toggle logic.
+// These beginner upgrades have active gameplay consumers. Progression unlocks
+// and the wider catalogue remain available through Browse All.
+const STARTER_UPGRADES = ['m_life', 'm_shield', 'm_mana', 'm_reroll', 'm_cache_primer', 'm_discount', 'm_greed'];
+
+export function hideSanctuaryGuidance() {
+    document.getElementById('learning-sanctuary-intro')?.remove();
+    document.getElementById('upgrade-list')?.classList.remove('learning-sanctuary-focused');
+}
+
+export function decorateSanctuary(game, { mode, introductory = false,
+    classId = game?.player?.classId } = {}) {
+    hideSanctuaryGuidance();
+    const list = document.getElementById('upgrade-list');
+    if (!list || mode !== 'guided' || !introductory) return null;
+    const wallet = Math.max(0, Number(game?.sparks) || 0);
+    const owned = id => typeof game?.isMetaOwned === 'function'
+        ? game.isMetaOwned(id) : !!game?.metaUpgrades?.includes(id);
+    const cards = [...list.querySelectorAll('.upgrade-card:not(.cosmetic-card)')];
+    const cardFor = upgrade => cards.find(card => card.dataset.upgradeId === upgrade.id
+        || card.querySelector('.upgrade-name')?.textContent.trim() === upgrade.name);
+    const classUpgrade = META_UPGRADES.find(upgrade => upgrade.appliesToClass === classId);
+    const ids = [...(classUpgrade ? [classUpgrade.id] : []), ...STARTER_UPGRADES];
+    const candidates = ids.map(id => META_UPGRADES.find(upgrade => upgrade.id === id))
+        .filter(upgrade => upgrade && !owned(upgrade.id) && cardFor(upgrade));
+    const affordable = candidates.filter(upgrade => upgrade.cost <= wallet).slice(0, 3);
+    const section = element('section', 'learning-sanctuary-intro');
+    section.id = 'learning-sanctuary-intro';
+    section.setAttribute('aria-label', 'Suggested permanent upgrades');
+    section.appendChild(element('h3', '', 'A FEW PLACES TO START'));
+    section.appendChild(element('p', '', 'Spend banked Sparks on permanent upgrades for future runs. Buying is optional; you can switch owned upgrades off in the full catalogue.'));
+    const recommendations = element('div', 'learning-sanctuary-picks');
+    for (const upgrade of affordable) {
+        const original = cardFor(upgrade);
+        const button = element('button', 'learning-sanctuary-card');
+        button.type = 'button';
+        button.dataset.upgradeId = upgrade.id;
+        if (upgrade.appliesToClass === classId) button.appendChild(element('span', 'learning-sanctuary-class', 'YOUR OPERATOR'));
+        button.appendChild(element('strong', '', upgrade.name));
+        button.appendChild(element('span', '', original.querySelector('.upgrade-desc')?.textContent || upgrade.desc));
+        button.appendChild(element('span', 'learning-sanctuary-cost', `BUY FOR ${upgrade.cost} SPARKS`));
+        button.onclick = () => {
+            // Re-check the live wallet and ownership. The existing card owns
+            // the transaction and renderMeta must redecorate after a purchase.
+            if (original.isConnected && !owned(upgrade.id) && (Number(game?.sparks) || 0) >= upgrade.cost) original.click();
+        };
+        recommendations.appendChild(button);
+    }
+    if (affordable.length) section.appendChild(recommendations);
+    else section.appendChild(element('p', 'learning-sanctuary-empty', candidates.length
+        ? 'No suggested upgrade is affordable yet. You can keep your Sparks and return after another run.'
+        : 'You already own the suggested starter upgrades. Browse All to review your upgrades and their toggles.'));
+    if (classUpgrade && !owned(classUpgrade.id) && classUpgrade.cost > wallet && cardFor(classUpgrade)) {
+        section.appendChild(element('p', 'learning-sanctuary-goal', `Your operator upgrade, ${classUpgrade.name}, costs ${classUpgrade.cost} Sparks. Save ${classUpgrade.cost - wallet} more Sparks to buy it.`));
+    }
+    let expanded = !!(game?._learningSanctuaryBrowseAll);
+    const browse = element('button', 'btn secondary learning-sanctuary-browse');
+    browse.type = 'button';
+    browse.setAttribute('aria-controls', 'upgrade-list');
+    const apply = () => {
+        list.classList.toggle('learning-sanctuary-focused', !expanded);
+        browse.setAttribute('aria-expanded', String(expanded));
+        browse.textContent = expanded ? 'SHOW SUGGESTIONS' : 'BROWSE ALL UPGRADES';
+    };
+    browse.onclick = () => {
+        expanded = !expanded;
+        if (game) game._learningSanctuaryBrowseAll = expanded;
+        apply();
+    };
+    section.appendChild(browse);
+    list.prepend(section);
+    apply();
+    return section;
+}
+
+export function hideOutcomeGuidance() {
+    document.getElementById('learning-outcome-note')?.remove();
+}
+
+export function decorateOutcome(game, { mode, introductory = false, kind = 'loss', host,
+    onPractice, practiceLabel = 'OPTIONAL PRACTICE', onDismiss } = {}) {
+    hideOutcomeGuidance();
+    const parent = typeof host === 'string' ? document.querySelector(host) : host
+        || document.getElementById('screen-gameover');
+    if (!parent || mode !== 'guided' || !introductory) return null;
+    const card = element('aside', 'learning-outcome-note');
+    card.id = 'learning-outcome-note';
+    card.setAttribute('aria-label', 'What carries between runs');
+    card.appendChild(element('h3', '', kind === 'loss' ? 'YOUR NEXT RUN' : 'WHAT YOU KEEP'));
+    card.appendChild(element('p', '', 'Sparks stay banked between runs and buy permanent Sanctuary upgrades. Fragments and augmentations belong to one run.'));
+    card.appendChild(element('p', '', kind === 'loss'
+        ? 'When a run ends, its Fragments and augmentations reset. You can retry with the same operator or practise one skill first.'
+        : 'Save and Return keeps your current run and its Fragments. Starting a new run replaces that checkpoint.'));
+    const actions = element('div', 'learning-note-actions');
+    let settled = false;
+    if (typeof onPractice === 'function') {
+        const practice = element('button', 'btn secondary learning-outcome-practice', practiceLabel);
+        practice.type = 'button';
+        practice.onclick = () => {
+            if (settled) return;
+            settled = true;
+            hideOutcomeGuidance();
+            onPractice();
+        };
+        actions.appendChild(practice);
+    }
+    const dismiss = element('button', 'btn secondary learning-note-dismiss', 'GOT IT');
+    dismiss.type = 'button';
+    dismiss.onclick = () => {
+        if (settled) return;
+        settled = true;
+        hideOutcomeGuidance();
+        onDismiss?.();
+    };
+    actions.appendChild(dismiss);
+    card.appendChild(actions);
+    const retry = parent.querySelector('#btn-retry-class');
+    if (retry) retry.before(card);
+    else parent.appendChild(card);
+    return card;
+}
+
+export function decorateReward(game, { mode, host } = {}) {
+    document.getElementById('learning-reward-scope')?.remove();
+    const parent = typeof host === 'string' ? document.querySelector(host) : host
+        || document.getElementById('screen-reward');
+    if (!parent || mode !== 'guided') return null;
+    const note = element('p', 'learning-reward-scope', 'Choose one augmentation for this run. Instant effects apply now.');
+    note.id = 'learning-reward-scope';
+    const options = parent.querySelector('#reward-options');
+    if (options) options.before(note);
+    else parent.appendChild(note);
+    return note;
 }
 
 export function hideObjective() {
