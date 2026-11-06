@@ -10,7 +10,8 @@ import { Learning } from '../services/learning.js';
 import { setupCombatFixture, teardownCombatFixture, createCombatPlayer } from './helpers/combat-fixture.js';
 
 const markup = readFileSync('index.html', 'utf8');
-const cases = PLAYER_CLASSES.flatMap(cls => ['good', 'perfect'].flatMap(quality => [0, 1].map(roomIndex => [cls.id, quality, roomIndex])));
+const cases = PLAYER_CLASSES.flatMap(cls => ['good', 'perfect'].flatMap(quality =>
+    [0, 1].flatMap(roomIndex => [false, true].map(baseCrit => [cls.id, quality, roomIndex, baseCrit]))));
 
 beforeEach(() => {
     setupCombatFixture({ profiles: ['cosmetics', 'ui', 'renderer'] });
@@ -66,8 +67,12 @@ async function use(type, target, quality) {
 }
 
 describe('guided core opening and completion', () => {
-    it.each(cases)('%s %s opening in room %s preserves a real enemy phase before core completion', async (classId, quality, roomIndex) => {
+    it.each(cases)('%s %s opening in room %s with base crit %s preserves a real enemy phase before core completion', async (classId, quality, roomIndex, baseCrit) => {
         createCombatPlayer(classId);
+        // The ordinary 15% critical roll is independent of timing quality.
+        // Cover both real damage branches without making suite order or RNG
+        // decide whether a first-time player gets an enemy phase.
+        vi.spyOn(Game, '_luckyChance').mockReturnValue(baseCrit);
         Game._guidedRun = Learning.createRun(classId);
         const attackTurns = new Map();
         const useDie = Game.useDie;
@@ -81,12 +86,13 @@ describe('guided core opening and completion', () => {
         const complete = Game._onGuidedCoreComplete = vi.fn();
         Breakout.start(Game, { guided: true, progress: { roomIndex, actions: [] } });
         const enemy = Game.enemy;
+        const damage = vi.spyOn(enemy, 'takeDamage');
         const cd = PLAYER_CLASSES.find(cls => cls.id === classId).classDice;
         if (classId === 'summoner') await use(cd.minion, Game.player, quality);
         await use(cd.defend, Game.player, quality);
         await use(cd.attack, enemy, quality);
         expect(Game.enemy, 'the attack must not reset the teaching room').toBe(enemy);
-        expect(enemy.currentHp, 'the opening attack must leave a real enemy action').toBeGreaterThan(0);
+        expect(enemy.currentHp, `the opening attack must leave a real enemy action (HP ${enemy.maxHp}; incoming ${damage.mock.calls.map(call => call[0]).join(', ')})`).toBeGreaterThan(0);
         expect(Breakout._coreActions.has('enemy_turn')).toBe(false);
         const turn = Game.endTurn();
         await tick(10000, quality);

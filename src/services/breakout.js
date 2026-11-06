@@ -862,11 +862,12 @@ function roomFor(roomIdx, classId) {
 function guidedRoomFor(index, classId, game) {
     if (index > 1) return null;
     const cd = classDice(classId);
-    // Leave room for a class-boosted Perfect opening and the first ally
-    // volley, while keeping a typical Good loop to two to four attack
-    // turns. Arcanist's Fire-assisted Perfect opener can deal 21 damage.
-    const hp = { tactician: 20, sentinel: 10, arcanist: 26,
-        bloodstalker: 20, annihilator: 26, summoner: 20 }[classId] || 26;
+    // Include the independent base critical hit in the strongest Perfect
+    // opener: Arcanist deals 21 and Annihilator 28. Sentinel also needs
+    // room after its 9-damage opener for the 3-damage Perfect parry.
+    // Ordinary Good loops still finish within four attack turns.
+    const hp = { tactician: 20, sentinel: 13, arcanist: 26,
+        bloodstalker: 20, annihilator: 32, summoner: 20 }[classId] || 26;
     if (index === 0) {
         const base = roomFor(0, classId);
         const sequence = base.sequence.map(beat => ({ ...beat }));
