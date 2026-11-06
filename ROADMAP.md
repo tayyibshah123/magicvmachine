@@ -8,11 +8,14 @@ in `docs/archive/`.
 ## Status
 
 - **Implementation complete:** Stable v1.9.57 and Guided v1.10.0.
-- **Release status:** final gates and public deployment verification
+- **Release status:** final Guided gate and public deployment verification
   pending. These are release candidates, not a claim of live publication.
 - **Earlier Stable reference:** v1.9.56 remains frozen at `d51d8b1` with
   552 normal checks, 552 shuffled checks, 15 browser cases and 150 layout
   checks passed. The v1.9.57 gate includes the additional consent fix.
+- **Final Stable evidence:** runtime and checks at `088aec7`, 566 normal
+  checks, 566 shuffled checks, 16 browser cases and 150 layout checks passed.
+  Report: `test-results/2026-11-06T21-46-20-271Z/summary.json` in the Stable checkout.
 - **Guided final evidence:** pending final source commit, normal and shuffled
   totals, browser cases, layout checks and report path.
 - **Frame metrics:** truthful (intervalBuf + workBuf split shipped v1.8.9)
@@ -80,8 +83,8 @@ Guided implementation now provides:
 
 ### Validation and remaining limits
 
-The final Stable and Guided gates and combined edition report still need
-their final counts recorded here. Public version,
+Stable's final gate is complete. The final Guided gate and combined edition
+report still need their final counts recorded here. Public version,
 cache and fresh-launch checks for both destination URLs are also pending.
 
 A separate balance stress probe at source `5589b26` ran 6,480 cases:
