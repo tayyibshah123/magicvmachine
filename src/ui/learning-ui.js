@@ -3,6 +3,7 @@ import { META_UPGRADES } from '../constants.js';
 // Presentation only. Learning policy and persistence stay with the caller.
 let closeLibrary = null;
 let closeRules = null;
+let closeReturn = null;
 
 function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -264,6 +265,36 @@ function modal({ id, title, onClose }) {
     return { panel, close, button };
 }
 
+export function showReturnGuidance(game, { onPractice, practiceLabel = 'OPTIONAL PRACTICE', onDismiss } = {}) {
+    hideReturnGuidance();
+    const view = modal({ id: 'learning-return-guidance', title: 'WHAT YOU KEEP', onClose: () => { closeReturn = null; } });
+    closeReturn = view.close;
+    const note = decorateOutcome(game, { mode: 'guided', introductory: true, kind: 'return', host: view.panel,
+        practiceLabel, onPractice: typeof onPractice === 'function' ? () => {
+            hideReturnGuidance();
+            onPractice();
+        } : undefined });
+    note.classList.add('learning-return-content');
+    note.querySelector('h3')?.remove();
+    note.querySelector('.learning-note-dismiss')?.remove();
+    if (!onPractice) note.querySelector('.learning-note-actions')?.remove();
+    view.button.before(note);
+    let acknowledged = false;
+    view.button.textContent = 'GOT IT';
+    view.button.onclick = () => {
+        if (acknowledged) return;
+        acknowledged = true;
+        hideReturnGuidance();
+        onDismiss?.();
+    };
+    return view.close;
+}
+
+export function hideReturnGuidance() {
+    closeReturn?.(false);
+    closeReturn = null;
+}
+
 export function showPracticeLibrary({ lessons = [], onSelect, onClose } = {}) {
     closeLibrary?.(false);
     const view = modal({ id: 'learning-practice-library', title: 'PRACTICE DRILLS', onClose });
@@ -320,6 +351,7 @@ export function hideBossRules() {
 }
 
 export function dismissLearningOverlay() {
+    if (document.getElementById('learning-return-guidance')) { hideReturnGuidance(); return true; }
     if (document.getElementById('learning-boss-rules')) { closeRules?.(); return true; }
     if (document.getElementById('learning-practice-library')) { hidePracticeLibrary(); return true; }
     return false;
