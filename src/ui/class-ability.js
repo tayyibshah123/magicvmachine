@@ -49,6 +49,7 @@ const CFG = {
         grandPct: 0.30,          // 30% of max HP
         majorAttack: 20,         // direct damage to enemy
         majorBleed: 5,           // bleed value for 3 turns
+        bleedTurns: 3,
         grandAttack: 40,
         grandBleed: 8,
         grandManaGain: 2,
@@ -607,7 +608,7 @@ export const ClassAbility = {
                         ParticleSys.createBloodstalkerBurst(Game.enemy.x, Game.enemy.y - 20);
                         ParticleSys.createShockwave(Game.enemy.x, Game.enemy.y, '#ff2244', 28);
                         if (Game.enemy.currentHp > 0) {
-                            Game.enemy.addEffect('bleed', 3, CFG.bloodstalker.majorBleed, '🩸',
+                            Game.enemy.addEffect('bleed', CFG.bloodstalker.bleedTurns, CFG.bloodstalker.majorBleed, '🩸',
                                 `Takes ${CFG.bloodstalker.majorBleed} DMG at end of turn.`, 'BLEED');
                         }
                         bossKilled = _resolveKill(Game.enemy);
@@ -632,7 +633,7 @@ export const ClassAbility = {
                         ParticleSys.createShockwave(Game.enemy.x, Game.enemy.y, '#ff0044', 48);
                         if (Game.triggerScreenFlash) Game.triggerScreenFlash('rgba(255, 0, 68, 0.35)', 320);
                         if (Game.enemy.currentHp > 0) {
-                            Game.enemy.addEffect('bleed', 3, CFG.bloodstalker.grandBleed, '🩸',
+                            Game.enemy.addEffect('bleed', CFG.bloodstalker.bleedTurns, CFG.bloodstalker.grandBleed, '🩸',
                                 `Takes ${CFG.bloodstalker.grandBleed} DMG at end of turn.`, 'BLEED');
                         }
                         bossKilled = _resolveKill(Game.enemy);
@@ -965,7 +966,33 @@ export const ClassAbility = {
         }
     },
 
+    _glyphDescriptions() {
+        const cfg = CFG.arcanist;
+        const mana = Game?.player?.mana || 0;
+        const shield = cfg.iceShield + Math.floor(mana * cfg.iceShieldPerMana);
+        return {
+            cycle: `Glyph Wheel cycles every ${cfg.cycleMs / 1000} seconds. Tap the lit glyph, once per turn.`,
+            fire: `Fire: ${cfg.fireDmg} base damage before bonuses and enemy defenses.`,
+            ice: `Ice: ${shield} shield (${cfg.iceShield} + ${cfg.iceShieldPerMana} per held mana), plus Weak: ${Math.round((1 - cfg.iceWeakVal) * 100)}% less enemy damage for ${cfg.iceWeakTurns} turn.`,
+            lightning: `Lightning: +${cfg.lightningRerolls} reroll.`
+        };
+    },
+
+    _tributeDescription(action) {
+        const cfg = CFG.bloodstalker;
+        const pct = { 'tribute-minor': cfg.minorPct, 'tribute-major': cfg.majorPct,
+            'tribute-grand': cfg.grandPct }[action];
+        if (!pct) return '';
+        const cost = this._tributeCost(action);
+        const effect = action === 'tribute-minor' ? '+1 reroll.'
+            : action === 'tribute-major'
+                ? `${cfg.majorAttack} base damage and ${cfg.majorBleed} Bleed per tick for ${cfg.bleedTurns} turns.`
+                : `${cfg.grandAttack} base damage, ${cfg.grandBleed} Bleed per tick for ${cfg.bleedTurns} turns, +${cfg.grandManaGain} mana and +${cfg.grandRerolls} rerolls.`;
+        return `Spend ${Math.round(pct * 100)}% Max HP (${cost} HP). ${effect}`;
+    },
+
     _templateFor(cls) {
+        const glyph = this._glyphDescriptions();
         switch (cls) {
             case 'tactician':
                 // Short titles everywhere so they never dominate the bar on narrow mobile widths.
@@ -986,13 +1013,13 @@ export const ClassAbility = {
             case 'arcanist':
                 // Title tucked top-right so the conduit trail + vortex own the left/center.
                 return `
-                    <div class="ca-title ca-title-right" title="Arcanist — Glyph Wheel. Auto-cycles every 0.7s; tap when the wanted glyph is lit.">GLYPHS</div>
-                    <button class="ca-glyph-wheel" data-action="arc-tap" title="Tap when the wanted glyph is lit. Fire: 12 dmg. Ice: 5 shield + Weak. Lightning: +1 reroll.">
+                    <div class="ca-title ca-title-right" title="${glyph.cycle}">GLYPHS</div>
+                    <button class="ca-glyph-wheel" data-action="arc-tap" title="${glyph.fire} ${glyph.ice} ${glyph.lightning}">
                         <span class="ca-vortex-seal" aria-hidden="true">${ICONS.arcanistSeal}</span>
                         <span class="ca-glyph-orbit">
-                            <span class="ca-glyph" data-idx="0" title="Fire glyph: tap when lit for 12 damage">${ICONS.glyphFire}</span>
-                            <span class="ca-glyph" data-idx="1" title="Ice glyph: tap when lit for 5 shield + Weak debuff">${ICONS.glyphIce}</span>
-                            <span class="ca-glyph" data-idx="2" title="Lightning glyph: tap when lit for +1 reroll">${ICONS.glyphLightning}</span>
+                            <span class="ca-glyph" data-idx="0" title="${glyph.fire}">${ICONS.glyphFire}</span>
+                            <span class="ca-glyph" data-idx="1" title="${glyph.ice}">${ICONS.glyphIce}</span>
+                            <span class="ca-glyph" data-idx="2" title="${glyph.lightning}">${ICONS.glyphLightning}</span>
                         </span>
                     </button>
                     <div class="ca-used-label" title="Cycles back to READY at start of your next turn">READY</div>`;
@@ -1008,27 +1035,27 @@ export const ClassAbility = {
                         </span>
                         <div class="ca-tributes">
                             <button class="ca-tribute ca-tribute-minor" data-action="tribute-minor"
-                                title="Minor Tribute. Pay 5% Max HP for +1 reroll.">
+                                title="${this._tributeDescription('tribute-minor')}">
                                 <span class="ca-tribute-pips" aria-hidden="true">${drop}</span>
-                                <span class="ca-tribute-cost">5%</span>
+                                <span class="ca-tribute-cost">${Math.round(CFG.bloodstalker.minorPct * 100)}%</span>
                             </button>
                             <button class="ca-tribute ca-tribute-major" data-action="tribute-major"
-                                title="Major Tribute. Pay 15% Max HP. Deal ${CFG.bloodstalker.majorAttack} DMG and apply ${CFG.bloodstalker.majorBleed} Bleed (3 turns).">
+                                title="${this._tributeDescription('tribute-major')}">
                                 <span class="ca-tribute-pips" aria-hidden="true">${drop}${drop}</span>
-                                <span class="ca-tribute-cost">15%</span>
+                                <span class="ca-tribute-cost">${Math.round(CFG.bloodstalker.majorPct * 100)}%</span>
                             </button>
                             <button class="ca-tribute ca-tribute-grand" data-action="tribute-grand"
-                                title="Grand Tribute. Pay 30% Max HP. Deal ${CFG.bloodstalker.grandAttack} DMG, apply ${CFG.bloodstalker.grandBleed} Bleed (3 turns), +${CFG.bloodstalker.grandManaGain} Mana, +${CFG.bloodstalker.grandRerolls} rerolls.">
+                                title="${this._tributeDescription('tribute-grand')}">
                                 <span class="ca-tribute-pips" aria-hidden="true">${drop}${drop}${drop}</span>
-                                <span class="ca-tribute-cost">30%</span>
+                                <span class="ca-tribute-cost">${Math.round(CFG.bloodstalker.grandPct * 100)}%</span>
                             </button>
                         </div>
                     </div>`;
             }
             case 'annihilator':
                 return `
-                    <div class="ca-title" title="Annihilator — Overheat Core. +10% heat per die used; vent in yellow / red zone for a payoff.">REACTOR</div>
-                    <button class="ca-heat" data-action="heat-vent" title="Yellow: next die ×${CFG.annihilator.yellowMult} | Red: ${CFG.annihilator.redAoeDmg} AoE, self ${CFG.annihilator.redSelfDmg}">
+                    <div class="ca-title" title="Overheat Core: +${CFG.annihilator.heatPerDie}% heat per die. Ending a turn at 100% causes ${CFG.annihilator.autoVentDmg} base self-damage.">REACTOR</div>
+                    <button class="ca-heat" data-action="heat-vent" title="Yellow (${CFG.annihilator.yellowMin}% to ${CFG.annihilator.yellowMax}%): next damage die x${CFG.annihilator.yellowMult}. Red (${CFG.annihilator.redMin}%+): ${CFG.annihilator.redAoeDmg} base AoE damage and ${CFG.annihilator.redSelfDmg} base self-damage.">
                         <span class="ca-reactor-frame">
                             <span class="ca-heat-bar">
                                 <span class="ca-heat-fill"></span>
@@ -1237,14 +1264,18 @@ export const ClassAbility = {
         // Glyph wheel ticks every 700ms; the active glyph index changes
         // most renders. Dirty-check still cheap because the comparison is
         // a single-string equality.
-        const sig = `a:${state.activeGlyph}|${state.usedThisTurn ? 1 : 0}`;
+        const sig = `a:${state.activeGlyph}|${state.usedThisTurn ? 1 : 0}|${Game?.player?.mana || 0}`;
         if (_renderSig === sig) return;
         _renderSig = sig;
         const glyphs = (_nodeCache && _nodeCache.glyphs) || el.querySelectorAll('.ca-glyph');
+        const descriptions = this._glyphDescriptions();
         glyphs.forEach(g => {
             const idx = parseInt(g.dataset.idx, 10);
             g.classList.toggle('active', idx === state.activeGlyph);
+            g.title = [descriptions.fire, descriptions.ice, descriptions.lightning][idx];
         });
+        const wheel = el.querySelector('.ca-glyph-wheel');
+        if (wheel) wheel.title = `${descriptions.fire} ${descriptions.ice} ${descriptions.lightning}`;
         el.classList.toggle('used', !!state.usedThisTurn);
         const readyLabel = (_nodeCache && _nodeCache.usedLabel) || el.querySelector('.ca-used-label');
         if (readyLabel) readyLabel.textContent = state.usedThisTurn ? 'USED' : 'READY';
@@ -1280,8 +1311,7 @@ export const ClassAbility = {
             btn.disabled = !state.ready || !affordable;
             // Resolved-HP cost label so players don't have to math their
             // own max HP against a percentage. Format: "5% (4 HP)".
-            const pctLabel = Math.round(costPct * 100);
-            btn.title = `Spend ${pctLabel}% (${cost} HP)`;
+            btn.title = this._tributeDescription(btn.dataset.action);
         });
     },
 
