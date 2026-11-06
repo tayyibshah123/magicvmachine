@@ -9,7 +9,7 @@ export async function sourceFingerprint(root) {
     'icon.svg', 'icon-maskable.svg', 'intro.png', 'package.json', 'package-lock.json',
     'vitest.config.js', 'playwright.config.js', 'mockup-menu.html',
     'mockup-menu-a1.html', 'mockup-menu-a2.html', 'mockup-menu-a3.html', 'mockup-menu-a4.html'];
-  for (const optional of ['playwright.editions.config.js']) {
+  for (const optional of ['playwright.editions.config.js', 'playwright.webkit.config.js']) {
     try { await readFile(join(root, optional)); files.push(optional); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
   async function collect(directory) {
