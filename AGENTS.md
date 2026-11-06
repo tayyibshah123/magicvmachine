@@ -199,6 +199,9 @@ not configured; tests are the gate.
 
 If you ship visual changes, briefly note manual QA done (or admit
 "not visually tested") in the commit body.
+For layout changes, inspect named native browser screenshots at 360px and
+390px before publication. Include measured separation and reachable tap
+checks, and keep the image paths and bounds in the browser evidence.
 
 ---
 

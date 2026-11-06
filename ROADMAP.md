@@ -7,18 +7,18 @@ in `docs/archive/`.
 
 ## Status
 
-- **Implementation complete:** Stable v1.9.57 and Guided v1.10.0.
-- **Release status:** both source gates passed. Combined-edition checks and
-  public deployment verification are pending; publication is not yet claimed.
+- **Implementation complete:** Stable v1.9.57 and Guided v1.10.1.
+- **Release status:** both final source gates passed. The corrected Guided
+  v1.10.1 pair and updated public deployment are being verified.
 - **Earlier Stable reference:** v1.9.56 remains frozen at `d51d8b1` with
   552 normal checks, 552 shuffled checks, 15 browser cases and 150 layout
   checks passed. The v1.9.57 gate includes the additional consent fix.
 - **Final Stable evidence:** runtime and checks at `088aec7`, 566 normal
   checks, 566 shuffled checks, 16 browser cases and 150 layout checks passed.
   Report: `test-results/2026-11-06T21-46-20-271Z/summary.json` in the Stable checkout.
-- **Final Guided evidence:** source `4cd2e4c`, 753 normal checks,
+- **Final Guided v1.10.1 evidence:** source `17c3d5f`, 753 normal checks,
   753 shuffled checks, 29 browser cases and 150 layout checks passed.
-  Report: `test-results/2026-11-06T22-08-35-398Z/summary.json` in the Guided checkout.
+  Report: `test-results/2026-11-06T22-33-55-914Z/summary.json` in the Guided checkout.
 - **Frame metrics:** truthful (intervalBuf + workBuf split shipped v1.8.9)
 
 ### Completed dual-edition implementation
@@ -26,7 +26,7 @@ in `docs/archive/`.
 | Edition | Version | Publication destination |
 |---|---|---|
 | Stable | 1.9.57 | [Existing root URL](https://tayyibshah123.github.io/magicvmachine/) |
-| Guided | 1.10.0 | [Separate Guided URL](https://tayyibshah123.github.io/magicvmachine/guided/) |
+| Guided | 1.10.1 | [Separate Guided URL](https://tayyibshah123.github.io/magicvmachine/guided/) |
 
 Stable preserves the five-room prologue and ordinary map progression.
 Guided adds optional staged learning. Full Rules remains available at the
@@ -89,8 +89,15 @@ Guided implementation now provides:
 ### Validation and remaining limits
 
 Both final source gates passed with frozen runtime, test and bundle inputs.
-The combined-edition report and public version, cache and fresh-launch checks
-for both destination URLs are still pending.
+The corrected pair and updated public verification are pending.
+
+Live visual QA of Guided v1.10.0 found that its recommended cards' previews
+still used the global absolute canvas positioning after the cards switched
+to a column layout. Guided v1.10.1 restores normal preview flow. Its browser
+regression failed before the correction and passed at 360px and 390px after
+fonts and entry effects settled. Preview, name, badge and role rectangles
+are separated, fit their cards and retain reachable card centres. Named
+screenshots and measured bounds are retained in the browser evidence.
 
 A separate balance stress probe at source `5589b26` ran 6,480 cases:
 5,480 wins, 951 losses and 49 turn-limit results. The turn-limit cases are
