@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures.js';
-import { openGame, configureEncounter, tap } from './game-driver.js';
+import { openGame, configureEncounter, tap, dragDie } from './game-driver.js';
 import { STATE } from '../../src/constants.js';
 
 test('all six class controls leave every die reachable at narrow phone widths', async ({ page }, testInfo) => {
@@ -40,6 +40,25 @@ test('all six class controls leave every die reachable at narrow phone widths', 
         for (const control of result.controls) {
           expect(control.w, JSON.stringify(control)).toBeGreaterThanOrEqual(43.5);
           expect(control.h, JSON.stringify(control)).toBeGreaterThanOrEqual(43.5);
+        }
+        if (width === 390 && hand === 6) {
+          await testInfo.attach(classId + '-phone-combat', { body: await page.screenshot(), contentType: 'image/png' });
+        }
+        if (width === 360 && hand === 6) {
+          for (const id of [0, 5]) {
+            if (classId === 'annihilator') {
+              // This class deliberately disables selection without rerolls.
+              // Verify the same edge dice through their actual drag action.
+              await dragDie(page, id, id === 0 ? 'enemy' : 'player');
+              await expect.poll(() => page.evaluate(id => Game.dicePool.find(d => d.id === id).used, id)).toBe(true);
+              await expect.poll(() => page.evaluate(() => !Game.qte?.active && !Game.inputLocked
+                && !(Game._combatActionDepth || 0) && Game.inputCooldown <= 0)).toBe(true);
+            } else {
+              const die = result.dice[id];
+              await page.touchscreen.tap(die.x + die.w / 2, die.y + die.h / 2);
+              await expect.poll(() => page.evaluate(id => Game.dicePool.find(d => d.id === id).selected, id)).toBe(true);
+            }
+          }
         }
       }
     }
