@@ -514,7 +514,7 @@ const Game = {
                 if (!Onboarding.isComplete()) {
                     Onboarding.run({
                         ...(APP_EDITION === 'guided' ? {
-                            mode: Learning.getMode(), onModeChoice: mode => Learning.setMode(mode)
+                            mode: Learning.getMode(), onModeChoice: mode => this.setLearningMode(mode)
                         } : {}),
                         onFinished: () => {
                             // Don't trust that the menu is still visible — on
@@ -4080,6 +4080,7 @@ startQTE(type, x, y, callback, opts) {
                     }
                 }
                 this.generateRewards();
+                if (APP_EDITION === 'guided') this._learningUI?.decorateReward?.(this, { mode: 'guided' });
                 this.showHintOnce('first_reward', "REWARDS: pick carefully. Synergies with your modules are highlighted.");
                 break;
             }
@@ -4088,7 +4089,10 @@ startQTE(type, x, y, callback, opts) {
                 document.getElementById('hud').classList.remove('hidden');
                 activate('screen-combat-win');
                 break;
-            case STATE.GAMEOVER: activate('screen-gameover'); break;
+            case STATE.GAMEOVER:
+                activate('screen-gameover');
+                this._showLearningOutcome('loss');
+                break;
             case STATE.EVENT: activate('screen-event'); this.showHintOnce('first_event', "EVENT: each choice has consequences. Read the text."); break;
             case STATE.INTEL:
                 activate('screen-intel');
@@ -4115,6 +4119,10 @@ startQTE(type, x, y, callback, opts) {
         break;
         }
         if (Hints.resume) Hints.resume();
+        if (newState === STATE.MENU && this._learningReturnPending) {
+            this._learningReturnPending = false;
+            this._showLearningOutcome('return');
+        }
     },
     
     // Drop every document-level pointerdown listener registered by
@@ -4609,6 +4617,10 @@ startQTE(type, x, y, callback, opts) {
                 list.appendChild(div);
             });
         }
+        if (APP_EDITION === 'guided') this._learningUI?.decorateSanctuary?.(this, {
+            mode: Learning.getMode(), introductory: this._isIntroductoryLearning(),
+            classId: this.player?.classId || this._lastClassId
+        });
     },
 
     // Bake the static Sanctuary backdrop (sky gradient, moon, grid, ground,
@@ -26211,13 +26223,31 @@ drawEffects() {
     setLearningMode(mode) {
         if (APP_EDITION !== 'guided' || this._practiceSession) return false;
         // Mode changes affect the next run. A saved route keeps its rules.
-        return Learning.setMode(mode);
+        const changed = Learning.setMode(mode);
+        const control = document.getElementById('learning-mode');
+        if (changed && control) control.value = mode;
+        return changed;
+    },
+
+    _isIntroductoryLearning() {
+        return APP_EDITION === 'guided' && !this._practiceSession
+            && (Learning.isIntroductory?.() ?? (Learning.getMode() === 'guided' && !Learning.profile()?.legacy));
+    },
+
+    _showLearningOutcome(kind) {
+        if (!this._isIntroductoryLearning() || Learning.isAcknowledged?.('outcome:' + kind)) return;
+        const options = { mode: 'guided', introductory: true, kind,
+            onPractice: () => this.openPracticeLibrary(),
+            onDismiss: () => Learning.acknowledge?.('outcome:' + kind) };
+        if (kind === 'return') this._learningUI?.showReturnGuidance?.(this, options);
+        else this._learningUI?.decorateOutcome?.(this, options);
     },
 
     getBossRules() {
         if (APP_EDITION !== 'guided' || !this.enemy || this.enemy.currentHp <= 0) return [];
         const rules = [...(this.enemy.isBoss ? this._guidedBossRules || [] : []),
-            ...collectBossRules({ ...this, _activeSectorMech: this._activeSectorMech || {} })];
+            ...collectBossRules({ enemy: this.enemy, player: this.player, sector: this.sector,
+                turnCount: this.turnCount, _activeSectorMech: this._activeSectorMech || {} })];
         if (this.enemy.isBoss) {
             const actions = this.enemy.nextIntents?.length || this.enemy.bossData?.actionsPerTurn || 1;
             rules.unshift({ id: 'actions', title: 'Read every intent',
@@ -26234,9 +26264,10 @@ drawEffects() {
     },
 
     _canReadLearningPanel() {
+        const combat = [STATE.COMBAT, STATE.BREAKOUT, STATE.TUTORIAL_COMBAT].includes(this.currentState);
         return !this._practiceSession && !this.qte?.active && !this.inputLocked
             && !this._combatActionDepth && !this._endTurnRunning && !this._winCombatRunning
-            && (!this.player || this.player.currentHp > 0);
+            && (!combat || !this.player || this.player.currentHp > 0);
     },
 
     _beginLearningRead() {
@@ -26265,7 +26296,12 @@ drawEffects() {
                 const lesson = lessons.find(item => item.id === (id?.id || id));
                 if (!lesson) return;
                 const classId = this.player?.classId;
-                const begin = () => Breakout.start(this, { practiceRoom: lesson.room, classId });
+                const begin = () => Breakout.start(this, {
+                    ...(lesson.practiceLesson ? { practiceLesson: lesson.practiceLesson } : { practiceRoom: lesson.room }), classId,
+                    onComplete: result => {
+                        Learning.recordPractice?.(result.lesson || lesson.id, result.classId || classId);
+                        this._showLearningObjective();
+                    } });
                 // Rehearsal begins from a durable checkpoint, after any
                 // earned victory settles. Never suspend half an action.
                 if (this._isInActiveRun()) {
@@ -26306,6 +26342,7 @@ drawEffects() {
         this.restoreCombatButtons();
         ClassAbility.endCombat();
         this._newRunConsent = null;
+        if (this._isGuidedRun()) this._learningReturnPending = true;
         this.changeState(STATE.MENU);
         return true;
     },

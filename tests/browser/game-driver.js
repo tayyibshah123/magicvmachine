@@ -43,6 +43,7 @@ export async function readState(page) {
     return {
       state: g.currentState, states: STATE, turn: g.turnCount, hp: g.player?.currentHp,
       mana: g.player?.mana, enemyHp: g.enemy?.currentHp,
+      manaSpent: g._manaSpentThisCombat || 0,
       locked: g.inputLocked, running: g._endTurnRunning, depth: g._combatActionDepth,
       paused: g.paused, room: Breakout._roomIdx, breakout: Breakout.isActive(),
       mapCurrentIdx: g.map?.currentIdx,
@@ -50,6 +51,7 @@ export async function readState(page) {
       storyboard: document.getElementById('breakout-storyboard')?.style.display === 'flex',
       qte: g.qte?.active ? {
         type: g.qte.type, phase: g.qte.phase, radius: g.qte.radius,
+        pattern: g.qte.pattern, waves: g.qte.waveTotal, wave: g.qte.waveIdx,
         cooldown: g.inputCooldown, x: g.qte.targetX, y: g.qte.targetY
       } : null,
       rect: { x: r.x, y: r.y, width: r.width, height: r.height },

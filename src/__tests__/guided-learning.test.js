@@ -241,7 +241,7 @@ describe('cold checkpoints, mode separation and harmless rehearsal', () => {
         picker.onSelect(picker.lessons[0]);
         expect(Game.currentState).toBe(STATE.MENU);
         expect(Game._readSaveRaw()).toBeTruthy();
-        expect(start).toHaveBeenCalledWith(Game, { practiceRoom: 0, classId: 'tactician' });
+        expect(start).toHaveBeenCalledWith(Game, { practiceRoom: 0, classId: 'tactician', onComplete: expect.any(Function) });
         start.mockClear();
         Game.currentState = STATE.COMBAT;
         vi.spyOn(Game, 'saveGame').mockReturnValue(false);
@@ -340,6 +340,56 @@ describe('cold checkpoints, mode separation and harmless rehearsal', () => {
         Game._showLearningObjective();
         expect(show).not.toHaveBeenCalled();
         expect(hide).toHaveBeenCalled();
+        expect(profileKeys()).toEqual(before);
+    });
+
+    it('opens actual encounter rules at body level, pauses reading and restores it through Back', async () => {
+        const { Game } = await game();
+        Game._learningUI = await import('../ui/learning-ui.js');
+        document.getElementById('hud').classList.remove('hidden');
+        Game.enemy._armedDetonate = true;
+        Game._showLearningObjective();
+        const card = document.getElementById('learning-objective');
+        expect(card.dataset.kind).toBe('boss');
+        card.querySelector('button').click();
+        expect(document.getElementById('learning-boss-rules').parentElement).toBe(document.body);
+        expect(Game.paused).toBe(true);
+        expect(Game.dismissOpenOverlay()).toBe(true);
+        expect(document.getElementById('learning-boss-rules')).toBeNull();
+        expect(Game.paused).toBe(false);
+    });
+
+    it('does not open a reading panel over timing, turn resolution or a committed attack', async () => {
+        const { Game } = await game();
+        Game._learningUI = await import('../ui/learning-ui.js');
+        document.getElementById('hud').classList.remove('hidden');
+        Game.enemy._armedDetonate = true;
+        Game._showLearningObjective();
+        const click = () => document.querySelector('#learning-objective button').click();
+        for (const lock of ['inputLocked', '_endTurnRunning', '_combatActionDepth']) {
+            Game[lock] = 1;
+            click();
+            expect(document.getElementById('learning-boss-rules')).toBeNull();
+            Game[lock] = 0;
+        }
+        Game.qte.active = true;
+        click();
+        expect(document.getElementById('learning-boss-rules')).toBeNull();
+        expect(Game.paused).toBe(false);
+    });
+
+    it('lets a defeated player open and close harmless practice without changing the lost run', async () => {
+        const { Game, STATE } = await game();
+        Game._learningUI = await import('../ui/learning-ui.js');
+        Game.currentState = STATE.GAMEOVER;
+        Game.player.currentHp = 0;
+        const before = profileKeys();
+        Game.openPracticeLibrary();
+        expect(document.getElementById('learning-practice-library')).not.toBeNull();
+        expect(Game.paused).toBe(true);
+        expect(Game.dismissOpenOverlay()).toBe(true);
+        expect(Game.paused).toBe(false);
+        expect(Game.player.currentHp).toBe(0);
         expect(profileKeys()).toEqual(before);
     });
 });

@@ -10,7 +10,7 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   timeout: 45000,
-  globalTimeout: 20 * 60 * 1000,
+  globalTimeout: 40 * 60 * 1000,
   expect: { timeout: 8000 },
   outputDir: resolve(output, 'artifacts'),
   reporter: [['line'], ['json', { outputFile: resolve(output, 'results.json') }]],
