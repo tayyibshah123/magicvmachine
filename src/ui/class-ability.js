@@ -19,6 +19,7 @@ import { AudioMgr } from '../audio.js';
 import { ParticleSys } from '../effects/particles.js';
 import { ICONS } from './icons.js';
 import { Hints } from '../services/hints.js';
+import { STATE } from '../constants.js';
 
 // Balance constants in one place so they can be re-tuned without touching render code.
 const CFG = {
@@ -112,7 +113,13 @@ function _resolveKill(target) {
     return false;
 }
 
-function show() { const el = $w(); if (el) el.classList.remove('hidden'); }
+function abilityEnabled() {
+    return !!Game && (!Game._modernPacing
+        || ([STATE.COMBAT, STATE.TUTORIAL_COMBAT, STATE.BREAKOUT].includes(Game.currentState)
+            && (typeof Game._canGuidedFeature !== 'function' || Game._canGuidedFeature('classAbility'))));
+}
+
+function show() { const el = $w(); if (el && abilityEnabled()) el.classList.remove('hidden'); }
 function hide() { const el = $w(); if (el) el.classList.add('hidden'); }
 
 function _defaultState(cls) {
@@ -137,6 +144,7 @@ export const ClassAbility = {
 
     startCombat() {
         if (!Game || !Game.player) return;
+        if (!abilityEnabled()) { this.endCombat(); return; }
         classId = Game.player.classId || null;
         state = _defaultState(classId);
         if (!state) { hide(); return; } // unknown class — no widget
@@ -160,6 +168,7 @@ export const ClassAbility = {
     },
 
     onTurnStart() {
+        if (!abilityEnabled()) { this.endCombat(); return; }
         // If state was lost mid-combat (hot-reload, stray endCombat on a UI
         // overlay), rebuild from the current player class so the widget is
         // back by the time the player acts this turn.
@@ -174,6 +183,8 @@ export const ClassAbility = {
     },
 
     onTurnEnd() {
+        if (!abilityEnabled()) { this.endCombat(); return; }
+        if (!state && Game?._modernPacing && Game.player && Game.enemy) this.startCombat();
         if (!state) return;
         // Annihilator: passive penalty if player lets the core hit 100%
         if (classId === 'annihilator' && state.heat >= 100) {
@@ -200,6 +211,8 @@ export const ClassAbility = {
     },
 
     onEvent(type, payload) {
+        if (!abilityEnabled()) { this.endCombat(); return; }
+        if (!state && Game?._modernPacing && Game.player && Game.enemy) this.startCombat();
         if (!state) return;
         if (classId === 'tactician' && type === 'dice_used') {
             // pipPerAttack trait (class rework): TAC_ATTACK builds pips faster
@@ -361,7 +374,7 @@ export const ClassAbility = {
 
     // Non-consuming variants for tooltip previews.
     peekPreDamageBonus(dieType) {
-        if (!state) return 0;
+        if (!abilityEnabled() || !state) return 0;
         let bonus = 0;
         if (classId === 'tactician' && state.pendingAttackBonus > 0 && dieType === 'ATTACK') {
             bonus += state.pendingAttackBonus;
@@ -369,7 +382,7 @@ export const ClassAbility = {
         return bonus;
     },
     peekDamageMultiplier(dieType) {
-        if (!state) return 1;
+        if (!abilityEnabled() || !state) return 1;
         let mult = 1;
         if (classId === 'annihilator' && state.pendingDmgMult > 1 && isDamageDie(dieType)) {
             mult *= state.pendingDmgMult;
@@ -387,7 +400,7 @@ export const ClassAbility = {
     // churn the previous push-of-fresh-objects pattern caused.
     peekBuffs() {
         _peekBuffsBuf.length = 0;
-        if (!state) return _peekBuffsBuf;
+        if (!abilityEnabled() || !state) return _peekBuffsBuf;
         if (classId === 'tactician' && state.pendingAttackBonus > 0) {
             _peekTactPrimed.val = state.pendingAttackBonus;
             _peekBuffsBuf.push(_peekTactPrimed);
@@ -400,7 +413,7 @@ export const ClassAbility = {
 
     // Called from useDie BEFORE damage is applied. Returns additive bonus.
     consumePreDamageBonus(dieType) {
-        if (!state) return 0;
+        if (!abilityEnabled() || !state) return 0;
         let bonus = 0;
         if (classId === 'tactician' && state.pendingAttackBonus > 0 && dieType === 'ATTACK') {
             bonus += state.pendingAttackBonus;
@@ -413,7 +426,7 @@ export const ClassAbility = {
 
     // Called from useDie BEFORE damage. Returns multiplier >= 1.
     consumeDamageMultiplier(dieType) {
-        if (!state) return 1;
+        if (!abilityEnabled() || !state) return 1;
         let mult = 1;
         if (classId === 'annihilator' && state.pendingDmgMult > 1 && isDamageDie(dieType)) {
             mult *= state.pendingDmgMult;
@@ -430,12 +443,12 @@ export const ClassAbility = {
     // Previous code reached for `ClassAbility._state.heat` which never
     // existed — `state` is module-private. These accessors expose just the
     // readable scalars without leaking the whole state object.
-    getHeat()       { return (classId === 'annihilator' && state) ? state.heat : 0; },
-    getPlates()     { return (classId === 'sentinel'    && state) ? state.plates : 0; },
-    isBloodReady()  { return (classId === 'bloodstalker' && state) ? !!state.ready : false; },
+    getHeat()       { return (abilityEnabled() && classId === 'annihilator' && state) ? state.heat : 0; },
+    getPlates()     { return (abilityEnabled() && classId === 'sentinel' && state) ? state.plates : 0; },
+    isBloodReady()  { return (abilityEnabled() && classId === 'bloodstalker' && state) ? !!state.ready : false; },
 
     consumeAttackBlock() {
-        if (!state) return false;
+        if (!abilityEnabled() || !state) return false;
         if (classId === 'sentinel' && state.blockReady) {
             state.blockReady = false;
             state.plates = 0;
@@ -458,7 +471,7 @@ export const ClassAbility = {
 
     // Fired when the widget area is tapped. The widget figures out what was clicked.
     _onClick(e) {
-        if (!state || !classId) return;
+        if (!abilityEnabled() || !state || !classId) return;
         const t = e.target.closest('[data-action]');
         if (!t) return;
         const action = t.dataset.action;
@@ -469,6 +482,7 @@ export const ClassAbility = {
     },
 
     _activate(action, el) {
+        if (!abilityEnabled() || !state) return;
         const p = Game && Game.player;
         if (!p) return;
         switch (classId) {
@@ -841,7 +855,7 @@ export const ClassAbility = {
         // _suppressBloomOnTap AFTER the new minion's constructor has fired
         // the minion_summoned event).
         return import('../entities/minion.js').then(mod => {
-            if (!Game.player) return;
+            if (!Game.player || !abilityEnabled()) return;
             // Honour maxMinions so the bloom-tap fallback path can't push a
             // 5th minion past the class cap (the MINION-die path already has
             // this guard; the fallback historically didn't).
@@ -1135,6 +1149,7 @@ export const ClassAbility = {
     },
 
     render() {
+        if (!abilityEnabled()) { this.endCombat(); return; }
         // Recover if combat is live but the widget was never mounted for this
         // class — e.g. a state-reset wiped `state` mid-combat, or the DOM was
         // rebuilt without re-running startCombat(). The widget is critical
