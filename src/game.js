@@ -16268,6 +16268,7 @@ async startTurn() {
                 { minionBoost: true, pattern: 'steady', waves: 1, volleyBoost: preview,
                     attackerX: darts[0].source.x, attackerY: darts[0].source.y }) : 1;
             if (!current() || player.currentHp <= 0 || enemy.currentHp <= 0) return;
+            if (darts.length && timingIntroduced) this._recordLearningAction?.('allyTiming');
             // Commit HP and charges together. Secondary hit effects collect
             // pure visuals, so no projectile can own a later HP change.
             const previousQueue = this._settledCombatVfx;

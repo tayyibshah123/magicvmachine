@@ -453,6 +453,7 @@ export const ClassAbility = {
             state.blockReady = false;
             state.plates = 0;
             state.shieldBuffer = 0;
+            Game._recordLearningAction?.('classAbility');
             ParticleSys.createFloatingText(Game.player.x, Game.player.y - 120, "PERFECT BLOCK", "#ffffff");
             // Aegis slam — wide white shockwave + sentinel burst so the
             // nullify lands as a moment, not a silent dodge.
@@ -483,6 +484,8 @@ export const ClassAbility = {
 
     _activate(action, el) {
         if (!abilityEnabled() || !state) return;
+        if (Game._modernPacing && (Game.inputLocked || Game.qte?.active || Game._endTurnRunning
+            || Game.paused || document.hidden || Game.player?.currentHp <= 0)) return;
         const p = Game && Game.player;
         if (!p) return;
         switch (classId) {
@@ -505,6 +508,7 @@ export const ClassAbility = {
                     ParticleSys.createFloatingText(p.x, p.y - 80, "ATTACK PRIMED", "#00f3ff");
                 } else return;
                 state.pips = 0;
+                Game._recordLearningAction?.('classAbility');
                 // Class rework: drawOnPipSpend — every 3-pip spend adds an
                 // extra die to next turn's hand. Capped at +3 so a player who
                 // cascades multiple pip-spends in a single turn can't inflate
@@ -530,6 +534,7 @@ export const ClassAbility = {
                 // would throw.
                 const glyph = state.activeGlyph;
                 state.usedThisTurn = true;
+                Game._recordLearningAction?.('classAbility');
                 if      (glyph === 0) this._fire();
                 else if (glyph === 1) this._ice();
                 else                  this._lightning();
@@ -561,6 +566,7 @@ export const ClassAbility = {
                 // and the trailing assignments would otherwise throw.
                 state.bar = 0;
                 state.ready = false;
+                Game._recordLearningAction?.('classAbility');
 
                 let bossKilled = false;
                 if (action === 'tribute-minor') {
@@ -645,6 +651,7 @@ export const ClassAbility = {
                     // endCombat would null `state`, so a trailing
                     // `state.heat = 0` would throw.
                     state.heat = 0;
+                    Game._recordLearningAction?.('classAbility');
                     const dmg = Game.calculateCardDamage(CFG.annihilator.redAoeDmg, 'EARTHQUAKE');
                     // Snapshot the minion list before damage — takeDamage may mutate it.
                     const targets = Game.enemy && Game.enemy.minions ? [...Game.enemy.minions] : [];
@@ -676,6 +683,7 @@ export const ClassAbility = {
                     ParticleSys.createShockwave(p.x, p.y, '#ff8800', 28);
                     AudioMgr.playSound('annihilator_vent');
                     state.heat = 0;
+                    Game._recordLearningAction?.('classAbility');
                 } else return;
                 break;
 
@@ -729,6 +737,7 @@ export const ClassAbility = {
                     // APEX consumes the entire canopy — every plot drains
                     // back to seed stage regardless of its current growth.
                     for (let i = 0; i < state.plots.length; i++) state.plots[i] = 0;
+                    Game._recordLearningAction?.('classAbility');
                     ParticleSys.createFloatingText(p.x, p.y - 100, `GROVE APEX. x2 EMPOWERS ${buffed} ALLIES`, color);
                     ParticleSys.createShockwave(p.x, p.y, color, 48);
                     ParticleSys.createSummonerBurst(p.x, p.y - 30);
@@ -767,7 +776,11 @@ export const ClassAbility = {
                 // auto-bloom handler picks the just-reset plot as the
                 // youngest, and re-blooms it — making the tap free.
                 if (typeof Game._spawnSpirit === 'function') {
-                    try { Game._spawnSpirit(); }
+                    try {
+                        const count = p.minions.length;
+                        Game._spawnSpirit();
+                        if (p.minions.length > count) Game._recordLearningAction?.('classAbility');
+                    }
                     finally { this._suppressBloomOnTap = false; this.render(); }
                 } else {
                     const clear = () => { this._suppressBloomOnTap = false; this.render(); };
@@ -868,6 +881,7 @@ export const ClassAbility = {
             // duplicate apply here was double-paying — every Spirit
             // spawned through this path got +6/+6 instead of +3/+3.
             Game.player.minions.push(m);
+            Game._recordLearningAction?.('classAbility');
             if (Game.triggerVFX) Game.triggerVFX('materialize', null, { x: Game.player.x, y: Game.player.y });
         });
     },

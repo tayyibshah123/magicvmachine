@@ -9,13 +9,20 @@ import { getBossRules } from '../ui/boss-rules.js';
 import { setupCombatFixture, teardownCombatFixture } from './helpers/combat-fixture.js';
 import { renderFor } from './helpers/combat-renderer.js';
 
+let originalLearningRecorder;
 beforeEach(() => {
+    originalLearningRecorder = Game._recordLearningAction;
+    Game._recordLearningAction = vi.fn();
     setupCombatFixture({ profiles: ['cosmetics', 'ui', 'class-events', 'renderer', 'terminal-observers'],
         game: { _modernPacing: true } });
     vi.spyOn(Game, 'drawQTE').mockImplementation(() => {});
     vi.spyOn(Game, '_qteWindupAudio').mockImplementation(() => {});
 });
-afterEach(teardownCombatFixture);
+afterEach(() => {
+    if (originalLearningRecorder) Game._recordLearningAction = originalLearningRecorder;
+    else delete Game._recordLearningAction;
+    teardownCombatFixture();
+});
 
 function allies(damages = [1, 2, 3, 10]) {
     Game.player.minions = damages.map((damage, index) => {
@@ -42,6 +49,8 @@ describe('guided shared friendly volley', () => {
             expect(Game.effects.filter(effect => effect.type === 'nature_dart')).toHaveLength(4);
             expect(Game.effects.filter(effect => effect.type === 'nature_dart').every(effect => effect.onHit === null)).toBe(true);
             expect(Game.inputLocked).toBe(true);
+            expect(Game._recordLearningAction).toHaveBeenCalledTimes(1);
+            expect(Game._recordLearningAction).toHaveBeenCalledWith('allyTiming');
             expect(ParticleSys.createFloatingText).toHaveBeenCalledWith(Game.enemy.x, Game.enemy.y - 50,
                 `ALLY POWER ${damage} (+${damage - 16})`, expect.any(String));
             await renderFor(2300);
@@ -223,10 +232,20 @@ describe('introduced class abilities', () => {
             ClassAbility._activate('heat-vent');
             expect(ClassAbility.getHeat()).toBe(0);
             expect(Game.player.currentHp).toBe(100);
+            expect(Game._recordLearningAction).not.toHaveBeenCalled();
             expect(document.getElementById('class-ability-widget').classList.contains('hidden')).toBe(true);
             introduced = true;
             ClassAbility.onEvent('dice_used', { type: 'ANH_ATTACK' });
             expect(ClassAbility.getHeat()).toBe(10);
+            for (let die = 0; die < 4; die++) ClassAbility.onEvent('dice_used', { type: 'ANH_ATTACK' });
+            Game.inputLocked = true;
+            ClassAbility._activate('heat-vent');
+            expect(ClassAbility.getHeat()).toBe(50);
+            expect(Game._recordLearningAction).not.toHaveBeenCalled();
+            Game.inputLocked = false;
+            ClassAbility._activate('heat-vent');
+            expect(Game._recordLearningAction).toHaveBeenCalledTimes(1);
+            expect(Game._recordLearningAction).toHaveBeenCalledWith('classAbility');
             introduced = false;
             ClassAbility.onTurnStart();
             expect(ClassAbility.getHeat()).toBe(0);
@@ -236,11 +255,13 @@ describe('introduced class abilities', () => {
             ClassAbility.onEvent('shield_gained', { amount: 18 });
             expect(ClassAbility.getPlates()).toBe(0);
             expect(ClassAbility.consumeAttackBlock()).toBe(false);
+            expect(Game._recordLearningAction).toHaveBeenCalledTimes(1);
             introduced = true;
             ClassAbility.onEvent('shield_gained', { amount: 18 });
             expect(ClassAbility.getPlates()).toBe(3);
             expect(ClassAbility.consumeAttackBlock()).toBe(true);
             expect(ClassAbility.consumeAttackBlock()).toBe(false);
+            expect(Game._recordLearningAction).toHaveBeenCalledTimes(2);
         } finally {
             ClassAbility.endCombat();
             if (original) Game._canGuidedFeature = original;
