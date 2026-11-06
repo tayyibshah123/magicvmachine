@@ -54,6 +54,7 @@
 
 import { STATE, DICE_TYPES, PLAYER_CLASSES, UPGRADES_POOL } from '../constants.js';
 import { Player } from '../entities/player.js';
+import { Minion } from '../entities/minion.js';
 import { ClassAbility } from '../ui/class-ability.js';
 import { CombatStats } from './combat-stats.js';
 import { CombatLog } from './combat-log.js';
@@ -901,6 +902,90 @@ function guidedRoomFor(index, classId, game) {
         sequence };
 }
 
+const PRACTICE_LESSONS = new Set(['resources', 'allies', 'status', 'hostile', 'multiwave', 'boss']);
+
+function practiceRoomFor(lesson, classId) {
+    const cd = classDice(classId);
+    const beat = (story, action, spot, wait) => ({ story, action, spot, wait });
+    const finish = beat('Repeat the lesson actions as needed. This drill cannot consume your run.',
+        'Defeat the practice enemy. Perfect timing is optional.', null, 'enemy_dies');
+    const base = {
+        id: 'practice-' + lesson,
+        enemy: { name: 'PRACTICE DRONE', hp: 64, dmg: 4, shape: 'drone', radius: 80 },
+        intents: [{ type: 'attack', val: 4, label: 'STRIKE 4' }],
+        diceFn: () => [cd.defend, cd.attack, cd.attack],
+        required: ['attack'],
+        storyboard: { tag: 'OPTIONAL PRACTICE', title: 'ONE SKILL AT A TIME',
+            body: 'A safe, reward-free drill. Your live run and banked currency return unchanged when you leave.', glyph: 'drone' }
+    };
+    if (lesson === 'resources') return { ...base, teaches: 'Generate Mana and spend it on a real paid skill.',
+        startMana: 0, required: ['mana', 'paid_skill'],
+        diceFn: () => [cd.mana, cd.mana, 'EARTHQUAKE', cd.defend, cd.attack],
+        storyboard: { ...base.storyboard, title: 'MANA AND PAID SKILLS',
+            body: 'Mana is a resource for paid skills. Your signature is free, so this drill uses Earthquake, which costs 2 Mana.' },
+        sequence: [
+            beat('This sandbox starts with 0 Mana. Your class Mana die generates more.',
+                'Use your MANA dice on yourself until you have at least 2 Mana.', 'die:mana', 'die_used:mana'),
+            beat('EARTHQUAKE costs 2 Mana and damages all enemies. The cost comes out when you use the skill.',
+                'Reach 2 Mana, then drag EARTHQUAKE onto the enemy. Watch your Mana fall by 2.', 'die:attack', 'paid_skill'),
+            finish
+        ] };
+    if (lesson === 'allies') return { ...base, teaches: 'Summon an ally and let it act after End Turn.',
+        required: ['minion', 'enemy_turn'], diceFn: () => [cd.minion, cd.defend, cd.attack],
+        storyboard: { ...base.storyboard, title: 'YOUR ALLY PHASE', glyph: 'hive' },
+        sequence: [
+            beat('Your class MINION die creates a friendly ally. It acts after you end the turn.',
+                'Drag MINION onto empty space to summon an ally.', 'die:minion', 'die_used:minion'),
+            beat('Allies act first. Their short attack prompt offers +10% for Good or +30% for Perfect, rounded up. Missing keeps base damage.',
+                'Press END TURN and try the short prompt. Then follow the enemy defensive prompt.', 'end_turn', 'enemy_turn'),
+            finish
+        ] };
+    if (lesson === 'status') return { ...base, teaches: 'Experience WEAK and continue the combat loop while it expires.',
+        required: ['status', 'enemy_turn', 'attack'],
+        intents: [{ type: 'frost_aoe', val: 2, label: 'WEAK WAVE', isAOE: true }, { type: 'attack', val: 4, label: 'STRIKE 4' }],
+        storyboard: { ...base.storyboard, title: 'READ A STATUS', glyph: 'glitch' },
+        sequence: [
+            beat('WEAK WAVE applies WEAK even if you block its damage. WEAK halves your outgoing damage while active.',
+                'Press END TURN, then follow the defensive timing prompt.', 'enemy_intent', 'enemy_turn'),
+            beat('Look for WEAK above your HP bar. Long-press its icon for details. Its turn counter shows when it expires.',
+                'Try ATTACK while WEAK is active, then continue the turn loop.', 'die:attack', 'die_used:attack'),
+            finish
+        ] };
+    if (lesson === 'hostile') return { ...base, teaches: 'Target a hostile minion before the main enemy.',
+        hostile: true, required: ['hostile_removed', 'attack'],
+        storyboard: { ...base.storyboard, title: 'CHOOSE YOUR TARGET', glyph: 'hive' },
+        sequence: [
+            beat('The small hostile drone is a separate attack target. If alive, it adds its own strike to the enemy phase.',
+                'Drag ATTACK onto the small hostile drone first. Its HP bar must reach zero.', 'enemy', 'hostile_removed'),
+            beat('When a hostile minion attacks, its short defensive prompt can prevent the hit with Perfect or reduce it with Good.',
+                'Finish the main enemy. You can use DEFEND and END TURN as needed.', null, 'enemy_dies')
+        ] };
+    if (lesson === 'multiwave') return { ...base, teaches: 'Follow a three-hit enemy barrage and your real class attack rhythm.',
+        required: ['enemy_turn', 'attack'],
+        intents: [{ type: 'multi_attack', val: 2, hits: 3, label: 'BARRAGE 2 x 3' }],
+        storyboard: { ...base.storyboard, title: 'FOLLOW THE WHOLE CHAIN',
+            body: 'This enemy commits three hits. Follow every defensive prompt. Your attacks also use your real class timing rhythm.' },
+        sequence: [
+            beat('BARRAGE 2 x 3 means three hits of 2 damage. One tap does not finish every defensive prompt.',
+                'Use DEFEND if you want, then END TURN. Stay with the full barrage.', 'enemy_intent', 'enemy_turn'),
+            beat('Your class attack may also have a changing rhythm or more than one wave. Follow each ring rather than a fixed delay.',
+                'Use ATTACK and finish the drill. No Perfect result is required.', 'die:attack', 'enemy_dies')
+        ] };
+    if (lesson === 'boss') return { ...base, teaches: 'Read and prepare for two boss intents in one enemy phase.',
+        enemy: { ...base.enemy, name: 'CAGE GUARDIAN', hp: 88, dmg: 6, isBoss: true, shape: 'tank', radius: 120 },
+        required: ['attack', 'defend', 'enemy_turn'],
+        intents: [{ type: 'attack', val: 6, label: 'STRIKE 6' }, { type: 'shield', val: 8, label: 'GUARD 8' }],
+        storyboard: { ...base.storyboard, title: 'READ BOTH BOSS INTENTS', glyph: 'seal' },
+        sequence: [
+            beat('This practice boss has two actions per enemy phase: STRIKE 6, then GUARD 8. Read both intents before committing.',
+                'Use your DEFEND die on yourself, then ATTACK.', 'enemy_intent', 'die_used:defend'),
+            beat('Your class defensive effect is ready. The boss acts only after you end the turn.',
+                'Press END TURN. Follow the defensive prompt and watch the boss gain shield.', 'end_turn', 'enemy_turn'),
+            finish
+        ] };
+    return null;
+}
+
 function clonePracticeValue(value, game, seen = new WeakMap()) {
     if (!value || typeof value !== 'object' || value === game) return value;
     if (seen.has(value)) return seen.get(value);
@@ -988,19 +1073,25 @@ export const Breakout = {
     /* Entry point. Called from selectClass after the player object is
      * built. Sets state + opens room 0. */
     start(game, options = {}) {
-        const practice = Number.isInteger(options.practiceRoom) && options.practiceRoom >= 0 && options.practiceRoom < ROOMS.length;
-        if (options.practiceRoom != null && !practice) throw new RangeError('Unknown practice room');
+        const legacyPractice = Number.isInteger(options.practiceRoom) && options.practiceRoom >= 0 && options.practiceRoom < ROOMS.length;
+        const lessonPractice = PRACTICE_LESSONS.has(options.practiceLesson);
+        if (options.practiceRoom != null && !legacyPractice) throw new RangeError('Unknown practice room');
+        if (options.practiceLesson != null && !lessonPractice) throw new RangeError('Unknown practice lesson');
+        const practice = legacyPractice || lessonPractice;
         if (game._practiceSession || practice && (game._combatActionDepth > 0 || game.qte && game.qte.active || game._endTurnRunning)) return false;
         if (this._active) this.cancel({ returnToMenu: false });
         this._game = game;
         this._guided = !!options.guided && !practice;
         this._practice = practice;
+        this._practiceLesson = lessonPractice ? options.practiceLesson : null;
+        this._practiceActions = new Set();
+        this._onPracticeComplete = practice && typeof options.onComplete === 'function' ? options.onComplete : null;
         this._sessionId = (this._sessionId || 0) + 1;
         const progress = this._guided ? options.progress : null;
         this._coreActions = new Set((Array.isArray(progress?.actions) ? progress.actions : [])
             .filter(action => ['attack', 'defend', 'enemy_turn', 'minion'].includes(action)));
         this._advancing = false;
-        this._roomIdx = practice ? options.practiceRoom : this._guided && progress?.roomIndex === 1 ? 1 : 0;
+        this._roomIdx = legacyPractice ? options.practiceRoom : this._guided && progress?.roomIndex === 1 ? 1 : 0;
         this._wardenStep = 0;
         if (practice) this._beginPractice(game, options.classId);
         this._active = true;
@@ -1084,8 +1175,9 @@ export const Breakout = {
 
     _roomForCurrent() {
         const game = this._game;
-        if (game) game._guidedRhythmPractice = !!(this._guided && this._roomIdx === 1);
-        return this._guided ? guidedRoomFor(this._roomIdx, game?.player?.classId, game)
+        if (game) game._guidedRhythmPractice = !!(this._practiceLesson || this._guided && this._roomIdx === 1);
+        return this._practiceLesson ? practiceRoomFor(this._practiceLesson, game?.player?.classId)
+            : this._guided ? guidedRoomFor(this._roomIdx, game?.player?.classId, game)
             : roomFor(this._roomIdx, game?.player?.classId);
     },
 
@@ -1131,6 +1223,8 @@ export const Breakout = {
         this._restorePractice = null;
         restore?.();
         this._practice = false;
+        this._practiceLesson = null;
+        this._onPracticeComplete = null;
         this._guided = false;
         if (returnToMenu) game?.changeState(STATE.MENU);
         return true;
@@ -1232,6 +1326,23 @@ export const Breakout = {
         game._inBreakout = true;
         if (typeof game._buildBreakoutCombat === 'function') {
             game._buildBreakoutCombat(room);
+        }
+        if (this._practiceLesson) {
+            game._manaSpentThisCombat = 0;
+            this._practiceManaSpent = 0;
+            if (typeof room.startMana === 'number' && game.player) game.player.mana = room.startMana;
+            this._practiceHostile = null;
+            if (room.hostile && game.enemy) {
+                const hostile = new Minion(game.enemy.x - 140, game.enemy.y + 140, 1, false);
+                hostile.name = 'PRACTICE DRONE';
+                hostile.maxHp = hostile.currentHp = 6;
+                hostile.dmg = 3;
+                game.enemy.minions.push(hostile);
+                this._practiceHostile = hostile;
+                game.updateMinionPositions?.();
+            }
+            game.updateHUD?.();
+            game.renderDiceUI?.();
         }
         if (room.startWound && game.player) game.player.currentHp = Math.max(1, game.player.maxHp - room.startWound);
         if (this._guided) game._onGuidedCoreProgress?.(this.getProgress());
@@ -1348,6 +1459,22 @@ export const Breakout = {
             if (event === 'die_used' && data?.slot) this._coreActions.add(data.slot);
             if (event === 'enemy_turn') this._coreActions.add('enemy_turn');
         }
+        let paidSkill = false;
+        let hostileRemoved = false;
+        if (this._practiceLesson) {
+            const game = this._game;
+            if (event === 'die_used' && data?.slot) this._practiceActions.add(data.slot);
+            if (event === 'enemy_turn') {
+                this._practiceActions.add('enemy_turn');
+                if (game?.player?.effects?.some(effect => effect.id === 'weak' && effect.duration > 0)) this._practiceActions.add('status');
+            }
+            const spent = Number(game?._manaSpentThisCombat) || 0;
+            paidSkill = event === 'die_used' && spent > this._practiceManaSpent;
+            if (paidSkill) this._practiceActions.add('paid_skill');
+            this._practiceManaSpent = spent;
+            hostileRemoved = !!(this._practiceHostile && this._practiceHostile.currentHp <= 0);
+            if (hostileRemoved) this._practiceActions.add('hostile_removed');
+        }
         if (event === 'enemy_turn') this._lastDefenceOutcome = data && data.defenceOutcome || 'none';
         const seq = this._room.sequence;
         if (!Array.isArray(seq)) return;
@@ -1357,6 +1484,8 @@ export const Breakout = {
             if (b.wait === event) return true;
             if (event === 'die_used' && data && data.slot && b.wait === ('die_used:' + data.slot)) return true;
             if (event === 'die_used' && data && data.signature && b.wait === 'die_used:signature') return true;
+            if (paidSkill && b.wait === 'paid_skill') return true;
+            if (hostileRemoved && b.wait === 'hostile_removed') return true;
             return false;
         };
         const beat = seq[this._beatIdx];
@@ -1394,6 +1523,14 @@ export const Breakout = {
                 else jump();
                 return;
             }
+        }
+        if (this._practiceLesson === 'hostile' && event === 'die_used' && beat?.wait === 'hostile_removed') {
+            this._afterAction(() => {
+                if (this._practiceHostile?.currentHp <= 0) {
+                    this._practiceActions.add('hostile_removed');
+                    this._advanceBeat();
+                }
+            });
         }
     },
 
@@ -1670,7 +1807,24 @@ export const Breakout = {
         if (this._advancing) return;
         this._advancing = true;
         const game = this._game;
-        if (this._practice) { this.cancel(); return; }
+        if (this._practice) {
+            if (this._practiceLesson) {
+                if (this._practiceHostile?.currentHp <= 0) this._practiceActions.add('hostile_removed');
+                const required = this._room?.required || [];
+                if (!required.every(action => this._practiceActions.has(action))) {
+                    this._advancing = false;
+                    game?.showHintToast?.('Try the lesson action before finishing. The drill stays safe and rewards nothing.');
+                    this._enterRoom();
+                    return;
+                }
+            }
+            const complete = this._onPracticeComplete;
+            const lesson = this._practiceLesson;
+            const classId = game?.player?.classId;
+            this.cancel();
+            complete?.({ lesson, classId });
+            return;
+        }
         const room = this._roomForCurrent();
         if (this._guided && this._roomIdx === 1) {
             const required = ['attack', 'defend', 'enemy_turn'];
