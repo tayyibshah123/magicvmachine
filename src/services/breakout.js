@@ -53,6 +53,13 @@
  */
 
 import { STATE, DICE_TYPES, PLAYER_CLASSES, UPGRADES_POOL } from '../constants.js';
+import { Player } from '../entities/player.js';
+import { ClassAbility } from '../ui/class-ability.js';
+import { CombatStats } from './combat-stats.js';
+import { CombatLog } from './combat-log.js';
+import { Hints } from './hints.js';
+import { Unlocks } from './unlocks.js';
+import { showObjective, hideObjective } from '../ui/learning-ui.js';
 
 // ────────────────────────────────────────────────────────────────────
 // STORYBOARD GLYPHS
@@ -851,6 +858,89 @@ function roomFor(roomIdx, classId) {
     return r;
 }
 
+function guidedRoomFor(index, classId, game) {
+    if (index > 1) return null;
+    const cd = classDice(classId);
+    const hp = { tactician: 12, sentinel: 10, arcanist: 20, bloodstalker: 16, annihilator: 26, summoner: 20 }[classId] || 12;
+    if (index === 0) {
+        const base = roomFor(0, classId);
+        const sequence = base.sequence.map(beat => ({ ...beat }));
+        if (classId === 'summoner') {
+            sequence.splice(2, 0, { story: 'Your Spirit is part of this class from the start. It attacks after you end the turn.',
+                action: 'Drag MINION onto empty space to summon one Spirit. Its short timing prompt boosts its strike; missing keeps base damage.',
+                spot: 'die:minion', wait: 'die_used:minion' });
+        }
+        return { ...base, id: 'guided-core', enemy: { ...base.enemy, hp, dmg: 4 },
+            startWound: classId === 'bloodstalker' ? 3 : 0,
+            teaches: 'Read intent, attack, use your defensive die, then end turn.',
+            diceFn: () => classId === 'summoner' ? [cd.minion, cd.attack, cd.defend] : [cd.attack, cd.defend],
+            storyboard: { ...base.storyboard, tag: 'CORE DRILL 1 OF 2',
+                body: 'This is safe practice. Read the enemy intent, try your attack and defensive die, then end the turn. Perfect timing is optional.' },
+            sequence };
+    }
+    const pattern = game && game._qtePatternFor ? game._qtePatternFor('ATTACK') : { pattern: 'steady', waves: 1 };
+    const rhythm = pattern.pattern === 'multi' ? 'Your attack has ' + pattern.waves + ' timing waves. Tap once in each inner timing band.'
+        : pattern.pattern === 'accelerate' ? 'Your attack ring speeds up as it closes. Watch the inner band and tap when it reaches it.'
+        : pattern.pattern === 'pulse' ? 'Your attack ring changes speed. Follow it into the inner band rather than tapping at a fixed delay.'
+        : 'Your attack ring closes steadily. Tap anywhere as it reaches the inner timing band.';
+    const sequence = [{ story: rhythm, action: 'Try your real class rhythm. A miss still lets you continue.', spot: 'enemy', wait: 'tap' }];
+    if (classId === 'summoner') sequence.push({ story: 'Bring back one Spirit before you attack.', action: 'Drag MINION onto empty space.', spot: 'die:minion', wait: 'die_used:minion' });
+    sequence.push(
+        { story: classId === 'bloodstalker' ? 'Your defensive die heals the safe practice wound.'
+            : classId === 'annihilator' ? 'Ricochet reduces the upcoming hit.' : 'Prepare shield for the upcoming strike.',
+            action: 'Use your DEFEND die on yourself.', spot: 'die:defend', wait: 'die_used:defend' },
+        { story: 'Use your attack and follow its timing rhythm.', action: 'Drag ATTACK onto the drone.', spot: 'die:attack', wait: 'die_used:attack' },
+        { story: 'Your dice have acted. Let the enemy take its turn.', action: 'Press END TURN, then watch the defensive timing ring.', spot: 'end_turn', wait: 'enemy_turn' },
+        { story: 'Finish the drill. You can read the same intent and repeat the actions.', defenceFeedback: true,
+            action: 'Use your next hand to defeat the drone. Perfect timing is not required.', spot: null, wait: 'enemy_dies' });
+    return { id: 'guided-rhythm', teaches: 'Practise the same loop with your class timing.', enemy: { name: 'EXIT DRONE', hp, dmg: 4, shape: 'drone', radius: 70 },
+        startWound: classId === 'bloodstalker' ? 3 : 0,
+        intents: [{ type: 'attack', val: 4, label: 'STRIKE 4' }],
+        diceFn: () => classId === 'summoner' ? [cd.minion, cd.defend, cd.attack] : [cd.defend, cd.attack],
+        storyboard: { tag: 'CORE DRILL 2 OF 2', title: 'YOUR CLASS RHYTHM', body: rhythm + ' Use your defensive die and End Turn once more. More systems arrive later, when you need them.', glyph: 'drone' },
+        sequence };
+}
+
+function clonePracticeValue(value, game, seen = new WeakMap()) {
+    if (!value || typeof value !== 'object' || value === game) return value;
+    if (seen.has(value)) return seen.get(value);
+    if (value instanceof Set) {
+        const copy = new Set(); seen.set(value, copy);
+        for (const item of value) copy.add(clonePracticeValue(item, game, seen));
+        return copy;
+    }
+    if (value instanceof Map) {
+        const copy = new Map(); seen.set(value, copy);
+        for (const [key, item] of value) copy.set(key, clonePracticeValue(item, game, seen));
+        return copy;
+    }
+    if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype) return value;
+    const copy = Array.isArray(value) ? [] : {};
+    seen.set(value, copy);
+    for (const [key, item] of Object.entries(value)) copy[key] = clonePracticeValue(item, game, seen);
+    return copy;
+}
+
+const PRACTICE_TRANSIENT = new Set(['currentState', '_combatGen', '_timers', '_loops', '_intervals', '_combatPresentations',
+    '_activeCombatPresentation', '_presentationEffectOwners', '_settledCombatVfx', '_turnStartOwner', 'qte', 'dragState',
+    '_endTurnRunning', '_winCombatRunning', '_combatActionDepth', '_revivePending', '_menuPulseRaf', 'inputLocked', 'inputCooldown', 'effects']);
+
+function snapshotPracticeObject(object, game, omit = new Set()) {
+    const values = {};
+    const keys = new Set(Object.keys(object));
+    const descriptors = Object.getOwnPropertyDescriptors(object);
+    for (const key of keys) {
+        const descriptor = descriptors[key];
+        if ('value' in descriptor && descriptor.writable && typeof descriptor.value !== 'function' && !omit.has(key)) {
+            values[key] = clonePracticeValue(descriptor.value, game);
+        }
+    }
+    return () => {
+        for (const key of Object.keys(object)) if (!keys.has(key) && typeof object[key] !== 'function' && !omit.has(key)) delete object[key];
+        Object.assign(object, values);
+    };
+}
+
 function isUnlockedDieType(type) {
     // Signature/special die types referenced in scripts may not be in
     // DICE_TYPES on every loadout (e.g. STALK belongs to bloodstalker).
@@ -876,7 +966,7 @@ export const Breakout = {
 
     isActive() { return !!this._active; },
     currentRoomIdx() { return this._roomIdx; },
-    totalRooms() { return ROOMS.length; },
+    totalRooms() { return this._practice ? 1 : this._guided ? 2 : ROOMS.length; },
 
     /* Determine if a fresh player should play the breakout. Veterans who
      * have already cleared it once get a one-tap skip path; first-time
@@ -897,15 +987,28 @@ export const Breakout = {
 
     /* Entry point. Called from selectClass after the player object is
      * built. Sets state + opens room 0. */
-    start(game) {
+    start(game, options = {}) {
+        const practice = Number.isInteger(options.practiceRoom) && options.practiceRoom >= 0 && options.practiceRoom < ROOMS.length;
+        if (options.practiceRoom != null && !practice) throw new RangeError('Unknown practice room');
+        if (game._practiceSession || practice && (game._combatActionDepth > 0 || game.qte && game.qte.active || game._endTurnRunning)) return false;
+        if (this._active) this.cancel({ returnToMenu: false });
         this._game = game;
-        this._roomIdx = 0;
+        this._guided = !!options.guided && !practice;
+        this._practice = practice;
+        this._sessionId = (this._sessionId || 0) + 1;
+        const progress = this._guided ? options.progress : null;
+        this._coreActions = new Set((Array.isArray(progress?.actions) ? progress.actions : [])
+            .filter(action => ['attack', 'defend', 'enemy_turn', 'minion'].includes(action)));
+        this._advancing = false;
+        this._roomIdx = practice ? options.practiceRoom : this._guided && progress?.roomIndex === 1 ? 1 : 0;
         this._wardenStep = 0;
+        if (practice) this._beginPractice(game, options.classId);
         this._active = true;
         // Body class drives Breakout-only CSS — narration pane becomes
         // pointer-events: none so drag drops pass through to the
         // canvas, and warden subtext styling activates.
         try { document.body.classList.add('breakout-active'); } catch (_) {}
+        document.body.classList.toggle('guided-core', this._guided);
         try {
             game.changeState(STATE.BREAKOUT);
         } catch (_) {}
@@ -935,6 +1038,102 @@ export const Breakout = {
             document.addEventListener('pointerdown', this._tapHandler, true);
         }
         this._enterRoom();
+        return true;
+    },
+
+    _beginPractice(game, requestedClass) {
+        const restoreGame = snapshotPracticeObject(game, game, PRACTICE_TRANSIENT);
+        const restoreStats = CombatStats.capturePracticeState();
+        const restoreLog = snapshotPracticeObject(CombatLog, game);
+        const priorSignature = DICE_TYPES.SIGNATURE;
+        const endScope = typeof window !== 'undefined' && window.__MVM_PROFILE_SCOPE__?.beginPractice?.();
+        this._restorePractice = () => {
+            game.clearTrackedTimers?.();
+            Hints.suspend();
+            Unlocks.suspendAnnouncements();
+            restoreGame();
+            restoreStats();
+            restoreLog();
+            if (priorSignature) DICE_TYPES.SIGNATURE = priorSignature;
+            else delete DICE_TYPES.SIGNATURE;
+            game.inputLocked = false;
+            game.inputCooldown = 0;
+            game._combatActionDepth = 0;
+            game._endTurnRunning = false;
+            game._winCombatRunning = false;
+            game._practiceSession = false;
+            if (typeof endScope === 'function') endScope();
+            Hints.init();
+            Unlocks.init();
+        };
+        const classId = requestedClass || game.player?.classId || 'tactician';
+        const config = PLAYER_CLASSES.find(cls => cls.id === classId) || PLAYER_CLASSES[0];
+        game._practiceSession = true;
+        Hints.suspend();
+        Unlocks.suspendAnnouncements();
+        Object.assign(game, { metaUpgrades: [], metaToggledOff: new Set(), _disabledMetaThisRun: new Set(),
+            activePacts: new Set(), customRunModifiers: new Set(), _ascEffects: {},
+            challengeMode: false, archiveMode: false, _activeSectorMech: null,
+            runStats: null, turnStats: null, techFragments: 0 });
+        game.player = new Player(config);
+        game.player.classId = config.id;
+        game._syncSignatureDie?.();
+        game._applyCustomRunModifiers?.({ restore: true });
+        CombatStats.startCombat();
+    },
+
+    _roomForCurrent() {
+        const game = this._game;
+        if (game) game._guidedRhythmPractice = !!(this._guided && this._roomIdx === 1);
+        return this._guided ? guidedRoomFor(this._roomIdx, game?.player?.classId, game)
+            : roomFor(this._roomIdx, game?.player?.classId);
+    },
+
+    getProgress() {
+        return { roomIndex: this._roomIdx, actions: [...(this._coreActions || [])] };
+    },
+
+    _cleanUp() {
+        this._active = false;
+        this._advancing = false;
+        this._storyToken = (this._storyToken || 0) + 1;
+        const game = this._game;
+        document.body.classList.remove('breakout-active', 'guided-core');
+        if (this._tapHandler) document.removeEventListener('pointerdown', this._tapHandler, true);
+        this._tapHandler = null;
+        this._tapAdvanceArmed = false;
+        this._setSpotlight(null);
+        document.getElementById('tutorial-narration')?.classList.add('hidden');
+        const slate = document.getElementById('breakout-storyboard');
+        if (slate) { slate.classList.remove('show'); slate.style.display = 'none'; }
+        if (this._storyHost && this._storyHandler) this._storyHost.removeEventListener('click', this._storyHandler);
+        this._storyHost = null;
+        this._storyHandler = null;
+        if (game) {
+            game._guidedRhythmPractice = false;
+            game._inBreakout = false;
+            game._breakoutForcedDice = null;
+            game._breakoutScript = null;
+        }
+        hideObjective();
+    },
+
+    cancel({ returnToMenu = true } = {}) {
+        if (!this._active && !this._restorePractice) return false;
+        const game = this._game;
+        this._sessionId = (this._sessionId || 0) + 1;
+        if (game) {
+            game._combatGen = (game._combatGen || 0) + 1;
+            game._cancelQTE?.();
+        }
+        this._cleanUp();
+        const restore = this._restorePractice;
+        this._restorePractice = null;
+        restore?.();
+        this._practice = false;
+        this._guided = false;
+        if (returnToMenu) game?.changeState(STATE.MENU);
+        return true;
     },
 
     /* One-tap skip: completes the flow and grants the relic without
@@ -942,6 +1141,7 @@ export const Breakout = {
     skip() {
         const game = this._game;
         if (!game) return;
+        if (this._practice || this._guided) { this.cancel(); return; }
         this._active = false;
         this._grantCellkey(game);
         this.markComplete();
@@ -969,7 +1169,7 @@ export const Breakout = {
         const game = this._game;
         if (!game) return;
         const idx = this._roomIdx;
-        const room = roomFor(idx, game.player && game.player.classId);
+        const room = this._roomForCurrent();
         if (!room) {
             // Past the last room — finish.
             this._finish();
@@ -1032,6 +1232,13 @@ export const Breakout = {
         game._inBreakout = true;
         if (typeof game._buildBreakoutCombat === 'function') {
             game._buildBreakoutCombat(room);
+        }
+        if (room.startWound && game.player) game.player.currentHp = Math.max(1, game.player.maxHp - room.startWound);
+        if (this._guided) game._onGuidedCoreProgress?.(this.getProgress());
+        if (this._practice || this._guided) {
+            showObjective({ title: this._practice ? 'PRACTICE ONLY' : 'CORE ' + (this._roomIdx + 1) + ' OF 2',
+                text: this._practice ? 'No rewards or checkpoint changes.' : 'Attack, defend, then End Turn.',
+                onHelp: this._practice ? () => this.cancel() : undefined, helpLabel: 'EXIT' });
         }
 
         // Run the first beat AFTER the combat is built so spotlights
@@ -1137,6 +1344,10 @@ export const Breakout = {
      * complete, so they advance immediately. */
     notify(event, data) {
         if (!this._active || !this._room) return;
+        if (this._guided) {
+            if (event === 'die_used' && data?.slot) this._coreActions.add(data.slot);
+            if (event === 'enemy_turn') this._coreActions.add('enemy_turn');
+        }
         if (event === 'enemy_turn') this._lastDefenceOutcome = data && data.defenceOutcome || 'none';
         const seq = this._room.sequence;
         if (!Array.isArray(seq)) return;
@@ -1380,6 +1591,7 @@ export const Breakout = {
     /* Show the full-screen storyboard slate. Fades in, listens for one
      * tap, fades out, then runs the supplied callback. */
     _showStoryboard(sb, onContinue) {
+        const token = this._storyToken = (this._storyToken || 0) + 1;
         const host = document.getElementById('breakout-storyboard');
         const tag = document.getElementById('breakout-storyboard-tag');
         const title = document.getElementById('breakout-storyboard-title');
@@ -1407,7 +1619,9 @@ export const Breakout = {
         host.classList.add('show');
 
         const advance = () => {
+            if (this._storyToken !== token) return;
             host.removeEventListener('click', advance);
+            if (this._storyHandler === advance) this._storyHandler = null;
             // Build the next scene UNDER the still-opaque slate first.
             // The previous order (fade out → then onContinue) revealed
             // an empty combat canvas during the 380ms fade because the
@@ -1417,8 +1631,10 @@ export const Breakout = {
             if (typeof onContinue === 'function') onContinue();
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
+                    if (this._storyToken !== token) return;
                     host.classList.remove('show');
                     setTimeout(() => {
+                        if (this._storyToken !== token) return;
                         host.style.display = 'none';
                     }, 380);
                 });
@@ -1426,7 +1642,11 @@ export const Breakout = {
         };
         // Small delay so the same tap that closed the previous screen
         // can't immediately advance the slate.
+        if (this._storyHost && this._storyHandler) this._storyHost.removeEventListener('click', this._storyHandler);
+        this._storyHost = host;
+        this._storyHandler = advance;
         setTimeout(() => {
+            if (this._storyToken !== token) return;
             host.addEventListener('click', advance, { once: true });
         }, 350);
     },
@@ -1450,7 +1670,21 @@ export const Breakout = {
         if (this._advancing) return;
         this._advancing = true;
         const game = this._game;
-        const room = roomFor(this._roomIdx, game && game.player && game.player.classId);
+        if (this._practice) { this.cancel(); return; }
+        const room = this._roomForCurrent();
+        if (this._guided && this._roomIdx === 1) {
+            const required = ['attack', 'defend', 'enemy_turn'];
+            if (game?.player?.classId === 'summoner') required.push('minion');
+            if (required.every(action => this._coreActions.has(action))) {
+                this._advancing = false;
+                this._finish();
+                return;
+            }
+            this._advancing = false;
+            game?.showHintToast?.('Try an ATTACK, your DEFEND die and END TURN. The drill stays safe.');
+            this._enterRoom();
+            return;
+        }
         // Last room = guardian → grant relic + finish.
         if (room && room.id === 'guardian') {
             this._advancing = false;
@@ -1458,13 +1692,14 @@ export const Breakout = {
             return;
         }
         this._roomIdx++;
+        const session = this._sessionId;
         // Brief delay so the kill VFX lands before the next spawn.
         setTimeout(() => {
-            this._advancing = false;
             // Defensive: a state change during the timeout (e.g.
             // selectClass re-entry, manual skip) could deactivate the
             // flow. Don't spawn a room into a dead controller.
-            if (!this._active) return;
+            if (!this._active || this._sessionId !== session) return;
+            this._advancing = false;
             this._enterRoom();
         }, 600);
     },
@@ -1486,11 +1721,12 @@ export const Breakout = {
         if (action) action.textContent = 'Resetting room...';
         if (sub) sub.textContent = 'CONTAINMENT FAILSAFE · RESPAWN AUTHORIZED';
         if (pane) pane.classList.remove('hidden');
+        const session = this._sessionId;
         setTimeout(() => {
             // Defensive: if the controller was deactivated during the
             // delay (e.g. user skipped, app backgrounded + lifecycle
             // restarted), don't spawn a room into stale state.
-            if (!this._active) return;
+            if (!this._active || this._sessionId !== session) return;
             this._enterRoom();
         }, 900);
     },
@@ -1501,6 +1737,16 @@ export const Breakout = {
     _finish() {
         const game = this._game;
         if (!game) return;
+        if (this._practice) { this.cancel(); return; }
+        if (this._guided) {
+            this._cleanUp();
+            this._guided = false;
+            this._practice = false;
+            game.sector = 1;
+            if (game._onGuidedCoreComplete) game._onGuidedCoreComplete();
+            else game.changeState(STATE.MAP);
+            return;
+        }
         this._active = false;
         this._grantCellkey(game);
         this.markComplete();
