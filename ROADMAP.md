@@ -8,8 +8,8 @@ in `docs/archive/`.
 ## Status
 
 - **Implementation complete:** Stable v1.9.57 and Guided v1.10.1.
-- **Release status:** both final source gates passed. The corrected Guided
-  v1.10.1 pair and updated public deployment are being verified.
+- **Release status:** both final versions are published and verified on
+  6 November 2026. Stable v1.9.57 and Guided v1.10.1 are independently playable.
 - **Earlier Stable reference:** v1.9.56 remains frozen at `d51d8b1` with
   552 normal checks, 552 shuffled checks, 15 browser cases and 150 layout
   checks passed. The v1.9.57 gate includes the additional consent fix.
@@ -89,7 +89,23 @@ Guided implementation now provides:
 ### Validation and remaining limits
 
 Both final source gates passed with frozen runtime, test and bundle inputs.
-The corrected pair and updated public verification are pending.
+Together they passed 1,319 checks in normal order and 1,319 in shuffled
+order, with no skipped checks. All 45 source mobile browser cases and
+150 layout scenarios per edition passed. The corrected publication then
+passed all seven combined-edition cases covering reset, abandon, import,
+update and cold offline isolation in the same browser profile.
+Combined report: `test-results/dual-1794005138191/summary.json`.
+
+Published commit `bd52dab` passed the GitHub Pages deployment. All 286
+deployed game files matched the package hashes; two interrupted transport
+requests matched on their first follow-up. Fresh native touch launches
+confirmed Stable v1.9.57 and Guided v1.10.1, their own worker scopes, separate
+storage and one navigation on each first installation. Onboarding was not
+refreshed or skipped, both entered the actual core, and no page errors were
+observed. The corrected public Guided cards were visually checked.
+Evidence: `test-results/publication-verification.json` and
+`test-results/public-smoke/summary.json` in the Guided checkout.
+Release refs: `stable-v1.9.57` and `guided-v1.10.1`; earlier frozen refs remain intact.
 
 Live visual QA of Guided v1.10.0 found that its recommended cards' previews
 still used the global absolute canvas positioning after the cards switched
