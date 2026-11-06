@@ -862,13 +862,17 @@ function roomFor(roomIdx, classId) {
 function guidedRoomFor(index, classId, game) {
     if (index > 1) return null;
     const cd = classDice(classId);
-    const hp = { tactician: 12, sentinel: 10, arcanist: 20, bloodstalker: 16, annihilator: 26, summoner: 20 }[classId] || 12;
+    // Leave room for a class-boosted Perfect opening and the first ally
+    // volley before the required enemy phase. Killing the second drone
+    // before that phase restarts the drill, so low per-class HP could
+    // punish the exact successful timing this sequence asks the player to try.
+    const hp = 64;
     if (index === 0) {
         const base = roomFor(0, classId);
         const sequence = base.sequence.map(beat => ({ ...beat }));
         if (classId === 'summoner') {
-            sequence.splice(2, 0, { story: 'Your Spirit is part of this class from the start. It attacks after you end the turn.',
-                action: 'Drag MINION onto empty space to summon one Spirit. Its short timing prompt boosts its strike; missing keeps base damage.',
+            sequence.splice(2, 0, { story: 'Your Spirit is part of this class from the start. It attacks automatically after you end the turn.',
+                action: 'Drag MINION onto empty space to summon one Spirit. Timing boosts are introduced in a later lesson.',
                 spot: 'die:minion', wait: 'die_used:minion' });
         }
         return { ...base, id: 'guided-core', enemy: { ...base.enemy, hp, dmg: 4 },
@@ -936,8 +940,8 @@ function practiceRoomFor(lesson, classId) {
         sequence: [
             beat('Your class MINION die creates a friendly ally. It acts after you end the turn.',
                 'Drag MINION onto empty space to summon an ally.', 'die:minion', 'die_used:minion'),
-            beat('Allies act first. Their short attack prompt offers +10% for Good or +30% for Perfect, rounded up. Missing keeps base damage.',
-                'Press END TURN and try the short prompt. Then follow the enemy defensive prompt.', 'end_turn', 'enemy_turn'),
+            beat('Allies act first. Their attack prompt offers +10% for Good or +30% for Perfect, rounded up. Missing keeps base damage.',
+                'Press END TURN and try the ally timing prompt. Then follow the enemy defensive prompt.', 'end_turn', 'enemy_turn'),
             finish
         ] };
     if (lesson === 'status') return { ...base, teaches: 'Experience WEAK and continue the combat loop while it expires.',
