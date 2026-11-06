@@ -4,6 +4,7 @@ import { APP_EDITION } from '../version.js';
 // settings, learning records, imports or resets. Keep the native stores only
 // as backing stores; game code continues to use the ordinary Storage API.
 export const editionPrefix = edition => `mvm-edition:${edition}:`;
+const controllers = new WeakMap();
 
 export function createEditionStorage(storage, edition) {
     const prefix = editionPrefix(edition);
@@ -11,6 +12,13 @@ export function createEditionStorage(storage, edition) {
     // would temporarily double its size and could exhaust a full device.
     const established = key => edition === 'stable' && key.startsWith('mvm_');
     const physicalName = key => established(key) ? key : prefix + key;
+    const overlays = [];
+    const read = key => {
+        for (let i = overlays.length - 1; i >= 0; i--) {
+            if (overlays[i].has(key)) return overlays[i].get(key);
+        }
+        return storage.getItem(physicalName(key));
+    };
     const names = () => {
         const result = new Set();
         for (let i = 0; i < storage.length; i++) {
@@ -18,28 +26,31 @@ export function createEditionStorage(storage, edition) {
             if (key?.startsWith(prefix)) result.add(key.slice(prefix.length));
             else if (key && established(key)) result.add(key);
         }
-        return [...result];
+        for (const layer of overlays) for (const key of layer.keys()) result.add(key);
+        return [...result].filter(key => read(key) !== null);
     };
     const api = {
         getItem(key) {
             key = String(key);
-            return storage.getItem(physicalName(key));
+            return read(key);
         },
         setItem(key, value) {
             key = String(key);
-            storage.setItem(physicalName(key), String(value));
+            if (overlays.length) overlays.at(-1).set(key, String(value));
+            else storage.setItem(physicalName(key), String(value));
         },
         removeItem(key) {
             key = String(key);
-            storage.removeItem(physicalName(key));
+            if (overlays.length) overlays.at(-1).set(key, null);
+            else storage.removeItem(physicalName(key));
         },
         clear() {
-            for (const key of names()) storage.removeItem(physicalName(key));
+            for (const key of names()) api.removeItem(key);
         },
         key(index) { return names()[Number(index)] ?? null; }
     };
     const target = Object.create(null);
-    return new Proxy(target, {
+    const view = new Proxy(target, {
         get(_, key) {
             if (key === 'length') return names().length;
             if (key === Symbol.toStringTag) return 'Storage';
@@ -56,6 +67,23 @@ export function createEditionStorage(storage, edition) {
                 : undefined;
         }
     });
+    controllers.set(view, {
+        begin() {
+            const layer = new Map();
+            overlays.push(layer);
+            return () => {
+                const index = overlays.indexOf(layer);
+                if (index >= 0) overlays.splice(index, 1);
+            };
+        }
+    });
+    return view;
+}
+
+export function beginPracticeStorage(local, session) {
+    const endLocal = controllers.get(local)?.begin();
+    const endSession = controllers.get(session)?.begin();
+    return () => { endLocal?.(); endSession?.(); };
 }
 
 export function installEditionStorage(win, edition = APP_EDITION) {
@@ -78,6 +106,9 @@ export function installEditionStorage(win, edition = APP_EDITION) {
         configurable: true, value: createEditionStorage(native.session, edition)
     });
     Object.defineProperty(win, '__MVM_STORAGE_EDITION__', { configurable: true, value: edition });
+    Object.defineProperty(win, '__MVM_PROFILE_SCOPE__', { configurable: true, value: {
+        beginPractice: () => beginPracticeStorage(win.localStorage, win.sessionStorage)
+    } });
     const label = () => {
         const stamp = win.document.querySelector('.db-version');
         if (stamp && !win.document.getElementById('edition-label')) {

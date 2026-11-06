@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createEditionStorage, installEditionStorage } from '../services/edition-storage.js';
+import { beginPracticeStorage, createEditionStorage, installEditionStorage } from '../services/edition-storage.js';
 
 const native = window.__MVM_NATIVE_STORAGE__?.local || window.localStorage;
 const session = window.__MVM_NATIVE_STORAGE__?.session || window.sessionStorage;
@@ -8,12 +8,49 @@ const resetWindow = () => {
     Object.defineProperty(window, 'sessionStorage', { configurable: true, value: session });
     delete window.__MVM_NATIVE_STORAGE__;
     delete window.__MVM_STORAGE_EDITION__;
+    delete window.__MVM_PROFILE_SCOPE__;
 };
 
 beforeEach(() => { resetWindow(); native.clear(); session.clear(); });
 afterEach(() => { vi.unstubAllGlobals(); resetWindow(); native.clear(); session.clear(); });
 
 describe('independent edition profiles', () => {
+    it('keeps every practice write, removal and clear out of the durable profile', () => {
+        const local = createEditionStorage(native, 'guided');
+        const temporary = createEditionStorage(session, 'guided');
+        local.setItem('mvm_sparks', '47');
+        local.setItem('mvm_save_v1__A', 'active run');
+        temporary.setItem('mvm_session', 'original session');
+        const before = { ...native };
+        const restore = beginPracticeStorage(local, temporary);
+        local.setItem('mvm_sparks', '99');
+        local.setItem('mvm_achievement', 'practice only');
+        local.removeItem('mvm_save_v1__A');
+        temporary.clear();
+        expect(local.getItem('mvm_sparks')).toBe('99');
+        expect(local.getItem('mvm_save_v1__A')).toBeNull();
+        expect(temporary.length).toBe(0);
+        expect({ ...native }).toEqual(before);
+        restore(); restore();
+        expect(local.getItem('mvm_sparks')).toBe('47');
+        expect(local.getItem('mvm_save_v1__A')).toBe('active run');
+        expect(local.getItem('mvm_achievement')).toBeNull();
+        expect(temporary.getItem('mvm_session')).toBe('original session');
+    });
+
+    it('does not resurrect an ended outer practice layer after a nested scope closes', () => {
+        const local = createEditionStorage(native, 'guided');
+        const temporary = createEditionStorage(session, 'guided');
+        local.setItem('mvm_sparks', '5');
+        const endOuter = beginPracticeStorage(local, temporary);
+        local.setItem('mvm_sparks', '10');
+        const endInner = beginPracticeStorage(local, temporary);
+        local.setItem('mvm_sparks', '20');
+        endOuter();
+        expect(local.getItem('mvm_sparks')).toBe('20');
+        endInner();
+        expect(local.getItem('mvm_sparks')).toBe('5');
+    });
     it('isolates the same wallet, save and preference keys on one origin', () => {
         const stable = createEditionStorage(native, 'stable');
         const guided = createEditionStorage(native, 'guided');

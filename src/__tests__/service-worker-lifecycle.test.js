@@ -87,6 +87,16 @@ function finishInstallingWorker() {
 }
 
 describe('browser service-worker lifecycle', () => {
+    it('treats a parent worker handing control to a nested edition as a first installation', async () => {
+        const childWorker = new URL('../../service-worker.js', import.meta.url).href;
+        await loadBootstrap({ scriptURL: 'https://game.example/service-worker.js' });
+        finishInstallingWorker();
+        expect(document.getElementById('sw-update-banner').classList.contains('hidden')).toBe(true);
+        takeControl({ scriptURL: childWorker, version: 'first' });
+        expect(reload).not.toHaveBeenCalled();
+        takeControl({ scriptURL: childWorker, version: 'second' });
+        expect(reload).toHaveBeenCalledTimes(1);
+    });
     it('reloads once when the controller of an already controlled page is replaced', async () => {
         await loadBootstrap({ version: 'previous build' });
 

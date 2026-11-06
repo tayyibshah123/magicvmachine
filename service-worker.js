@@ -83,6 +83,7 @@ const SHELL_ASSETS = [
     './src/services/palette.js',
     './src/services/perf-trace.js',
     './src/services/save-sync.js',
+    './src/services/retired-upgrades.js',
     './src/services/turn-digest.js',
     './src/services/ui.js',
     './src/services/vfx.js',

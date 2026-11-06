@@ -1,4 +1,5 @@
 import { expect } from '@playwright/test';
+import { storagePrefix } from './fixtures.js';
 
 const touchSessions = new WeakMap();
 async function touchSession(page) {
@@ -22,11 +23,11 @@ export async function tap(page, selector) {
 
 export async function openGame(page, { returning = false } = {}) {
   if (returning) {
-    await page.addInitScript(() => {
-      localStorage.setItem('mvm_onboarding_done', '1');
-      localStorage.setItem('mvm_first_run_done', '1');
-      localStorage.setItem('mvm_analytics_consent', 'denied');
-    });
+    await page.addInitScript(prefix => {
+      localStorage.setItem(prefix + 'mvm_onboarding_done', '1');
+      localStorage.setItem(prefix + 'mvm_first_run_done', '1');
+      localStorage.setItem(prefix + 'mvm_analytics_consent', 'denied');
+    }, storagePrefix);
   }
   await page.goto('/');
   await page.waitForFunction(() => window.Game?.canvas && window.Game?.ctx);
@@ -335,6 +336,7 @@ export async function configureEncounter(page, options = {}) {
     Game.player.diceUpgrades = o.upgrades || [];
     Game.enemy = new Enemy({ name: o.enemyName || 'Browser QA', hp: o.enemyHp ?? 500, dmg: 20, kind: o.enemyKind }, 0);
     Object.assign(Game, {
+      _guidedRun: null, _practiceSession: false,
       currentState: STATE.COMBAT, _combatActionDepth: 0, _revivePending: null, _endTurnRunning: false,
       _winCombatRunning: false, _combatStartedAt: 0, inputLocked: false, paused: false,
       autoQTE: !!o.autoQTE, qteWiderWindow: !!o.widerWindow, assistDisabled: true,

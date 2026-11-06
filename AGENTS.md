@@ -165,6 +165,13 @@ game defects. Do not skip or weaken checks to make a release green.
 variant when changing fixtures or test organisation. A deployment retry
 can reuse results if the tested source has not changed.
 
+The approved two-edition release uses `npm run check:editions -- --stable
+PATH --guided PATH`. It verifies independent saves, updates and cold offline
+launches in one browser profile. Keep Stable source on `main`, Guided source
+on `codex/guided-v1.10.0`, and publish the validated dual bundle on `gh-pages`.
+Never commit `release-site/` or `www/` to a source branch. Reused evidence must
+match the full source fingerprint. Preserve the frozen v1.9.55 refs.
+
 Every shippable change does these in one commit, in this order:
 
 1. Bump `APP_VERSION` in `src/version.js` (e.g. `1.9.49` → `1.9.50`).

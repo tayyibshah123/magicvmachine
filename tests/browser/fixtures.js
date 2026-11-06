@@ -1,4 +1,8 @@
 import { test as base, expect } from '@playwright/test';
+import { APP_EDITION } from '../../src/version.js';
+
+export const edition = APP_EDITION;
+export const storagePrefix = edition === 'guided' ? 'mvm-edition:guided:' : '';
 
 export const test = base.extend({
   browserErrors: [async ({ page, context }, use, testInfo) => {

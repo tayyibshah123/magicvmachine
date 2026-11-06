@@ -41,6 +41,16 @@ its real callers and its rendered browser behaviour.
   source and perform a fresh launch. Reuse results for an unchanged-source
   deployment retry.
 
+For the Stable and Guided release pair, use `npm run check:editions --
+--stable PATH --guided PATH`. It checks both source trees, packages only
+their validated web bundles, and tests both editions in one browser profile.
+Evidence may be reused only when its source fingerprint matches. The final
+check also rejects source edits made while checks were running. Publish the
+generated `release-site/` contents on `gh-pages`, with Stable at the root and
+Guided in `guided/`. Source branches remain separate; generated output is
+never committed to the source branches. Verify both public URLs after Pages
+finishes its deployment.
+
 Use `helpers/combat-fixture.js` for reset state, clocks and explicit optional
 cosmetic stubs. Opt into real rendering through `helpers/combat-renderer.js`.
 Do not globally mock QTE, damage, death or victory: a test must choose any

@@ -4,6 +4,7 @@ import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { resolve, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TEST_GROUPS, groupFor } from './test-groups.mjs';
+import { sourceFingerprint } from './source-fingerprint.mjs';
 
 const root = resolve(fileURLToPath(new URL('../', import.meta.url)));
 const args = process.argv.slice(2);
@@ -26,6 +27,7 @@ const report = {
   startedAt: new Date().toISOString(), areas: {}, phases: [],
   limitations: ['Desktop touch emulation does not verify physical iPhone Safari or Android OS Back.']
 };
+report.sourceFingerprint = await sourceFingerprint(root);
 const run = async (name, commandArgs, extraEnv = {}) => {
   const began = performance.now();
   console.log('\nChecking ' + name);
@@ -115,6 +117,10 @@ if (!area) {
   }
 }
 report.finishedAt = new Date().toISOString();
+const finalFingerprint = await sourceFingerprint(root);
+report.phases.push({ name: 'Frozen source and test inputs',
+  status: finalFingerprint === report.sourceFingerprint ? 'passed' : 'failed',
+  ...(finalFingerprint === report.sourceFingerprint ? {} : { message: 'Source or checks changed during this run. Verify the final inputs again.' }) });
 const executedChecks = Object.values(report.areas).reduce((n, a) => n + a.passed + a.failed, 0)
   + (report.browser?.passed || 0) + (report.browser?.failed || 0);
 if (!executedChecks) report.phases.push({ name: 'Executed checks', status: 'failed', message: 'No test cases executed.' });

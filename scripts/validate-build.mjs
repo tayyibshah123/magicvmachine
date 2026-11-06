@@ -71,6 +71,10 @@ const sourceClosure = await offlineClosure(root);
 const bundleClosure = await offlineClosure(bundle);
 assert.deepEqual([...bundleClosure].sort(), [...sourceClosure].sort(), 'Source and bundle startup dependency paths must match');
 for (const path of bundleClosure) assert(cachedPaths.has(path), 'Startup dependency missing from offline cache: ' + path);
+for (const path of sourceClosure) {
+  assert.deepEqual(await readFile(join(bundle, path)), await readFile(join(root, path)),
+    'Bundle must contain the exact tested source dependency: ' + path);
+}
 for (const excluded of ['node_modules', 'src/__tests__', 'tests', 'package.json']) {
   let exists = true;
   try { await access(join(bundle, excluded)); } catch { exists = false; }

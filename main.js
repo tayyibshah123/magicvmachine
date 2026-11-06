@@ -181,6 +181,13 @@ if (document.readyState === 'loading') {
 //      then reloads when an existing worker is replaced (including
 //      updates triggered by another tab) to keep code in sync
 let reloadingForServiceWorkerUpdate = false;
+const ownWorkerUrl = new URL('./service-worker.js', import.meta.url).href;
+function isOwnController(controller) {
+    // A first visit to /guided/ can initially be controlled by Stable's
+    // parent-scope worker. Its replacement is the child's first install,
+    // not an update that should refresh onboarding.
+    return !!controller && (!controller.scriptURL || controller.scriptURL === ownWorkerUrl);
+}
 function reloadForServiceWorkerUpdate() {
     // The activation event and Refresh's fallback can arrive in either
     // order. They must share a guard so one update only reloads once.
@@ -204,7 +211,7 @@ if ('serviceWorker' in navigator) {
                     // .controller is null — we don't want to show
                     // "REFRESH" before the player has even loaded once.
                     if (newWorker.state === 'installed'
-                        && navigator.serviceWorker.controller) {
+                        && isOwnController(navigator.serviceWorker.controller)) {
                         showUpdateBanner(reg);
                     }
                 });
@@ -234,7 +241,7 @@ if ('serviceWorker' in navigator) {
         navigator.serviceWorker.addEventListener('controllerchange', () => {
             const previousController = currentController;
             currentController = navigator.serviceWorker.controller;
-            if (!previousController || !currentController
+            if (!isOwnController(previousController) || !currentController
                 || previousController === currentController) return;
             reloadForServiceWorkerUpdate();
         });

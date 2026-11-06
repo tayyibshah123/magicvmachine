@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures.js';
+import { test, expect, storagePrefix } from './fixtures.js';
 
 test.setTimeout(90000);
 
@@ -28,17 +28,17 @@ async function setRevision(page, revision) {
 }
 
 async function seedOnce(context) {
-    await context.addInitScript(values => {
+    await context.addInitScript(({ values, prefix }) => {
         if (location.origin === 'null') return;
         // This marker survives reloads and new documents. Never reinsert a
         // checkpoint after the application has had a chance to alter it.
-        if (!localStorage.getItem('mvm_qa_pwa_seeded')) {
-            for (const [key, value] of Object.entries(values)) localStorage.setItem(key, value);
-            localStorage.setItem('mvm_qa_pwa_seeded', '1');
-            localStorage.setItem('mvm_qa_pwa_seed_count', String(Number(localStorage.getItem('mvm_qa_pwa_seed_count') || 0) + 1));
+        if (!localStorage.getItem(prefix + 'mvm_qa_pwa_seeded')) {
+            for (const [key, value] of Object.entries(values)) localStorage.setItem(prefix + key, value);
+            localStorage.setItem(prefix + 'mvm_qa_pwa_seeded', '1');
+            localStorage.setItem(prefix + 'mvm_qa_pwa_seed_count', String(Number(localStorage.getItem(prefix + 'mvm_qa_pwa_seed_count') || 0) + 1));
         }
         window.__mvmQaDocument = `${Date.now()}-${Math.random()}`;
-    }, profile);
+    }, { values: profile, prefix: storagePrefix });
 }
 
 async function waitForGame(page) {
@@ -86,15 +86,14 @@ test('first installation preserves consent and onboarding without an automatic r
     await waitForGame(page);
     await waitForInstalledWorker(page);
     await page.locator('#intro-overlay').click();
-    await expect(page.locator('#analytics-consent-banner')).toBeVisible();
-    await page.locator('[data-consent="denied"]').click();
+    await expect(page.locator('#analytics-consent-banner')).toBeHidden();
     await expect(page.locator('#onboarding-overlay')).toBeVisible();
     await page.locator('#onb-name').fill('FIRST VISIT');
     // Observe beyond the refresh fallback window after the actual claim.
     await page.waitForTimeout(1000);
     expect(navigations).toHaveLength(1);
     await expect(page.locator('#onb-name')).toHaveValue('FIRST VISIT');
-    expect(await page.evaluate(() => localStorage.getItem('mvm_analytics_consent'))).toBe('denied');
+    expect(await page.evaluate(() => localStorage.getItem('mvm_analytics_consent'))).toBeNull();
     await expect(page.locator('#sw-update-banner')).toBeHidden();
     await page.locator('#onb-next-1').click();
     await expect(page.locator('#screen-char-select')).toBeVisible();

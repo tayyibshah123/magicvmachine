@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { test, expect } from './fixtures.js';
+import { test, expect, edition, storagePrefix } from './fixtures.js';
 import { openGame, playUntil, readState, tap } from './game-driver.js';
 
 test('fresh profile completes the tutorial and a normal combat through touch controls', async ({ page }, testInfo) => {
@@ -9,7 +9,7 @@ test('fresh profile completes the tutorial and a normal combat through touch con
     await openGame(page);
     await playUntil(page, s => s.state === s.states.MAP && !s.breakout, { timeout: 600000, events });
     expect([...new Set(events.filter(s => s.breakout).map(s => s.room))].sort())
-      .toEqual([0, 1, 2, 3, 4]);
+      .toEqual(edition === 'guided' ? [0, 1] : [0, 1, 2, 3, 4]);
     expect(await page.evaluate(() => localStorage.getItem('mvm_breakout_done'))).toBe('1');
     const firstMap = await readState(page);
     expect(firstMap.hp).toBeGreaterThan(0);
@@ -33,13 +33,13 @@ test('fresh profile completes the tutorial and a normal combat through touch con
 test('returning player resumes, uses a fresh hand, refreshes and resumes again', async ({ page }, testInfo) => {
   test.setTimeout(180000);
   const snapshot = JSON.parse(await readFile(new URL('./returning-save.json', import.meta.url), 'utf8'));
-  await page.addInitScript(snapshot => {
-    if (!localStorage.getItem('mvm_browser_fixture_seeded')) {
-      localStorage.setItem('mvm_save_v1__A', JSON.stringify(snapshot));
-      localStorage.setItem('mvm_active_slot', 'A');
-      localStorage.setItem('mvm_browser_fixture_seeded', '1');
+  await page.addInitScript(({ snapshot, prefix }) => {
+    if (!localStorage.getItem(prefix + 'mvm_browser_fixture_seeded')) {
+      localStorage.setItem(prefix + 'mvm_save_v1__A', JSON.stringify(snapshot));
+      localStorage.setItem(prefix + 'mvm_active_slot', 'A');
+      localStorage.setItem(prefix + 'mvm_browser_fixture_seeded', '1');
     }
-  }, snapshot);
+  }, { snapshot, prefix: storagePrefix });
   const events = [];
   try {
     await openGame(page, { returning: true });
