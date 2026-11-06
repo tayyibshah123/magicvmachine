@@ -133,7 +133,7 @@ session re-discover them.
    not require Sparks or a separate upgrade. Glitch Overlay and Drift
    Echo are built into the title styling.
 
-9. **Settle health changes before action presentation.** Use
+10. **Settle health changes before action presentation.** Use
    `Game._runCombatAction` for damage and its subsequent animation.
    Support actions also use this boundary to settle inverted healing
    and deaths. Surviving support actions need not hold input for VFX.
@@ -143,6 +143,15 @@ session re-discover them.
    Wait for actual presentation completion, including delayed effects;
    a fixed wall-clock delay cannot cover low frame rates or pauses.
    After awaits, verify combat generation, state and entity identity.
+
+11. **Keep the editions independent.** The first import in `main.js`
+    installs the edition's storage view before game modules execute.
+    Stable retains the existing `mvm_*` keys; Guided uses its own
+    namespace. Always use the installed Storage API, including imports,
+    exports and resets. Never bypass it through native backing storage.
+    Service-worker cache cleanup must be restricted to its own edition
+    and URL scope. Keep `APP_EDITION`, `APP_CACHE_PREFIX`, worker constants
+    and the PWA identity consistent when preparing an edition.
 
 ---
 

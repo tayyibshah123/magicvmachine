@@ -32,10 +32,10 @@ async function seedOnce(context) {
         if (location.origin === 'null') return;
         // This marker survives reloads and new documents. Never reinsert a
         // checkpoint after the application has had a chance to alter it.
-        if (!localStorage.getItem('__mvm_qa_pwa_seeded')) {
+        if (!localStorage.getItem('mvm_qa_pwa_seeded')) {
             for (const [key, value] of Object.entries(values)) localStorage.setItem(key, value);
-            localStorage.setItem('__mvm_qa_pwa_seeded', '1');
-            localStorage.setItem('__mvm_qa_pwa_seed_count', String(Number(localStorage.getItem('__mvm_qa_pwa_seed_count') || 0) + 1));
+            localStorage.setItem('mvm_qa_pwa_seeded', '1');
+            localStorage.setItem('mvm_qa_pwa_seed_count', String(Number(localStorage.getItem('mvm_qa_pwa_seed_count') || 0) + 1));
         }
         window.__mvmQaDocument = `${Date.now()}-${Math.random()}`;
     }, profile);
@@ -135,7 +135,7 @@ test('installed game cold-opens offline with HTTP cache cleared and resumes its 
             expect(moduleResponses, `offline module ${path} is supplied by the installed worker`).toContainEqual({ path, status: 200, worker: true });
         }
         expect(await page.evaluate(() => window.__mvmQaDocument)).not.toBe(documentId);
-        expect(await page.evaluate(() => localStorage.getItem('__mvm_qa_pwa_seed_count'))).toBe('1');
+        expect(await page.evaluate(() => localStorage.getItem('mvm_qa_pwa_seed_count'))).toBe('1');
         expect(await readProfile(page)).toEqual(profile);
         await page.locator('#btn-load-save').click();
         await expect(page.locator('#screen-map')).toBeVisible();
@@ -170,7 +170,7 @@ test('a real worker update refreshes once and preserves a representative saved r
         await expect.poll(async () => (await cacheSnapshot(page)).some(cache => cache.name.endsWith('-qa-update'))).toBe(true);
         await page.waitForTimeout(1200);
         expect(navigations, 'worker takeover and the fallback must share one refresh').toHaveLength(2);
-        expect(await page.evaluate(() => localStorage.getItem('__mvm_qa_pwa_seed_count'))).toBe('1');
+        expect(await page.evaluate(() => localStorage.getItem('mvm_qa_pwa_seed_count'))).toBe('1');
         expect(await readProfile(page)).toEqual(before);
         await testInfo.attach('pwa-cache-after-update', { body: JSON.stringify(await cacheSnapshot(page), null, 2), contentType: 'application/json' });
         await page.locator('#intro-overlay').click();

@@ -32,16 +32,22 @@ shipped, removed during this consolidation:
 - ✅ Intel Cipher + Chronicle tabs (collapsed back into the unified
   Intel screen. see `_renderIntelCipher` in game.js:12477)
 
-## Proposed experience and onboarding plan (awaiting approval)
+<a id="proposed-experience-and-onboarding-plan-awaiting-approval"></a>
+## Approved experience and onboarding work
+
+Approved on 2026-11-06. The user authorised completing all recommended
+work and publishing two independently playable editions, with recommended
+decisions resolved autonomously. Release targets are Stable v1.9.56 and
+Guided v1.10.0. The frozen v1.9.55 snapshot remains a separate fallback.
 
 ### Baseline and scope
 
 - Reviewed source: v1.9.55, commit `56435c416137368781c88af931b986710cf0f31b`.
 - Frozen stable branch: `codex/stable-v1.9.55`. Annotated tag:
   `stable-v1.9.55`. Both point to that same existing release commit.
-- Proposal branch: `codex/progressive-onboarding-plan`. This proposal changes
-  documentation only. The live game, main branch and stable snapshot retain
-  their existing gameplay. Approval is required before implementation.
+- Original proposal branch: `codex/progressive-onboarding-plan`.
+  Implementation proceeds on separate Stable and Guided branches. The
+  original v1.9.55 branch and tag remain frozen.
 - Existing release evidence remains 381 normal checks, 381 shuffled checks
   and nine browser cases. This exploratory review found additional gaps;
   passing the existing gate does not invalidate the findings below.
@@ -338,8 +344,10 @@ Tesseract's orb/vulnerability/reversal rules as separate balance scenarios.
   route versions or pending choices enter slot snapshots, bump the run
   schema and append the required migration. Resume the current short
   lesson/checkpoint instead of restarting all training.
-- Keep future preview and stable game on different origins or ports.
-  Branches alone do not isolate browser storage or service workers.
+- Published editions may share the existing GitHub Pages host only with
+  verified storage views, independent PWA identities and URL-scoped worker
+  caches. Branches or URL paths alone do not isolate browser state. Test
+  updates, imports, resets and offline launches with both editions present.
 
 ### Proposed implementation order and approval gates
 

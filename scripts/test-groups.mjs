@@ -6,7 +6,7 @@ export const TEST_GROUPS = {
   actions: { label: 'Actions and turns', files: ['combat-lifecycle', 'settled-combat-actions', 'settled-secondary-effects'] },
   timing: { label: 'Timing and presentation', files: ['combat-control-status', 'presentation-completion', 'sleep-pause'] },
   saves: { label: 'Saves and progression', files: ['combat-recovery', 'save-migration', 'save-storage', 'run-mode-regressions', 'run-mode-persistence', 'streak'] },
-  platform: { label: 'Browser and mobile behaviour', files: ['gesture', 'native-back', 'null-deref-guards', 'service-worker-lifecycle'] },
+  platform: { label: 'Browser and mobile behaviour', files: ['gesture', 'native-back', 'null-deref-guards', 'service-worker-lifecycle', 'edition-storage'] },
   services: { label: 'Supporting services', files: ['analytics', 'sector-music', 'matchup-hints'] }
 };
 

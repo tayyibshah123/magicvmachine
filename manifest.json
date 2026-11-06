@@ -1,6 +1,6 @@
 {
-  "name": "Magic v Machine",
-  "short_name": "MvM",
+  "name": "Magic v Machine Stable",
+  "short_name": "MvM Stable",
   "description": "Cyberpunk roguelite dice-builder. Infiltrate the Silicon Empire one run at a time.",
   "start_url": "./index.html?src=pwa",
   "id": "/mvm",

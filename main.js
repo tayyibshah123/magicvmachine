@@ -1,3 +1,5 @@
+// Install the edition's storage view before any game module reads its profile.
+import './src/services/edition-storage.js';
 import { Game } from './src/game.js';
 import { Analytics } from './src/services/analytics.js';
 import { Perf } from './src/services/perf.js';

@@ -8,6 +8,18 @@ Purely cosmetic menu improvements are standard features and must not
 require Sparks or a separate upgrade. Glitch Overlay and Drift Echo are
 part of the normal menu title styling.
 
+## Independent editions
+
+The Stable and Guided editions share a hosting origin but keep independent
+profiles, saves, settings, imports, resets and offline caches. `main.js`
+must import `edition-storage.js` before any game module. Stable keeps the
+established game keys in place, avoiding a quota-consuming copy of existing
+profiles. Guided uses a separate namespace. Use the installed Storage API;
+do not access its native backing stores from gameplay code. Each worker
+owns only its edition's scoped cache family and must never intercept a
+nested edition's resources. Keep edition metadata and PWA identities in
+sync with their source versions. Both editions retain the ALPHA V1 stamp.
+
 ## Testing procedure
 
 Tests have seven reporting owners in `scripts/test-groups.mjs`: health,
@@ -278,14 +290,10 @@ takeDamage(amount, source, ...) {
 
 `npm test` runs the vitest suite. Test files live in `src/__tests__/`.
 
-Two flavours:
-- **Pure helpers** (e.g., `shield.test.js`) — replicate the production math as
-  a pure function and test it. Avoids needing to import Game with all its
-  side effects. Good for tight loops.
-- **Integration** (e.g., `damage-flow.test.js`) — import `Game` and entity
-  classes directly. Set up a player + enemy and exercise the real flow.
-  Slower, more thorough. Use this when a pure helper would miss
-  interactions (instanceof checks, late-bound class registrations, TDZ).
+Use production helpers directly for small rule checks. Integration checks
+import `Game` and entity classes through the shared fixtures and exercise
+their actual callers. Do not recreate gameplay formulas inside tests. Add
+new cases to the owning area rather than creating overlapping suites.
 
 When you fix a bug, add an integration test in `damage-flow.test.js` (or a
 new file) that locks the regression. Tests are cheaper than a re-discovery.

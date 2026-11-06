@@ -5,13 +5,17 @@
 // Keep in sync with src/version.js — service worker runs in a separate
 // worker context that can't import ES modules, so the version string is
 // duplicated by design. Old caches are deleted on activate.
-const CACHE_NAME = 'mvm-shell-v1-9-55';
+const CACHE_PREFIX = 'mvm-stable-shell-v';
+const CACHE_NAME = 'mvm-stable-shell-v1-9-56';
+const SCOPE = new URL(self.registration.scope);
+const ACTIVE_CACHE = SCOPE.pathname + '|' + CACHE_NAME;
 const SHELL_ASSETS = [
     './',
     './index.html',
     './style.css',
     './main.js',
     './src/version.js',
+    './src/services/edition-storage.js',
     // Every stylesheet linked by index.html is required on a cold offline boot.
     './src/styles/tokens.css',
     './src/styles/components.css',
@@ -102,10 +106,13 @@ self.addEventListener('install', event => {
     // REFRESH. That keeps a mid-run player from getting their
     // tab swapped out from under them by a silent SW update.
     event.waitUntil(
-        caches.open(CACHE_NAME).then(cache =>
+        caches.open(ACTIVE_CACHE).then(cache =>
             // addAll fails atomically — if any asset 404s, the SW won't install.
             // We tolerate failures by adding individually.
-            Promise.all(SHELL_ASSETS.map(url => cache.add(url).catch(() => null)))
+            Promise.all(SHELL_ASSETS.map(url => cache.add(url).catch(error => {
+                if (url === './' || /\.(?:html|js|css)$/.test(url)) throw error;
+                return null;
+            })))
         )
     );
 });
@@ -123,9 +130,12 @@ self.addEventListener('message', event => {
 
 self.addEventListener('activate', event => {
     event.waitUntil(
-        caches.keys().then(keys =>
-            Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-        ).then(() => self.clients.claim())
+        caches.keys().then(keys => Promise.all(keys.map(async key => {
+            const sameEdition = key.startsWith(SCOPE.pathname + '|' + CACHE_PREFIX);
+            const legacy = CACHE_PREFIX === 'mvm-stable-shell-v' && key.startsWith('mvm-shell-v')
+                && await (await caches.open(key)).match(new URL('index.html', SCOPE));
+            if ((sameEdition && key !== ACTIVE_CACHE) || legacy) await caches.delete(key);
+        }))).then(() => self.clients.claim())
     );
 });
 
@@ -136,6 +146,9 @@ self.addEventListener('fetch', event => {
     // Skip third-party hosts (Google Fonts, etc.) — let the browser handle them
     const url = new URL(req.url);
     if (url.origin !== self.location.origin) return;
+    if (!url.pathname.startsWith(SCOPE.pathname)) return;
+    // The nested Guided edition owns its own worker and offline shell.
+    if (url.pathname.slice(SCOPE.pathname.length).startsWith('guided/')) return;
 
     // Network-first for code/markup so dev iteration isn't blocked by stale
     // caches; cache acts only as an offline fallback.
@@ -143,9 +156,9 @@ self.addEventListener('fetch', event => {
         fetch(req).then(resp => {
             if (resp && resp.status === 200 && resp.type === 'basic') {
                 const copy = resp.clone();
-                caches.open(CACHE_NAME).then(c => c.put(req, copy));
+                caches.open(ACTIVE_CACHE).then(c => c.put(req, copy));
             }
             return resp;
-        }).catch(() => caches.match(req))
+        }).catch(() => caches.open(ACTIVE_CACHE).then(cache => cache.match(req)))
     );
 });
