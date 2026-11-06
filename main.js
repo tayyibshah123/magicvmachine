@@ -13,6 +13,7 @@ import { NativeSplash } from './src/services/native-splash.js';
 import * as LearningUI from './src/ui/learning-ui.js';
 import { Learning } from './src/services/learning.js';
 import { OfflineAudio } from './src/services/offline-audio.js';
+import { createConsentController } from './src/services/consent.js';
 
 // Detect device perf tier BEFORE Game.init so the game can read `Perf.tier`.
 Perf.detect();
@@ -23,6 +24,7 @@ ParticleSys.quality = Perf.particleQuality();
 // change the choice later.
 const CONSENT_KEY = 'mvm_analytics_consent';
 let analyticsInitialized = false;
+let consentController = null;
 function applyAnalyticsConsent(granted) {
     Analytics.setEnabled(granted);
     if (granted && !analyticsInitialized) {
@@ -41,6 +43,7 @@ function readConsent() {
 function writeConsent(granted) {
     try { localStorage.setItem(CONSENT_KEY, granted ? 'granted' : 'denied'); } catch (e) {}
     applyAnalyticsConsent(granted);
+    consentController?.settle();
     const banner = document.getElementById('analytics-consent-banner');
     if (banner) banner.remove();
     const setting = document.getElementById('chk-local-diagnostics');
@@ -51,7 +54,7 @@ function writeConsent(granted) {
 const consent = readConsent();
 applyAnalyticsConsent(consent === true);
 
-function showConsentBanner() {
+function showConsentBanner(onChoice) {
     if (readConsent() !== null) return;                        // already settled
     if (document.getElementById('analytics-consent-banner')) return; // dedupe
     const el = document.createElement('div');
@@ -69,30 +72,23 @@ function showConsentBanner() {
         </div>`;
     document.body.appendChild(el);
     el.querySelectorAll('[data-consent]').forEach(btn => {
-        btn.addEventListener('click', () => writeConsent(btn.dataset.consent === 'granted'));
+        btn.addEventListener('click', () => onChoice(btn.dataset.consent === 'granted', btn));
     });
+    return el;
 }
 
 // Ask at a visible menu or map after onboarding, never over an action or
 // a teaching overlay. Diagnostics stay off throughout the wait.
 function showConsentWhenReady() {
     if (readConsent() !== null) return;
-    const poll = () => {
-        if (readConsent() !== null) return;
-        const blocked = document.getElementById('intro-overlay')
-            || document.getElementById('onboarding-overlay')
-            || document.body.classList.contains('breakout-active')
-            || document.querySelector('#modal-settings:not(.hidden), #cipher-intro, #sector-intro.active');
-        const safeState = Game.currentState === STATE.MENU || Game.currentState === STATE.MAP;
-        if (!document.hidden && !blocked && safeState) { showConsentBanner(); return; }
-        // Wait for a menu or map, including tutorials longer than one minute.
-        setTimeout(poll, 1000);
+    const start = () => {
+        consentController = createConsentController({ read: readConsent, write: writeConsent,
+            render: showConsentBanner, getState: () => Game.currentState });
+        consentController.start();
     };
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', poll);
-    } else {
-        poll();
-    }
+        document.addEventListener('DOMContentLoaded', start, { once: true });
+    } else start();
 }
 
 if (consent === null) {
@@ -100,7 +96,8 @@ if (consent === null) {
 }
 
 // Expose for the Settings panel (Privacy section will wire a toggle to these).
-window.MVMConsent = { read: readConsent, write: writeConsent };
+window.MVMConsent = { read: readConsent, write: writeConsent,
+    refresh: options => consentController?.refresh(options) };
 window.MVMOfflineAudio = OfflineAudio;
 
 Hints.init();

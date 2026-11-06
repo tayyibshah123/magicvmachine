@@ -1,4 +1,5 @@
 import { test, expect, edition, storagePrefix } from './fixtures.js';
+import { configureEncounter, tap } from './game-driver.js';
 
 test.setTimeout(90000);
 
@@ -211,4 +212,31 @@ test('a real worker update refreshes once and preserves a representative saved r
     } finally {
         await setRevision(page, '');
     }
+});
+
+test('automatic consent cannot survive combat or accept queued gameplay taps and returns safely to the menu', async ({ page }) => {
+    await page.addInitScript(prefix => {
+        if (location.origin === 'null' || localStorage.getItem(prefix + 'mvm_qa_consent_seeded')) return;
+        localStorage.setItem(prefix + 'mvm_onboarding_done', '1');
+        localStorage.setItem(prefix + 'mvm_first_run_done', '1');
+        localStorage.setItem(prefix + 'mvm_qa_consent_seeded', '1');
+    }, storagePrefix);
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await waitForGame(page);
+    await tap(page, '#intro-overlay');
+    await expect(page.locator('#analytics-consent-banner')).toBeVisible();
+    const previous = await page.locator('[data-consent="granted"]').boundingBox();
+    expect(previous).not.toBeNull();
+    await page.evaluate(() => { window.__qaStaleAllow = document.querySelector('[data-consent="granted"]'); });
+    await configureEncounter(page, { classId: 'tactician', hp: 100 });
+    await expect(page.locator('#analytics-consent-banner')).toHaveCount(0);
+    await page.evaluate(() => window.__qaStaleAllow.click());
+    await page.touchscreen.tap(previous.x + previous.width / 2, previous.y + previous.height / 2);
+    expect(await page.evaluate(() => window.MVMConsent.read())).toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem('mvm_analytics_install'))).toBeNull();
+    await page.evaluate(() => Game.saveAndReturn());
+    await expect(page.locator('#analytics-consent-banner')).toBeVisible();
+    await tap(page, '[data-consent="denied"]');
+    await expect(page.locator('#analytics-consent-banner')).toHaveCount(0);
+    expect(await page.evaluate(() => window.MVMConsent.read())).toBe(false);
 });

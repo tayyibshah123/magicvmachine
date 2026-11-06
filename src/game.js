@@ -3861,6 +3861,7 @@ startQTE(type, x, y, callback, opts) {
         }
 
         this.currentState = newState;
+        window.MVMConsent?.refresh?.({ resetIdle: true });
         if ((prev === STATE.COMBAT || prev === STATE.TUTORIAL_COMBAT || prev === STATE.BREAKOUT)
             && newState !== STATE.COMBAT && newState !== STATE.TUTORIAL_COMBAT && newState !== STATE.BREAKOUT) {
             this._cancelQTE();

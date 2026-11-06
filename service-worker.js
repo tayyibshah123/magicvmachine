@@ -51,6 +51,7 @@ const SHELL_ASSETS = [
     './src/ui/canvas-icons.js',
     // v1.1 services
     './src/services/analytics.js',
+    './src/services/consent.js',
     './src/services/perf.js',
     './src/services/hints.js',
     './src/services/unlocks.js',
