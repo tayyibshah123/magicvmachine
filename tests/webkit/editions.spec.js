@@ -164,7 +164,9 @@ for (const edition of editions) {
             expect(flight.lastY).toBeGreaterThanOrEqual(flight.targetY);
             expect(flight.retired).toBe(true);
         }
-        expect(chain.terminal).toMatchObject({ state: 16, hp: 0, depth: 0, groups: 0 });
+        const combatWin = await page.evaluate(async () =>
+            (await import(new URL('./src/constants.js', document.baseURI).href)).STATE.COMBAT_WIN);
+        expect(chain.terminal).toMatchObject({ state: combatWin, hp: 0, depth: 0, groups: 0 });
         await page.waitForFunction(() => Game.currentState === 4);
         await page.locator('.reward-card').first().tap();
         await page.waitForFunction(() => Game.currentState === 2);
