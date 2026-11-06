@@ -5,8 +5,8 @@
 // Keep in sync with src/version.js — service worker runs in a separate
 // worker context that can't import ES modules, so the version string is
 // duplicated by design. Old caches are deleted on activate.
-const CACHE_PREFIX = 'mvm-stable-shell-v';
-const CACHE_NAME = 'mvm-stable-shell-v1-9-56';
+const CACHE_PREFIX = 'mvm-guided-shell-v';
+const CACHE_NAME = 'mvm-guided-shell-v1-10-0';
 const SCOPE = new URL(self.registration.scope);
 const ACTIVE_CACHE = SCOPE.pathname + '|' + CACHE_NAME;
 const SHELL_ASSETS = [
@@ -16,6 +16,10 @@ const SHELL_ASSETS = [
     './main.js',
     './src/version.js',
     './src/services/edition-storage.js',
+    './src/services/learning.js',
+    './src/ui/learning-ui.js',
+    './src/ui/boss-rules.js',
+    './src/styles/learning.css',
     // Every stylesheet linked by index.html is required on a cold offline boot.
     './src/styles/tokens.css',
     './src/styles/components.css',

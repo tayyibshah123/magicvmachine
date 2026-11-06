@@ -3,10 +3,10 @@
 export const TEST_GROUPS = {
   health: { label: 'Health and mechanics', files: ['damage-flow', 'self-destruct', 'support-action-deaths', 'combat-correctness'] },
   decisions: { label: 'Dice and enemy decisions', files: ['dice', 'boss-intent'] },
-  actions: { label: 'Actions and turns', files: ['combat-lifecycle', 'settled-combat-actions', 'settled-secondary-effects', 'widget-combat-actions'] },
+  actions: { label: 'Actions and turns', files: ['combat-lifecycle', 'settled-combat-actions', 'settled-secondary-effects', 'widget-combat-actions', 'guided-combat'] },
   timing: { label: 'Timing and presentation', files: ['combat-control-status', 'presentation-completion', 'sleep-pause'] },
   saves: { label: 'Saves and progression', files: ['combat-recovery', 'save-migration', 'save-storage', 'save-transactions', 'guided-learning', 'run-mode-regressions', 'run-mode-persistence', 'streak'] },
-  platform: { label: 'Browser and mobile behaviour', files: ['gesture', 'native-back', 'null-deref-guards', 'service-worker-lifecycle', 'edition-storage', 'ux-learning', 'cipher-practice'] },
+  platform: { label: 'Browser and mobile behaviour', files: ['gesture', 'native-back', 'null-deref-guards', 'service-worker-lifecycle', 'edition-storage', 'ux-learning', 'cipher-practice', 'guided-learning-ui'] },
   services: { label: 'Supporting services', files: ['analytics', 'sector-music', 'matchup-hints'] }
 };
 

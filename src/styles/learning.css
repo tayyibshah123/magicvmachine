@@ -1,4 +1,7 @@
 /* Loaded only by the guided edition. */
+.learning-settings { display: grid; gap: 8px; margin: 8px 0 16px; }
+.learning-settings select { min-height: 44px; max-width: 100%; color: #fff; background: #101b28; padding: 6px; }
+.learning-settings p { margin: 0; font-size: .9rem; line-height: 1.35; }
 .learning-advanced-hidden { display: none !important; }
 .char-card.learning-recommended { border-color: #00ffb2; }
 .learning-recommended-badge { display: block; color: #00ffb2; font-family: var(--font-main); font-size: .75rem; font-weight: 700; letter-spacing: .03em; padding: 3px; }

@@ -10,6 +10,8 @@ import { Unlocks } from './src/services/unlocks.js';
 import { Gesture } from './src/services/gesture.js';
 import { NativeBack } from './src/services/native-back.js';
 import { NativeSplash } from './src/services/native-splash.js';
+import * as LearningUI from './src/ui/learning-ui.js';
+import { Learning } from './src/services/learning.js';
 
 // Detect device perf tier BEFORE Game.init so the game can read `Perf.tier`.
 Perf.detect();
@@ -144,10 +146,40 @@ function wireLandscapeHint() {
 }
 
 function bootGame() {
+  Game._learningUI = LearningUI;
   Game.init();
+  wireLearningSettings();
   wireLandscapeHint();
   Gesture.init();
   NativeBack.init();
+}
+
+function wireLearningSettings() {
+  const anchor = document.getElementById('btn-glossary');
+  if (!anchor || document.getElementById('learning-settings')) return;
+  const section = document.createElement('section');
+  section.id = 'learning-settings';
+  section.className = 'learning-settings';
+  const label = document.createElement('label');
+  label.htmlFor = 'learning-mode';
+  label.textContent = 'Next run rules';
+  const choice = document.createElement('select');
+  choice.id = 'learning-mode';
+  for (const [value, text] of [['guided', 'Guided: introduce features gradually'], ['full', 'Full Rules: every system available']]) {
+    const option = document.createElement('option');
+    option.value = value; option.textContent = text; choice.appendChild(option);
+  }
+  choice.value = Learning.getMode();
+  choice.onchange = () => Game.setLearningMode(choice.value);
+  const note = document.createElement('p');
+  note.textContent = 'Your current saved run keeps the rules it started with.';
+  const practice = document.createElement('button');
+  practice.id = 'btn-learning-practice';
+  practice.className = 'btn secondary';
+  practice.textContent = 'OPTIONAL PRACTICE';
+  practice.onclick = () => Game.openPracticeLibrary();
+  section.append(label, choice, note, practice);
+  anchor.before(section);
 }
 // Hide the native splash on the first paint after DOMContentLoaded —
 // the intro overlay is part of the document, so by the time the

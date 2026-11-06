@@ -168,6 +168,7 @@ export const Achievements = {
     },
 
     unlock(id) {
+        if (typeof window !== 'undefined' && window.Game?._practiceSession) return false;
         if (this.isUnlocked(id)) return false;
         const ach = ACHIEVEMENTS.find(a => a.id === id);
         if (!ach) return false;

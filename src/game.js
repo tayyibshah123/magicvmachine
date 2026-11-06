@@ -12,6 +12,7 @@ import { getEventArt, getOptionIcon } from './ui/event-art.js';
 import { getClassEmblemSvg } from './ui/class-emblems.js';
 import { CombatMetrics } from './services/combat-metrics.js';
 import { ClassAbility } from './ui/class-ability.js';
+import { getBossRules as collectBossRules } from './ui/boss-rules.js';
 import { ICONS, iconImage, drawIcon, preloadCombatIcons } from './ui/icons.js';
 import { drawIntentIcon, drawEffectIcon, blitEffectIcon } from './ui/canvas-icons.js';
 import { Ascension, ASCENSION_TWISTS } from './services/ascension.js';
@@ -193,6 +194,7 @@ const Game = {
     },
 
     init() {
+        this._modernPacing = APP_EDITION === 'guided';
         if (!SaveSync.recoverImport()) {
             this._showErrorOverlay(new Error(SaveSync.lastImportError));
             return;
@@ -3732,6 +3734,10 @@ startQTE(type, x, y, callback, opts) {
     },
 
     changeState(newState) {
+        this._learningReadClose?.();
+        this._learningUI?.hideBossRules?.();
+        this._learningUI?.hidePracticeLibrary?.();
+        this._learningHUDSignature = null;
         const transition = this._screenTransitionGen = (this._screenTransitionGen || 0) + 1;
         // Stop the menu beat-pulse rAF whenever we leave MENU. The tick
         // self-stops on its next frame too, but explicit cleanup here
@@ -6698,6 +6704,7 @@ triggerPhaseGlitch() {
     // overlay where dismiss has special "abort" semantics, and a player
     // stuck in a maze should always be able to back out.
     dismissOpenOverlay() {
+        if (this._learningUI?.dismissLearningOverlay?.()) return true;
         const cipherIntro = document.getElementById('cipher-intro');
         if (cipherIntro) {
             cipherIntro.remove();
@@ -26139,6 +26146,19 @@ drawEffects() {
     },
 
     _showLearningObjective() {
+        const combat = [STATE.COMBAT, STATE.BREAKOUT, STATE.TUTORIAL_COMBAT].includes(this.currentState);
+        const rules = APP_EDITION === 'guided' && combat ? this.getBossRules() : [];
+        if (rules.length && !this._practiceSession) {
+            const signature = JSON.stringify(['rules', this.currentState, rules]);
+            if (this._learningHUDSignature === signature && document.getElementById('learning-objective')) return;
+            this._learningHUDSignature = signature;
+            let closeRead;
+            this._learningUI?.showBossRules?.({ title: this.enemy?.isBoss ? 'BOSS RULES' : 'ENCOUNTER RULES', rules,
+                canInspect: () => this._canReadLearningPanel(),
+                onOpen: () => { closeRead = this._beginLearningRead(); },
+                onClose: () => closeRead?.() });
+            return;
+        }
         if (APP_EDITION !== 'guided' || this._practiceSession || this.tutorialHintsEnabled === false
             || !this._isGuidedRun() || [STATE.MENU, STATE.CHAR_SELECT, STATE.GAMEOVER, STATE.VICTORY].includes(this.currentState)) {
             this._learningUI?.hideObjective?.();
@@ -26150,6 +26170,9 @@ drawEffects() {
             if (next) route = { ...route, stage: next.guideStage };
         }
         const objective = Learning.objective(route, this.player?.classId);
+        const signature = JSON.stringify(['objective', this.currentState, objective]);
+        if (this._learningHUDSignature === signature && document.getElementById('learning-objective')) return;
+        this._learningHUDSignature = signature;
         if (objective) this._learningUI?.showObjective?.({ ...objective,
             ...(this.currentState === STATE.MAP ? { host: document.getElementById('screen-map') } : {}),
             onHelp: () => this.openPracticeLibrary() });
@@ -26187,27 +26210,53 @@ drawEffects() {
     },
 
     getBossRules() {
-        const enemy = this.enemy;
-        if (APP_EDITION !== 'guided' || !enemy?.isBoss) return [];
-        const rules = [...(this._guidedBossRules || [])];
-        const actions = enemy.bossData?.actionsPerTurn || 1;
-        rules.push({ id: 'actions', title: 'Read every intent',
-            text: `${actions} action${actions === 1 ? '' : 's'} per turn. Timing bonuses are optional; a miss keeps the normal base outcome.`, tone: 'info' });
-        const allies = (enemy.minions || []).filter(minion => minion.currentHp > 0);
-        if (allies.length) rules.push({ id: 'support', title: 'Supporting enemies',
-            text: `${allies.length} supporting enemies are active. Each has its own health and intent; you can target them separately.`, tone: 'warning' });
-        if (enemy.shield > 0) rules.push({ id: 'shield', title: 'Current shield',
-            text: `${enemy.shield} shield currently absorbs ordinary damage before HP.`, tone: 'info' });
-        if (enemy.name === 'THE PANOPTICON') rules.push({ id: 'analyse', title: 'Analyse',
-            text: 'An ANALYSE intent cancels your first otherwise valid die next turn. Read the intent before committing a valuable die.', tone: 'warning' });
-        return rules;
+        if (APP_EDITION !== 'guided' || !this.enemy || this.enemy.currentHp <= 0) return [];
+        const rules = [...(this.enemy.isBoss ? this._guidedBossRules || [] : []),
+            ...collectBossRules({ ...this, _activeSectorMech: this._activeSectorMech || {} })];
+        if (this.enemy.isBoss) {
+            const actions = this.enemy.nextIntents?.length || this.enemy.bossData?.actionsPerTurn || 1;
+            rules.unshift({ id: 'actions', title: 'Read every intent',
+                text: `${actions} action${actions === 1 ? '' : 's'} this enemy phase. Timing bonuses are optional; a miss keeps the normal base outcome.`, tone: 'info' });
+            const supports = (this.enemy.minions || []).filter(minion => minion.currentHp > 0);
+            if (supports.length) rules.push({ id: 'support', title: 'Supporting enemies',
+                text: `${supports.length} supporting enemies are active. Each has its own HP and intent; you can target them separately.`, tone: 'warning' });
+            if (this.enemy.shield > 0) rules.push({ id: 'shield', title: 'Current shield',
+                text: `${this.enemy.shield} shield currently absorbs ordinary damage before HP.`, tone: 'info' });
+            if (this.enemy.name === 'THE PANOPTICON') rules.push({ id: 'analyse', title: 'Analyse',
+                text: 'An ANALYSE intent cancels your first otherwise valid die next turn. Read the intent before committing a valuable die.', tone: 'warning' });
+        }
+        return [...new Map(rules.map(rule => [rule.id, rule])).values()];
+    },
+
+    _canReadLearningPanel() {
+        return !this._practiceSession && !this.qte?.active && !this.inputLocked
+            && !this._combatActionDepth && !this._endTurnRunning && !this._winCombatRunning
+            && (!this.player || this.player.currentHp > 0);
+    },
+
+    _beginLearningRead() {
+        this._learningReadClose?.();
+        const previous = this.paused;
+        const player = this.player, generation = this._combatGen;
+        this.paused = true;
+        let closed = false;
+        const close = () => {
+            if (closed) return;
+            closed = true;
+            if (this.player === player && this._combatGen === generation) this.paused = previous;
+            if (this._learningReadClose === close) this._learningReadClose = null;
+        };
+        this._learningReadClose = close;
+        return close;
     },
 
     openPracticeLibrary() {
-        if (APP_EDITION !== 'guided' || this._practiceSession) return;
+        if (APP_EDITION !== 'guided' || this._practiceSession || !this._canReadLearningPanel()) return;
+        const closeRead = this._beginLearningRead();
         const lessons = Learning.lessons(this.player?.classId);
         this._learningUI?.showPracticeLibrary?.({ lessons,
             onSelect: id => {
+                closeRead();
                 const lesson = lessons.find(item => item.id === (id?.id || id));
                 if (!lesson) return;
                 const classId = this.player?.classId;
@@ -26219,7 +26268,7 @@ drawEffects() {
                     if (saved?.then) saved.then(ok => { if (ok) begin(); });
                     else if (saved) begin();
                 } else begin();
-            }, onClose: () => {} });
+            }, onClose: closeRead });
     },
 
     saveAndReturn() {
@@ -28997,6 +29046,10 @@ drawEffects() {
         if (dt > 0.1) dt = 0.1;
 
         this.lastTime = timestamp;
+        if (APP_EDITION === 'guided' && (!this._learningHUDAt || timestamp - this._learningHUDAt >= 250)) {
+            this._learningHUDAt = timestamp;
+            this._showLearningObjective();
+        }
         // Bump the per-frame memo key so caches like _collectStatusDisplay
         // know they're seeing a fresh frame and rebuild on the first call.
         this._statusFrameId = (this._statusFrameId | 0) + 1;

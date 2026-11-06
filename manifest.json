@@ -1,9 +1,9 @@
 {
-  "name": "Magic v Machine Stable",
-  "short_name": "MvM Stable",
+  "name": "Magic v Machine Guided",
+  "short_name": "MvM Guided",
   "description": "Cyberpunk roguelite dice-builder. Infiltrate the Silicon Empire one run at a time.",
   "start_url": "./index.html?src=pwa",
-  "id": "/mvm",
+  "id": "./",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
   "background_color": "#050011",

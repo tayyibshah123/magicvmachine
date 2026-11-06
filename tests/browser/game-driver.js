@@ -195,6 +195,10 @@ export async function playUntil(page, predicate, { timeout = 360000, events = []
     if (ui.pause) { await tap(page, '#pause-overlay.active'); continue; }
     if (s.state === s.states.CHAR_SELECT) {
       await expect(page.locator('#screen-char-select')).toHaveClass(/active/);
+      if (await page.locator('.char-card[data-class-id="summoner"]').isHidden()
+        && await page.locator('#btn-more-operators').isVisible()) {
+        await tap(page, '#btn-more-operators');
+      }
       await page.waitForFunction(() => {
         const card = document.querySelector('.char-card[data-class-id="summoner"]');
         const rect = card?.getBoundingClientRect();
