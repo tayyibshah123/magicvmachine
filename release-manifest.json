@@ -1,18 +1,18 @@
 {
-  "generatedAt": "2026-11-06T22:20:05.748Z",
+  "generatedAt": "2026-11-06T22:45:43.633Z",
   "editions": {
     "stable": {
       "version": "1.9.57",
       "cachePrefix": "mvm-stable-shell-v",
-      "commit": "28360f5c242b75612e8482106be953a621a957aa",
+      "commit": "5d2dccbd822023d5c42c8e98d2673dcdfd2b8d9d",
       "bundleFingerprint": "7d31e229747f95410c1c4f8053dd7493454564fb507c0f8fe6f63fd993d36ccd",
       "path": "./"
     },
     "guided": {
-      "version": "1.10.0",
+      "version": "1.10.1",
       "cachePrefix": "mvm-guided-shell-v",
-      "commit": "ea41404067af2af839d67455d24d2647a304d881",
-      "bundleFingerprint": "32df81423ade196973559b7bdaaf3e0b17fc6c0e682e1b5dafccfdc3a11d50ff",
+      "commit": "1b29eaf1486e145ac698632f7f15a2426d7b4db0",
+      "bundleFingerprint": "dc3a660fe3fee01df71941c06eac2b56d704add60ee623aab4e2f42d44e657a5",
       "path": "./guided/"
     }
   },
@@ -179,7 +179,7 @@
     "guided/music/synth3.ogg": "ea9aa0f67e149651e42be98509c99c31bfe9540bf38def90c7361f87ce544dc8",
     "guided/music/synth4.m4a": "8ae1d646cff854a309ebcf7b2c9f7fe6d4c6d211915fcdc04730866637ab4aa9",
     "guided/music/synth4.ogg": "371b27473af497528fa47f3d32789fb8fba08be552eca008e13653cb5e089d82",
-    "guided/service-worker.js": "e9cdad161d6812bc649170dadd5f393b93eec34e60e1ec231e46327fdc69b063",
+    "guided/service-worker.js": "b241b7415bd6ae09af233752884c1a48b3b0e8a45486283308b81f0f7a318cf1",
     "guided/sfx/attack.m4a": "d573754931e4994f26e8b7550d5ebbe571191ee909eacb9c391b2ed98fe876c4",
     "guided/sfx/attack.ogg": "e5e0b6ccc4d5720c8174a3e5b7cc6f9be3057352a89cbb2e99a00efc6fe5cc11",
     "guided/sfx/beam.m4a": "3dbb08cb22693401d8764b2ecabf5ea3fd3092832ebfbc79e78092c8ab9a3a86",
@@ -285,7 +285,7 @@
     "guided/src/styles/bracket-screens.css": "45d7afbd81ed2cbe2018c145dbdf6c20c3ba8266f54b29798133567649ca7cb2",
     "guided/src/styles/components.css": "222c260ee00e46830feb95f826a286860ac2f5cdd3f339ad4662cb39e9e539ff",
     "guided/src/styles/glass.css": "569025fe49a8b1a6b2c63e20dc66dfa4f08895e7f329380086cda5d50833e674",
-    "guided/src/styles/learning.css": "7714022d350e74a29efb9a57583a8d90f63ebd30a9f741a1b4d821e8ed5c4bb1",
+    "guided/src/styles/learning.css": "dda2317891e18b228c9b1ccb4b62fd3079fbcd1eb144e07903cde56d04e37f26",
     "guided/src/styles/menu.css": "4e2c45957abd27526c02cb58a15deef1e3b17263b398a88feab00d27630f0a63",
     "guided/src/styles/polish.css": "92ede12b28b88321077ceca320ab03775e7fe2be848b481ba76b619be0afe776",
     "guided/src/styles/settings.css": "2458ea2e1592422e5cc62db153afb93f28b0b9178c11e6ceff3c30b80ab88fa8",
@@ -301,7 +301,7 @@
     "guided/src/ui/intel-modal.js": "1af6ee71cc93cd086983041598f66f943706eadfb2a760067ea2a1e1052cf84b",
     "guided/src/ui/learning-ui.js": "bf5e946e52ccd550c91f544cc80a42cafcf435093ffd506f6e755e0e6646b5b3",
     "guided/src/ui/tooltip.js": "5474100db556ceec172130466c2815c72c192923d6ec1dd1cecd987f3c4da1a7",
-    "guided/src/version.js": "fb53b13d32462622358162625ab040934e4b8a625e63e3f6273f83fc11b03352",
+    "guided/src/version.js": "c14810f8e06c647ff74df02b27c7917adc4c3a1b75cb8ee24ac9818c96012dea",
     "guided/style.css": "eff0c71c151309a32891dcc1048dfbb24ec4f7f82e06d037b26615cff034060f"
   }
 }

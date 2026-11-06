@@ -9,7 +9,7 @@
 #screen-char-select.learning-introductory-select { overflow-y: auto !important; scroll-padding: 12px 0 max(16px, env(safe-area-inset-bottom)); }
 #screen-char-select #char-grid.learning-recommended-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; grid-template-rows: auto !important; grid-auto-rows: auto !important; gap: 12px !important; max-width: 560px; flex: 0 0 auto; align-content: center; align-self: center; }
 #screen-char-select #char-grid.learning-recommended-grid .char-card:not(.learning-advanced-hidden) { display: flex !important; flex-direction: column; justify-content: center; gap: 6px !important; min-height: 220px !important; height: auto; padding: 12px 8px !important; overflow: visible; }
-#screen-char-select #char-grid.learning-recommended-grid canvas.char-preview { width: min(100%, 140px) !important; height: auto !important; aspect-ratio: 1 !important; flex: 0 0 auto; }
+#screen-char-select #char-grid.learning-recommended-grid canvas.char-preview { position: static !important; inset: auto !important; width: min(100%, 140px) !important; height: auto !important; aspect-ratio: 1 !important; flex: 0 0 auto; }
 #screen-char-select #char-grid.learning-recommended-grid .char-name { font-size: 1rem !important; line-height: 1.3 !important; white-space: normal !important; overflow: visible !important; }
 #screen-char-select #char-grid.learning-recommended-grid .char-name-inner { white-space: normal; animation: none; }
 #char-grid .learning-recommended-badge, #char-grid .learning-operator-role { position: static; flex: none; width: 100%; pointer-events: none; }
