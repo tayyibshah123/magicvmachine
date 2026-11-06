@@ -17,8 +17,10 @@ let workers;
 let registration;
 let reload;
 
-beforeEach(() => {
+beforeEach(async () => {
     vi.resetModules();
+    const { Game } = await import('../game.js');
+    Game.currentState = 1;
     vi.useFakeTimers();
     document.body.innerHTML = `
         <div id="sw-update-banner" class="hidden">
