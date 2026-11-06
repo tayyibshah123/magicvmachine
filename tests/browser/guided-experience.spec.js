@@ -29,10 +29,7 @@ test('an actual short-core checkpoint survives a cold refresh without completing
   const events = [];
   await playUntil(page, s => s.breakout && s.room === 0 && s.dice.length > 0 && !s.storyboard && !s.locked,
     { timeout: 45000, events });
-  const checkpoint = await page.evaluate(() => {
-    Game.saveGame();
-    return JSON.parse(Game._readSaveRaw());
-  });
+  const checkpoint = await page.evaluate(() => JSON.parse(Game._readSaveRaw()));
   expect(checkpoint.guidance.core.roomIndex).toBe(0);
   await page.reload();
   await page.waitForFunction(() => window.Game?.ctx);
@@ -52,17 +49,18 @@ test('native paid-skill practice uses real mana and restores the real checkpoint
   await openGame(page, { returning: true });
   await configureEncounter(page, { classId: 'tactician', hp: 57 });
   await page.evaluate(() => { Game.techFragments = 23; Game.saveGame(); });
-  await tap(page, '#btn-settings');
-  await tap(page, '#btn-learning-practice');
-  await expect(page.locator('#learning-practice-library')).toBeVisible();
-  await tap(page, '[data-lesson-id="resources"]');
-  await expect.poll(() => page.evaluate(() => !!Game._practiceSession)).toBe(true);
   const physical = () => page.evaluate(prefix => {
     const storage = window.__MVM_NATIVE_STORAGE__.local;
     return Object.fromEntries(Object.keys(storage).filter(key => key.startsWith(prefix))
       .map(key => [key, storage.getItem(key)]));
   }, storagePrefix);
   const before = await physical();
+  await tap(page, '#btn-settings');
+  await tap(page, '#btn-learning-practice');
+  await expect(page.locator('#learning-practice-library')).toBeVisible();
+  await tap(page, '[data-lesson-id="resources"]');
+  await expect.poll(() => page.evaluate(() => !!Game._practiceSession)).toBe(true);
+  expect(await physical()).toEqual(before);
   const events = [];
   await playUntil(page, s => s.state === STATE.MENU && !s.breakout, { timeout: 130000, events });
   const after = await physical();
@@ -149,6 +147,31 @@ test('a wrong native drop gives a useful target correction and leaves the die av
   expect(await page.evaluate(() => ({ hp: Game.player.currentHp,
     enemyHp: Game.enemy.currentHp, used: Game.dicePool[0].used, qte: Game.qte.active })))
     .toEqual({ hp: 100, enemyHp: 500, used: false, qte: false });
+});
+
+test('native Challenge briefing and replacement cancellation both preserve the checkpoint', async ({ page }) => {
+  await openGame(page);
+  await tap(page, '#onb-next-1');
+  await configureEncounter(page, { classId: 'tactician' });
+  const checkpoint = await page.evaluate(async () => {
+    const { Unlocks } = await import('/src/services/unlocks.js');
+    Game.saveAndReturn();
+    Unlocks.grant('daily', 'browser-test');
+    Unlocks.applyMenuVisibility();
+    return Game._readSaveRaw();
+  });
+  await tap(page, '#btn-challenge');
+  await expect(page.locator('#learning-mode-briefing')).toBeVisible();
+  expect(await page.evaluate(() => Game._readSaveRaw())).toBe(checkpoint);
+  await tap(page, '#learning-mode-briefing .learning-modal-close');
+  await expect(page.locator('#learning-mode-briefing')).toHaveCount(0);
+  expect(await page.evaluate(() => Game._readSaveRaw())).toBe(checkpoint);
+  await tap(page, '#btn-challenge');
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.getByRole('button', { name: 'START', exact: true }).tap();
+  await expect(page.locator('#learning-mode-briefing')).toHaveCount(0);
+  expect(await page.evaluate(() => Game._readSaveRaw())).toBe(checkpoint);
+  expect(await page.evaluate(() => Game.currentState)).toBe(STATE.MENU);
 });
 
 for (const [classId, pattern, waves] of [

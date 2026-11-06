@@ -5688,6 +5688,9 @@ startQTE(type, x, y, callback, opts) {
         overlay.querySelector('.char-detail-style').textContent = meta.style || '...';
         overlay.querySelector('.char-detail-minion').textContent = meta.minion || '...';
         overlay.querySelector('.char-detail-ability').textContent = meta.ability || '...';
+        if (APP_EDITION === 'guided') this._learningUI?.decorateClassDetail?.(this, {
+            mode: Learning.getMode(), coreComplete: Learning.coreComplete(), classId: cls.id
+        });
         const attackEl = overlay.querySelector('.char-detail-attack');
         if (attackEl) attackEl.textContent = meta.attack || '...';
         const comboEl = overlay.querySelector('.char-detail-combo');
