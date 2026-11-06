@@ -1,4 +1,4 @@
-// Build the shippable web bundle for Capacitor.
+// Build a browser bundle by default, or a compact Capacitor bundle with --native.
 //
 // Capacitor's `webDir` points at a single folder that gets copied into
 // the native APK. We don't want to ship node_modules, tests, dev docs,
@@ -50,9 +50,11 @@ const COPY_DIRS = [
 // Drop the heavier OGG variants from the APK build when M4A versions
 // exist alongside (compress-music.mjs produces them). Saves ~50% of
 // the music payload on Android. The web build still ships both since
-// service-worker.js precaches by URL list and the audio loader picks
-// per-codec at runtime.
-const STRIP_OGG_IF_M4A_PRESENT = true;
+// the audio loader picks its codec at runtime.
+const STRIP_OGG_IF_M4A_PRESENT = process.argv.includes('--native');
+for (const argument of process.argv.slice(2)) {
+    if (argument !== '--native') throw new Error('Unknown build option: ' + argument);
+}
 
 // Pruned from copied dirs: dev-only files that have no business in the APK.
 const PRUNE = [
@@ -138,6 +140,12 @@ if (STRIP_OGG_IF_M4A_PRESENT) {
                 const rx = new RegExp(oggUrl.replace(/[.]/g, '\\.'), 'g');
                 sw = sw.replace(rx, m4aUrl);
             }
+            // Browser workers list both codecs. Native URL replacements
+            // must not turn that into duplicate cache downloads.
+            sw = sw.replace(/const (SHELL_ASSETS|MUSIC_ASSETS) = \[([\s\S]*?)\];/g, (whole, name, body) => {
+                const urls = [...new Set([...body.matchAll(/'([^']+)'/g)].map(match => match[1]))];
+                return 'const ' + name + ' = [\n' + urls.map(url => "    '" + url + "'").join(',\n') + '\n];';
+            });
             writeFileSync(swPath, sw);
             console.log(`build-www: rewrote ${stripped.length} OGG → M4A URL(s) in service-worker.js`);
         }
