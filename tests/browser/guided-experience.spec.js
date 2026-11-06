@@ -28,9 +28,52 @@ test('an actual short-core checkpoint survives a cold refresh without completing
   await expect(page.locator('.char-card:visible')).toHaveCount(2);
   await expect(page.getByText('Flexible attacks and rerolls', { exact: true })).toBeVisible();
   await expect(page.getByText('Shield and automatic protection', { exact: true })).toBeVisible();
-  await page.waitForFunction(() => [...document.querySelectorAll('.char-card.learning-recommended')]
-    .every(card => getComputedStyle(card).opacity > 0.99));
-  await info.attach('guided-recommended-operators-360', { body: await page.screenshot(), contentType: 'image/png' });
+  const layouts = [];
+  for (const width of [360, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForFunction(() => [document.getElementById('screen-char-select'),
+      ...document.querySelectorAll('.char-card.learning-recommended')].every(node => {
+      const style = getComputedStyle(node);
+      return Number(style.opacity) > 0.99 && [...style.filter.matchAll(/blur\(([\d.]+)px\)/g)]
+        .every(match => Number(match[1]) <= 0.01);
+    }));
+    const cards = await page.locator('.char-card.learning-recommended').evaluateAll(nodes => nodes.map(card => {
+      const rect = node => {
+        const { top, right, bottom, left, width, height } = node.getBoundingClientRect();
+        return { top, right, bottom, left, width, height };
+      };
+      const bounds = rect(card);
+      const centre = document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
+      return { classId: card.dataset.classId, card: bounds,
+        preview: rect(card.querySelector('.char-preview')), name: rect(card.querySelector('.char-name')),
+        badge: rect(card.querySelector('.learning-recommended-badge')), role: rect(card.querySelector('.learning-operator-role')),
+        centreHittable: centre?.closest('.char-card') === card };
+    }));
+    layouts.push({ width, height: 800, cards });
+    await page.screenshot({ path: info.outputPath(`guided-operators-${width}.png`) });
+    await info.attach(`guided-recommended-operators-${width}`, {
+      path: info.outputPath(`guided-operators-${width}.png`), contentType: 'image/png'
+    });
+  }
+  await info.attach('guided-recommended-operator-bounds', { body: JSON.stringify(layouts, null, 2), contentType: 'application/json' });
+  for (const layout of layouts) for (const card of layout.cards) {
+    expect(card.centreHittable, `${layout.width}px ${card.classId} centre`).toBe(true);
+    expect(card.preview.bottom, `${layout.width}px ${card.classId} preview before name`).toBeLessThanOrEqual(card.name.top + 0.5);
+    expect(card.name.bottom, `${layout.width}px ${card.classId} name before badge`).toBeLessThanOrEqual(card.badge.top + 0.5);
+    expect(card.badge.bottom, `${layout.width}px ${card.classId} badge before role`).toBeLessThanOrEqual(card.role.top + 0.5);
+    expect(card.card.top).toBeGreaterThanOrEqual(0);
+    expect(card.card.bottom).toBeLessThanOrEqual(layout.height);
+    for (const part of [card.preview, card.name, card.badge, card.role]) {
+      expect(part.width).toBeGreaterThan(0);
+      expect(part.height).toBeGreaterThan(0);
+      expect(part.top).toBeGreaterThanOrEqual(card.card.top - 0.5);
+      expect(part.bottom).toBeLessThanOrEqual(card.card.bottom + 0.5);
+      expect(part.left).toBeGreaterThanOrEqual(Math.max(0, card.card.left) - 0.5);
+      expect(part.right).toBeLessThanOrEqual(Math.min(layout.width, card.card.right) + 0.5);
+    }
+  }
+  await page.setViewportSize({ width: 360, height: 800 });
   await tap(page, '.char-card[data-class-id="tactician"]');
   await tap(page, '#btn-char-detail-confirm');
   const events = [];
