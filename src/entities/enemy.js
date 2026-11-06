@@ -246,6 +246,8 @@ class Enemy extends Entity {
         // lowest-HP player minion (so enemies feel tactical and finish off
         // weakened minions instead of spreading damage evenly). Random 30%
         // stays spread to avoid full-deterministic cheese.
+        const guidedIntent = !this.isBoss && Game._guidedOrdinaryIntent?.(this);
+        if (guidedIntent) return guidedIntent;
         const getTarget = () => {
             const minions = Game.player ? Game.player.minions : null;
             if (!minions || minions.length === 0) return Game.player;
@@ -588,8 +590,8 @@ class Enemy extends Entity {
         const isLowHp = this.currentHp < this.maxHp * 0.3;
         const roll = Math.random();
 
-        if (isLowHp) return { type: 'heal', val: Math.floor(this.maxHp * 0.1) };
-        if (this.minions.length < 2 && roll < 0.2) return { type: 'summon', val: 0 };
+        if (isLowHp && (!Game._canGuidedFeature || Game._canGuidedFeature('enemy_healer'))) return { type: 'heal', val: Math.floor(this.maxHp * 0.1) };
+        if (this.minions.length < 2 && roll < 0.2 && (!Game._canGuidedFeature || Game._canGuidedFeature('hostileMinions'))) return { type: 'summon', val: 0 };
 
         return { type: 'attack', val: this.baseDmg, target: getTarget() };
     }

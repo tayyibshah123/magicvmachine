@@ -2632,6 +2632,7 @@ startQTE(type, x, y, callback, opts) {
                         || this.currentState === STATE.TUTORIAL_COMBAT || this.currentState === STATE.BREAKOUT);
                 try {
                     const feedback = this._enemyTurnFeedback;
+                    if (!cancelled && stillLive) this._recordLearningAction('timing');
                     if (!cancelled && stillLive && type === 'DEFEND' && !opts?.minionBoost
                         && feedback && feedback.gen === gen && feedback.player === player
                         && feedback.enemy === enemy && this.qte.id === qteId && this.qte.quality) {
@@ -6316,6 +6317,7 @@ triggerPhaseGlitch() {
     },
 
     checkSynergies(newRelic) {
+        if (!this._canGuidedFeature('synergies')) return;
         if (!this.player || !Array.isArray(SYNERGIES)) return;
         const ownedIds = new Set(this.player.relics.map(r => r.id));
         this.synergiesTriggered = this.synergiesTriggered || new Set();
@@ -6326,6 +6328,7 @@ triggerPhaseGlitch() {
             // Only fire when the newly-added relic is one of the synergy parts.
             if (newRelic && !s.ids.includes(newRelic.id)) continue;
             this.synergiesTriggered.add(s.id);
+            this._recordLearningAction('synergies');
             // Track for run summary (C13).
             this.runStats = this.runStats || { synergies: [] };
             this.runStats.synergies = this.runStats.synergies || [];
@@ -7258,6 +7261,11 @@ triggerPhaseGlitch() {
      * when crossing 2/4/6. APEX flag is read by the next-attack damage
      * path. */
     _tickMomentum(reason, delta) {
+        if (!this._canGuidedFeature('momentum')) {
+            this.momentum = 0;
+            this._momentumApexArmed = false;
+            return;
+        }
         if (typeof this.momentum !== 'number') this.momentum = 0;
         const before = this.momentum;
         if (reason === 'apex_consume') {
@@ -7268,6 +7276,7 @@ triggerPhaseGlitch() {
         this.momentum = Math.max(0, Math.min(6, this.momentum + (delta || 1)));
         this._momentumTriggeredThisTurn = true;
         if (this.momentum === before) return;
+        this._recordLearningAction('momentum');
         // First-time-on-momentum hint — fires when the player first
         // reaches FLOW (tier 2) so the system is taught at the moment
         // of earning, not via wiki.
@@ -9178,8 +9187,9 @@ triggerSystemCrash() {
     },
 
     generateMap() {
-        if (this._isGuidedRun() && this.sector === 1 && !this.challengeMode && !this.archiveMode) {
-            this.map = Learning.route();
+        if (this._isGuidedRun() && (this.sector === 1 || this._guidedRun.v === 2 && this.sector <= 5)
+            && !this.challengeMode && !this.archiveMode) {
+            this.map = Learning.route(this._guidedRun, this.sector);
             return;
         }
         // Archive Mode — Sector X. Single fight against THE ARCHIVIST.
@@ -10225,6 +10235,8 @@ triggerSystemCrash() {
 
     visitNode(node) {
         if (this.pendingReward) { this.changeState(STATE.REWARD); return; }
+        if (this._isGuidedRun() && (!node || node.status !== 'available'
+            || !this.map.nodes.some(candidate => candidate === node))) return;
         AudioMgr.playSound('click');
 
         if (node.type === 'start') return;
@@ -10289,7 +10301,9 @@ triggerSystemCrash() {
         // 2. Update Player Position (Crucial for completeCurrentNode to work)
         this.map.currentIdx = node.id;
         if (this._isGuidedRun() && Number.isInteger(node.guideStage)) {
-            Learning.boundary(this._guidedRun, node.guideStage, { practice: !!this._practiceSession });
+            this._queueGuidedOpportunities(node);
+            Learning.boundary(this._guidedRun, node.guideStage, { practice: !!this._practiceSession,
+                sector: this.sector, nodeId: node.id });
             this._showLearningObjective();
         }
 
@@ -11529,7 +11543,7 @@ triggerSystemCrash() {
             // Restore ongoing rules without repeating starting HP changes
             // or the starter relic grant already included in this snapshot.
             this._applyCustomRunModifiers({ restore: true });
-            if (this._isGuidedRun() && this._guidedRun.finished) this.player.diceCount = Math.max(6, this.player.diceCount || 0);
+            if (this._isGuidedRun() && (this._guidedRun.finished || this._guidedRun.foundationComplete)) this.player.diceCount = Math.max(6, this.player.diceCount || 0);
             this._challengeTwist = this.challengeMode ? Challenge.todayTwist() : null;
 
             // Rehydrate runStats from save. Defensive merge — missing fields
@@ -11630,7 +11644,7 @@ triggerSystemCrash() {
             return;
         }
         // FIX: Filter events based on conditions (e.g. don't show upgrade events if maxed)
-        const validEvents = EVENTS_DB.filter(e => !e.condition || e.condition(this));
+        const validEvents = this._guidedPool(EVENTS_DB.filter(e => !e.condition || e.condition(this)), 'events');
 
         // Anti-repeat memory ring — track the last 2 event titles played
         // this run. Filter the pool to avoid surfacing the same event
@@ -11696,6 +11710,7 @@ triggerSystemCrash() {
             btn.onclick = () => {
                 const beforeFrags = this.techFragments || 0;
                 const msg = opt.effect(this);
+                this._recordLearningAction('events');
 
                 if (msg === "COMBAT_STARTED") return;
 
@@ -11846,7 +11861,8 @@ triggerSystemCrash() {
             [availableUpgrades[i], availableUpgrades[j]] = [availableUpgrades[j], availableUpgrades[i]];
         }
         
-        const shopUpgrades = this._canGuidedFeature('advanced') ? availableUpgrades.slice(0, 3) : [];
+        const shopUpgrades = this._canGuidedFeature(this._guidedRun?.v === 1 ? 'advanced' : 'synergies')
+            ? availableUpgrades.slice(0, 3) : [];
         let discountIndex = shopUpgrades.length > 0 ? Math.floor(Math.random() * shopUpgrades.length) : -1;
 
         shopUpgrades.forEach((key, idx) => {
@@ -12369,6 +12385,7 @@ triggerSystemCrash() {
                     if (this.techFragments >= item.cost) {
                         this.techFragments -= item.cost;
                         item.action();
+                        this._recordLearningAction('shopBuy', { cost: item.cost });
                         item.purchased = true;
                         AudioMgr.playSound('buy');
                         this.saveGame();
@@ -12397,6 +12414,7 @@ triggerSystemCrash() {
                     if (this.techFragments >= item.cost) {
                         this.techFragments -= item.cost;
                         this.player.diceUpgrades.push(item.key);
+                        this._recordLearningAction('shopBuy', { cost: item.cost });
                         item.purchased = true;
                         AudioMgr.playSound('upgrade');
                         this.saveGame();
@@ -14498,10 +14516,7 @@ async startCombat(type) {
             } else this._guidedBossRules = null;
         } else {
             let pool = ENEMIES.filter(e => e.sector === this.sector);
-            if (this._isGuidedRun() && !this._guidedRun.finished && this.sector === 1) {
-                pool = pool.filter(e => this._guidedRun.stage < 5
-                    ? e.name === 'Sentry Drone' : ['Sentry Drone', 'Heavy Loader'].includes(e.name));
-            }
+            if (this._isGuidedRun()) pool = Learning.enemyPool(pool, this._guidedRun);
             if (pool.length === 0) pool = ENEMIES.filter(e => e.sector === 3); 
             if (pool.length === 0) pool = ENEMIES.filter(e => e.sector === 1); 
             template = pool[Math.floor(Math.random() * pool.length)];
@@ -14524,6 +14539,24 @@ async startCombat(type) {
 
         // Create New Enemy
         this.enemy = new Enemy(template, level, isElite);
+        if (this._isGuidedRun() && this._guidedRun.v === 2 && !this._guidedRun.finished) {
+            if (isElite) {
+                const key = `${this.sector}:${this.map.currentIdx}`;
+                if (this._guidedRun.eliteNodeKey !== key) {
+                    this._guidedRun.eliteNodeKey = key;
+                    this._guidedRun.eliteAffix = this.sector === 1 ? 'Shielded' : this.enemy.affixes[0];
+                }
+                this.enemy.affixes = [this._guidedRun.eliteAffix];
+            }
+            if (!isBoss && !isElite && this._guidedRun.lesson === 'hostile') {
+                this.enemy.minions.push(new Minion(0, 0, 1, false));
+            }
+            if (!isBoss && !isElite && ['enemy_healer', 'enemy_shielder', 'enemy_buffer'].includes(this._guidedRun.lesson)) {
+                const support = new Minion(0, 0, 1, false, 2);
+                if (this._guidedRun.lesson === 'enemy_healer') support.currentHp = 4;
+                this.enemy.minions.push(support);
+            }
+        }
         if (isElite && this._isGuidedRun() && !this._guidedRun.finished && this.sector === 1) {
             this.enemy.affixes = ['Shielded'];
         }
@@ -17041,6 +17074,10 @@ async startTurn() {
     },
 
     _getAvailableDiceTypes() {
+        if (this._practiceSession) {
+            const forced = Breakout.forcedHand?.();
+            if (forced?.length) return [...new Set(forced.filter(type => DICE_TYPES[type]))];
+        }
         const classBase = new Set(this._getClassBaseDice());
         return Object.keys(DICE_TYPES).filter(key => {
             if (!Learning.allowDie(key, this._isGuidedRun() ? this._guidedRun : null)) return false;
@@ -17348,6 +17385,10 @@ async startTurn() {
         this.comboSiblingBond = false;
         this.comboSets = {}; // id -> { name, color, members: Set<dieId> }
         this.activeCombos = [];
+        if (!this._canGuidedFeature('combos')) {
+            for (const die of this.dicePool || []) die._tacticiansEye = false;
+            return;
+        }
         // Pact of Silence — combos do not trigger this run. Cleared maps
         // above mean the UI also stops glowing combo-eligible dice.
         if (this.hasPact && this.hasPact('silence')) return;
@@ -17496,6 +17537,7 @@ async startTurn() {
             const set = this.comboSets[id];
             this._playComboClimax(id, set);
             delete this.comboSets[id];
+            this._recordLearningAction('combos');
             // Momentum: combo set fully consumed → +1 to the meter.
             if (this._tickMomentum) this._tickMomentum('combo', 1);
         }
@@ -18193,9 +18235,13 @@ async startTurn() {
             Hints.trigger && Hints.trigger('first_mana_spent');
         }
         this.diceUsedThisTurn = (this.diceUsedThisTurn || 0) + 1;
-        this._recordLearningAction(this._dieSlot(die.type) || 'skill', {
+        const learningSlot = this._dieSlot(die.type);
+        this._recordLearningAction(learningSlot === 'minion' ? 'minionDie' : learningSlot || 'skill', {
             skill: !!data.isSkill, cost: effectiveCost, signature: die.type === 'SIGNATURE'
         });
+        if (target instanceof Minion && !target.isPlayerSide && (learningSlot === 'attack' || data.isSkill)) {
+            this._recordLearningAction('hostileMinions');
+        }
         // Diag — count dice used + attacks for the diagnostic dump.
         // NOTE: `type` is declared later via `const type = die.type;` so
         // referencing the bare symbol here was a TDZ error. Read straight
@@ -18946,6 +18992,7 @@ async startTurn() {
                         if(this.player.hasRelic('neural_link')) { m.maxHp += 3; m.currentHp += 3; m.dmg += 3; }
                         
                         this.player.minions.push(m);
+                        this._recordLearningAction('minion');
                         this.triggerVFX('materialize', null, {x: this.player.x, y: this.player.y});
                         // Class-fantasy summon VFX — fires after updateMinionPositions
                         // so it anchors to the minion's real slot position.
@@ -19031,6 +19078,7 @@ async startTurn() {
                  const name = isUpgraded ? "DIGITAL ROT" : "CONSTRICT";
                  const icon = isUpgraded ? DICE_UPGRADES.CONSTRICT.icon : DICE_TYPES.CONSTRICT.icon;
                  finalEnemy.addEffect('constrict', dur, val, icon, 'Atk/Heal reduced.', name);
+                 if (finalEnemy.hasEffect('constrict')) this._recordLearningAction('status');
                  this.triggerVFX('chains', this.player, finalEnemy);
                  
             } else if (type === 'VOODOO') {
@@ -19599,6 +19647,10 @@ async startTurn() {
         }
 
         // Apply Cost
+        if (hpCost > 0 && !this._canGuidedFeature('hpCosts')) {
+            this.showHintToast?.('HP-cost rerolls arrive in the hand-control lesson. Free rerolls are still available each turn.', 3500);
+            return;
+        }
         this._recordLearningAction('reroll');
         // Per-turn reroll accumulator for the end-of-turn summary —
         // counts every reroll regardless of how it was paid (banked,
@@ -23738,6 +23790,7 @@ drawEffects() {
                     await this._presentCombatHits(vfxType, attackSource, validTarget, hits, current);
                 });
                 if (!continued || !stillLive()) return;
+                if (intent.type === 'multi_attack' && hits > 1) this._recordLearningAction('multiwave');
             } 
             else if (intent.type === 'heal') {
                 await this.sleep(300);
@@ -24136,6 +24189,12 @@ drawEffects() {
             if (!continueWin()) return;
         }
         // Achievements: boss + run-completion checks (eligible only outside tutorial)
+        if (this.currentState !== STATE.TUTORIAL_COMBAT && this._isGuidedRun()) {
+            Learning.recordWin(this._guidedRun, this.map.currentIdx, {
+                boss: !!this.enemy?.isBoss, sector: this.sector, practice: !!this._practiceSession
+            });
+            if (this._guidedRun.finished || this._guidedRun.foundationComplete) this.player.diceCount = Math.max(6, this.player.diceCount || 0);
+        }
         if (this.currentState !== STATE.TUTORIAL_COMBAT && this.enemy) {
             if (this.enemy.isBoss && typeof Achievements !== 'undefined') {
                 Achievements.unlock('FIRST_BOSS');
@@ -24725,10 +24784,6 @@ drawEffects() {
         };
 
         const skipReward = wasElite && this._ascEffects?.noEliteRewards;
-        if (this._isGuidedRun()) Learning.recordWin(this._guidedRun, this.map.currentIdx, {
-            boss: wasBoss && this.sector === 1, practice: !!this._practiceSession
-        });
-        if (this._isGuidedRun() && this._guidedRun.finished) this.player.diceCount = Math.max(6, this.player.diceCount || 0);
         this.pendingReward = null;
         if (!skipReward) {
             this._rewardContext = { encounterType: wasBoss ? 'boss' : (wasElite ? 'elite' : 'combat'), killName };
@@ -24897,8 +24952,10 @@ drawEffects() {
 
         // --- ADD CORRUPTED RELICS (If Ascended) ---
         // Gated entries require minimum corruption level.
-        if (this.corruptionLevel > 0 && typeof CORRUPTED_RELICS !== 'undefined' && this._canGuidedFeature('corrupted')) {
-            const level = this.corruptionLevel;
+        const rewardCorruption = this._isGuidedRun() && this._guidedRun.v === 2
+            ? Math.max(this.corruptionLevel || 0, Ascension.getSelected() || 0) : this.corruptionLevel;
+        if (rewardCorruption > 0 && typeof CORRUPTED_RELICS !== 'undefined' && this._canGuidedFeature('corrupted')) {
+            const level = rewardCorruption;
             const eligible = CORRUPTED_RELICS.filter(r => !r.minAscension || level >= r.minAscension);
             pool.push(...eligible);
         }
@@ -26020,12 +26077,29 @@ drawEffects() {
         if (APP_EDITION !== 'guided') return true;
         // Optional practice uses the drill's own explicit tools, never the
         // unfinished curriculum of the suspended real run.
-        if (this._practiceSession) return true;
+        if (this._practiceSession) return this._practiceFeatures?.has?.(feature)
+            ?? !['combos', 'momentum', 'synergies'].includes(feature);
         return Learning.canFeature(feature, this._isGuidedRun() ? this._guidedRun : null);
     },
 
     _guidedPool(items, kind) {
         return Learning.filterPool(items, kind, this._isGuidedRun() ? this._guidedRun : null);
+    },
+
+    _queueGuidedOpportunities(node) {
+        if (!this._isGuidedRun() || this._guidedRun.v !== 2 || this._practiceSession || this.sector < 2) return;
+        const owned = new Set((this.player?.relics || []).map(relic => relic.id));
+        if (this._canGuidedFeature('synergies') && MODULE_FUSIONS.some(fusion => fusion.ids.every(id => owned.has(id)))) Learning.queue('fusions');
+        const practised = Learning.profile()?.shared.practised || [];
+        if (node?.type === 'shop' && practised.includes('shopBuy') && this.techFragments >= 100) Learning.queue('shopHack');
+        if (this.corruptionLevel > 0 || Ascension.getSelected() > 0) Learning.queue('corrupted');
+        if (practised.includes('events')) Learning.queue('eventVariety');
+    },
+
+    _guidedOrdinaryIntent(enemy) {
+        if (!this._isGuidedRun() || this._guidedRun.v !== 2 || this._guidedRun.finished || enemy?.isBoss) return null;
+        if (this._guidedRun.lesson === 'multiwave') return { type: 'multi_attack', val: 3, hits: 2, target: this.player };
+        return null;
     },
 
     _recordLearningAction(action, details = {}) {
