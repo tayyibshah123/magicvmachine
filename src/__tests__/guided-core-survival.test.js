@@ -63,6 +63,15 @@ async function use(type, target, quality) {
 describe('guided core opening and completion', () => {
     it.each(cases)('%s %s opening in room %s preserves a real enemy phase before core completion', async (classId, quality, roomIndex) => {
         createCombatPlayer(classId);
+        const attackTurns = new Map();
+        const useDie = Game.useDie;
+        vi.spyOn(Game, 'useDie').mockImplementation(function (die, el, target) {
+            if (Game._dieSlot(die.type) === 'attack') {
+                if (!attackTurns.has(target)) attackTurns.set(target, new Set());
+                attackTurns.get(target).add(Game.turnCount);
+            }
+            return useDie.call(this, die, el, target);
+        });
         const complete = Game._onGuidedCoreComplete = vi.fn();
         Breakout.start(Game, { guided: true, progress: { roomIndex, actions: [] } });
         const enemy = Game.enemy;
@@ -96,6 +105,9 @@ describe('guided core opening and completion', () => {
         expect(complete).toHaveBeenCalledTimes(1);
         expect(Breakout.isActive()).toBe(false);
         expect(Game._guidedRhythmPractice).toBe(false);
+        if (quality === 'good') {
+            for (const turns of attackTurns.values()) expect(turns.size, 'Good core pacing stays within four attack turns per room').toBeLessThanOrEqual(4);
+        }
     }, 15000);
 
     it('introduces the core Spirit automatic strike without promising a locked timing boost', () => {
