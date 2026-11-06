@@ -6,7 +6,7 @@
 // worker context that can't import ES modules, so the version string is
 // duplicated by design. Old caches are deleted on activate.
 const CACHE_PREFIX = 'mvm-stable-shell-v';
-const CACHE_NAME = 'mvm-stable-shell-v1-9-56';
+const CACHE_NAME = 'mvm-stable-shell-v1-9-57';
 const SCOPE = new URL(self.registration.scope);
 const ACTIVE_CACHE = SCOPE.pathname + '|' + CACHE_NAME;
 const SHELL_ASSETS = [
