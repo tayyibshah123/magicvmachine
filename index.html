@@ -1,0 +1,1503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#050011">
+    <meta name="color-scheme" content="dark">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="Magic v Machine. A Cyber-Roguelite. Infiltrate the Silicon Empire.">
+
+    <title>Magic v Machine</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <!-- Home-screen icon for iOS when the site is added to the home screen
+         or packaged via Capacitor. Maskable is fine for Android/Chrome. -->
+    <link rel="apple-touch-icon" href="intro.png">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <link rel="icon" type="image/png" href="intro.png">
+    <!-- Google Fonts with font-display=swap (in the URL) — the CSS swaps
+         in Orbitron/Rajdhani when loaded, otherwise system fonts from
+         style.css are used. For offline / App Store wrapped builds, drop
+         these two lines and ship self-hosted woff2 copies instead. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Typography pass — extra weights for impact + utility:
+           Orbitron 500/700/900    cyber chrome (eyebrows, captions)
+           Rajdhani 300/500/600/700 body + UI labels
+           Saira 800/900 + italic   IMPACT — main display font, used
+                                    for the wordmark and shard labels.
+                                    Heavy condensed sans with strong
+                                    rectangular geometry, the closest
+                                    free Google Font to the Marvel Snap
+                                    custom wordmark.
+           Audiowide 400            cyber-tech secondary display, used
+                                    on small status / module / hub
+                                    eyebrow labels. -->
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;500;600;700&family=Saira:ital,wght@0,800;0,900;1,800;1,900&display=swap" rel="stylesheet">
+    <!-- UI v2 — Phase 1 tokens (must load BEFORE style.css so any
+         legacy rule that references the new vars cascades correctly).
+         Phase 2 components live in components.css and use the v2
+         `.ui-*` namespace, additive on top of the legacy classes
+         until each screen is migrated in Phase 3+. -->
+    <link rel="stylesheet" href="src/styles/tokens.css">
+    <link rel="stylesheet" href="src/styles/components.css">
+    <link rel="stylesheet" href="style.css">
+    <!-- Phase 3 — main menu redesign. Loaded AFTER style.css so its
+         scoped overrides (.menu-v2 *) win over the legacy menu rules
+         while only affecting the redesigned screen. -->
+    <link rel="stylesheet" href="src/styles/menu.css">
+    <!-- Phase 4 — settings + secondary modals re-skin. Overlay-style
+         restyle of the existing legacy markup so JS handlers stay
+         untouched. Targets #modal-settings, #modal-glossary, the
+         save-slot modal, and the sanctuary NPC modal. -->
+    <link rel="stylesheet" href="src/styles/settings.css">
+    <!-- Snap-pivot — Marvel Snap visual language. Hexagonal motifs,
+         chamfered angular plates, metallic gradients with white
+         sheen highlights, wedge banners for player-vs-opponent
+         layouts. Loads LAST so its plate / hex / wedge primitives
+         and `.menu-v2` overrides win over the earlier glass-blur
+         grammar wherever the snap context applies. -->
+    <link rel="stylesheet" href="src/styles/snap.css">
+    <!-- Glass-shard variety — unique crystalline silhouettes per
+         UI slot (parallelogram / pentagon / kite / tab / arrow)
+         instead of a single repeated chamfered plate. Translucent
+         backdrop-blur fill with refined sheen + edge highlights.
+         Loads after snap.css so its `.ui-shard` rules + menu
+         overrides win where applied. -->
+    <link rel="stylesheet" href="src/styles/glass.css">
+    <!-- Detail polish — impact typography (Saira 900 italic),
+         layered shard fills (scanlines + chromatic edge tints),
+         neon chromatic wordmark, LED indicator dots on shard
+         eyebrows, diagonal glint sheen. Loads last so its
+         higher-specificity rules anchor the final visual. -->
+    <link rel="stylesheet" href="src/styles/polish.css">
+    <!-- Bracket aesthetic for non-menu screens — applies the menu's
+         diagonal TL+BR cyan bracket buttons / panels / cards
+         consistently across char-select, map, sanctuary, shop,
+         codex, intel, glossary, reward, victory, gameover, hex,
+         event, pact, story, ending. Combat HUD intentionally
+         excluded (state-cue colours stay legible). -->
+    <link rel="stylesheet" href="src/styles/bracket-screens.css">
+    <!-- VFX layer — non-combat ambient particle / beam / spark /
+         aurora field. Mounted to body via src/services/vfx.js and
+         retinted per screen (purple, blue, gold, green, pink). -->
+    <link rel="stylesheet" href="src/styles/vfx.css">
+</head>
+<body>
+
+    <!-- Service-worker update banner — shown when a new build has
+         been cached in the background. Tap REFRESH to replace the
+         currently-running tab with the new code. Self-dismissable
+         with the X button so a player who's mid-run can defer it
+         until they finish. -->
+    <div id="sw-update-banner" class="sw-update-banner hidden" role="status">
+        <span class="sw-update-icon" aria-hidden="true">↻</span>
+        <span class="sw-update-text">New build available</span>
+        <button id="btn-sw-refresh" class="btn-inline">REFRESH</button>
+        <button id="btn-sw-dismiss" class="sw-update-close" aria-label="Dismiss update">×</button>
+    </div>
+
+    <!-- Portrait-only blocker. CSS media query at the body level
+         shows this when the device is in landscape orientation +
+         coarse-pointer (touch). Rotation back to portrait dismisses
+         automatically; no JS dismiss handler so the message can't
+         be permanently silenced. -->
+    <div id="landscape-hint" aria-live="polite" role="alertdialog" aria-modal="true">
+        <div class="landscape-hint-card">
+            <svg class="landscape-hint-icon" viewBox="0 0 64 64" aria-hidden="true">
+                <rect x="22" y="6" width="20" height="36" rx="3"
+                    fill="none" stroke="currentColor" stroke-width="3"/>
+                <circle cx="32" cy="38" r="1.5" fill="currentColor"/>
+                <path d="M 6 28 Q 6 18 16 18 L 22 18"
+                    fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round"/>
+                <path d="M 22 18 L 18 14 M 22 18 L 18 22"
+                    fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round"/>
+            </svg>
+            <div class="landscape-hint-title">ROTATE DEVICE</div>
+            <div class="landscape-hint-sub">Magic v Machine plays in portrait.</div>
+        </div>
+    </div>
+    <div id="game-container">
+        <!-- Main Game Canvas -->
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- UI Overlay Layer -->
+        <div id="ui-layer">
+            
+            <!-- NEW: Phase Banner -->
+            <div id="phase-banner" class="hidden">
+                <div class="banner-text">PLAYER PHASE</div>
+                <div class="banner-sub">SYSTEM READY</div>
+            </div>
+
+            <!-- CRT Scanline & Vignette Overlay -->
+            <div id="crt-overlay"></div>
+
+            <!-- Intro splash (first thing shown on launch). V2 rework:
+                 every size is authored in container-query units (cqw / cqh /
+                 cqmin) so the layout renders identically on mobile and
+                 desktop. Decorative layers are kept minimal so the brand
+                 moment is clean, not cluttered. -->
+            <div id="intro-overlay" class="intro-v2" role="button" tabindex="0" aria-label="Tap to continue">
+                <!-- Layered backgrounds — all use container-percent dimensions
+                     so they track the container box identically across sizes. -->
+                <div class="introv2-bg"></div>
+                <div class="introv2-vignette"></div>
+                <div class="introv2-scanlines"></div>
+                <div class="introv2-gridfloor"></div>
+
+                <!-- Centered brand block -->
+                <div class="introv2-center">
+                    <div class="introv2-pulse" aria-hidden="true"></div>
+                    <!-- Boot sequence — three short status lines that type in
+                         before the title appears. Sells the "system is
+                         coming online" framing in the half-second before
+                         the brand reveal. Pure CSS keyframes; no JS. -->
+                    <div class="introv2-boot" aria-hidden="true">
+                        <div class="introv2-boot-line introv2-boot-1">&gt; INITIATING SECURE CHANNEL...</div>
+                        <div class="introv2-boot-line introv2-boot-2">&gt; PANOPTICON WATCHDOG: BYPASSED</div>
+                        <div class="introv2-boot-line introv2-boot-3">&gt; CONNECTION ESTABLISHED</div>
+                    </div>
+                    <div class="introv2-brand">
+                        <span class="introv2-sub-top">// SYSTEM BOOT</span>
+                        <h1 class="introv2-title">
+                            <span class="introv2-word introv2-word-1">MAGIC</span>
+                            <span class="introv2-vs" aria-hidden="true">v</span>
+                            <span class="introv2-word introv2-word-2">MACHINE</span>
+                        </h1>
+                        <div class="introv2-divider" aria-hidden="true">
+                            <span class="introv2-divider-line"></span>
+                            <span class="introv2-divider-node"></span>
+                            <span class="introv2-divider-line"></span>
+                        </div>
+                        <div class="introv2-tagline">A CYBER ROGUELITE</div>
+                    </div>
+                    <div class="introv2-tap" aria-live="polite">
+                        <span class="introv2-tap-bracket">[</span>
+                        <span class="introv2-tap-text">TAP TO CONTINUE</span>
+                        <span class="introv2-tap-bracket">]</span>
+                    </div>
+                </div>
+
+                <!-- Corner tech brackets — pure CSS, scale via cqmin so they
+                     stay the same visual weight on any device. -->
+                <span class="introv2-corner introv2-corner-tl" aria-hidden="true"></span>
+                <span class="introv2-corner introv2-corner-tr" aria-hidden="true"></span>
+                <span class="introv2-corner introv2-corner-bl" aria-hidden="true"></span>
+                <span class="introv2-corner introv2-corner-br" aria-hidden="true"></span>
+            </div>
+
+            <!-- Tooltip -->
+            <div id="tooltip" class="tooltip hidden"></div>
+
+            <!-- NEW: Tutorial Spotlight Ring -->
+            <div id="tutorial-spotlight" class="hidden"></div>
+
+	<!-- NEW: Ending Cinematic Screen -->
+<div id="screen-ending" class="screen hidden">
+    <div id="ending-content" class="story-crawl">
+        <!-- JS injects text here -->
+    </div>
+    <button id="btn-finish-ending" class="btn primary hidden" style="position: absolute; bottom: max(50px, calc(env(safe-area-inset-bottom, 0px) + 12px));">PROCEED</button>
+</div>
+
+<!-- Post-combat celebration (between combat kill and reward picker) -->
+<div id="screen-combat-win" class="screen hidden combat-win">
+    <div class="combat-win-rings" aria-hidden="true">
+        <div class="combat-win-ring r1"></div>
+        <div class="combat-win-ring r2"></div>
+        <div class="combat-win-ring r3"></div>
+    </div>
+    <div id="combat-win-callout" class="combat-win-callout">
+        <div id="combat-win-title" class="combat-win-title">TARGET NEUTRALIZED</div>
+        <div id="combat-win-sub" class="combat-win-sub">+0 FRAGMENTS</div>
+    </div>
+</div>
+
+<!-- Victory Screen — full run celebration -->
+<div id="screen-victory" class="screen hidden">
+    <div class="victory-grade-ring" id="victory-grade-ring">
+        <span id="victory-grade">S</span>
+    </div>
+    <h1 class="neon-text-gold victory-title">SYSTEM RESTORED</h1>
+    <div id="victory-stats" class="victory-stats"></div>
+    <div class="victory-actions">
+        <button id="btn-share-victory" class="btn secondary">SHARE RUN</button>
+        <button id="btn-victory-endless" class="btn primary hidden">CONTINUE ENDLESS</button>
+        <button id="btn-victory-sanctuary" class="btn primary neon-border-green">RETURN TO SANCTUARY</button>
+    </div>
+</div>
+
+            <!-- Main Menu -->
+            <div id="screen-start" class="screen active menu-v2 dropbay">
+                <!-- Ambient backdrop — single full-bleed canvas-grade
+                     parallax. Replaces the legacy 7-element chrome
+                     (lattice / scans / radar / glyphs / hud-tags) which
+                     stacked into a chatty CPU-paint mess. The new layer
+                     is one fixed-position full-viewport `.mv2-bg` with
+                     three very-low-opacity gradient sub-layers that
+                     drift on transform-only animations.
+                     Compositor handles every frame; CPU paint is zero. -->
+                <!-- DROP BAY backdrop — radials + perspective floor +
+                     drifting dust motes + scan sweep + drifting cyber
+                     glyphs + vignette. Pure CSS, transform-only
+                     animations, zero CPU paint per frame. -->
+                <div class="db-bg" aria-hidden="true">
+                    <div class="db-bg-radial-a"></div>
+                    <div class="db-bg-radial-b"></div>
+                    <div class="db-bg-floor"></div>
+                    <div class="db-bg-scan"></div>
+                    <div class="db-bg-particles">
+                        <i></i><i></i><i></i><i></i><i></i><i></i>
+                        <i></i><i></i><i></i><i></i><i></i><i></i>
+                    </div>
+                    <!-- Drifting glyphs — 8 abstract symbols rising
+                         through the empty edges of the screen at
+                         varied speeds + opacities. Adds living motion
+                         to the upper third where the chrome is sparse. -->
+                    <div class="db-bg-glyphs">
+                        <i style="left: 4%;  --gd: 0s;  --gs: 22s;">⬡</i>
+                        <i style="left: 12%; --gd: -7s; --gs: 18s;">◇</i>
+                        <i style="left: 22%; --gd: -3s; --gs: 26s;">⬢</i>
+                        <i style="left: 88%; --gd: -12s;--gs: 24s;">▲</i>
+                        <i style="left: 78%; --gd: -5s; --gs: 19s;">◆</i>
+                        <i style="left: 92%; --gd: -16s;--gs: 28s;">⬡</i>
+                        <i style="left: 8%;  --gd: -10s;--gs: 30s;">⬣</i>
+                        <i style="left: 94%; --gd: -2s; --gs: 21s;">◈</i>
+                    </div>
+                    <div class="db-bg-vignette"></div>
+                </div>
+
+                <!-- DROP BAY shell — title / hero / console / tabs / footer.
+                     Header strip removed — the operator chip now lives as a
+                     subtitle directly under the wordmark and the settings
+                     gear is absolute-positioned in the top-right corner of
+                     the shell. -->
+                <div class="db-shell">
+
+                    <!-- Floating settings gear — pinned to the top-right
+                         of the shell so it stays out of the title's flow. -->
+                    <button id="btn-settings-main" class="db-gear db-gear-floating" aria-label="Settings">
+                        <svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2 L12 5 M12 19 L12 22 M2 12 L5 12 M19 12 L22 12 M4.6 4.6 L6.7 6.7 M17.3 17.3 L19.4 19.4 M19.4 4.6 L17.3 6.7 M4.6 19.4 L6.7 17.3"/></svg>
+                    </button>
+
+                    <!-- Hidden sparks pill — kept so any code path binding
+                         to #menu-sparks still resolves. Pill is no longer
+                         visually rendered in a header strip. -->
+                    <div id="menu-sparks-pill" class="db-chip db-sparks-chip feature-locked-hidden hidden" aria-hidden="true">
+                        <span class="meta-sparks-glyph" aria-hidden="true">✦</span>
+                        <span id="menu-sparks">0</span>
+                    </div>
+
+                    <!-- TITLE — big, dynamic wordmark. The Archivist Slain
+                         cosmetic frame is mounted but rendered behind/at
+                         the wordmark's level for the post-archive-kill
+                         brass reveal. Operator callsign now sits as the
+                         subtitle directly under the wordmark. -->
+                    <div class="db-title-row">
+                        <div class="title-frame mv2-title-frame db-title-frame" id="title-frame" data-archivist-tier="0" aria-hidden="true">
+                            <span class="title-frame-corner tl"></span>
+                            <span class="title-frame-corner tr"></span>
+                            <span class="title-frame-corner bl"></span>
+                            <span class="title-frame-corner br"></span>
+                            <span class="title-frame-badge" id="title-frame-badge">ARCHIVIST SLAIN</span>
+                        </div>
+                        <h1 class="title mv2-wordmark db-wordmark">MAGIC <span class="vs">v</span> MACHINE</h1>
+                        <div class="subtitle db-chip mv2-operator-chip db-operator-subtitle" aria-label="Operator callsign"></div>
+                    </div>
+
+                    <!-- TICKER removed (was rendering as a small bar
+                         under the wordmark that read as visual noise) -->
+
+                    <!-- ORB — centerpiece. Layered animated emblem
+                         (halo + rotating rings + crosshair + corner
+                         brackets + orbiting motes + radial spark
+                         bursts + centre core + class label). -->
+                    <div class="db-orb-stage">
+                        <div class="db-orb" aria-hidden="true">
+                            <div class="db-orb-halo"></div>
+                            <div class="db-orb-ring-outer"></div>
+                            <div class="db-orb-ring-mid"></div>
+                            <div class="db-orb-ring-inner"></div>
+                            <div class="db-orb-crosshair">
+                                <span class="cl"></span><span class="cr"></span>
+                                <span class="ct"></span><span class="cb"></span>
+                            </div>
+                            <span class="db-orb-corner tl"></span>
+                            <span class="db-orb-corner tr"></span>
+                            <span class="db-orb-corner bl"></span>
+                            <span class="db-orb-corner br"></span>
+                            <div class="db-orb-orbit">
+                                <i></i><i></i><i></i><i></i><i></i><i></i>
+                            </div>
+                            <div class="db-orb-sparks">
+                                <i></i><i></i><i></i><i></i>
+                                <i></i><i></i><i></i><i></i>
+                            </div>
+                    <div class="db-orb-core"></div>
+                            <!-- Orb class emblem — animated SVG keyed
+                                 to the most-recently played class.
+                                 JS injects via getClassEmblemSvg. -->
+                            <div id="menu-orb-emblem" class="db-orb-emblem" data-class-id="" aria-hidden="true"></div>
+                        </div>
+                    </div>
+
+                    <!-- 1fr spacer — eats leftover vertical space so
+                         the title/orb cluster sits at the top of the
+                         frame and the ops/console/cluster/footer
+                         block anchors against the bottom. Prevents
+                         the orb halo from bleeding into the title
+                         and gives the bottom controls thumb-room. -->
+                    <div class="db-spacer" aria-hidden="true"></div>
+
+                    <!-- BOTTOM BLOCK — wraps ops/console/energy/cluster/
+                         footer so the cluster can be locked to the canvas
+                         bottom via `margin-top: auto` on the flex shell.
+                         Ensures the streak/version footer stays flush with
+                         the canvas bottom edge regardless of internal
+                         spacing changes. -->
+                    <div class="db-bottom-block">
+
+                    <!-- OPS — 3-cell readout strip (last sector,
+                         sparks, encrypted files). -->
+                    <div class="db-ops">
+                        <div class="db-ops-cell"><div class="lbl">LAST</div><div class="val" id="menu-ops-last">—</div></div>
+                        <div class="db-ops-cell"><div class="lbl">SPARKS</div><div class="val" id="menu-ops-sparks">0</div></div>
+                        <div class="db-ops-cell"><div class="lbl">FILES</div><div class="val" id="menu-ops-files">0</div></div>
+                    </div>
+
+                    <!-- CONSOLE — RESUME (with Ascension + Sector + class
+                         subtext) above INITIATE. -->
+                    <div class="db-console">
+                        <button id="btn-load-save" class="db-resume hidden">
+                            <div class="db-resume-meta-block">
+                                <div class="ey">CONTINUE</div>
+                                <div class="meta" id="db-resume-meta">RESUME RUN</div>
+                                <div class="db-resume-sub" id="db-resume-sub" aria-hidden="true"></div>
+                            </div>
+                            <div class="progress" id="db-resume-progress" aria-hidden="true">
+                                <span></span><span></span><span></span><span></span><span></span>
+                            </div>
+                            <span class="icn" aria-hidden="true">↻</span>
+                        </button>
+
+                        <button id="btn-start" class="db-deploy">
+                            <span class="eyebrow">// READY TO DROP</span>
+                            <span id="btn-start-label" class="label">INITIATE RUN</span>
+                            <span id="btn-start-warn" class="btn-start-warn hidden">DISCARDS CURRENT RUN</span>
+                            <span class="arrow" aria-hidden="true">▶</span>
+                        </button>
+                    </div>
+
+                    <!-- ENERGY BAR — class-color pulse sweep above the
+                         footer. Adds movement to the lower third
+                         without crowding the tabs. -->
+                    <div class="db-energy" aria-hidden="true">
+                        <span class="db-energy-tick"></span>
+                        <span class="db-energy-tick"></span>
+                        <span class="db-energy-tick"></span>
+                        <span class="db-energy-sweep"></span>
+                    </div>
+
+                    <!-- Hidden ascension button — kept alive so the
+                         existing click handler (which opens the picker)
+                         can still be invoked programmatically if needed. -->
+                    <button id="btn-ascension" class="hidden feature-locked-hidden" aria-hidden="true" title="Pick a difficulty tier">
+                        <span id="ascension-status-line">A0</span>
+                    </button>
+
+                    <!-- INSTRUMENT DOCK — 5 minimal icon+label tabs.
+                         All inherit the run accent from --db-accent so
+                         the dock feels like a single instrument cluster
+                         instead of a rainbow palette. CHAL is always
+                         shown; SANC/INTEL/SAVES gated by the Unlocks
+                         system. The optional .pip carries status (new /
+                         alert / on); the legacy challenge-status-line
+                         + intel count survive as hidden / count-slot
+                         children so the existing JS stays compatible. -->
+                    <div class="db-cluster">
+                        <button id="btn-challenge" class="db-tab" aria-label="Challenge — daily boss-rush mode">
+                            <span class="pip" id="db-pip-challenge" aria-hidden="true"></span>
+                            <span class="icon" aria-hidden="true">⚔</span>
+                            <span class="ttl">CHALLENGE</span>
+                            <span id="challenge-status-line" class="db-tab-status hidden"></span>
+                        </button>
+                        <button id="btn-upgrades" class="db-tab feature-locked-hidden" aria-label="Sanctuary — spend Sparks on permanent upgrades">
+                            <span class="pip" id="db-pip-sanctuary" aria-hidden="true"></span>
+                            <span class="icon" aria-hidden="true">✦</span>
+                            <span class="ttl">SANCTUARY</span>
+                        </button>
+                        <button id="btn-intel" class="db-tab feature-locked-hidden" aria-label="Intel — review decrypted files">
+                            <span class="pip" id="db-pip-intel" aria-hidden="true"></span>
+                            <span class="icon" aria-hidden="true">▤</span>
+                            <span class="ttl">INTEL<span id="btn-intel-count" class="db-tab-count"></span></span>
+                        </button>
+                        <button id="btn-save-slots" class="db-tab feature-locked-hidden" aria-label="Save slots — switch between A · B · C">
+                            <span class="pip" aria-hidden="true"></span>
+                            <span class="icon" aria-hidden="true">⊟</span>
+                            <span class="ttl">SAVES</span>
+                        </button>
+                        <button id="btn-menu-tutorial" class="db-tab" aria-label="Tutorial — practice combat without committing to a run">
+                            <span class="pip" aria-hidden="true"></span>
+                            <span class="icon" aria-hidden="true">▶</span>
+                            <span class="ttl">TUTORIAL</span>
+                        </button>
+                    </div>
+
+                    <!-- FOOTER — streak chip + version stamp. -->
+                    <div class="db-footer">
+                        <div id="login-streak" class="login-streak db-streak hidden"></div>
+                        <span class="db-version">ALPHA V1</span>
+                    </div>
+                    </div><!-- /db-bottom-block -->
+                </div>
+
+                <!-- Save Slot picker — modal (kept). Lives outside the
+                     db-shell because it's a full-frame overlay. -->
+                <div id="save-slot-modal" class="save-slot-modal hidden" role="dialog" aria-modal="true" aria-labelledby="save-slot-title-h">
+                    <div class="save-slot-panel glass-panel">
+                        <h3 id="save-slot-title-h" class="save-slot-title neon-text-gold">SAVE SLOTS</h3>
+                        <p class="save-slot-sub">Each slot stores its own run. Switch slots to keep multiple games going.</p>
+                        <div id="save-slot-list" class="save-slot-list"></div>
+                        <div class="save-slot-actions">
+                            <button id="btn-save-slot-close" class="btn primary">DONE</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Character Select -->
+            <div id="screen-char-select" class="screen hidden">
+                <h2 class="neon-text-blue">SELECT OPERATOR</h2>
+                <!-- Difficulty frame selector. Three lore-framed tiers
+                     so new players have a visible easy-mode option
+                     without the "EASY / NORMAL / HARD" stigma:
+                       INITIATE  = newcomer assist forced on
+                       OPERATOR  = standard run
+                       ASCENDANT = opens Ascension picker for harder runs
+                     Persisted to mvm_difficulty (initiate|operator|ascendant).
+                     The Ascension picker (rendered separately) appears
+                     when ASCENDANT is selected. -->
+                <div id="difficulty-frames" class="difficulty-frames" role="radiogroup" aria-label="Difficulty">
+                    <button class="diff-frame" data-tier="initiate" role="radio" aria-checked="false">
+                        <div class="diff-frame-tier">// TIER 1</div>
+                        <div class="diff-frame-name">INITIATE</div>
+                        <div class="diff-frame-desc">Assist on. Damage taken reduced. Recommended.</div>
+                    </button>
+                    <button class="diff-frame is-active" data-tier="operator" role="radio" aria-checked="true">
+                        <div class="diff-frame-tier">// TIER 2</div>
+                        <div class="diff-frame-name">OPERATOR</div>
+                        <div class="diff-frame-desc">Standard run. Calibrated baseline.</div>
+                    </button>
+                    <button class="diff-frame" data-tier="ascendant" role="radio" aria-checked="false">
+                        <div class="diff-frame-tier">// TIER 3</div>
+                        <div class="diff-frame-name">ASCENDANT</div>
+                        <div class="diff-frame-desc">Layered modifiers. Expert run.</div>
+                    </button>
+                </div>
+                <!-- Custom Run panel (Roadmap Part 29). Hidden until the
+                     player unlocks Ascension 1+. JS toggles display. -->
+                <div id="custom-run-bar" class="custom-run-bar hidden">
+                    <div class="custom-run-bar-info">
+                        <span class="custom-run-bar-label">CUSTOM RUN</span>
+                        <span id="custom-run-bar-summary" class="custom-run-bar-summary">Standard run</span>
+                    </div>
+                    <button id="btn-custom-run" class="btn secondary">CONFIGURE</button>
+                </div>
+                <div id="char-grid" class="char-grid">
+                    <!-- Populated by JS -->
+                </div>
+                <button id="btn-back-char" class="btn secondary">ABORT</button>
+
+                <!-- Custom Run configuration modal -->
+                <div id="custom-run-modal" class="custom-run-modal hidden" role="dialog" aria-modal="true" aria-labelledby="custom-run-title-h">
+                    <div class="custom-run-panel glass-panel glass-panel--premium">
+                        <h3 id="custom-run-title-h" class="custom-run-title neon-text-pink">CUSTOM RUN</h3>
+                        <p class="custom-run-sub">Stack modifiers to sharpen the run. Payout scales with the difficulty you accept.</p>
+                        <div id="custom-run-presets" class="custom-run-presets">
+                            <button class="custom-run-preset" data-preset="hardcore">HARDCORE</button>
+                            <button class="custom-run-preset" data-preset="random">ROULETTE</button>
+                            <button class="custom-run-preset" data-preset="casual">CASUAL</button>
+                        </div>
+                        <div class="custom-run-sections">
+                            <div class="custom-run-section" data-kind="negative">
+                                <div class="custom-run-section-head neon-text-pink">Harder &mdash; bigger payout</div>
+                                <div class="custom-run-grid" data-kind="negative"></div>
+                            </div>
+                            <div class="custom-run-section" data-kind="chaotic">
+                                <div class="custom-run-section-head neon-text-purple">Chaotic</div>
+                                <div class="custom-run-grid" data-kind="chaotic"></div>
+                            </div>
+                            <div class="custom-run-section" data-kind="positive">
+                                <div class="custom-run-section-head neon-text-green">Easier &mdash; reduced payout</div>
+                                <div class="custom-run-grid" data-kind="positive"></div>
+                            </div>
+                        </div>
+                        <div class="custom-run-footer">
+                            <div class="custom-run-net">
+                                NET PAYOUT: <span id="custom-run-net">100%</span>
+                            </div>
+                            <div class="custom-run-actions">
+                                <button id="btn-custom-run-clear" class="btn secondary">CLEAR</button>
+                                <button id="btn-custom-run-apply" class="btn primary">APPLY</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detail overlay (expands when a class card is tapped) -->
+                <div id="char-detail-overlay" class="char-detail-overlay hidden">
+                    <div class="char-detail-content glass-panel">
+                        <div class="char-detail-header">
+                            <div class="char-detail-previews">
+                                <div class="char-detail-canvas-slot">
+                                    <!-- Player canvas injected on open -->
+                                </div>
+                                <div class="char-detail-minion-slot">
+                                    <!-- Minion canvas injected on open -->
+                                </div>
+                            </div>
+                            <div class="char-detail-header-text">
+                                <h2 class="char-detail-name neon-text-blue">CLASS</h2>
+                                <div class="char-detail-difficulty"></div>
+                            </div>
+                        </div>
+                        <div class="char-detail-desc"></div>
+                        <div class="char-detail-rows">
+                            <div class="char-detail-row">
+                                <span class="char-detail-label">Style</span>
+                                <span class="char-detail-style char-detail-value"></span>
+                            </div>
+                            <div class="char-detail-row">
+                                <span class="char-detail-label">Minion</span>
+                                <span class="char-detail-minion char-detail-value"></span>
+                            </div>
+                            <div class="char-detail-row">
+                                <span class="char-detail-label">Class Ability</span>
+                                <span class="char-detail-ability char-detail-value"></span>
+                            </div>
+                            <div class="char-detail-row">
+                                <span class="char-detail-label">Default Attack</span>
+                                <span class="char-detail-attack char-detail-value"></span>
+                            </div>
+                            <div class="char-detail-row">
+                                <span class="char-detail-label">Unique Combo</span>
+                                <span class="char-detail-combo char-detail-value"></span>
+                            </div>
+                        </div>
+                        <div class="char-detail-actions">
+                            <button id="btn-char-detail-back" class="btn secondary">BACK</button>
+                            <button id="btn-char-detail-confirm" class="btn primary">CONFIRM</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Debriefing / Tutorial Screen -->
+            <div id="screen-tutorial" class="screen hidden">
+                <h2 class="neon-text-blue">DEBRIEFING</h2>
+                <div class="tutorial-container glass-panel">
+                    <h3 id="tut-title" class="neon-text-gold" style="font-family: 'Orbitron'; margin-top: 0;">TOPIC</h3>
+                    <div id="tut-content" class="tut-content">
+                        <!-- Dynamic Content -->
+                    </div>
+                    
+                    <div class="tut-nav">
+                        <button id="btn-tut-prev" class="btn secondary small">PREV</button>
+                        <span id="tut-page-num" class="neon-text-blue" style="font-family: 'Orbitron';">1 / 5</span>
+                        <button id="btn-tut-next" class="btn secondary small">NEXT</button>
+                    </div>
+                </div>
+                <div class="spacer"></div>
+                <button id="btn-back-tutorial" class="btn primary">CLOSE DEBRIEFING</button>
+            </div>
+
+           <!-- Meta Progression (Sanctuary) -->
+            <div id="screen-meta" class="screen hidden">
+                <h2 class="neon-text-green" style="text-shadow: 0 0 15px lime; margin-top: 20px; margin-bottom: 10px;">SANCTUARY</h2>
+                <div class="sanctuary-currencies" style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-bottom:8px;">
+                    <!-- Fragment counter removed from the Sanctuary header — fragments are
+                         a run-only currency and the Sanctuary is a between-run surface, so
+                         the value is always 0 here. The dev-frag button still updates it
+                         via the off-screen #fragment-count node below for in-run displays. -->
+                    <div id="fragment-count" class="currency-display neon-text-gold" style="display:none;">Fragments: 0</div>
+                    <div class="sanctuary-sparks" aria-label="Sparks">
+                        <span style="font-size:18px; line-height:1;">✦</span>
+                        <span id="sanctuary-sparks">0</span>
+                        <span style="opacity:0.7; font-size:11px; letter-spacing:0.12em;">SPARKS</span>
+                    </div>
+                </div>
+
+                <div id="upgrade-list" class="meta-grid">
+                    <!-- Populated by JS -->
+                </div>
+                
+                <div class="meta-controls">
+                    <button id="btn-view-sanctuary" class="btn secondary" style="width: auto; min-width: 150px;"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12 Q7 4 12 4 Q17 4 22 12 Q17 20 12 20 Q7 20 2 12 Z" fill="currentColor" fill-opacity="0.18"/><circle cx="12" cy="12" r="3.5" fill="currentColor" fill-opacity="0.5"/></svg> VIEW WORLD</button>
+                    <button id="btn-achievements" class="btn secondary" style="width: auto; min-width: 150px;">ACHIEVEMENTS</button>
+                    <button id="btn-back-meta" class="btn secondary" style="width: auto; min-width: 150px;">RETURN TO MENU</button>
+                </div>
+            </div>
+
+            <!-- Achievements Panel (overlay) -->
+            <div id="screen-achievements" class="screen hidden">
+                <h2 class="neon-text-gold">ACHIEVEMENTS</h2>
+                <div id="achievements-progress" class="currency-display neon-text-gold" style="font-size: 0.85rem;">0 / 0 unlocked</div>
+                <div id="achievements-list" class="achievements-list"></div>
+                <button id="btn-back-achievements" class="btn secondary" style="width: auto; min-width: 150px;">BACK</button>
+            </div>
+
+            <!-- Intel 3.0 — Operator Profile + Dossier / Cipher / Chronicle -->
+            <div id="screen-intel" class="screen hidden">
+                <h2 class="neon-text-blue">INTEL ARCHIVE</h2>
+
+                <!-- Operator profile banner removed — was a stale strip
+                     above every tab that read as visual noise. The
+                     tabs below carry the live data the player needs. -->
+
+                <div id="intel-tabs" class="intel-tabs" role="tablist">
+                    <button class="intel-tab active" data-intel-tab="cipher" role="tab">CIPHER</button>
+                    <button class="intel-tab" data-intel-tab="dossier" role="tab">DOSSIER</button>
+                    <button class="intel-tab" data-intel-tab="chronicle" role="tab">CHRONICLE</button>
+                </div>
+
+                <!-- CIPHER pane — chapter-grouped lore (default tab) -->
+                <div class="intel-pane active" data-intel-pane="cipher">
+                    <div class="intel-cipher-header">
+                        <span class="intel-cipher-progress" id="intel-cipher-progress">0 / 0 decrypted</span>
+                        <button id="btn-decrypt" class="btn primary neon-border-pink intel-cipher-btn">DECRYPT FILE</button>
+                        <button id="btn-cipher-practice" class="btn secondary" type="button">PRACTISE FREE</button>
+                    </div>
+                    <div id="intel-cipher-chapters" class="intel-cipher-chapters"></div>
+                </div>
+
+                <!-- DOSSIER pane — progressive enemy unlocks -->
+                <div class="intel-pane" data-intel-pane="dossier">
+                    <div id="intel-dossier" class="intel-dossier"></div>
+                    <div id="intel-dossier-empty" class="intel-empty" style="display: none;">
+                        No targets logged yet. First kills will appear here.
+                    </div>
+                </div>
+
+                <!-- CHRONICLE pane — stats + filterable run history -->
+                <div class="intel-pane" data-intel-pane="chronicle">
+                    <div id="intel-chronicle-stats" class="intel-chronicle-stats"></div>
+                    <div id="intel-chronicle-filters" class="intel-chronicle-filters"></div>
+                    <div id="intel-chronicle-list" class="intel-chronicle"></div>
+                    <div id="intel-chronicle-empty" class="intel-empty" style="display: none;">
+                        No runs logged yet. Every run, win or loss, appears here for review.
+                    </div>
+                </div>
+
+                <div class="spacer"></div>
+                <button id="btn-back-intel" class="btn secondary">RETURN</button>
+            </div>
+
+            <!-- Codex (enemy kill ledger) -->
+            <div id="screen-codex" class="screen hidden">
+                <h2 class="neon-text-blue">ENEMY CODEX</h2>
+                <div id="codex-stats" class="currency-display neon-text-pink" style="font-size: 1rem; margin-bottom: 10px;">
+                    Total kills: <span id="codex-total">0</span>
+                </div>
+                <div id="codex-grid" class="codex-grid"></div>
+                <div class="spacer"></div>
+                <button id="btn-back-codex" class="btn secondary" style="min-width: 150px;">RETURN</button>
+            </div>
+
+            <!-- Hex Breach Minigame Overlay -->
+            <div id="screen-hex" class="screen hidden" style="background: rgba(0,0,0,0.95); z-index: 200;">
+                <h2 id="hex-title" class="neon-text-pink">HEX BREACH</h2>
+                <p id="hex-status" style="font-family: 'Orbitron'; color: #fff;">MEMORIZE THE PATTERN</p>
+
+                <div id="hex-grid" class="hex-grid">
+                    <!-- 9 Hex Nodes generated by JS -->
+                </div>
+
+                <div id="hex-progress" class="neon-text-blue" style="margin-top: 20px; font-family: 'Orbitron';">
+                    SEQUENCE: <span id="hex-round">1</span> / <span id="hex-max-round">3</span>
+                </div>
+                <button id="btn-hex-exit" class="btn secondary" type="button">RETURN TO INTEL</button>
+
+                <!-- Result panel — populated + revealed by JS on win/fail.
+                     Replaces the previous alert() popup. -->
+                <div id="hex-result" class="hex-result hidden" role="status" aria-live="polite">
+                    <div class="hex-result-card glass-panel">
+                        <div id="hex-result-icon" class="hex-result-icon" aria-hidden="true"></div>
+                        <h3 id="hex-result-title" class="hex-result-title">DECRYPTION SUCCESSFUL</h3>
+                        <ul id="hex-result-rewards" class="hex-result-rewards"></ul>
+                        <button id="btn-hex-result-continue" class="btn primary">CONTINUE</button>
+                    </div>
+                </div>
+            </div>
+            <!-- Event Screen — hero illustration + title + description +
+                 option cards. Each event sets data-event-art on
+                 #screen-event so per-event accent colors / glow tints
+                 cascade through the layout. -->
+            <div id="screen-event" class="screen hidden" data-event-art="glitch">
+                <div class="event-hero" id="event-hero" aria-hidden="true">
+                    <!-- SVG illustration injected by getEventArt() -->
+                </div>
+                <h2 id="event-title" class="event-title">SIGNAL DETECTED</h2>
+                <p id="event-desc" class="event-desc">...</p>
+                <div id="event-options" class="event-options">
+                    <!-- Option cards injected by JS -->
+                </div>
+            </div>
+
+            <!-- Game HUD (Hidden by default) -->
+            <div id="hud" class="hidden">
+                <div class="top-bar">
+                    <div class="resources">
+                        <div class="sector-turn-group">
+                            <div id="sector-display" class="neon-text-purple" style="font-family: 'Orbitron'; font-size: 1.2rem;">SECTOR 1</div>
+                            <!-- Sector signature mechanic pill (Part 23). Empty = hidden. -->
+                            <div id="sector-mech-pill" class="sector-mech-pill" aria-hidden="true"></div>
+                        </div>
+                    </div>
+                    <!-- Relic/Upgrade Dropdown -->
+                    <div id="relic-menu-wrapper" style="position: relative;">
+                        <button id="btn-relics" class="btn-icon btn-modules-toggle" aria-label="Modules"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.2" fill="currentColor" fill-opacity="0.22"/><rect x="13" y="3" width="8" height="8" rx="1.2" fill="currentColor" fill-opacity="0.22"/><rect x="3" y="13" width="8" height="8" rx="1.2" fill="currentColor" fill-opacity="0.22"/><rect x="13" y="13" width="8" height="8" rx="1.2" fill="currentColor" fill-opacity="0.22"/></svg><span class="btn-modules-label">MODULES</span><svg viewBox="0 0 24 24" class="game-icon btn-modules-chevron" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9 L12 16 L19 9"/></svg></button>
+                        <div id="relic-dropdown" class="relic-dropdown hidden">
+                            <h3 class="neon-text-blue" style="margin: 0 0 10px 0; font-size: 1rem; border-bottom: 1px solid #333; padding-bottom: 5px; font-family: 'Orbitron';">MODULES</h3>
+                            <div id="relic-list" class="relic-grid"></div>
+                        </div>
+                    </div>
+
+                    <button id="btn-loadout" class="btn-icon" aria-label="Loadout summary" title="Loadout. Relics, dice, ascension, pacts"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3 L19 3 L19 21 L5 21 Z" fill="currentColor" fill-opacity="0.14"/><path d="M9 3 L9 6 L15 6 L15 3"/><path d="M8 11 L16 11 M8 14 L16 14 M8 17 L13 17"/></svg></button>
+
+                    <button id="btn-combat-log" class="btn-icon" aria-label="Combat Log"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4 L19 4 L19 20 L5 20 Z" fill="currentColor" fill-opacity="0.12"/><path d="M8 8 L16 8 M8 12 L16 12 M8 16 L13 16"/></svg></button>
+                    <button id="btn-settings" class="btn-icon" aria-label="Settings"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5 L20 7 L20 17 L12 21.5 L4 17 L4 7 Z" fill="currentColor" fill-opacity="0.14"/><circle cx="12" cy="12" r="4.5" fill="none"/><path d="M12 5.5 L12 7.5 M12 16.5 L12 18.5 M5.5 12 L7.5 12 M16.5 12 L18.5 12 M7.6 7.6 L9 9 M15 15 L16.4 16.4 M16.4 7.6 L15 9 M7.6 16.4 L9 15" stroke-width="1.4"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg></button>
+                </div>
+                
+                <!-- Bottom Area: Dice & Controls -->
+                <div class="bottom-controls">
+                    <div id="dice-container"></div>
+                    
+                    <div class="control-bar">
+                        <!-- Reroll Button (Circular with Badge) -->
+                        <div class="reroll-wrapper">
+                            <button id="btn-reroll" class="btn-circle" aria-label="Reroll"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12 A8 8 0 0 1 12 4 L16 4"/><path d="M14 1 L17 4 L14 7"/><path d="M20 12 A8 8 0 0 1 12 20 L8 20"/><path d="M10 23 L7 20 L10 17"/></svg></button>
+                            <div id="reroll-badge" class="badge">2</div>
+                        </div>
+
+                        <!-- Class Ability Widget (populated per-class at combat start) -->
+                        <div id="class-ability-widget" class="class-ability hidden" role="group" aria-label="Class ability"></div>
+
+
+                        <button id="btn-end-turn" class="btn primary" aria-label="End turn" title="End turn"><svg viewBox="0 0 24 24" class="game-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5 L11 12 L5 19 Z" fill="currentColor" fill-opacity="0.3"/><path d="M12 5 L18 12 L12 19 Z" fill="currentColor" fill-opacity="0.3"/><path d="M19 5 L19 19" stroke-width="2.2"/></svg></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Map Screen -->
+            <div id="screen-map" class="screen hidden">
+                <nav class="map-navigation" aria-label="Run navigation">
+                    <button id="btn-map-settings" class="btn secondary" type="button">SETTINGS / HELP</button>
+                    <button id="btn-map-return" class="btn secondary" type="button">SAVE AND RETURN</button>
+                </nav>
+                <h2 class="neon-text-blue map-title"><span id="map-title-text">SECTOR MAP</span> <span id="map-sector-display" style="font-size: 0.6em; color: var(--neon-gold); margin-left: 15px;"></span></h2>
+                <div id="map-legend-top" class="map-legend-top"></div>
+                <div id="map-nodes" class="map-container"></div>
+            </div>
+
+            <!-- Shop Screen -->
+            <div id="screen-shop" class="screen hidden">
+                <div class="shop-header">
+                    <h2 class="neon-text-gold shop-title-main">FABRICATOR</h2>
+                    <div class="shop-header-strip">
+                        <div class="shop-fragment-pill">
+                            <span class="shop-fragment-label">FRAGMENTS</span>
+                            <span id="shop-frag-count" class="shop-fragment-count">0</span>
+                        </div>
+                        <button id="btn-hack-shop" class="btn-hack" type="button">
+                            <span class="hack-label">
+                                <span class="hack-icon" aria-hidden="true">⚡</span>
+                                HACK FABRICATOR
+                            </span>
+                            <span class="hack-sub">MINIGAME · WIN = −25% PRICES · LOSE = PRICES ×2 · MIN 100 FRAGS</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="shop-grid" class="shop-grid"></div>
+                <button id="btn-leave-shop" class="btn primary">EXIT SHOP</button>
+            </div>
+
+	<!-- Rest Screen — central player figure absorbing energy from four
+	     quadrants, each a different colour-coded recovery option. -->
+            <div id="screen-rest" class="screen hidden">
+                <h2 class="neon-text-green">SYSTEM RESTORE</h2>
+                <p class="rest-sub">Select maintenance protocol:</p>
+
+                <!-- Stage: 2x2 grid of option cards with the player figure
+                     overlaying the centre. Inflow particle streams radiate
+                     from the player (CSS pseudo-elements). -->
+                <div class="rest-stage">
+                    <button id="btn-rest-sleep" class="rest-option rest-option--sleep" data-quadrant="tl">
+                        <div class="rest-option-glow" aria-hidden="true"></div>
+                        <svg class="rest-option-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M22 14 A8 8 0 1 1 14 4 A6 6 0 0 0 22 14 Z" fill="currentColor" fill-opacity="0.3"/>
+                            <path d="M22 14 A8 8 0 1 1 14 4 A6 6 0 0 0 22 14 Z" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                            <path d="M3 5 L9 5 L3 11 L9 11" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                        </svg>
+                        <span class="rest-option-label">SLEEP</span>
+                        <span class="rest-option-desc">Heal 50% HP</span>
+                    </button>
+
+                    <button id="btn-rest-meditate" class="rest-option rest-option--meditate" data-quadrant="tr">
+                        <div class="rest-option-glow" aria-hidden="true"></div>
+                        <svg class="rest-option-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle cx="12" cy="9" r="3" fill="currentColor" fill-opacity="0.45"/>
+                            <circle cx="12" cy="9" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                            <path d="M5 19 Q8 14 12 14 Q16 14 19 19" fill="none" stroke="currentColor" stroke-width="1.8"/>
+                            <path d="M9 17 L7 20 M15 17 L17 20" stroke="currentColor" stroke-width="1.6"/>
+                        </svg>
+                        <span class="rest-option-label">MEDITATE</span>
+                        <span class="rest-option-desc">+1 Reroll per turn · this run</span>
+                    </button>
+
+                    <button id="btn-rest-tinker" class="rest-option rest-option--tinker" data-quadrant="bl">
+                        <div class="rest-option-glow" aria-hidden="true"></div>
+                        <svg class="rest-option-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M5 19 L11 13" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                            <path d="M11 13 L13 11 L15 13 L17 11 Q19 9 17 7 Q15 5 13 7 L11 9 L13 11 Z" fill="currentColor" fill-opacity="0.3"/>
+                            <path d="M11 13 L13 11 L15 13 L17 11 Q19 9 17 7 Q15 5 13 7 L11 9 L13 11 Z" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                        </svg>
+                        <span class="rest-option-label">TINKER</span>
+                        <span class="rest-option-desc">Upgrade a random skill</span>
+                    </button>
+
+                    <!-- Bottom-right: pick 1 of 3 modules. Default for ALL runs;
+                         tapping opens screen-module-pick which renders three
+                         random modules from the run's eligible pool. -->
+                    <button id="btn-rest-module" class="rest-option rest-option--module" data-quadrant="br">
+                        <div class="rest-option-glow" aria-hidden="true"></div>
+                        <svg class="rest-option-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <polygon points="12,3 19,9 15,21 9,21 5,9" fill="currentColor" fill-opacity="0.3"/>
+                            <polygon points="12,3 19,9 15,21 9,21 5,9" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                            <polygon points="12,3 19,9 12,9" fill="rgba(255,255,255,0.35)"/>
+                        </svg>
+                        <span class="rest-option-label">MODULE</span>
+                        <span class="rest-option-desc">Pick 1 of 3 · install</span>
+                    </button>
+
+                    <!-- Streams SVG — sibling of .rest-center so its 0/100
+                         viewBox coords map directly to the rest-stage's
+                         full bounding box. Sparks animate from the four
+                         option-card corners (0,0/100,0/0,100/100,100) INTO
+                         (50,50) which is the rest-stage's geometric centre,
+                         exactly where .rest-center renders the class emblem.
+                         Previous nesting inside rest-center + inset:-40%
+                         was causing a visible offset between the streams'
+                         convergence point and the emblem. -->
+                    <svg viewBox="0 0 100 100" class="rest-streams" preserveAspectRatio="none" aria-hidden="true">
+                        <g class="rest-inflow" stroke-width="0.6" fill="none">
+                            <line x1="0"   y1="0"   x2="50" y2="50" stroke="#5ad864" class="rest-stream rest-stream-tl"/>
+                            <line x1="100" y1="0"   x2="50" y2="50" stroke="#bc13fe" class="rest-stream rest-stream-tr"/>
+                            <line x1="0"   y1="100" x2="50" y2="50" stroke="#ffd76a" class="rest-stream rest-stream-bl"/>
+                            <line x1="100" y1="100" x2="50" y2="50" stroke="#ff5b87" class="rest-stream rest-stream-br"/>
+                        </g>
+                        <g class="rest-sparks">
+                            <circle r="1.5" fill="#5ad864" class="rest-spark rest-spark-tl"/>
+                            <circle r="1.5" fill="#bc13fe" class="rest-spark rest-spark-tr"/>
+                            <circle r="1.5" fill="#ffd76a" class="rest-spark rest-spark-bl"/>
+                            <circle r="1.5" fill="#ff5b87" class="rest-spark rest-spark-br"/>
+                        </g>
+                    </svg>
+
+                    <!-- Centre figure: animated class emblem (SVG glyph
+                         keyed to the player's current class). Anchored at
+                         the rest-stage geometric centre via top:50%/left:50%
+                         + transform translate(-50%,-50%). Streams above
+                         converge precisely on this same point. -->
+                    <div class="rest-center" aria-hidden="true">
+                        <!-- Class emblem mount — JS injects the SVG via
+                             getClassEmblemSvg(classId). data-class-id on
+                             the host lets CSS scope per-class tweaks. -->
+                        <div id="rest-class-emblem" class="rest-figure-emblem" data-class-id=""></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pact pick modal — opened by the rest-area shrine, the
+                 Challenge Mode pact node, and the Corrupted Shrine event. -->
+            <div id="screen-pact" class="screen hidden">
+                <h2 class="neon-text-pink">SIGN A PACT</h2>
+                <p class="pact-subtitle">Each pact stays for the rest of the run. Pick once, live with it.</p>
+                <div id="pact-options" class="pact-options"></div>
+                <button id="btn-pact-cancel" class="btn secondary" style="margin-top: 18px;">CANCEL. RETURN TO REST</button>
+            </div>
+
+            <!-- Module pick (rest screen, all runs) — three random modules,
+                 player picks one. Opened by handleRest('module'). Reuses
+                 the reward-card markup so cards read identically to the
+                 post-combat reward screen. -->
+            <div id="screen-module-pick" class="screen hidden">
+                <h2 class="neon-text-blue">INSTALL A MODULE</h2>
+                <p class="module-pick-subtitle">Pick one. The other two leave with the rest cycle.</p>
+                <div id="module-pick-options" class="card-container"></div>
+            </div>
+
+            <!-- LOADOUT modal (audit F8) — full mid-run summary. Toggled via
+                 the loadout icon in the combat top-bar. Dismissed by tapping
+                 the close button or anywhere on the dim backdrop. -->
+            <div id="loadout-modal" class="loadout-modal hidden" role="dialog" aria-modal="true" aria-labelledby="loadout-title">
+                <div class="loadout-backdrop" id="loadout-backdrop"></div>
+                <div class="loadout-panel glass-panel">
+                    <div class="loadout-header">
+                        <h2 id="loadout-title" class="neon-text-blue">LOADOUT</h2>
+                        <button id="btn-loadout-close" class="btn-icon" aria-label="Close loadout">✕</button>
+                    </div>
+                    <div id="loadout-body" class="loadout-body"></div>
+                </div>
+            </div>
+
+	<!-- Tutorial Dark Background -->
+            <div id="tutorial-overlay" class="hidden"></div>
+
+            <!-- Tutorial Text (Now Separate) -->
+            <div id="tutorial-text" class="hidden">Initializing...</div>
+
+            <!-- Sector intro overlay (P6) — brief banner when sector advances -->
+            <div id="sector-intro" class="sector-intro hidden">
+                <div class="sector-intro-content">
+                    <div class="sector-intro-num" id="sector-intro-num">SECTOR 1</div>
+                    <div class="sector-intro-name" id="sector-intro-name">THE GATE</div>
+                    <div class="sector-intro-mech" id="sector-intro-mech"></div>
+                    <svg class="sector-intro-sweep" viewBox="0 0 400 6" preserveAspectRatio="none">
+                        <line x1="0" y1="3" x2="400" y2="3" stroke="url(#siGrad)" stroke-width="2"/>
+                        <defs>
+                            <linearGradient id="siGrad" x1="0" x2="1">
+                                <stop offset="0%" stop-color="transparent"/>
+                                <stop offset="50%" stop-color="#00f3ff"/>
+                                <stop offset="100%" stop-color="transparent"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Phase 3: narration pane under combat tutorial. Skip button
+                 is a sibling, pinned to the bottom-center of the game
+                 container so it never follows the pane when it swaps
+                 between anchor-top and anchor-bottom. -->
+            <div id="tutorial-narration" class="tutorial-narration hidden">
+                <div class="tutorial-narration-story" id="tutorial-narration-story"></div>
+                <div class="tutorial-narration-action" id="tutorial-narration-action"></div>
+                <!-- Sector 0 Breakout — Warden "system bulletin" subtext.
+                     Empty by default so the legacy tutorial doesn't display
+                     it. The Breakout controller writes into this node and
+                     the CSS jitter animation kicks in automatically. -->
+                <div class="breakout-warden-sub" id="breakout-warden-sub"></div>
+                <!-- Tap-to-continue hint — Breakout-only. Shown when the
+                     current beat waits on a tap (no other player action).
+                     Hidden by the JS controller when the wait condition
+                     is something else (e.g. die_used, enemy_turn). -->
+                <div class="breakout-tap-hint" id="breakout-tap-hint">TAP ANYWHERE TO CONTINUE</div>
+            </div>
+            <button id="btn-tutorial-skip" class="btn ghost tutorial-skip-btn hidden">SKIP TUTORIAL</button>
+
+            <!-- Sector 0 Breakout — full-screen storyboard interlude
+                 between rooms. Hidden until the Breakout controller writes
+                 into it, then fades in before the next combat. The visual
+                 panel above the text shows an animated cyber-prison sigil
+                 with scanning lines and per-room glyph (set via JS into
+                 #breakout-storyboard-glyph). -->
+            <div id="breakout-storyboard" class="breakout-storyboard" style="display:none;">
+                <div class="sb-visual">
+                    <!-- Outer rotating hex ring -->
+                    <svg class="sb-sigil" viewBox="-100 -100 200 200" aria-hidden="true">
+                        <polygon class="sb-hex sb-hex-outer" points="80,0 40,-69.3 -40,-69.3 -80,0 -40,69.3 40,69.3"/>
+                        <polygon class="sb-hex sb-hex-mid" points="55,0 27.5,-47.6 -27.5,-47.6 -55,0 -27.5,47.6 27.5,47.6"/>
+                        <circle class="sb-hex-core" cx="0" cy="0" r="22"/>
+                        <circle class="sb-hex-pupil" cx="0" cy="0" r="8"/>
+                    </svg>
+                    <!-- Per-room glyph: drone / sentry / etc. Populated by JS.
+                         Read with the same SVG conventions as the surveillance hex. -->
+                    <div class="sb-glyph" id="breakout-storyboard-glyph" aria-hidden="true"></div>
+                    <!-- Scanning line that sweeps top-to-bottom across the slate -->
+                    <div class="sb-scanline"></div>
+                    <!-- Glitch bars — random horizontal red strips that flash -->
+                    <div class="sb-glitch sb-glitch-1"></div>
+                    <div class="sb-glitch sb-glitch-2"></div>
+                </div>
+                <div class="sb-tag" id="breakout-storyboard-tag"></div>
+                <div class="sb-title" id="breakout-storyboard-title"></div>
+                <div class="sb-body" id="breakout-storyboard-body"></div>
+                <div class="sb-cta">TAP TO CONTINUE</div>
+            </div>
+
+            <!-- Sanctuary first-visit explainer. One-shot per profile —
+                 controlled by mvm_sanctuary_seen flag in localStorage.
+                 Activated by Game.changeState(STATE.META) when the
+                 flag is missing; closes via the GOT IT button. -->
+            <div id="sanctuary-intro" class="info-overlay hidden" aria-hidden="true">
+                <div class="info-card">
+                    <div class="info-tag">// PERMANENT UPGRADE HUB</div>
+                    <h2 class="info-title">SANCTUARY</h2>
+                    <p class="info-lede">Everything you install here survives death. The Sanctuary is the one place the Panopticon cannot reach.</p>
+                    <div class="info-bullets">
+                        <div class="info-bullet"><span class="info-icon">◆</span><span><strong>Fragments</strong> drop in combat and buy upgrades for this run. <strong>Sparks</strong> buy permanent Sanctuary upgrades.</span></div>
+                        <div class="info-bullet"><span class="info-icon" style="color:#ffd76a">✦</span><span><strong>Sparks</strong> drop from boss kills. Spend them on new options, modes, and quality-of-life unlocks.</span></div>
+                        <div class="info-bullet"><span class="info-icon">▣</span><span>Tap a node to install. <strong>Locked</strong> nodes are dim. <strong>Installed</strong> nodes glow green.</span></div>
+                        <div class="info-bullet"><span class="info-icon">↻</span><span>Every install carries into <strong>every future run</strong>, every class.</span></div>
+                    </div>
+                    <button id="btn-sanctuary-intro-dismiss" class="btn primary">GOT IT</button>
+                </div>
+            </div>
+
+            <!-- Story / Outro Screen -->
+            <div id="screen-story" class="screen hidden">
+                <div id="story-content" class="story-crawl">
+                    <!-- JS injects text here -->
+                </div>
+                <button id="btn-finish-story" class="btn primary hidden" style="position: absolute; bottom: max(50px, calc(env(safe-area-inset-bottom, 0px) + 12px));">SYSTEM READY</button>
+            </div>
+
+            <!-- Reward Screen -->
+            <div id="screen-reward" class="screen hidden">
+                <h2 id="reward-title" class="neon-text-gold">COMBAT WON</h2>
+                <div id="reward-boss-destroyed" class="reward-boss-destroyed hidden"></div>
+                <p style="font-family: 'Orbitron'; margin-bottom: 20px;">Select augmentation:</p>
+                <div id="reward-options" class="card-container"></div>
+            </div>
+
+            <!-- Game Over -->
+            <div id="screen-gameover" class="screen hidden">
+                <h2 id="go-title" class="neon-text-pink">CRITICAL ERROR</h2>
+                <div class="go-portrait-slot" aria-hidden="true">
+                    <!-- Enemy portrait canvas injected on death. -->
+                </div>
+                <p id="go-desc" style="font-family: 'Orbitron'; font-size: 1.2rem;">System integrity compromised.</p>
+                <div class="currency-display neon-text-gold" style="margin-top: 20px;">Fragments: <span id="run-fragments">0</span></div>
+                <button id="btn-retry-class" class="btn secondary">RETRY SAME CLASS</button>
+                <button id="btn-menu" class="btn primary">REBOOT SYSTEM</button>
+                <button id="btn-share-run" class="btn secondary" style="margin-top: 6px;">SHARE RESULT</button>
+            </div>
+            
+            <!-- Pause/Settings Modal -->
+            <div id="modal-settings" class="modal hidden">
+                <div class="modal-content glass-panel neon-border-white settings-modal">
+                    <h3 class="neon-text-white settings-title">SYSTEM SETTINGS</h3>
+
+                    <div class="settings-tabs" role="tablist">
+                        <button class="settings-tab active" data-tab="audio" role="tab" aria-label="Audio" title="Audio">
+                            <svg viewBox="0 0 24 24" class="game-icon settings-tab-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M11 5 L6 9 H3 V15 H6 L11 19 Z"/>
+                                <path d="M15.5 8.5 a5 5 0 0 1 0 7"/>
+                                <path d="M18.5 5.5 a9 9 0 0 1 0 13"/>
+                            </svg>
+                        </button>
+                        <button class="settings-tab" data-tab="display" role="tab" aria-label="Display and accessibility" title="Display">
+                            <svg viewBox="0 0 24 24" class="game-icon settings-tab-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <rect x="2.5" y="4" width="19" height="13" rx="1.5"/>
+                                <path d="M8 21 H16 M12 17 V21"/>
+                            </svg>
+                        </button>
+                        <button class="settings-tab" data-tab="gameplay" role="tab" aria-label="Gameplay" title="Gameplay">
+                            <svg viewBox="0 0 24 24" class="game-icon settings-tab-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M6 8 H18 a4 4 0 0 1 4 4 v2 a3 3 0 0 1-5.6 1.5 L15 13 H9 L7.6 15.5 A3 3 0 0 1 2 14 v-2 a4 4 0 0 1 4-4 z"/>
+                                <path d="M7 11 H10 M8.5 9.5 V12.5"/>
+                                <circle cx="15.5" cy="11" r="0.9" fill="currentColor"/>
+                                <circle cx="17.5" cy="12.5" r="0.9" fill="currentColor"/>
+                            </svg>
+                        </button>
+                        <button class="settings-tab" data-tab="dev" role="tab" aria-label="Dev" title="Dev tools">
+                            <svg viewBox="0 0 24 24" class="game-icon settings-tab-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M8.5 7.5 L4 12 L8.5 16.5"/>
+                                <path d="M15.5 7.5 L20 12 L15.5 16.5"/>
+                                <path d="M13.5 5.5 L10.5 18.5"/>
+                            </svg>
+                        </button>
+                        <button class="settings-tab" data-tab="credits" role="tab" aria-label="Credits" title="Credits">
+                            <svg viewBox="0 0 24 24" class="game-icon settings-tab-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <circle cx="12" cy="12" r="9"/>
+                                <path d="M12 11 V17"/>
+                                <circle cx="12" cy="8" r="0.9" fill="currentColor"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="settings-body">
+                        <!-- AUDIO TAB -->
+                        <div class="settings-pane active" data-pane="audio">
+                            <div class="setting-row">
+                                <label for="chk-music">Music</label>
+                                <input type="checkbox" id="chk-music" checked>
+                            </div>
+                            <div class="setting-row setting-select">
+                                <label for="sel-music-track">Music track</label>
+                                <select id="sel-music-track">
+                                    <option value="synth">Synth (default)</option>
+                                    <option value="lofi">Lofi</option>
+                                </select>
+                            </div>
+                            <div class="setting-row setting-slider">
+                                <label for="sld-music-vol">Music volume</label>
+                                <input type="range" id="sld-music-vol" min="0" max="100" step="5" value="30">
+                                <span class="setting-value" data-for="sld-music-vol">30</span>
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-sfx">Sound effects</label>
+                                <input type="checkbox" id="chk-sfx" checked>
+                            </div>
+                            <div class="setting-row setting-slider">
+                                <label for="sld-sfx-vol">SFX volume</label>
+                                <input type="range" id="sld-sfx-vol" min="0" max="100" step="5" value="80">
+                                <span class="setting-value" data-for="sld-sfx-vol">80</span>
+                            </div>
+                            <div class="setting-row setting-slider">
+                                <label for="sld-ambient-vol">Sector ambient</label>
+                                <input type="range" id="sld-ambient-vol" min="0" max="100" step="5" value="60">
+                                <span class="setting-value" data-for="sld-ambient-vol">60</span>
+                            </div>
+                        </div>
+
+                        <!-- DISPLAY TAB -->
+                        <div class="settings-pane" data-pane="display">
+                            <div class="settings-section-label">Accessibility</div>
+                            <div class="setting-row setting-slider">
+                                <label for="sld-text-scale">Text size</label>
+                                <input type="range" id="sld-text-scale" min="80" max="140" step="5" value="100">
+                                <span class="setting-value" data-for="sld-text-scale">100%</span>
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-reduced-motion">Reduced motion in combat <span class="setting-hint">(combat-only — menus and other screens always run at full motion)</span></label>
+                                <input type="checkbox" id="chk-reduced-motion">
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-high-contrast">High contrast</label>
+                                <input type="checkbox" id="chk-high-contrast">
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-dyslexic-font">Readable font (OpenDyslexic-style)</label>
+                                <input type="checkbox" id="chk-dyslexic-font">
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-reduced-glow">Reduced glow (perf + readability)</label>
+                                <input type="checkbox" id="chk-reduced-glow">
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-large-touch">Larger touch targets</label>
+                                <input type="checkbox" id="chk-large-touch">
+                            </div>
+                            <div class="setting-row setting-select">
+                                <label for="sel-handedness">Handedness</label>
+                                <select id="sel-handedness">
+                                    <option value="right">Right-handed</option>
+                                    <option value="left">Left-handed</option>
+                                </select>
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-auto-qte">Auto-QTE (accessibility)</label>
+                                <input type="checkbox" id="chk-auto-qte">
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-qte-wider">Wider QTE window (+50% tolerance)</label>
+                                <input type="checkbox" id="chk-qte-wider">
+                            </div>
+                            <div class="setting-row setting-select">
+                                <label for="sel-perf-tier">Graphics quality <span class="setting-hint">(Auto adjusts on the fly; lock to keep visuals stable)</span></label>
+                                <select id="sel-perf-tier">
+                                    <option value="auto">Auto (adapts to device)</option>
+                                    <option value="high">Lock — High (full effects)</option>
+                                    <option value="mid">Lock — Balanced</option>
+                                    <option value="low">Lock — Low (save battery)</option>
+                                </select>
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-show-fps">Show FPS overlay (dev)</label>
+                                <input type="checkbox" id="chk-show-fps">
+                            </div>
+                            <div class="setting-row">
+                                <label for="btn-copy-diag">Copy diag report (dev) <span class="setting-hint">(includes per-turn perf trends — paste into a bug report)</span></label>
+                                <button id="btn-copy-diag" class="btn secondary" type="button" style="font-size: 0.78rem; padding: 6px 12px;">📋 COPY DIAG</button>
+                            </div>
+                            <div class="setting-row setting-select">
+                                <label for="sel-colorblind">Color-blind mode</label>
+                                <select id="sel-colorblind">
+                                    <option value="none">None</option>
+                                    <option value="deuteranopia">Deuteranopia (red-green)</option>
+                                    <option value="protanopia">Protanopia (red-green)</option>
+                                    <option value="tritanopia">Tritanopia (blue-yellow)</option>
+                                </select>
+                            </div>
+                            <div class="setting-row setting-select">
+                                <label for="sel-dmg-size">Damage number size</label>
+                                <select id="sel-dmg-size">
+                                    <option value="small">Small</option>
+                                    <option value="medium" selected>Medium</option>
+                                    <option value="large">Large</option>
+                                </select>
+                            </div>
+                            <div class="setting-row setting-slider">
+                                <label for="sld-combat-pace">Combat pace</label>
+                                <input type="range" id="sld-combat-pace" min="60" max="200" step="10" value="100">
+                                <span class="setting-value" data-for="sld-combat-pace">100%</span>
+                            </div>
+                        </div>
+
+                        <!-- GAMEPLAY TAB -->
+                        <div class="settings-pane" data-pane="gameplay">
+                            <div class="setting-row">
+                                <label for="chk-tutorial-hints">Tutorial hints</label>
+                                <input type="checkbox" id="chk-tutorial-hints" checked>
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-haptics">Haptic feedback (mobile)</label>
+                                <input type="checkbox" id="chk-haptics" checked>
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-assist">Adaptive difficulty assist</label>
+                                <input type="checkbox" id="chk-assist" checked>
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Export save (for backup)</label>
+                                <button id="btn-export-save" class="btn-inline btn-dev">EXPORT</button>
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Import save (from backup file)</label>
+                                <button id="btn-import-save" class="btn-inline btn-dev">IMPORT</button>
+                                <input type="file" id="file-import-save" accept="application/json" style="display:none;">
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Export local diagnostics (JSON)</label>
+                                <button id="btn-export-analytics" class="btn-inline btn-dev">EXPORT</button>
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-local-diagnostics">Optional local diagnostics <span class="setting-hint">(stored on this device; nothing sent automatically)</span></label>
+                                <input type="checkbox" id="chk-local-diagnostics">
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Reset all progress</label>
+                                <button id="btn-reset-progress" class="btn-inline btn-reset">RESET</button>
+                            </div>
+                            <div id="reset-progress-confirm" class="setting-confirm hidden">
+                                <p>This will erase <strong>all</strong> saves, meta upgrades, fragments, lore, settings, and reload. This cannot be undone.</p>
+                                <div class="setting-confirm-actions">
+                                    <button id="btn-reset-cancel" class="btn-inline btn-ghost">Cancel</button>
+                                    <button id="btn-reset-confirm" class="btn-inline btn-danger-solid">Erase everything</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- CREDITS TAB -->
+                        <div class="settings-pane" data-pane="credits">
+                            <div class="credits-section">
+                                <div class="credits-heading">AUDIO</div>
+                                <div class="credits-entry">
+                                    <span class="credits-name">White Bat Audio</span>
+                                    <span class="credits-role">Synthwave background tracks</span>
+                                </div>
+                                <div class="credits-entry">
+                                    <span class="credits-name">Kenney</span>
+                                    <span class="credits-role">Sound effects (kenney.nl, CC0)</span>
+                                </div>
+                                <div class="credits-entry">
+                                    <span class="credits-name">Sonniss &middot; GDC Game Audio Bundle</span>
+                                    <span class="credits-role">Sound effects (sonniss.com)</span>
+                                </div>
+                            </div>
+
+                            <div class="credits-section">
+                                <div class="credits-heading">GAME</div>
+                                <div class="credits-entry">
+                                    <span class="credits-name">Magic v Machine</span>
+                                    <span class="credits-role">Design, art, code &mdash; Taz</span>
+                                </div>
+                            </div>
+
+                            <div class="credits-section">
+                                <div class="credits-heading">THANKS</div>
+                                <div class="credits-legal">
+                                    Audio assets used under their respective licenses.
+                                    Royalty-free samples remain the copyright of their
+                                    original creators &mdash; please support them directly
+                                    for commercial use.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- DEV TAB -->
+                        <div class="settings-pane" data-pane="dev">
+                            <div class="setting-row">
+                                <label class="god-mode-label" for="chk-godmode">God mode</label>
+                                <input type="checkbox" id="chk-godmode">
+                            </div>
+                            <div class="setting-row setting-slider">
+                                <label for="sld-ascension">Ascension level</label>
+                                <input type="range" id="sld-ascension" min="0" max="10" step="1" value="0">
+                                <span class="setting-value" data-for="sld-ascension">0</span>
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Grant +500 Fragments</label>
+                                <button id="btn-dev-frags" class="btn-inline btn-dev">+500</button>
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Reset Sanctuary (meta upgrades)</label>
+                                <button id="btn-dev-reset-meta" class="btn-inline btn-dev">CLEAR</button>
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Skip to next sector</label>
+                                <button id="btn-dev-skip-sector" class="btn-inline btn-dev">SKIP</button>
+                            </div>
+                            <div class="setting-row setting-action">
+                                <label>Kill current enemy</label>
+                                <button id="btn-dev-kill-enemy" class="btn-inline btn-dev">KILL</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="spacer"></div>
+                    <button id="btn-glossary" class="btn secondary">QUICK RULES</button>
+                    <button id="btn-resume" class="btn primary">RESUME</button>
+                    <button id="btn-quit" class="btn secondary">SAVE AND RETURN</button>
+                    <p class="run-exit-help">Return to the menu with this run saved. In combat, resume restarts the encounter.</p>
+                    <button id="btn-abandon-run" class="btn danger">ABANDON RUN</button>
+                    <p class="run-exit-help">Delete this run in the active save slot. Sparks and permanent progress stay banked.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- Quick Rules / Glossary modal — accessible from the settings
+         menu. Tabbed reference (STATUS / COMBOS / SECTORS / DICE /
+         QTE / CLASSES) so a player can look up any system without
+         leaving the run. Content is pulled from runtime data where
+         possible (status from describeEffect, sectors from
+         SECTOR_MECHANICS) so the glossary stays in sync with the
+         live mechanics. -->
+    <!-- Ascension panel modal — vertical ladder of all 21 tiers (0-20).
+         Cleared tiers gold, current pulsing, future locked + teaser.
+         Opened from the ASCENSION main-menu tile (Roadmap Part 28.2). -->
+    <div id="modal-ascension" class="modal hidden" role="dialog" aria-labelledby="ascension-title">
+        <div class="modal-content ascension-modal glass-panel">
+            <div class="ascension-modal-head">
+                <h2 id="ascension-title" class="neon-text-pink">ASCENSION</h2>
+                <button id="btn-ascension-close" class="btn-icon" aria-label="Close ascension panel">×</button>
+            </div>
+            <div class="ascension-current">
+                <span class="ascension-current-label">SELECTED FOR NEXT RUN</span>
+                <span id="ascension-current-value" class="ascension-current-value">A0 · STANDARD</span>
+            </div>
+            <div id="ascension-ladder" class="ascension-ladder" role="listbox" aria-label="Ascension difficulty ladder"></div>
+        </div>
+    </div>
+
+    <div id="modal-glossary" class="modal hidden">
+        <div class="modal-content modal-glossary glass-panel glass-panel--premium">
+            <div class="modal-glossary-head">
+                <h2 class="neon-text-blue">QUICK RULES</h2>
+                <button id="btn-glossary-close" class="btn-icon" aria-label="Close glossary">×</button>
+            </div>
+            <div class="glossary-tabs" role="tablist">
+                <button class="glossary-tab active" data-tab="status">STATUS</button>
+                <button class="glossary-tab" data-tab="combos">COMBOS</button>
+                <button class="glossary-tab" data-tab="sectors">SECTORS</button>
+                <button class="glossary-tab" data-tab="dice">DICE</button>
+                <button class="glossary-tab" data-tab="qte">QTE</button>
+                <button class="glossary-tab" data-tab="classes">CLASSES</button>
+            </div>
+            <div id="glossary-body" class="glossary-body"></div>
+        </div>
+    </div>
+
+    <!-- Sanctuary NPC service modal (Smith / Oracle / Curator). Top-level so
+         it can overlay the sanctuary (META) screen. -->
+    <div id="sanctuary-npc-modal" class="sanctuary-npc-modal hidden" role="dialog" aria-modal="true" aria-labelledby="sanctuary-npc-title">
+        <div class="sanctuary-npc-content glass-panel">
+            <h2 id="sanctuary-npc-title" class="sanctuary-npc-title neon-text-gold">NPC</h2>
+            <div class="sanctuary-npc-body"></div>
+            <div class="sanctuary-npc-actions">
+                <button class="btn secondary" data-action="npc-close">CLOSE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Intel Codex modal. Replaces the legacy tooltip on the Cipher
+         grid with a full read experience. Lives at body top-level so
+         it overlays any screen. Renders the structured entries from
+         src/data/intel-codex.js with format-specific styling. -->
+    <div id="intel-modal" class="modal intel-modal hidden" aria-hidden="true">
+        <div class="intel-modal-backdrop" data-action="close"></div>
+        <div class="intel-modal-card" role="dialog" aria-labelledby="intel-modal-title" aria-describedby="intel-modal-body">
+            <button class="intel-modal-close" data-action="close" aria-label="Close" type="button">×</button>
+            <button class="intel-modal-nav intel-modal-prev" data-action="prev" aria-label="Previous file" type="button">‹</button>
+            <button class="intel-modal-nav intel-modal-next" data-action="next" aria-label="Next file" type="button">›</button>
+
+            <div class="intel-modal-meta">
+                <span class="intel-modal-filenum" data-bind="filenum">// FILE 00</span>
+                <span class="intel-modal-state" data-bind="state">DECRYPTED</span>
+            </div>
+            <div class="intel-modal-classification">
+                <span class="im-tag" data-bind="classification">PROTOCOL-000</span>
+                <span class="im-dot">•</span>
+                <span class="im-tag" data-bind="decryptDate">00.00.0000</span>
+                <span class="im-dot">•</span>
+                <span class="im-tag im-format" data-bind="format">Field Report</span>
+            </div>
+            <!-- Audio waveform strip. Visible only when the entry's
+                 format is audio_transcript (gated by a CSS rule on
+                 the card's data-format attribute). 8 bars with
+                 staggered idle bounce so the strip reads as a live
+                 audio meter. -->
+            <div class="intel-modal-waveform" aria-hidden="true">
+                <span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span>
+            </div>
+
+            <h2 id="intel-modal-title" class="intel-modal-title" data-bind="title">Title</h2>
+
+            <blockquote class="intel-modal-quote" data-bind="legacyEpigram">Quote</blockquote>
+
+            <div id="intel-modal-body" class="intel-modal-body" data-bind="body">
+                <p class="intel-body-pending">Body pending. Decryption ongoing.</p>
+            </div>
+
+            <div class="intel-modal-footer">
+                <span class="intel-modal-progress" data-bind="progress">1 of 33</span>
+                <span class="intel-modal-chapter-chip" data-bind="chapterLabel"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hack Fabricator minigame (maze-escape). Lives at body top-level so it
+         can overlay any screen without being trapped in a hidden ancestor. -->
+    <div id="hack-minigame-overlay" class="hack-overlay hidden" role="dialog" aria-modal="true" aria-label="Hack Fabricator">
+        <div class="hack-panel glass-panel">
+            <div class="hack-header">
+                <h2 class="hack-title neon-text-pink">DECRYPT FABRICATOR</h2>
+                <div class="hack-subtitle" id="hack-subtitle">Escape the data maze. Reach the exit before the timer expires.</div>
+            </div>
+            <div class="hack-status-row">
+                <div class="hack-status" id="hack-status">STANDBY</div>
+                <div class="hack-timer">
+                    <span id="hack-timer-label">TIMER</span>
+                    <span id="hack-timer-value">--</span>
+                </div>
+            </div>
+            <canvas id="hack-maze" class="hack-maze" aria-hidden="true"></canvas>
+            <div class="hack-joypad" role="group" aria-label="Directional pad">
+                <div class="hack-joypad-row">
+                    <button class="hack-dpad" data-dir="up" aria-label="Up">▲</button>
+                </div>
+                <div class="hack-joypad-row">
+                    <button class="hack-dpad" data-dir="left" aria-label="Left">◀</button>
+                    <button class="hack-dpad hack-dpad-center" aria-hidden="true" tabindex="-1"></button>
+                    <button class="hack-dpad" data-dir="right" aria-label="Right">▶</button>
+                </div>
+                <div class="hack-joypad-row">
+                    <button class="hack-dpad" data-dir="down" aria-label="Down">▼</button>
+                </div>
+            </div>
+            <div class="hack-result" id="hack-result"></div>
+        </div>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>

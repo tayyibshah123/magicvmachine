@@ -1,0 +1,44 @@
+{
+  "name": "Magic v Machine Stable",
+  "short_name": "MvM Stable",
+  "description": "Cyberpunk roguelite dice-builder. Infiltrate the Silicon Empire one run at a time.",
+  "start_url": "./index.html?src=pwa",
+  "id": "/mvm",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#050011",
+  "theme_color": "#050011",
+  "orientation": "portrait",
+  "scope": "./",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["games", "strategy", "role-playing"],
+  "iarc_rating_id": "",
+  "prefer_related_applications": false,
+  "launch_handler": {
+    "client_mode": "auto"
+  },
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "intro.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Main menu"
+    }
+  ]
+}

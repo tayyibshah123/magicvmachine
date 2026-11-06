@@ -1,0 +1,1747 @@
+/**
+ * Magic v Machine
+ * Core Game Logic - Production Ready V1.4 (No Template Literals)
+ */
+
+import { ICONS } from './ui/icons.js';
+
+/* =========================================
+   1. CONFIG & CONSTANTS
+   ========================================= */
+const CONFIG = {
+    CANVAS_WIDTH: 1080,
+    CANVAS_HEIGHT: 1920
+};
+
+const COLORS = {
+    BG: '#050011',
+    NATURE_LIGHT: '#00ff99',
+    NATURE_DARK: '#008f55',
+    MECH_LIGHT: '#ff0055',
+    MECH_DARK: '#8f0030',
+    MANA: '#00f3ff',
+    SHIELD: '#00f3ff',
+    GOLD: '#ffd700',
+    PURPLE: '#bc13fe',
+    ORANGE: '#ff8800',
+    WHITE: '#ffffff',
+    HP_BAR_BG: '#111'
+};
+
+// Codified impact-feedback palette — single source of truth for VFX
+// tints so future hit-feedback work stays coherent across classes.
+// Reference these from compose helpers (game.js triggerVFX, particle
+// helpers, status-effect ticks) instead of inlining hex strings.
+const IMPACT_COLORS = {
+    PERFECT: '#ffd700',  // crit, perfect parry, signature finish
+    GOOD:    '#6fe8ff',  // solid hit, ally minion damage
+    HEAVY:   '#ff3300',  // catastrophic hit, big damage
+    BLOCK:   '#88aaff',  // shield absorb, BLOCKED text
+    BLEED:   '#ff1a3a',  // bleed/poison ticks, bloodstalker
+    ARCANE:  '#bc13fe',  // arcanist, void, glitch
+    NATURE:  '#00ff99',  // heal, summoner, leaf VFX
+    WARN:    '#ff8800',  // annihilator, fire, telegraph
+    DEATH:   '#ffffff'   // deaths, shatters, finishers
+};
+
+// UPDATED: Added 'type' for background generation
+const SECTOR_CONFIG = {
+    // Sector 0 — The Breakout (cyber-prison prologue). Cold red/black
+    // palette so the prologue reads visibly distinct from the cyan
+    // Sector 1 chrome. Custom backdrop in drawSectorCelestial sector-0
+    // branch handles the cell-bar overlay; this entry only feeds the
+    // sky gradient + grid colour.
+    0: { type: 'prison', bgTop: '#0a0207', bgMid: '#1c0610', bgBot: '#000000', sun: ['#ff3355', '#ff8aa0'],  grid: '#ff335544' },
+    // Richer two-stop gradients + primary/secondary celestial colours. `bgMid` is an
+    // intermediate stop used by the enhanced backdrop for richer horizon lighting.
+    1: { type: 'city',   bgTop: '#11023d', bgMid: '#3c0855', bgBot: '#050015', sun: ['#ff5eb9', '#00f3ff'],  grid: '#00f3ff55' },
+    2: { type: 'ice',    bgTop: '#00282e', bgMid: '#005062', bgBot: '#000a14', sun: ['#e0f7ff', '#00f3ff'],  grid: '#88eaff55' },
+    3: { type: 'fire',   bgTop: '#5a0f00', bgMid: '#c23800', bgBot: '#1a0300', sun: ['#ffca3a', '#ff4400'],  grid: '#ff664455' },
+    4: { type: 'tech',   bgTop: '#2a0845', bgMid: '#630a9e', bgBot: '#08002a', sun: ['#e0b0ff', '#ffffff'],  grid: '#bc13fe55' },
+    5: { type: 'source', bgTop: '#3d0015', bgMid: '#82001f', bgBot: '#0a0008', sun: ['#ff3355', '#ffd76a'],  grid: '#ff335555' }
+};
+
+// Sector signature mechanics — each sector has ONE light-touch rule that
+// colours combat without replacing the base system. Activated per-combat
+// from Game.startCombat and cleared when the fight ends.
+//   enemyShieldBonus — flat shield added to each enemy on spawn
+//   playerHeatDmg    — HP tick each turn end while in sector (ignored in
+//                      tutorial / boss silence)
+//   minionDmgMult    — damage multiplier applied to every enemy minion's
+//                      outgoing damage (stackable with existing debuffs)
+//   damageNoiseRange — on any player attack, roll a uniform ± scalar so
+//                      Source sector rolls feel unstable
+const SECTOR_MECHANICS = {
+    1: { label: 'STANDARD OPS',    desc: 'Corporate patrols. Baseline threat.' },
+    2: { label: 'FROST FIELD',     desc: 'Cryo hostiles carry +6 Shield.',
+         enemyShieldBonus: 6 },
+    3: { label: 'HEAT TILES',      desc: 'Molten ground burns you and every player minion 1 HP each turn end.',
+         playerHeatDmg: 1 },
+    4: { label: 'HIVE RESONANCE',  desc: 'Enemy minions hit +20% harder.',
+         minionDmgMult: 1.2 },
+    5: { label: 'REALITY GLITCH',  desc: 'Attacks roll ±15% damage each cast.',
+         damageNoiseRange: 0.15 }
+};
+
+// v1.9.44 — incoming damage type registry. Each enemy / boss can carry
+// a `dmgType` field; entity.takeDamage tints the player's impact-burst
+// particles + the glitch_spike projectile with the matching colour.
+// Common-sense split:
+//   fire     orange   — Compiler, immolators, foundry sector
+//   ice      cyan     — Cryo enemies, frost field sector
+//   electric yellow   — Annihilator / glitch / Hive swarm sector
+//   void     purple   — NULL_POINTER, Tesseract Prime, Archivist
+//   generic  red      — every other enemy (default fallback)
+const DMG_TYPES = {
+    fire:     { color: '#ff8800' },
+    ice:      { color: '#88eaff' },
+    electric: { color: '#ffff00' },
+    void:     { color: '#bc13fe' },
+    generic:  { color: '#ff3355' }
+};
+
+// Sector default dmg type for any enemy that lacks an explicit tag.
+// Bosses override via their BOSS_DATA entry; specific enemy templates
+// can override via a `dmgType` field on the enemy spec.
+const SECTOR_DMG_TYPE = {
+    1: 'generic',
+    2: 'ice',
+    3: 'fire',
+    4: 'electric',
+    5: 'void',
+    6: 'void'
+};
+
+const STATE = {
+    BOOT: 0, MENU: 1, MAP: 2, COMBAT: 3, REWARD: 4, GAMEOVER: 6, TUTORIAL: 7, META: 8, SHOP: 9, CHAR_SELECT: 10, EVENT: 11,
+    INTEL: 12, HEX: 13, TUTORIAL_COMBAT: 14, STORY: 15,
+    ENDING: 16, VICTORY: 17,
+    COMBAT_WIN: 18,
+    ACHIEVEMENTS: 19,
+    CODEX: 20,
+    // Sector 0 — The Breakout. Scripted prologue tutorial (5 rooms +
+    // Cage Guardian boss) that frames new players with cyber-prison
+    // story, per-class forced-die scripts, and a guaranteed first
+    // relic on completion. Replaces the legacy Training Mode for
+    // first-time players; veterans can skip in one tap.
+    BREAKOUT: 21
+};
+
+// LORE_DATABASE is now a re-export of the structured intel codex. The
+// codex lives in src/data/intel-codex.js and carries per-entry
+// metadata (chapter, format, classification, body paragraphs) that
+// the modal popup needs. The flat string array kept here is purely
+// for backwards compatibility with the existing breach-unlock loop
+// in game.js. New code should import INTEL_ENTRIES / getIntelEntry
+// from intel-codex.js directly.
+import { LORE_DATABASE as _LORE_DB_FROM_CODEX } from './data/intel-codex.js';
+const LORE_DATABASE = _LORE_DB_FROM_CODEX;
+
+// Minimal narration shown under the combat-tutorial steps (Phase 3).
+// Keyed by tutorialStep (0..12). Each entry: short story line + one clear action.
+// Deliberately minimal — advanced tooltips teach the rest later.
+const TUTORIAL_NARRATION = [
+    { story: "Welcome, Operator.", action: "Tap the screen to begin." },
+    { story: "Your HP keeps you alive.", action: "Tap to continue." },
+    { story: "Read the machine's next move.", action: "Tap to continue." },
+    { story: "Modules are your magic.", action: "Tap to continue." },
+    { story: "Study your target.", action: "Tap the enemy." },
+    { story: "Strike first.", action: "Drag the ATTACK module onto the enemy." },
+    { story: "Time your strike. Tap the moment the ring crosses the gold zone for a critical.", action: "Tap when the ring lands on the target." },
+    { story: "Brace yourself.", action: "Drag the SHIELD module onto yourself." },
+    { story: "Cycle complete.", action: "Tap END TURN (⏭)." },
+    { story: "Read the strike. Tap the ring at the target zone to parry. Perfect parries halve the hit and reflect half of what you took.", action: "Tap the ring to parry the incoming attack." },
+    { story: "Bad roll?", action: "Tap the reroll icon." },
+    { story: "Call in reinforcements.", action: "Drag the MINION module onto empty space." },
+    { story: "Finish it.", action: "One more attack ends the drill." }
+];
+
+const TUTORIAL_PAGES = [
+    {
+        title: "MISSION BRIEFING",
+        content: "<p>The year is 21XX. Technology has consumed the Earth. The Silicon Empire controls everything with cold precision.</p>" +
+                 "<p>You are the <strong>Green Spark</strong>, the last avatar of Nature. Your mission is to infiltrate their servers, disrupt their code, and destroy the mechanical overlords.</p>"
+    },
+    {
+        title: "INTEL & DATA FILES",
+        content: "<p><strong>Encrypted Files:</strong> High-ranking machine units (Bosses & Elites) carry encrypted data regarding the fall of humanity.</p>" +
+                 "<p><strong>Hex Breach:</strong> Access the <strong>INTEL</strong> menu to decrypt these files using the Hex Breach protocol. Memorize the pattern to inject the virus.</p>" +
+                 "<p><strong>Rewards:</strong> Successful decryption grants massive Fragment rewards and unlocks permanent Lore entries.</p>"
+    },
+    {
+        title: "COMBAT PROTOCOLS",
+        content: "<p>Combat is turn-based. You start with a set of <strong>Dice</strong>.</p>" +
+                 "<p><strong>Drag and Drop</strong> a die onto a target to use it.</p>" +
+                 "<p><strong>Single Click/Tap</strong> a die to select it for a Reroll.</p>" +
+                 "<ul style='list-style-type: none; padding: 0;'>" +
+                    "<li>🗡️ <strong>Attack:</strong> Drag to Enemy.</li>" +
+                    "<li>🛡️ <strong>Defend/Heal:</strong> Drag to Player.</li>" +
+                    "<li>🌿 <strong>Summon:</strong> Drag to empty space to spawn Minion.</li>" +
+                 "</ul>" +
+                 "<div class='tut-tip'>NOTE: Minions have unique names and traits based on your Class. Check their tooltips!</div>"
+    },
+    {
+        title: "ACTION COMMANDS (TIMING)",
+        content: "<p>Timing rewards reading the enemy. Each strike spawns a ring that shrinks toward a target zone.</p>" +
+                 "<p><strong>CRIT (Attack):</strong> Tap as the ring crosses the target. Perfect timing deals <strong>+60% DAMAGE</strong>.</p>" +
+                 "<p><strong>PARRY (Defend):</strong> A perfect tap <strong>HALVES</strong> the hit and reflects <strong>50% of what you took</strong> back at the attacker. A late tap still <strong>BLOCKS</strong> 40%.</p>" +
+                 "<div class='tut-tip'>READ THE PATTERN: Bosses ramp up fast. Elites feint. Multi-hits chain — every wave matters.</div>"
+    },
+    {
+        title: "PROGRESSION",
+        content: "<p>Defeated enemies drop <strong>Tech Fragments</strong>.</p>" +
+                 "<p>Use Fragments in the <strong>Sanctuary</strong> to reclaim the earth and unlock permanent upgrades.</p>" +
+                 "<p>As you restore the Sanctuary, new life will return to the digital wasteland.</p>"
+    }
+];
+
+const POST_TUTORIAL_PAGES = [
+    {
+        title: "SYSTEM OVERVIEW",
+        content: "<p>Your training is complete. You are now connected to the Sector Map.</p>" +
+                 "<ul style='list-style-type: none; padding: 0;'>" +
+                    "<li>⚔️ <strong>Combat:</strong> Engage security units.</li>" +
+                    "<li>☠️ <strong>Elite:</strong> 10% chance to drop Encrypted Data.</li>" +
+                    "<li>💠 <strong>Shop:</strong> Trade Fragments for Modules.</li>" +
+                    "<li>💤 <strong>Rest:</strong> Heal, Upgrade Skill, or Gain Max Rerolls.</li>" +
+                 "</ul>"
+    },
+    {
+        title: "ARSENAL DATA (BASE)",
+        content: "<p><strong>Base Modules (Unupgraded):</strong></p>" +
+                 "<ul style='list-style-type: none; padding: 0;'>" +
+                    "<li>🗡️ <strong>Attack:</strong> 5 DMG. (QTE Criticals available).</li>" +
+                    "<li>🛡️ <strong>Defend:</strong> 5 Block.</li>" +
+                    "<li>💠 <strong>Mana:</strong> +1 Action Point (Energy).</li>" +
+                    "<li>🌿 <strong>Summon:</strong> Spawns a Minion ally.</li>" +
+                 "</ul>" +
+                 "<div class='tut-tip'>TIP: Visit the Sanctuary to unlock powerful Dice Upgrades and Meta Progression.</div>"
+    },
+    {
+        title: "ADVANCED MODULES",
+        content: "<p>Unlock these via Sanctuary or Events:</p>" +
+                 "<ul style='list-style-type: none; padding: 0; font-size: 0.9rem;'>" +
+                    "<li>📉 <strong>Earthquake:</strong> AOE Damage + Weaken.</li>" +
+                    "<li>☄️ <strong>Meteor:</strong> Massive single-target DMG.</li>" +
+                    "<li>⛓️ <strong>Constrict:</strong> Reduces Enemy Atk & Healing.</li>" +
+                    "<li>☠️ <strong>Voodoo:</strong> Delayed massive damage.</li>" +
+                    "<li>⚡ <strong>Overcharge:</strong> Enemy takes more DMG, deals more DMG.</li>" +
+                    "<li>🐂 <strong>Reckless:</strong> Double DMG this turn, take Triple DMG.</li>" +
+                 "</ul>"
+    },
+    {
+        title: "THREAT DATABASE",
+        content: "<p><strong>Elite Unit Modifiers:</strong></p>" +
+                 "<ul style='list-style-type: none; padding: 0;'>" +
+                    "<li>🛡️ <strong>Shielded:</strong> Regenerates barrier every turn.</li>" +
+                    "<li>❤️ <strong>Second Wind:</strong> Revives once with 50% HP upon death.</li>" +
+                    "<li>📶 <strong>Jammer:</strong> Reduces your available Dice count.</li>" +
+                 "</ul>" +
+                 "<div class='tut-tip'>TIP: Focus fire on Jammers immediately. Save heavy attacks for after a Shielded unit's barrier breaks.</div>"
+    },
+    {
+        title: "META OBJECTIVES",
+        content: "<p><strong>💾 Data Files:</strong> Encrypted lore dropped by Bosses. Decrypt them in the Intel menu.</p>" +
+                 "<p><strong>🌳 Sanctuary:</strong> Spend Fragments to upgrade stats. As you upgrade, the wasteland will visually be restored to nature.</p>" +
+                 "<div style='margin-top:15px; border: 1px solid var(--neon-pink); padding: 10px; background: rgba(255,0,85,0.1); border-radius: 5px;'>" +
+                    "<strong class='neon-text-pink'>⚠️ RESTRICTED ACCESS: SECTOR X</strong><br>" +
+                    "<span style='font-size: 0.85rem;'>The hidden Core (Sector X) will only reveal itself when <strong>ALL Data Files</strong> are decrypted and the <strong>Sanctuary</strong> is fully restored.</span>" +
+                 "</div>"
+    },
+    {
+        title: "INTERFACE TIPS",
+        content: "<p><strong>💡 Tooltips:</strong> If you are ever unsure what an icon, enemy, or skill does, <strong>TAP</strong> (or hover) on it to see details.</p>" +
+                 "<p><strong>📊 Accurate Numbers:</strong> The damage and healing numbers shown on your cards are <strong>calculated in real-time</strong>. They include your current buffs, relics, and modifiers.</p>" +
+                 "<p><em>Exception: Random chance effects (e.g. '50% chance') are calculated when the action occurs.</em></p>"
+    },
+    {
+        title: "MISSION START",
+        content: "<p>The Silicon Empire has paved the oceans.<br>" +
+                 "Humanity is deleted.<br>" +
+                 "Nature is illegal.</p>" +
+                 "<p>You are the <strong>GREEN SPARK</strong>.<br>" +
+                 "The last avatar of life.</p>" +
+                 "<h3 class='neon-text-green' style='text-align:center; margin-top:20px;'>Magic v Machine initialised</h3>" +
+                 "<p style='text-align:center; font-weight:bold;'>Good luck.</p>"
+    }
+];
+
+const PLAYER_CLASSES = [
+    {
+        id: 'tactician', name: 'Tactician', icon: ICONS.classTactician, color: '#00f3ff',
+        desc: 'Starts with 6 dice.\nAttacks build 2 Command pips instead of 1.\nSpending 3 pips also draws +1 die next turn.\nMinion: Pawn. +1 reroll on death.',
+        traits: { diceCount: 6, minionName: "Pawn", minionTrait: "Death: +1 Reroll next turn.", pipPerAttack: 2, drawOnPipSpend: 1 },
+        classDice: { attack: 'TAC_ATTACK', defend: 'TAC_DEFEND', mana: 'TAC_MANA', minion: 'TAC_MINION' }
+    },
+    {
+        id: 'arcanist', name: 'Arcanist', icon: ICONS.classArcanist, color: '#bc13fe',
+        desc: 'Starts with 5 base mana.\nGains +1 mana every turn (Flux Regen).\nGlyph wheel cycles Fire, Ice, Lightning. One use per turn.\nMinion: Mana Wisp. +1 mana on death.',
+        traits: { baseMana: 5, minionName: "Mana Wisp", minionTrait: "Death: +1 Mana next turn.", manaPassive: 1 },
+        classDice: { attack: 'ARC_ATTACK', defend: 'ARC_DEFEND', mana: 'ARC_MANA', minion: 'ARC_MINION' }
+    },
+    {
+        id: 'bloodstalker', name: 'Blood Stalker', icon: ICONS.classBloodstalker, color: '#ff0000',
+        desc: 'Lifesteal 2 HP on every hit.\nTakes +1 damage from every source.\nBlood Pool fills on damage taken. Spend HP for tribute payouts.\nMinion: Blood Thrall. Heals you for any damage it takes (x2 if upgraded).',
+        traits: { lifesteal: true, vulnerable: true, minionName: "Blood Thrall", minionTrait: "Alive: heals the player for damage it takes (x2 at level 2).", bloodTierPerKill: 1, bloodTierLifestealBonus: 1 },
+        classDice: { attack: 'BLD_ATTACK', defend: 'BLD_DEFEND', mana: 'BLD_MANA', minion: 'BLD_MINION' }
+    },
+    {
+        id: 'annihilator', name: 'Annihilator', icon: ICONS.classAnnihilator, color: '#ff8800',
+        desc: 'Deals +50% damage.\nStarts with 6 dice and zero free rerolls.\nEarn rerolls by landing QTE crits, or pay 20% max HP.\nMinion: Bomb Bot. 10 AoE on death.',
+        traits: { dmgMultiplier: 1.5, diceCount: 6, noRerolls: true, qteCritRerolls: 1, minionName: "Bomb Bot", minionTrait: "Death: 10 DMG to Enemies." },
+        classDice: { attack: 'ANH_ATTACK', defend: 'ANH_DEFEND', mana: 'ANH_MANA', minion: 'ANH_MINION' }
+    },
+    {
+        id: 'sentinel', name: 'Sentinel', icon: ICONS.classSentinel, color: '#ffffff',
+        desc: 'Starts combat with 10 shield.\nCounter: 4 damage back when your shield breaks.\nAegis Plates bank shield gain into a guaranteed nullify.\nMinion: Guardian. +10 shield on spawn.',
+        traits: { startShield: 10, shieldCounter: 4, minionName: "Guardian", minionTrait: "Spawn: +10 Shield." },
+        classDice: { attack: 'SEN_ATTACK', defend: 'SEN_DEFEND', mana: 'SEN_MANA', minion: 'SEN_MINION' }
+    },
+    {
+        id: 'summoner', name: 'Summoner', icon: ICONS.classSummoner, color: '#00ff99',
+        desc: 'Starts with 2 Spirits at +40% HP and damage.\n4 minion cap. Only class above 3.\nSacred Grove blooms free Spirits while any minion lives.\nMinion: Spirit. 30% revive chance on death.',
+        // Opening buff: 2 minions at +40% so the Summoner's opener survives
+        // Sector 1 pressure — single +20% Spirit used to die turn 1 to AoEs.
+        // Cap raised from 3 → 4 so the GROVE APEX (×2 every minion) reads
+        // as a true endgame swing — three minions are easy to keep alive,
+        // four demands the player actually finish the canopy and field a
+        // full grove. Only Summoner ever exceeds 3 minions.
+        traits: { startMinions: 2, startMinionBuff: 1.4, maxMinions: 4, minionName: "Spirit", minionTrait: "Death: 30% Revive." },
+        classDice: { attack: 'SUM_ATTACK', defend: 'SUM_DEFEND', mana: 'SUM_MANA', minion: 'SUM_MINION' }
+    }
+];
+
+const DICE_TYPES = {
+    // ─── TACTICIAN ───
+    TAC_ATTACK: { name: "Tactical Strike",  icon: ICONS.tacAttack, color: '#00f3ff', desc: 'Deal 5 DMG. If enemy intends attack, +1 Reroll.', cost: 0, target: 'enemy', classId: 'tactician', slot: 'attack' },
+    TAC_DEFEND: { name: "Field Barrier",    icon: ICONS.tacDefend, color: '#00d4e6', desc: 'Gain 5 Shield. +1 Reroll.', cost: 0, target: 'self', classId: 'tactician', slot: 'defend' },
+    TAC_MANA:   { name: "Battle Intel",     icon: ICONS.tacMana,   color: '#00b8cc', desc: '+1 Mana. Enemy takes +1 DMG this turn.', cost: 0, target: 'self', classId: 'tactician', slot: 'mana' },
+    TAC_MINION: { name: "Deploy Pawn",      icon: ICONS.tacMinion, color: '#00f3ff', desc: 'Deploy Pawn.', cost: 0, target: 'any', classId: 'tactician', slot: 'minion' },
+
+    // ─── ARCANIST ───
+    ARC_ATTACK: { name: "Mana Bolt",        icon: ICONS.arcAttack, color: '#bc13fe', desc: 'Deal 4 DMG + 1 per Mana held (max +5).', cost: 0, target: 'enemy', classId: 'arcanist', slot: 'attack' },
+    ARC_DEFEND: { name: "Ward of Flux",     icon: ICONS.arcDefend, color: '#a020f0', desc: 'Gain Shield = 3 + current Mana.', cost: 0, target: 'self', classId: 'arcanist', slot: 'defend' },
+    ARC_MANA:   { name: "Channel",          icon: ICONS.arcMana,   color: '#d070ff', desc: '+1 Mana. +2 if you have 3+ Mana.', cost: 0, target: 'self', classId: 'arcanist', slot: 'mana' },
+    ARC_MINION: { name: "Conjure Wisp",     icon: ICONS.arcMinion, color: '#bc13fe', desc: 'Conjure Mana Wisp.', cost: 0, target: 'any', classId: 'arcanist', slot: 'minion' },
+
+    // ─── BLOODSTALKER ───
+    BLD_ATTACK: { name: "Crimson Rend",     icon: ICONS.bldAttack, color: '#ff0000', desc: 'Deal 6 DMG + 2 Bleed (2 DMG/turn, 2 turns).', cost: 0, target: 'enemy', classId: 'bloodstalker', slot: 'attack' },
+    BLD_DEFEND: { name: "Sanguine Pact",    icon: ICONS.bldDefend, color: '#cc0000', desc: 'Heal 3 HP. Any overflow feeds the Blood Pool.', cost: 0, target: 'self', classId: 'bloodstalker', slot: 'defend' },
+    BLD_MANA:   { name: "Blood Price",      icon: ICONS.bldMana,   color: '#990000', desc: '+2 Mana. Pay 1 HP.', cost: 0, target: 'self', classId: 'bloodstalker', slot: 'mana' },
+    BLD_MINION: { name: "Raise Thrall",     icon: ICONS.bldMinion, color: '#ff0000', desc: 'Raise Blood Thrall.', cost: 0, target: 'any', classId: 'bloodstalker', slot: 'minion' },
+
+    // ─── ANNIHILATOR ───
+    ANH_ATTACK: { name: "Overheat Salvo",   icon: ICONS.anhAttack, color: '#ff8800', desc: 'Deal 8 DMG. +10 Heat.', cost: 0, target: 'enemy', classId: 'annihilator', slot: 'attack' },
+    ANH_DEFEND: { name: "Ricochet Plate",   icon: ICONS.anhDefend, color: '#ff6600', desc: 'Ricochet: -20% incoming DMG next turn. x3 = immunity.', cost: 0, target: 'self', classId: 'annihilator', slot: 'defend' },
+    ANH_MANA:   { name: "Core Surge",       icon: ICONS.anhMana,   color: '#ff4400', desc: '+1 Mana. +5 Heat.', cost: 0, target: 'self', classId: 'annihilator', slot: 'mana' },
+    ANH_MINION: { name: "Deploy Bomb Bot",  icon: ICONS.anhMinion, color: '#ff8800', desc: 'Deploy Bomb Bot.', cost: 0, target: 'any', classId: 'annihilator', slot: 'minion' },
+
+    // ─── SENTINEL ───
+    SEN_ATTACK: { name: "Bulwark Bash",     icon: ICONS.senAttack, color: '#ffffff', desc: 'Deal 3 DMG + 30% of current Shield.', cost: 0, target: 'enemy', classId: 'sentinel', slot: 'attack' },
+    SEN_DEFEND: { name: "Aegis Plate",      icon: ICONS.senDefend, color: '#c0c0c0', desc: 'Gain 6 Shield + 2 Thorns until next turn.', cost: 0, target: 'self', classId: 'sentinel', slot: 'defend' },
+    SEN_MANA:   { name: "Shield Focus",     icon: ICONS.senMana,   color: '#e0e0e0', desc: '+1 Mana + 3 Shield.', cost: 0, target: 'self', classId: 'sentinel', slot: 'mana' },
+    SEN_MINION: { name: "Deploy Guardian",  icon: ICONS.senMinion, color: '#ffffff', desc: 'Deploy Guardian.', cost: 0, target: 'any', classId: 'sentinel', slot: 'minion' },
+
+    // ─── SUMMONER ───
+    SUM_ATTACK: { name: "Primal Howl",      icon: ICONS.sumAttack, color: '#00ff99', desc: 'Deal 4 DMG + 2 per alive minion.', cost: 0, target: 'enemy', classId: 'summoner', slot: 'attack' },
+    SUM_DEFEND: { name: "Bramble Ward",     icon: ICONS.sumDefend, color: '#00cc77', desc: '4 Shield self + 3 Shield each minion.', cost: 0, target: 'self', classId: 'summoner', slot: 'defend' },
+    SUM_MANA:   { name: "Grove Tap",        icon: ICONS.sumMana,   color: '#00ff66', desc: '+1 Mana. Heal player and all minions 1 HP.', cost: 0, target: 'self', classId: 'summoner', slot: 'mana' },
+    SUM_MINION: { name: "Call Spirit",      icon: ICONS.sumMinion, color: '#00ff99', desc: 'Call Spirit.', cost: 0, target: 'any', classId: 'summoner', slot: 'minion' },
+
+    // ─── SHARED SKILL DICE ───
+    EARTHQUAKE:      { name: "Earthquake",      icon: ICONS.earthquake,    color: '#ff8800', desc: 'Deal 5 DMG to ALL enemies.\n[QTE]: Crit for x1.3', cost: 2, isSkill: true, target: 'all_enemies' },
+    METEOR:          { name: "Meteor",          icon: ICONS.meteor,        color: '#bc13fe', desc: 'Deal 30 DMG to target.\n[QTE]: Crit for x1.3', cost: 5, isSkill: true, target: 'enemy' },
+    CONSTRICT:       { name: "Constrict",       icon: ICONS.constrict,     color: '#ff0055', desc: 'Reduce Enemy Atk and Healing by 50% for 3 turns.', cost: 3, isSkill: true, target: 'enemy' },
+    VOODOO:          { name: "Voodoo Hex",      icon: ICONS.voodoo,        color: '#ff0000', desc: 'Apply Curse: Deal 150 Base DMG after 3 turns.', cost: 9, isSkill: true, locked: true, target: 'enemy' },
+    OVERCHARGE:      { name: "Overcharge",      icon: ICONS.overcharge,    color: '#ff4400', desc: 'Enemy takes +50% Damage from all sources (3 turns).', cost: 1, isSkill: true, locked: true, target: 'enemy' },
+    RECKLESS_CHARGE: { name: "Reckless Charge", icon: ICONS.recklessCharge, color: '#ff2200', desc: 'Next Attack x2 DMG.\nTake x3 DMG until next turn.', cost: 2, isSkill: true, locked: true, target: 'self' }
+};
+
+// Sanctuary upgrades — costs are now in SPARKS (✦), the persistent
+// meta-currency. Fragments became a run-only resource; the old fragment
+// costs (400-2000) made these unreachable once cross-run fragment carry
+// was removed. All entries are toggleable in the Sanctuary so a player
+// can dial them off for a harder ascension run without refunding.
+const META_UPGRADES = [
+    { id: 'm_life',       name: "Gaia's Heart",       desc: "Start runs with +20 Max HP.",                cost: 5,  icon: ICONS.metaLife },
+    { id: 'm_mana',       name: "Deep Roots",         desc: "Start runs with +1 Base Mana.",              cost: 8,  icon: ICONS.metaMana },
+    { id: 'm_greed',      name: "Recycler",           desc: "+20% Fragment gain (within a run).",         cost: 4,  icon: ICONS.metaRecycler },
+    { id: 'm_discount',   name: "Merchant Protocol",  desc: "Shop items 25% cheaper.",                    cost: 6,  icon: ICONS.metaMerchant },
+    { id: 'm_thorn',      name: "Double Edge",        desc: "Start with Double Edge (Reflect 30% Dmg).",  cost: 8,  icon: ICONS.relicDoubleEdge },
+    { id: 'm_reroll',     name: "Tactical Link",      desc: "+1 Reroll per turn.",                        cost: 10, icon: ICONS.metaReroll },
+    { id: 'm_dmg',        name: "Solar Flare",        desc: "All attacks deal +30% Damage.",              cost: 12, icon: ICONS.metaSolar },
+    { id: 'm_minion_atk', name: "Nano-Swarm",         desc: "Minions: +50% Dmg, +1 HP.",                  cost: 8,  icon: ICONS.metaSwarm },
+    { id: 'm_shield',     name: "Hardened Hull",      desc: "Start combat with 15 Shield.",               cost: 6,  icon: ICONS.relicShield },
+    { id: 'm_relic',      name: "Data Cache",         desc: "Start run with a random Relic.",             cost: 12, icon: ICONS.metaDataCache },
+    /* Roadmap Part 2.1.5 — Dice weight system. Each bias upgrade gives
+       a +25% roll-weighting toward its slot. Stackable across slots
+       (own multiple → bias multiple slots, useful for the Summoner's
+       attack+minion pivot). */
+    { id: 'm_bias_attack', name: "Aim Override",      desc: "+25% chance attack dice land in your hand.", cost: 6,  icon: ICONS.metaSolar },
+    { id: 'm_bias_defend', name: "Bulwark Routine",   desc: "+25% chance defend dice land in your hand.", cost: 6,  icon: ICONS.relicShield },
+    { id: 'm_bias_mana',   name: "Conduit Tap",       desc: "+25% chance mana dice land in your hand.",   cost: 6,  icon: ICONS.metaMana },
+    { id: 'm_bias_minion', name: "Summon Imprint",    desc: "+25% chance minion dice land in your hand.", cost: 6,  icon: ICONS.metaSwarm },
+    // Cache Primer — the only sanctuary upgrade that buys into the
+    // RUN-only fragment economy. Pre-loads the run with a starting
+    // stash so the early shop has a real ceiling instead of "you can
+    // only afford one node-1 item." 5 ✦ for +100 ≈ a quarter of a
+    // mid-tier shop run by sector 1.
+    { id: 'm_cache_primer', name: "Cache Primer",     desc: "Start each run with +100 Fragments.",        cost: 5,  icon: ICONS.metaRecycler },
+
+    // ── Class specialisation upgrades. Each only applies when the run's
+    // active class matches `appliesToClass`. Trait-modifying — Player's
+    // constructor reads them and bumps the relevant class trait field
+    // (manaPassive, startShield, startMinionBuff, etc.) so every
+    // downstream system already wired into traits picks up the boost
+    // for free.
+    { id: 'cls_tactician',    name: "Command Drill",     desc: "Tactician: attacks build +1 extra Command pip.",       cost: 8, icon: ICONS.classTactician,    appliesToClass: 'tactician' },
+    { id: 'cls_arcanist',     name: "Conduit Reservoir", desc: "Arcanist: Flux Regen ticks 2 Mana per turn (was 1).",  cost: 8, icon: ICONS.classArcanist,     appliesToClass: 'arcanist' },
+    { id: 'cls_bloodstalker', name: "Sanguine Primer",   desc: "Blood Stalker: each Blood Tier grants +2 lifesteal (was +1).", cost: 8, icon: ICONS.classBloodstalker, appliesToClass: 'bloodstalker' },
+    { id: 'cls_annihilator',  name: "Overcore Tuning",   desc: "Annihilator: outgoing damage multiplier 1.7× (was 1.5×).",     cost: 8, icon: ICONS.classAnnihilator,  appliesToClass: 'annihilator' },
+    { id: 'cls_sentinel',     name: "Aegis Surplus",     desc: "Sentinel: combat-start shield 18 (was 10).",           cost: 8, icon: ICONS.classSentinel,     appliesToClass: 'sentinel' },
+    { id: 'cls_summoner',     name: "Verdant Awakening", desc: "Summoner: starting Spirits scale to +60% stats (was +40%).",   cost: 8, icon: ICONS.classSummoner,     appliesToClass: 'summoner' }
+];
+
+const UPGRADES_POOL = [
+    { id: 'nano_shield',     name: "Nano-Shield",     desc: "Start combat with 5 Block.",                                                         icon: ICONS.relicShield },
+    { id: 'mana_syphon',     name: "Mana Syphon",     desc: "+1 Mana at start of turn.",                                                          icon: ICONS.classArcanist },
+    { id: 'repair',          name: "Field Repair",    desc: "Heal 30% Max HP (Instant).",                                                         icon: ICONS.intentHeal,   instant: true },
+    { id: 'titan_module',    name: "Titan Module",    desc: "+25% Damage Output.",                                                                icon: ICONS.relicTitan,   rarity: 'gold' },
+    { id: 'hull_plating',    name: "Hull Plating",    desc: "+10 Max HP.",                                                                        icon: ICONS.relicHull,    instant: true },
+    { id: 'minion_core',     name: "Minion Core",     desc: "Start combat with 1 Wisp (Wisp gains Shield).",                                      icon: ICONS.minion },
+    { id: 'spike_armor',     name: "Double Edge",     desc: "Reflect 30% of damage taken back to enemy.",                                         icon: ICONS.relicDoubleEdge },
+    { id: 'crit_lens',       name: "Crit Lens",       desc: "15% chance to deal Double Damage.",                                                  icon: ICONS.relicCrit },
+    { id: 'loot_bot',        name: "Loot Bot",        desc: "+20% Fragment gain.",                                                                icon: ICONS.relicLoot },
+    { id: 'stim_pack',       name: "Stim Pack",       desc: "Heal 5 HP after combat.",                                                            icon: ICONS.relicStim },
+    { id: 'reroll_chip',     name: "Reroll Chip",     desc: "+1 Reroll per turn.",                                                                icon: ICONS.metaReroll },
+    { id: 'mana_battery',    name: "Mana Battery",    desc: "+1 Base Mana.",                                                                      icon: ICONS.relicBattery, instant: true },
+    { id: 'shield_gen',      name: "Shield Gen",      desc: "Gain 5 Block every turn.",                                                           icon: ICONS.relicShieldGen },
+    { id: 'wisp_hp',         name: "Wisp Vitality",   desc: "Minions have +5 HP.",                                                                icon: ICONS.relicWispVit },
+    { id: 'second_life',     name: "Second Life",     desc: "Revive with 50% HP once.",                                                           icon: ICONS.relicSecondLife, rarity: 'red' },
+    { id: 'voodoo_doll',     name: "Voodoo Doll",     desc: "Unlock 'Voodoo Curse' Dice.",                                                        icon: ICONS.relicVoodoo,  rarity: 'red' },
+    { id: 'overcharge_chip', name: "Overcharge Chip", desc: "Unlock 'Overcharge' Dice.",                                                          icon: ICONS.overcharge,   rarity: 'red' },
+    { id: 'manifestor',      name: "Manifestor",      desc: "+1 Reward Choice. (Unique)",                                                         icon: ICONS.relicManifest, rarity: 'gold' },
+    { id: 'brutalize',       name: "Brutalize",       desc: "Killing a minion deals 20 DMG to all enemies.",                                      icon: ICONS.relicBrutalize },
+    { id: 'relentless',      name: "Relentless",      desc: "Your 3rd Attack each turn deals TRIPLE damage. Stacks trigger earlier (2nd, then 1st).", icon: ICONS.relicRelentless },
+    { id: 'reckless_drive',  name: "Reckless Drive",  desc: "Unlock 'Reckless Charge' Dice.",                                                     icon: ICONS.recklessCharge, rarity: 'red' },
+    { id: 'static_field',    name: "Static Field",    desc: "Deal 15 DMG to random enemy at start of turn.",                                      icon: ICONS.overcharge },
+    { id: 'emergency_kit',   name: "Emergency Kit",   desc: "Heal 30% Max HP if below 30% (Consumed on use).",                                    icon: ICONS.relicEmergency },
+    { id: 'gamblers_chip',   name: "Gambler's Chip",  desc: "+2 Rerolls per turn, but -5 Max HP.",                                                icon: ICONS.relicGambler },
+    { id: 'hologram',        name: "Hologram",        desc: "15% chance to dodge an attack completely.",                                          icon: ICONS.relicHologram },
+    { id: 'solar_battery',   name: "Solar Battery",   desc: "Every 2nd turn, gain +1 Mana.",                                                      icon: ICONS.metaSolar },
+    { id: 'neural_link',     name: "Neural Link",     desc: "Minions gain +3 HP and +3 DMG.",                                                     icon: ICONS.constrict, classLocked: 'summoner' },
+    { id: 'recycle_bin',     name: "Recycle Bin",     desc: "Gaining Mana heals 1 HP (Max 5/turn).",                                              icon: ICONS.metaRecycler },
+    { id: 'firewall',        name: "Firewall",        desc: "First hit of 30+ DMG each combat: soften by 15 and gain 15 Shield.",                  icon: ICONS.defend },
+    { id: 'thorn_mail',      name: "Thorn Mail",      desc: "Gain 2 Block whenever you deal damage.",                                             icon: ICONS.thorns },
+    { id: 'data_miner',      name: "Data Miner",      desc: "Gain 20 Fragments if you end combat with full HP.",                                  icon: ICONS.relicMiner },
+    { id: 'med_dispenser',   name: "Med Dispenser",   desc: "Heal 3 HP whenever you defeat an enemy.",                                            icon: ICONS.relicStim },
+    { id: 'coolant_loop',    name: "Coolant Loop",    desc: "When your Shield breaks, heal 2 HP.",                                                icon: ICONS.relicCoolant },
+
+    // --- V1.1 relic expansion ---
+    { id: 'aegis_cycler',    name: "Aegis Cycler",    desc: "At start of turn, convert 5 Shield into +3 DMG next attack.",                        icon: ICONS.sentAegisCycler, classLocked: 'sentinel' },
+    { id: 'static_capacitor',name: "Static Capacitor",desc: "At start of turn, zap a random enemy for 10 DMG if you hold 3+ Mana.",              icon: ICONS.overcharge, rarity: 'gold' },
+    { id: 'shard_reactor',   name: "Shard Reactor",   desc: "Gain +1 Mana whenever a minion dies (yours or enemy's).",                            icon: ICONS.relicBattery },
+    { id: 'swarm_beacon',    name: "Swarm Beacon",    desc: "Your minions deal +1 DMG for each minion alive.",                                   icon: ICONS.sumSwarmBeacon, classLocked: 'summoner' },
+    { id: 'leyline_cache',   name: "Leyline Cache",   desc: "Gain +50% Fragments from combat rewards.",                                           icon: ICONS.relicManifest },
+    { id: 'bait_drone',      name: "Bait Drone",      desc: "Summon a decoy minion each combat. HP scales with sector (so late-game drones actually survive a round).", icon: ICONS.minion },
+    { id: 'retaliator',      name: "Retaliator",      desc: "After taking 20+ damage in a single hit, deal 10 DMG back.",                         icon: ICONS.thorns },
+    { id: 'dice_cache',      name: "Dice Cache",      desc: "Your first reroll each turn is free (doesn't consume a reroll).",                  icon: ICONS.tactDiceCache, classLocked: 'tactician' },
+    { id: 'hex_fragment',    name: "Hex Fragment",    desc: "Skill dice cost -1 Mana (minimum 0).",                                               icon: ICONS.arcHexFragment, classLocked: 'arcanist' },
+    { id: 'iron_lung',       name: "Iron Lung",       desc: "The first Defend die each turn grants +5 extra Shield.",                             icon: ICONS.defend },
+    { id: 'dusk_protocol',   name: "Dusk Protocol",   desc: "After turn 5, deal +10% damage per turn beyond.",                                    icon: ICONS.annDuskProtocol, classLocked: 'annihilator' },
+    { id: 'dawn_protocol',   name: "Dawn Protocol",   desc: "First attack of each combat deals +100% damage.",                                    icon: ICONS.annDawnProtocol, classLocked: 'annihilator' },
+    { id: 'reflection_glass',name: "Reflection Glass",desc: "Dodging an attack deals 8 DMG to the attacker.",                                     icon: ICONS.relicHologram },
+    { id: 'venom_edge',      name: "Venom Edge",      desc: "Attacks apply 1 stack of Poison (2 DMG/turn for 3 turns).",                          icon: ICONS.attack },
+    { id: 'kinetic_battery', name: "Kinetic Battery", desc: "Every 5 shields gained grants +1 Reroll.",                                           icon: ICONS.metaReroll, rarity: 'gold' },
+    { id: 'salvage_arm',     name: "Salvage Arm",     desc: "Elite kills drop +15 Fragments.",                                                    icon: ICONS.relicLoot },
+    { id: 'ghost_cache',     name: "Ghost Cache",     desc: "Once per run, auto-revive a dead minion with 1 HP.",                                 icon: ICONS.relicSecondLife },
+    { id: 'warden_protocol', name: "Warden Protocol", desc: "Your minions gain +3 Shield at start of each turn.",                                 icon: ICONS.defend,        classLocked: 'sentinel' },
+    { id: 'tempo_loop',      name: "Tempo Loop",      desc: "Each unused die at end of turn grants +3 Shield next turn.",                         icon: ICONS.classTactician },
+    { id: 'echo_chamber',    name: "Echo Chamber",    desc: "First skill die each combat costs 0 Mana.",                                          icon: ICONS.classArcanist, rarity: 'gold', classLocked: 'arcanist' },
+    { id: 'nano_forge',      name: "Nano Forge",      desc: "At combat start, spawn a free Minion at +50% stats.",                                icon: ICONS.sumNanoForge,        rarity: 'gold', classLocked: 'summoner' },
+    { id: 'celestial_sync',  name: "Celestial Sync",  desc: "Perfect QTEs also heal 3 HP.",                                                       icon: ICONS.intentHeal },
+    { id: 'dervish_mode',    name: "Dervish Mode",    desc: "After 3 attacks in a single turn, gain +2 Mana.",                                    icon: ICONS.relicBattery },
+    { id: 'iron_vault',      name: "Iron Vault",      desc: "Shield does not decay at end of turn (max 50 carry).",                               icon: ICONS.sentIronVault,   rarity: 'gold', classLocked: 'sentinel' },
+
+    // --- Part 5 relic expansion ---
+    { id: 'reinforced_shell',name: "Reinforced Shell",desc: "+20 Max HP.",                                                                        icon: ICONS.relicHull,     instant: true },
+    { id: 'volt_primer',     name: "Volt Primer",     desc: "First attack each turn deals +5 flat DMG.",                                          icon: ICONS.overcharge },
+    { id: 'salvage_protocol',name: "Salvage Protocol",desc: "Gain 3 Fragments every time you kill an enemy.",                                     icon: ICONS.relicLoot },
+
+    // ── Module expansion (Sparks-rebalance batch) — these slot into
+    // existing resolution paths so adding the data here is almost
+    // sufficient. Each is referenced by id from game.js where it
+    // plumbs into damage / reroll / mana / shield events.
+    { id: 'kindling',        name: "Kindling",        desc: "Bleed and Poison ticks deal +1 damage per stack of Kindling.",                       icon: ICONS.bldAttack },
+    { id: 'last_stand',      name: "Last Stand",      desc: "Below 33% HP: +30% damage, +1 Reroll at turn start.",                                icon: ICONS.bldDefend },
+    { id: 'spark_battery',   name: "Spark Battery",   desc: "First reroll each combat grants +1 Mana.",                                           icon: ICONS.tactSparkBattery, classLocked: 'tactician' },
+    { id: 'siphon_blade',    name: "Siphon Blade",    desc: "Killing an enemy heals 4 HP and refunds 1 Mana.",                                    icon: ICONS.bldAttack, rarity: 'gold' },
+
+    // ── Module expansion (round 2) — synergy fillers and class-leaning
+    // payoffs. All slot into existing turn-start / damage / kill paths.
+    { id: 'glass_lens',      name: "Glass Lens",      desc: "First attack each turn deals +50% damage but you take +1 from next hit.",            icon: ICONS.relicCrit },
+    { id: 'pressure_valve',  name: "Pressure Valve",  desc: "End of turn: each unspent Mana deals 4 damage to a random enemy.",                   icon: ICONS.overcharge },
+    { id: 'overcharge_vent', name: "Overcharge Vent", desc: "Every 5 Mana spent in a combat: +2 damage until combat ends (perm).",                icon: ICONS.relicBattery },
+    { id: 'phalanx_drive',   name: "Phalanx Drive",   desc: "Minions: +1 damage per other minion-affecting Module owned.",                        icon: ICONS.constrict },
+    { id: 'echo_round',      name: "Echo Round",      desc: "Every 3rd attack also hits a random enemy for 50% damage.",                          icon: ICONS.attack },
+    { id: 'tidal_recycler',  name: "Tidal Recycler",  desc: "When Shield > Max HP/2 at turn start, gain +1 Mana.",                                icon: ICONS.relicShieldGen },
+    { id: 'munitions_belt',  name: "Munitions Belt",  desc: "Skill dice (Meteor, Earthquake, etc.) gain +25% effect.",                            icon: ICONS.classAnnihilator, classLocked: 'annihilator' },
+    { id: 'tacticians_eye',  name: "Tactician's Eye", desc: "Each die rolled with matching slot (2+ same): +2 to its effect.",                    icon: ICONS.classTactician,   classLocked: 'tactician' },
+
+    // ── Class-locked module expansion (Part X). Each class earns a
+    // small private pool of high-fantasy modules that ONLY surface in
+    // its own reward screens. Generic-pool modules still appear for
+    // every class — these layer on top so each class has at least 3
+    // identity-pure picks.
+    //
+    // Bloodstalker (lifesteal / blood ramp):
+    { id: 'crimson_tithe',   name: "Crimson Tithe",   desc: "Lifesteal heals an extra 2 HP per attack.",                                          icon: ICONS.bldAttack,    rarity: 'gold', classLocked: 'bloodstalker' },
+    { id: 'vermilion_hunger',name: "Vermilion Hunger",desc: "Each kill grants +1 extra Blood Tier.",                                              icon: ICONS.bldMana,                      classLocked: 'bloodstalker' },
+    { id: 'predators_mark',  name: "Predator's Mark", desc: "Killing a Bleeding enemy heals 5 HP and grants +1 Reroll.",                          icon: ICONS.bldDefend,                    classLocked: 'bloodstalker' },
+    // Arcanist (mana). hex_fragment + echo_chamber + flux_overload = 3.
+    { id: 'flux_overload',   name: "Flux Overload",   desc: "Flux Regen grants +1 extra Mana per turn.",                                          icon: ICONS.arcFluxOverload,               classLocked: 'arcanist' },
+
+    // --- Sector 0 Breakout reward — Cellkey Shard ---
+    // Awarded once, on completion of the Cage Guardian fight in the
+    // prologue. Modest first-run boost: +3 Max HP and a free reroll on
+    // turn 1 of every combat. Read by Player on combat start (turn 1
+    // reroll grant) and by the player constructor (HP).
+    { id: 'cellkey_shard',   name: "Cellkey Shard",   desc: "+3 Max HP. First turn of every combat starts with +1 Reroll.",                       icon: ICONS.metaReroll, rarity: 'gold' }
+];
+
+const CORRUPTED_RELICS = [
+    { id: 'c_blood_pact',    name: "Blood Pact",    desc: "Deal +50% DMG, but take 2 DMG at start of turn.",                                       icon: ICONS.corBlood,    rarity: 'corrupted' },
+    { id: 'c_unstable_core', name: "Unstable Core", desc: "+2 Base Mana, but 25% chance to lose turn when casting skills.",                        icon: ICONS.corUnstable, rarity: 'corrupted' },
+    { id: 'c_void_shell',    name: "Void Shell",    desc: "Start each combat with 40 Shield. Shield plays are disabled.",                          icon: ICONS.corVoid,     rarity: 'corrupted' },
+    { id: 'c_glitch_blade',  name: "Glitch Blade",  desc: "Attacks deal random DMG (1 to 3x Base).",                                               icon: ICONS.corGlitch,   rarity: 'corrupted' },
+    { id: 'c_entropy',       name: "Entropy",       desc: "Enemies start with -20% HP, but deal +50% DMG.",                                        icon: ICONS.corEntropy,  rarity: 'corrupted' },
+    { id: 'c_quantum_core',  name: "Quantum Core",  desc: "Every 3rd Attack is a guaranteed CRIT. -15 Max HP.",                                    icon: ICONS.corQuantum,  rarity: 'corrupted', minAscension: 2 },
+    { id: 'c_overclock',     name: "Overclock",     desc: "+2 Base Mana. Take 3 DMG at the start of every turn.",                                  icon: ICONS.corOverclock,rarity: 'corrupted', minAscension: 3 },
+    { id: 'c_paradox',       name: "Paradox Loop",  desc: "First die each turn costs 0 Mana. All others cost +1.",                                 icon: ICONS.corParadox,  rarity: 'corrupted', minAscension: 4 },
+
+    // --- V1.1 corrupted expansion ---
+    { id: 'c_fracture',      name: "Fracture",      desc: "Rerolls cost 2 HP instead of a reroll token. Rerolls never deplete.",                  icon: ICONS.corUnstable, rarity: 'corrupted' },
+    { id: 'c_void_siphon',   name: "Void Siphon",   desc: "Killing an enemy grants +1 Max Mana. Max HP -5 on pickup.",                             icon: ICONS.corVoid,     rarity: 'corrupted', minAscension: 1 },
+    { id: 'c_mirror_shard',  name: "Mirror Shard",  desc: "50% of damage taken is also dealt to a random enemy.",                                 icon: ICONS.corGlitch,   rarity: 'corrupted' },
+    { id: 'c_pyre',          name: "Pyre",          desc: "Attacks deal +30% DMG but you take +1 DMG per attack made.",                           icon: ICONS.corBlood,    rarity: 'corrupted' },
+
+    // ── Corrupted expansion (round 2)
+    { id: 'c_amputation',  name: "Amputation",  desc: "Lose 1 die slot. Remaining dice deal +50% effect.",                                          icon: ICONS.corBlood,    rarity: 'corrupted', minAscension: 2 },
+    { id: 'c_oracle',      name: "Oracle's Tax", desc: "See enemy intents 2 turns ahead. Pay HP equal to current sector at combat start.",          icon: ICONS.corVoid,     rarity: 'corrupted', minAscension: 1 },
+    { id: 'c_thanatos',    name: "Thanatos",    desc: "Killing an enemy stuns you for 1 turn. Kills grant +2 Mana, +20 Frags.",                    icon: ICONS.corQuantum,  rarity: 'corrupted', minAscension: 3 },
+    { id: 'c_inferno',     name: "Inferno",     desc: "All attacks deal +5 flat damage. You ignite for 5 DMG/turn (resets each combat).",          icon: ICONS.corBlood,    rarity: 'corrupted' }
+];
+
+// SPARKS_UPGRADES — persistent meta unlocks bought with Sparks. Unlike
+// META_UPGRADES (Fragment-spend, raw stat creep), every entry here is
+// content/option/quality-of-life — never raw power. The Sanctuary UI
+// renders this list under the "SPARKS" tab.
+const SPARKS_UPGRADES = [
+    { id: 's_signature',    name: "Signature Forge",  cost: 20, category: 'class',    desc: "Permanently unlock Signature Tier 2 + Tier 3 evolutions." },
+    { id: 's_endless',      name: "Endless Spire",    cost: 25, category: 'marquee',  desc: "After Sector 5, continue into escalating Endless Sectors with personal-best tracking." },
+    { id: 's_archivist_key',name: "Archivist Key",    cost: 1000, category: 'marquee',desc: "Unlock THE ARCHIVIST as a required boss after Sector 5. Defeat to choose: continue Endless or return home." }
+];
+
+// Synergies: when the player owns ALL listed ids, a one-time banner fires.
+// First discovery per run grants a small fragment bonus.
+const SYNERGIES = [
+    { id: 'minion_lord',  name: "MINION LORD",  ids: ['minion_core', 'neural_link', 'wisp_hp'], desc: "Your swarm is complete." },
+    { id: 'death_spiral', name: "DEATH SPIRAL", ids: ['relentless', 'titan_module'],            desc: "Heavy hitter online." },
+    { id: 'glass_cannon', name: "GLASS CANNON", ids: ['c_blood_pact', 'c_entropy'],             desc: "No guts, no glory." },
+    { id: 'thorn_tank',   name: "THORN TANK",   ids: ['nano_shield', 'spike_armor', 'thorn_mail'], desc: "Hit me harder." },
+    { id: 'frugal',       name: "FRUGAL",       ids: ['loot_bot', 'stim_pack'],                 desc: "Greed is good." },
+    { id: 'crit_artisan', name: "CRIT ARTISAN", ids: ['crit_lens', 'c_quantum_core'],           desc: "Every strike precise." },
+    { id: 'power_plant',  name: "POWER PLANT",  ids: ['solar_battery', 'mana_syphon', 'recycle_bin'], desc: "Mana overflow." },
+    { id: 'gambler_king', name: "GAMBLER KING", ids: ['gamblers_chip', 'reroll_chip'],          desc: "House always wins." },
+
+    // ── New build clusters surfacing the expanded module pool. Each
+    // bundles 3-4 ids that pay off as a coherent identity. The detect-
+    // and-banner path in game.js already iterates this array.
+    { id: 'skill_caster',  name: "SKILL CASTER",   ids: ['hex_fragment', 'echo_chamber', 'munitions_belt', 'overcharge_vent'], desc: "Skills are your weapon." },
+    { id: 'dot_stalker',   name: "DOT STALKER",    ids: ['venom_edge', 'kindling', 'siphon_blade', 'last_stand'],              desc: "Bleed them dry." },
+    { id: 'shield_engine', name: "SHIELD ENGINE",  ids: ['iron_vault', 'tidal_recycler', 'iron_lung', 'kinetic_battery'],      desc: "The wall pays you back." }
+];
+
+// Module FUSIONS — Hades-style "Duo" pairings. When a player owns BOTH
+// source ids, the next reward screen surfaces the fusion as a single
+// rare option. Picking it consumes both source modules and replaces
+// them with the fusion (more powerful than the sum). Each fusion has
+// its own id so game.js can wire bespoke effects; fired fusions are
+// tracked in `firedFusions` so a fusion can't be re-rolled forever.
+//
+// Pairs are chosen so neither source is class-locked to a class the
+// other source is incompatible with — every pair below uses general-
+// pool relics or explicitly-matched class-locked combinations.
+const MODULE_FUSIONS = [
+    {
+        id: 'fusion_voltaic_bulwark',
+        ids: ['kinetic_battery', 'iron_lung'],
+        name: "Voltaic Bulwark",
+        desc: "First Defend each turn: +8 Shield AND +2 Rerolls. Every 5 Shield gained still rolls Kinetic.",
+        netGain: "Adds the +2 reroll trigger on top of every defend, plus your Kinetic shield-rolls keep going.",
+        icon: '⚡',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_toxic_coil',
+        ids: ['static_field', 'venom_edge'],
+        name: "Toxic Coil",
+        desc: "Static Field strikes apply 2 stacks of Poison. Attacks also chain a 5 DMG static spark to a random other enemy.",
+        netGain: "Doubles your poison output and chains every attack to a second target. Synergy you cannot get from the parts alone.",
+        icon: '☣',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_phoenix_protocol',
+        ids: ['second_life', 'emergency_kit'],
+        name: "Phoenix Protocol",
+        desc: "Revive at 100% HP and clear all debuffs. Emergency Kit charges restored on revive.",
+        netGain: "Full-HP revive, debuff wipe, and your kit gets a fresh charge. The two parts cannot do this alone.",
+        icon: '🜂',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_tesla_lens',
+        ids: ['static_capacitor', 'crit_lens'],
+        name: "Tesla Lens",
+        desc: "Static Capacitor zaps for 25 DMG and counts as a guaranteed Crit. Crit Lens chance +10%.",
+        netGain: "Capacitor zap is now 25 DMG (up from 10) and always crits. Lens crit chance still climbs.",
+        icon: '✦',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_reflective_plating',
+        ids: ['shield_gen', 'spike_armor'],
+        name: "Reflective Plating",
+        desc: "Shield Gen is +8/turn (was 5) and refunds 30% reflected damage as DPS to a random enemy.",
+        netGain: "Shield tick is +3/turn higher and your thorns finally hit something useful.",
+        icon: '◈',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_flux_cycler',
+        ids: ['mana_syphon', 'recycle_bin'],
+        name: "Flux Cycler",
+        desc: "+2 Mana at start of turn. Each Mana gained heals 2 HP (max 8/turn).",
+        netGain: "Mana income matches your two stacks AND every gain heals you. The combo is the upgrade.",
+        icon: '⟁',
+        rarity: 'red'
+    },
+    // ── Second wave of fusions (6 more pairings). Mix of universally-
+    // available combos and class-flavoured ones; each one's effect is
+    // wired in src/game.js where the source relics' hooks live.
+    {
+        id: 'fusion_aegis_field',
+        ids: ['nano_shield', 'warden_protocol'], // warden_protocol is sentinel-locked
+        name: "Aegis Field",
+        desc: "Start combat with 18 Shield. Minions gain +6 Shield at start of every turn.",
+        netGain: "Combat-start shield jumps from 5 to 18, and every turn your minions get a fresh +6 plate.",
+        icon: '◇',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_pulse_hammer',
+        ids: ['crit_lens', 'volt_primer'],
+        name: "Pulse Hammer",
+        desc: "First attack each turn deals +12 flat DMG and is a guaranteed crit.",
+        netGain: "First attack always crits AND adds +12 flat. The two parts could never combine the trigger.",
+        icon: '⚒',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_tyrant_engine',
+        ids: ['relentless', 'titan_module'],
+        name: "Tyrant Engine",
+        desc: "Every attack deals +50% damage and stacks on itself. Your 3rd attack each turn still triples.",
+        netGain: "Damage multiplier per stack is +50% (up from Titan's +25%). Stacks compound. Your triple still fires.",
+        icon: '☗',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_bramble_cycle',
+        ids: ['thorn_mail', 'coolant_loop'],
+        name: "Bramble Cycle",
+        desc: "Gain 4 Block on every damage you deal. Heal 5 HP whenever your shield breaks.",
+        netGain: "Damage now feeds shield. Shield breaks now heal. Loop your defence into your offence.",
+        icon: '✺',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_wisp_engine',
+        ids: ['minion_core', 'wisp_hp'],
+        name: "Wisp Engine",
+        desc: "Start combat with 2 Wisps at +10 HP each AND 5 starting Shield.",
+        netGain: "Two Wisps instead of one, each tougher, plus 5 shield on you for the opener.",
+        icon: '✧',
+        rarity: 'red'
+    },
+    {
+        id: 'fusion_wounded_beast',
+        ids: ['last_stand', 'retaliator'],
+        name: "Wounded Beast",
+        desc: "Below 33% HP: +30% damage, +1 Reroll/turn, AND every reflect deals 3× damage.",
+        netGain: "Three effects fire at once below 33% HP. The parts only ever gave you one or the other.",
+        icon: '⚔',
+        rarity: 'red'
+    }
+];
+
+const GLITCH_MODIFIERS = [
+    { id: 'volatile', name: 'Volatile',    icon: ICONS.glitchVolatile, desc: 'Explodes for 15 DMG on death.' },
+    { id: 'evasive',  name: 'Evasive',     icon: ICONS.glitchEvasive,  desc: '20% chance to dodge attacks.' },
+    { id: 'regen',    name: 'Regenerator', icon: ICONS.glitchRegen,    desc: 'Heals 5% HP each turn.' },
+    { id: 'thorns',   name: 'Sharp',       icon: ICONS.glitchThorns,   desc: 'Reflects 2 DMG on hit.' }
+];
+
+// Class default-attack dice — one per class, 3 evolution tiers.
+// Tier 1 granted at run start; tier advances on sector boss defeats (sector 2 → T2, sector 4 → T3).
+// Keyed into DICE_TYPES at runtime so the standard roll pipeline picks them up.
+// Names are class-flavored; T2/T3 are the upgraded forms.
+const SIGNATURE_DICE = {
+    tactician: [
+        { key: 'SIG_TACT_1', name: 'Volley',    icon: ICONS.classTactician, color: '#00f3ff', desc: 'Deal 7 DMG. +1 Reroll next turn.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_TACT_2', name: 'Salvo',     icon: ICONS.classTactician, color: '#00f3ff', desc: 'Deal 10 DMG. +1 Reroll this turn.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_TACT_3', name: 'Checkmate', icon: ICONS.classTactician, color: '#00f3ff', desc: 'Deal 14 DMG. +2 Rerolls. Draw 1 Die.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' }
+    ],
+    arcanist: [
+        { key: 'SIG_ARC_1', name: 'Spark', icon: ICONS.classArcanist, color: '#bc13fe', desc: 'Deal 6 DMG. +1 Mana.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_ARC_2', name: 'Hex',   icon: ICONS.classArcanist, color: '#bc13fe', desc: 'Deal 12 DMG. +2 Mana.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_ARC_3', name: 'Rite',  icon: ICONS.classArcanist, color: '#bc13fe', desc: 'Deal 18 DMG. +3 Mana. Apply Weak.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' }
+    ],
+    bloodstalker: [
+        { key: 'SIG_BLOOD_1', name: 'Bite',  icon: ICONS.classBloodstalker, color: '#ff0000', desc: 'Deal 8 DMG. Heal 3 HP.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_BLOOD_2', name: 'Gouge', icon: ICONS.classBloodstalker, color: '#ff0000', desc: 'Deal 12 DMG. Heal 6 HP.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_BLOOD_3', name: 'Maul',  icon: ICONS.classBloodstalker, color: '#ff0000', desc: 'Deal 18 DMG. Heal 10 HP. Apply Frail.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' }
+    ],
+    annihilator: [
+        { key: 'SIG_ANNI_1', name: 'Blast',      icon: ICONS.classAnnihilator, color: '#ff8800', desc: 'Deal 12 DMG. Ignore Shield.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_ANNI_2', name: 'Barrage',    icon: ICONS.classAnnihilator, color: '#ff8800', desc: 'Deal 18 DMG. Ignore Shield. Apply Weak.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_ANNI_3', name: 'Annihilate', icon: ICONS.classAnnihilator, color: '#ff8800', desc: 'Deal 28 DMG. Ignore Shield. Stuns 1 turn.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' }
+    ],
+    sentinel: [
+        { key: 'SIG_SENT_1', name: 'Bash',        icon: ICONS.classSentinel, color: '#ffffff', desc: 'Gain 10 Shield. Deal 4 DMG.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_SENT_2', name: 'Slam',        icon: ICONS.classSentinel, color: '#ffffff', desc: 'Gain 15 Shield. Deal 8 DMG. Taunt.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_SENT_3', name: 'Aegis Break', icon: ICONS.classSentinel, color: '#ffffff', desc: 'Gain 22 Shield. Deal 14 DMG. Taunt + Thorns.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' }
+    ],
+    summoner: [
+        { key: 'SIG_SUM_1', name: 'Call',        icon: ICONS.classSummoner, color: '#00ff99', desc: 'Summon a Spirit. Deal 4 DMG.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_SUM_2', name: 'Rouse',       icon: ICONS.classSummoner, color: '#00ff99', desc: 'Summon a Spirit. Deal 8 DMG. Heal Minions 3 HP.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_SUM_3', name: 'Primal Roar', icon: ICONS.classSummoner, color: '#00ff99', desc: 'Summon 2 Spirits. Deal 12 DMG. Minions: +3 DMG this turn.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' }
+    ]
+};
+
+const DICE_UPGRADES = {
+    // ─── TACTICIAN ───
+    TAC_ATTACK: { name: "Precision Strike",   desc: "Deal 8 DMG. If enemy intends attack, +1 Reroll + 3 Shield.", cost: 190, icon: ICONS.tacAttack },
+    TAC_DEFEND: { name: "Holo Barrier",       desc: "Gain 10 Shield. +5 Shield to minions. +2 Rerolls.", cost: 175, icon: ICONS.tacDefend },
+    TAC_MANA:   { name: "Battle Analysis",    desc: "+2 Mana. Enemy takes +2 DMG this turn.", cost: 200, icon: ICONS.tacMana },
+    TAC_MINION: { name: "Elite Pawn",         desc: "Deploy L2 Pawn (+5 Block, +5 DMG).", cost: 200, icon: ICONS.tacMinion },
+
+    // ─── ARCANIST ───
+    ARC_ATTACK: { name: "Arcane Barrage",     desc: "Deal 6 DMG + 2 per Mana held. Apply Weak.", cost: 190, icon: ICONS.arcAttack },
+    ARC_DEFEND: { name: "Prismatic Ward",     desc: "Shield = 5 + current Mana. +1 Mana.", cost: 175, icon: ICONS.arcDefend },
+    ARC_MANA:   { name: "Resonance",          desc: "+2 Mana. +3 if you have 3+ Mana.", cost: 200, icon: ICONS.arcMana },
+    ARC_MINION: { name: "Greater Wisp",       desc: "Conjure L2 Mana Wisp (+5 Block, +5 DMG).", cost: 200, icon: ICONS.arcMinion },
+
+    // ─── BLOODSTALKER ───
+    BLD_ATTACK: { name: "Crimson Cascade",    desc: "Deal 9 DMG + 3 Bleed (3 DMG/turn, 2 turns). Lifesteal 2.", cost: 190, icon: ICONS.bldAttack },
+    BLD_DEFEND: { name: "Transfusion",        desc: "Heal 5 HP. Overflow feeds the Blood Pool.", cost: 175, icon: ICONS.bldDefend },
+    BLD_MANA:   { name: "Blood Tithe",        desc: "+3 Mana. Pay 1 HP. Apply Frail to enemy.", cost: 200, icon: ICONS.bldMana },
+    BLD_MINION: { name: "Alpha Thrall",       desc: "Raise L2 Thrall (+5 HP, +5 DMG). Damage it takes heals you ×2.", cost: 200, icon: ICONS.bldMinion },
+
+    // ─── ANNIHILATOR ───
+    ANH_ATTACK: { name: "Plasma Cannon",      desc: "Deal 12 DMG. +15 Heat. 20% AoE splash.", cost: 190, icon: ICONS.anhAttack },
+    ANH_DEFEND: { name: "Deflector Array",    desc: "Ricochet: -30% incoming DMG next turn. x3 = immunity + 5 DMG reflect.", cost: 175, icon: ICONS.anhDefend },
+    ANH_MANA:   { name: "Reactor Core",       desc: "+2 Mana. +8 Heat. If Heat > 50, +1 extra Mana.", cost: 200, icon: ICONS.anhMana },
+    ANH_MINION: { name: "Heavy Bomb Bot",     desc: "Deploy L2 Bomb Bot (+5 Block, 15 DMG on death).", cost: 200, icon: ICONS.anhMinion },
+
+    // ─── SENTINEL ───
+    SEN_ATTACK: { name: "Fortress Strike",    desc: "Deal 5 DMG + 40% of current Shield. Retain 50% Shield.", cost: 190, icon: ICONS.senAttack },
+    SEN_DEFEND: { name: "Reinforced Plate",   desc: "Gain 10 Shield + 3 Thorns until next turn.", cost: 175, icon: ICONS.senDefend },
+    SEN_MANA:   { name: "Bastion Protocol",   desc: "+1 Mana + 5 Shield. If Shield > 15, +1 extra Mana.", cost: 200, icon: ICONS.senMana },
+    SEN_MINION: { name: "Elite Guardian",     desc: "Deploy L2 Guardian (+5 Block, +5 DMG, 15 Shield on spawn).", cost: 200, icon: ICONS.senMinion },
+
+    // ─── SUMMONER ───
+    SUM_ATTACK: { name: "Wrath of the Wild",  desc: "Deal 6 DMG + 3 per alive minion. Heal self 1 per minion.", cost: 190, icon: ICONS.sumAttack },
+    SUM_DEFEND: { name: "Living Fortress",    desc: "6 Shield self + 4 Shield each minion. Minions gain 1 Thorns.", cost: 175, icon: ICONS.sumDefend },
+    SUM_MANA:   { name: "Deep Roots",         desc: "+2 Mana. Heal player and all minions 2 HP.", cost: 200, icon: ICONS.sumMana },
+    SUM_MINION: { name: "Elder Spirit",       desc: "Call L2 Spirit (+5 Block, +5 DMG, 30% Revive).", cost: 200, icon: ICONS.sumMinion },
+
+    // ─── SHARED SKILL UPGRADES (unchanged) ───
+    EARTHQUAKE:      { name: "Cataclysm",      desc: "Deal 12 DMG to ALL. Apply WEAK.\n[QTE]: Crit x1.3.", cost: 225, icon: ICONS.upgCataclysm },
+    METEOR:          { name: "Starfall",       desc: "3-hit chain: 30 DMG per part.\n[Chain QTE]: each part crits x1.6.", cost: 350, icon: ICONS.upgStarfall },
+    CONSTRICT:       { name: "Digital Rot",    desc: "Reduce Atk/Heal by 75% for 4 turns.", cost: 250, icon: ICONS.upgDigitalRot },
+    VOODOO:          { name: "Void Curse",     desc: "Apply Curse: After 3 turns, 150 Base DMG (50% chance for 500).", cost: 350, icon: ICONS.upgVoid },
+    OVERCHARGE:      { name: "Hyper Beam",     desc: "Enemy takes +100% Damage from all sources (3 turns).", cost: 300, icon: ICONS.upgHyperBeam },
+    RECKLESS_CHARGE: { name: "Vicious Charge", desc: "Next Attack x3 DMG.\nTake +50% DMG until next turn.", cost: 500, icon: ICONS.upgVicious }
+};
+
+const ENEMIES = [
+    // Sector 1
+    { name: "Sentry Drone", hp: 30, dmg: 6, sector: 1, shape: 'drone' },
+    { name: "Heavy Loader", hp: 44, dmg: 8, sector: 1, shape: 'tank' },
+    { name: "Cyber Arachnid", hp: 40, dmg: 12, sector: 1, shape: 'spider' },
+    // Sector 1 — expansion (5.2.1)
+    { name: "Riot Suppressor", hp: 50, dmg: 8, sector: 1, shape: 'tank', kind: 'aoe_sweep' },
+    { name: "Drone Swarmling",  hp: 15, dmg: 4, sector: 1, shape: 'drone', kind: 'swarm', summonOnStart: 2 },
+    { name: "Mirror",            hp: 40, dmg: 6, sector: 1, shape: 'wisp', kind: 'mirror' },
+    // Sector 2
+    { name: "Cryo Bot", hp: 60, dmg: 10, sector: 2, shape: 'drone' },
+    { name: "Data Leech", hp: 50, dmg: 14, sector: 2, shape: 'wisp' },
+    { name: "Firewall Sentinel", hp: 80, dmg: 8, sector: 2, shape: 'tank' },
+    // Sector 2 — expansion (5.2.1)
+    { name: "Cryo Cultivator", hp: 60, dmg: 8,  sector: 2, shape: 'tank',   kind: 'frost' },
+    { name: "Data Mite",        hp: 40, dmg: 12, sector: 2, shape: 'spider', kind: 'burrow' },
+    { name: "Echo",             hp: 55, dmg: 10, sector: 2, shape: 'wisp',   kind: 'clone' },
+    // Sector 3 — Audit 2026-05 balance pass.
+    // S2→S3 enemy mean HP was a 2.0× spike (55→110); the steepest jump
+    // in the run. Trimmed the top tier by ~15% to soften the wall while
+    // keeping S3 visibly tougher than S2. New mean ≈93 (1.7× ratio).
+    { name: "Magma Construct", hp: 85,  dmg: 18, sector: 3, shape: 'tank' },     // 100→85
+    { name: "Core Guardian",   hp: 100, dmg: 12, sector: 3, shape: 'drone' },    // 120→100
+    { name: "Nullifier",       hp: 80,  dmg: 24, sector: 3, shape: 'sniper' },   // 90→80
+    // Sector 3 — expansion (5.2.1)
+    { name: "Foundry Golem", hp: 120, dmg: 18, sector: 3, shape: 'tank',   kind: 'armored' },  // 140→120
+    { name: "Slag Geyser",   hp: 80,  dmg: 0,  sector: 3, shape: 'sniper', kind: 'immolate' },
+    { name: "Coolant Tech",  hp: 70,  dmg: 6,  sector: 3, shape: 'drone',  kind: 'healer' },
+    // Sector 4 (High Security) — Audit 2026-05 balance pass.
+    // S3→S4 mean enemy DMG was flat (14→15 = 1.07×, basically no
+    // change despite the visual sector change). Bumped top-tier S4
+    // damage by ~15% so the difficulty curve actually moves at the
+    // sector boundary. New mean ≈17 (1.21× ratio S3→S4).
+    { name: "Praetorian",    hp: 160, dmg: 17, sector: 4, shape: 'tank' },                        // 15→17
+    { name: "Sentinel Orb",  hp: 130, dmg: 23, sector: 4, shape: 'drone' },                       // 20→23
+    { name: "Phase Stalker", hp: 110, dmg: 28, sector: 4, shape: 'spider', kind: 'phase_shift' }, // 25→28
+    // Sector 4 — expansion (5.2.1)
+    { name: "Hive Warden", hp: 130, dmg: 10, sector: 4, shape: 'tank',   kind: 'shielder' },
+    { name: "Phage Pod",   hp: 60,  dmg: 17, sector: 4, shape: 'wisp',   kind: 'detonator' },     // 15→17 (detonator burst hurts more)
+    { name: "Keeper",      hp: 180, dmg: 8,  sector: 4, shape: 'sniper', kind: 'buffer' },
+    // Sector 5 (The Source)
+    { name: "Code Fragment", hp: 180, dmg: 22, sector: 5, shape: 'wisp' },
+    { name: "Fatal Error", hp: 200, dmg: 30, sector: 5, shape: 'sniper' },
+    { name: "Null Pointer", hp: 250, dmg: 18, sector: 5, shape: 'wisp' },
+    // Sector 5 — expansion (5.2.1)
+    { name: "Null Priest",      hp: 180, dmg: 25, sector: 5, shape: 'wisp',   kind: 'shield_break' },
+    { name: "Entropy",          hp: 200, dmg: 20, sector: 5, shape: 'sniper', kind: 'chaotic' },
+    { name: "Silent Observer",  hp: 160, dmg: 35, sector: 5, shape: 'spider', kind: 'observer' },
+
+    /* ==== Part 23 roster expansion — fresh enemies per sector ========
+       Reuse existing `kind` values (handled in game.js intent logic) so
+       each new enemy is mechanically unique without requiring new handler
+       code. This doubles the effective variety of each sector's draw. */
+    // Sector 1 — Downtown Glass
+    { name: "Watcher Pod",      hp: 32, dmg: 6,  sector: 1, shape: 'drone',  kind: 'observer' },
+    { name: "Paper Pusher",     hp: 36, dmg: 5,  sector: 1, shape: 'tank',   kind: 'swarm',    summonOnStart: 1 },
+    { name: "Signal Jammer",    hp: 30, dmg: 7,  sector: 1, shape: 'wisp',   kind: 'mirror' },
+    // Sector 2 — Cryo Docks
+    { name: "Cargo Hauler",     hp: 80, dmg: 10, sector: 2, shape: 'tank',   kind: 'armored' },
+    { name: "Icicle Sniper",    hp: 42, dmg: 16, sector: 2, shape: 'sniper', kind: 'frost' },
+    { name: "Freezer Drone",    hp: 48, dmg: 8,  sector: 2, shape: 'drone',  kind: 'frost' },
+    // Sector 3 — Foundry Ravine
+    { name: "Forge Welder",     hp: 110, dmg: 14, sector: 3, shape: 'tank',   kind: 'immolate' },
+    { name: "Slag Mech",        hp: 130, dmg: 16, sector: 3, shape: 'tank',   kind: 'aoe_sweep' },
+    { name: "Ember Swarm",      hp: 50,  dmg: 10, sector: 3, shape: 'drone',  kind: 'swarm',    summonOnStart: 2 },
+    // Sector 4 — Hive Vectors
+    { name: "Hive Conduit",     hp: 140, dmg: 12, sector: 4, shape: 'wisp',   kind: 'buffer' },
+    { name: "Parasite Carrier", hp: 90,  dmg: 14, sector: 4, shape: 'spider', kind: 'detonator' },
+    { name: "Queen Node",       hp: 160, dmg: 16, sector: 4, shape: 'drone',  kind: 'healer' },
+    // Sector 5 — The Source
+    { name: "Glitch Shard",     hp: 160, dmg: 28, sector: 5, shape: 'wisp',   kind: 'clone' },
+    { name: "Echo Phantom",     hp: 150, dmg: 24, sector: 5, shape: 'wisp',   kind: 'mirror' },
+    { name: "Paradox Loop",     hp: 120, dmg: 30, sector: 5, shape: 'sniper', kind: 'chaotic' },
+
+    /* ==== Part 5 content expansion — drop-in variety using existing
+       enemy `kind` handlers. New names and stat spreads only; no new
+       combat behavior code required. Dossier lines are handled by the
+       _getIntelLine BY_KIND fallback in game.js. */
+    // Sector 1 — Downtown Glass
+    { name: "Security Bot",      hp: 46, dmg: 8,  sector: 1, shape: 'tank',   kind: 'aoe_sweep' },
+    { name: "Network Intruder",  hp: 28, dmg: 7,  sector: 1, shape: 'drone',  kind: 'mirror' },
+    // Sector 2 — Cryo Docks
+    { name: "Data Phantom",      hp: 58, dmg: 11, sector: 2, shape: 'wisp',   kind: 'clone' },
+    { name: "Cryo Wraith",       hp: 52, dmg: 10, sector: 2, shape: 'wisp',   kind: 'frost' },
+    // Sector 3 — Foundry Ravine
+    { name: "Furnace Knight",    hp: 130, dmg: 14, sector: 3, shape: 'tank',   kind: 'armored' },
+    { name: "Crucible Shaper",   hp: 120, dmg: 10, sector: 3, shape: 'sniper', kind: 'buffer' },
+    // Sector 4 — Hive Vectors
+    { name: "Hive Mender",       hp: 100, dmg: 8,  sector: 4, shape: 'drone',  kind: 'healer' },
+    { name: "Phage Drone",       hp: 80,  dmg: 14, sector: 4, shape: 'drone',  kind: 'detonator' },
+    // Sector 5 — The Source
+    { name: "Error Cluster",     hp: 170, dmg: 22, sector: 5, shape: 'wisp',   kind: 'shield_break' },
+    { name: "Glitch Cascade",    hp: 140, dmg: 28, sector: 5, shape: 'sniper', kind: 'chaotic' },
+    /* ==== Roster expansion — fills missing-kind gaps so each sector
+       carries a wider behavioural spread. Stats picked to slot between
+       the existing tier of that sector's roster, not to redefine it. */
+    // Sector 1 — first detonator so the player learns "kill carefully" early
+    { name: "Maintenance Spike", hp: 26,  dmg: 9,  sector: 1, shape: 'spider', kind: 'detonator' },
+    // Sector 2 — frost-themed shielder; introduces shield-allies in Cryo Docks
+    { name: "Cryo Lord",         hp: 70,  dmg: 9,  sector: 2, shape: 'tank',   kind: 'shielder' },
+    // Sector 3 — heavy shielder; pairs nicely with the sector's armored tier
+    { name: "Foundry Bulwark",   hp: 150, dmg: 11, sector: 3, shape: 'tank',   kind: 'shielder' },
+    // Sector 4 — burrow specialist; rewards intent reading mid-Hive
+    { name: "Hive Stalker",      hp: 95,  dmg: 22, sector: 4, shape: 'spider', kind: 'burrow' },
+    // Sector 5 — first healer at endgame; chips become liabilities
+    { name: "Void Mender",       hp: 140, dmg: 12, sector: 5, shape: 'drone',  kind: 'healer' }
+];
+const BOSS_DATA = {
+    1: {
+        name: "THE PANOPTICON",
+        subtitle: "THE ALL-SEEING EYE",
+        hp: 300,
+        dmg: 20,
+        actionsPerTurn: 2,
+        color: '#00ffff', // Electric Cyan
+        moves: ['attack', 'debuff', 'multi_attack', 'analyse'],
+        shieldVal: 30,
+        dmgType: 'electric'
+    },
+    2: {
+        // v1.8.2 — shieldVal removed. NULL_POINTER no longer wastes a
+        // turn on a shield action when at voidling cap; the summon_void
+        // roll now flips to `buff_voidlings` (Phase 2) or a basic
+        // attack (Phase 1 / 3) instead. Pressure comes entirely from
+        // Pull of Void + Void Spawns + (Phase 2) double summons & buffs
+        // + (Phase 3) Void Crush + reality shatter + consume-minions.
+        name: "NULL_POINTER",
+        subtitle: "THE CONSUMING VOID",
+        hp: 500,
+        dmg: 40,
+        actionsPerTurn: 1,
+        color: '#ff00ff',
+        moves: ['summon_void'],
+        dmgType: 'void'
+    },
+    3: {
+        name: "THE COMPILER",
+        subtitle: "INDUSTRIAL DATA CRUSHER",
+        hp: 750,
+        dmg: 70,
+        actionsPerTurn: 1,
+        color: '#ff4500', // Neon Orange-Red
+        moves: ['attack', 'shield', 'buff'],
+        shieldVal: 100,
+        dmgType: 'fire'
+    },
+    4: {
+        // Audit 2026-05 balance pass — actionsPerTurn dropped 4 → 3.
+        // S3→S4 boss effective-DPS was the steepest spike in the run:
+        // 70 (Compiler) → 120 (Hive 4×30) = 1.71× jump. With 3
+        // actions/turn the effective DPS becomes 90 = 1.29× from S3,
+        // and S5 (Tesseract 3×50 = 150) regains its role as the
+        // climactic per-turn spike (1.67× from S4 instead of 1.25×).
+        // Per-action damage held at 30 so each Hive hit still bites;
+        // the change reduces the action volume, not the per-action
+        // pressure. The "swarm" fantasy (3 distinct moves) survives.
+        name: "HIVE PROTOCOL",
+        subtitle: "DISTRIBUTED LETHALITY",
+        hp: 900,
+        dmg: 30,
+        actionsPerTurn: 3,
+        color: '#32cd32', // Neon Lime Green
+        moves: ['attack', 'multi_attack', 'summon'],
+        shieldVal: 15,
+        dmgType: 'electric'
+    },
+    5: {
+        name: "TESSERACT PRIME",
+        subtitle: "GEOMETRIC IMPOSSIBILITY",
+        hp: 1000,
+        // Damage doubled (50 to 100) and shield doubled (60 to 120)
+        // to lift the sector 5 boss to its proper endgame weight.
+        // Each attack and purge_attack now bites twice as hard while
+        // a shield turn becomes a substantial threat-clear instead
+        // of a chip the player ignores.
+        dmg: 100,
+        actionsPerTurn: 3,
+        color: '#ffffff', // Pure White/Gold
+        moves: ['attack', 'purge_attack', 'reality_overwrite', 'shield'],
+        shieldVal: 120,
+        dmgType: 'void'
+    },
+    // Sector X — Roadmap Part 24.2. Post-Sector-5 boss; only spawned via the
+    // ARCHIVE main-menu run path. HP scales +150 per Ascension level (handled
+    // at spawn time in startCombat). Moves are unused — generateSingleIntent
+    // has a `name === "THE ARCHIVIST"` branch that picks from the rotating
+    // sector mechanic menu (Phase 1) and layers per-phase behaviours on top.
+    6: {
+        name: "THE ARCHIVIST",
+        subtitle: "KEEPER OF DEAD RUNS",
+        hp: 500,
+        dmg: 30,
+        actionsPerTurn: 3,
+        color: '#ffd76a',
+        moves: ['attack'],
+        shieldVal: 30,
+        isArchivist: true,
+        dmgType: 'void'
+    }
+};
+
+const EVENTS_DB = [
+    {
+        title: "STRANGE SIGNAL",
+        art: 'beacon',
+        desc: "You intercept an encrypted transmission. It seems to be a distress signal from a rogue AI.",
+        options: [
+            { text: "Decrypt (-4 HP, +40 Fragments)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(4); g.techFragments += 40; return "You gained 40 Fragments.";
+            } },
+            // No-op skip removed — every option must commit. The signal
+            // pulses on whether you tune in or not; ignoring it costs.
+            { text: "Tune it out (-3 HP, signal feedback)", icon: 'skull', effect: (g) => {
+                g.player.takeDamage(3); return "Static drives a spike through your skull.";
+            } }
+        ],
+        classOptions: {
+            tactician: { text: "Trace the source (+60 Fragments, +1 Reroll Token)", icon: 'eye', effect: (g) => {
+                g.techFragments += 60; g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
+                return "Source traced. +60 Fragments. +1 Reroll Token.";
+            } },
+            arcanist:  { text: "Channel the glyph (-2 Mana, +1 Reroll, +30 Fragments)", icon: 'mana-drop', effect: (g) => {
+                g.player.mana = Math.max(0, (g.player.mana || 0) - 2);
+                g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
+                g.techFragments += 30;
+                return "Glyph channeled. +1 Reroll. +30 Fragments.";
+            } },
+            bloodstalker: { text: "Bleed for it (-8 HP, +80 Fragments)", icon: 'skull', effect: (g) => {
+                g.player.takeDamage(8); g.techFragments += 80;
+                return "Blood paid. +80 Fragments.";
+            } },
+        }
+    },
+    {
+        title: "ABANDONED CACHE",
+        art: 'data-vault',
+        desc: "A supply crate sits amidst the rubble.",
+        options: [
+            { text: "Open (+25 Fragments)", icon: 'coin-stack', effect: (g) => {
+                g.techFragments += 25; return "Found 25 Fragments.";
+            } },
+            { text: "Salvage Parts (+5 HP)", icon: 'bandage', effect: (g) => {
+                g.player.heal(5); return "Restored 5 HP.";
+            } }
+        ],
+        classOptions: {
+            sentinel: { text: "Reinforce armour (+5 Max HP, +5 HP)", icon: 'shield', effect: (g) => {
+                g.player.maxHp += 5; g.player.heal(5);
+                return "Armour reinforced. +5 Max HP. Healed 5.";
+            } },
+            summoner: { text: "Send a Spirit ahead (+60 Fragments, +5 HP)", icon: 'minion', effect: (g) => {
+                g.techFragments += 60; g.player.heal(5);
+                return "Spirit returns with the haul. +60 Fragments.";
+            } },
+            annihilator: { text: "Rig a charge (-3 HP, +1 Reroll Token)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(3); g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
+                return "Charge rigged. +1 Reroll Token.";
+            } },
+        }
+    },
+    {
+        title: "MALFUNCTIONING FABRICATOR",
+        art: 'conduit',
+        desc: "An unstable upgrade station sparks wildly. You might be able to force an upgrade, but it will hurt.",
+        condition: (g) => Object.keys(DICE_UPGRADES).some(k => !g.player.hasDiceUpgrade(k)),
+        options: [
+            { text: "Force Upgrade (-8 HP)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(8);
+                const available = Object.keys(DICE_UPGRADES).filter(k => !g.player.hasDiceUpgrade(k));
+                if (available.length > 0) {
+                    const up = available[Math.floor(Math.random() * available.length)];
+                    g.player.diceUpgrades.push(up);
+                    return "SYSTEM UPGRADED: " + DICE_UPGRADES[up].name;
+                }
+                g.techFragments += 100;
+                return "Maximum Upgrades Reached. (+100 Frags)";
+            } },
+            // The fabricator catches you on the way out. No free retreat.
+            { text: "Back away (-4 HP, sparks scorch)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(4); return "Sparks rake your back as you retreat.";
+            } }
+        ]
+    },
+    {
+        title: "GLITCH ANOMALY",
+        art: 'glitch',
+        desc: "A tear in the network reveals a high-value target. It looks dangerous.",
+        options: [
+            { text: "Engage Elite (Combat)", icon: 'sword', effect: (g) => { g.startCombat('elite'); return "COMBAT_STARTED"; } },
+            // No "free avoid" — proximity to a tear damages the integrity
+            // of any system that gets close. 25% Max HP loss is steep
+            // enough to feel like a real choice vs. fighting the elite.
+            { text: "Skirt the tear (lose 25% current HP)", icon: 'skull', effect: (g) => {
+                const dmg = Math.max(4, Math.floor(g.player.currentHp * 0.25));
+                g.player.takeDamage(dmg);
+                return `Static rakes ${dmg} HP off your hull.`;
+            } }
+        ]
+    },
+    {
+        title: "DATA BROKER",
+        art: 'data-vault',
+        desc: "A shady algorithm offers you a random module in exchange for raw data.",
+        options: [
+            { text: "Buy Random Module (-50 Fragments)", icon: 'gem', effect: (g) => {
+                if (g.techFragments >= 50) {
+                    g.techFragments -= 50;
+                    const cid = g.player && g.player.classId;
+                    const pool = UPGRADES_POOL.filter(r => !r.classLocked || r.classLocked === cid);
+                    const item = pool[Math.floor(Math.random() * pool.length)];
+                    g.player.addRelic(item);
+                    return "ACQUIRED: " + item.name;
+                }
+                return "Insufficient Fragments.";
+            } },
+            // The broker scrapes a "browsing fee" if you leave empty-handed.
+            { text: "Decline (-25 Fragments parting fee)", icon: 'coin-stack', effect: (g) => {
+                const lost = Math.min(25, g.techFragments);
+                g.techFragments -= lost;
+                return `Broker skims ${lost} Fragments on your way out.`;
+            } }
+        ]
+    },
+    {
+        title: "CORRUPTED NODE",
+        art: 'glitch',
+        desc: "This node is leaking data. You can absorb it, but it will corrupt your max integrity.",
+        options: [
+            { text: "Absorb (-4 Max HP, +150 Fragments)", icon: 'skull', effect: (g) => {
+                g.player.maxHp = Math.max(5, g.player.maxHp - 4);
+                g.player.currentHp = Math.max(1, Math.min(g.player.currentHp, g.player.maxHp));
+                g.techFragments += 150;
+                return "Data absorbed. Integrity compromised.";
+            } },
+            { text: "Purge (+7 HP)", icon: 'heart-burst', effect: (g) => { g.player.heal(7); return "Node stabilized."; } }
+        ],
+        classOptions: {
+            bloodstalker: { text: "Drink the corruption (-10 HP, +200 Fragments)", icon: 'skull', effect: (g) => {
+                g.player.takeDamage(10); g.techFragments += 200;
+                return "Corruption metabolized. +200 Fragments.";
+            } },
+            arcanist:  { text: "Catalyse it (+60 Fragments, +2 Mana)", icon: 'mana-drop', effect: (g) => {
+                g.techFragments += 60; g.player.mana = (g.player.mana || 0) + 2;
+                return "Catalysed. +60 Fragments. +2 Mana.";
+            } },
+        }
+    },
+    {
+        title: "TRAINING SIMULATION",
+        art: 'combat-trial',
+        desc: "You find an old combat log. Studying it might reveal new tactics.",
+        options: [
+            { text: "Study (Unlock Random Skill)", icon: 'star', effect: (g) => {
+                const available = Object.keys(DICE_UPGRADES).filter(k => !g.player.hasDiceUpgrade(k));
+                if (available.length > 0) {
+                    const up = available[Math.floor(Math.random() * available.length)];
+                    g.player.diceUpgrades.push(up);
+                    return "TACTIC LEARNED: " + DICE_UPGRADES[up].name;
+                }
+                g.techFragments += 50;
+                return "Knowledge database full. (+50 Frags)";
+            } }
+        ]
+    },
+
+    // --- V1.1 event expansion ---
+    {
+        title: "FROZEN LATTICE",
+        art: 'frozen',
+        desc: "A shimmering ice crystal holds a trapped fragment of code. Touching it burns.",
+        options: [
+            { text: "Shatter (+40 Fragments, -3 HP)", icon: 'spark', effect: (g) => { g.player.takeDamage(3); g.techFragments += 40; return "Shards scatter and fuse to your circuits."; } },
+            // Lingering near a frozen lattice frosts your coolant.
+            { text: "Linger near it (-2 HP, frostbite)", icon: 'skull', effect: (g) => {
+                g.player.takeDamage(2); return "Cold seeps through your shielding.";
+            } }
+        ]
+    },
+    {
+        title: "ROGUE CODEC",
+        art: 'beacon',
+        desc: "A friendly voice broadcasts on an unused frequency, offering a tuneup.",
+        options: [
+            { text: "Accept tuneup (+5 Max HP)", icon: 'heart-burst', effect: (g) => { g.player.maxHp += 5; g.player.currentHp += 5; return "Calibration complete."; } },
+            { text: "Trade frequencies (+1 Reroll max)", icon: 'dice', effect: (g) => { g.maxRerolls = (g.maxRerolls || 2) + 1; return "Bandwidth expanded."; } }
+        ]
+    },
+    {
+        title: "SILENT SERVER",
+        art: 'data-vault',
+        desc: "Idle hardware. You could scavenge it, but its maintenance drone is close.",
+        options: [
+            { text: "Scavenge (+80 Fragments)", icon: 'coin-stack', effect: (g) => { g.techFragments += 80; return "Quick pass. Drone none the wiser."; } },
+            { text: "Provoke drone (Combat)", icon: 'sword', effect: (g) => { g.startCombat('elite'); return "COMBAT_STARTED"; } }
+        ]
+    },
+    {
+        title: "BURNT-OUT ORACLE",
+        art: 'relic-shrine',
+        desc: "A charred Oracle-class AI offers one last prophecy, but it needs a minion to focus.",
+        condition: (g) => g.player.minions && g.player.minions.length > 0,
+        options: [
+            { text: "Sacrifice a minion (Unlock Random Relic)", icon: 'minion', effect: (g) => {
+                if (g.player.minions.length > 0) g.player.minions.shift();
+                const cid = g.player && g.player.classId;
+                const pool = UPGRADES_POOL.filter(r => !r.classLocked || r.classLocked === cid);
+                const item = pool[Math.floor(Math.random() * pool.length)];
+                g.player.addRelic(item);
+                return "Oracle speaks once more: " + item.name;
+            } },
+            // The Oracle's last words land on your back as you leave —
+            // a parting curse for refusing the prophecy.
+            { text: "Refuse the prophecy (-6 HP curse)", icon: 'skull', effect: (g) => {
+                g.player.takeDamage(6); return "The Oracle's whisper rakes you.";
+            } }
+        ]
+    },
+    {
+        title: "RECURSIVE MARKET",
+        art: 'merchant',
+        desc: "An automated market offers an exchange: pay fragments to duplicate one of your relics' effects.",
+        condition: (g) => g.player.relics && g.player.relics.length >= 3,
+        options: [
+            { text: "Buy duplicate (-120 Fragments)", icon: 'coin-stack', effect: (g) => {
+                if (g.techFragments < 120) return "Insufficient fragments.";
+                g.techFragments -= 120;
+                const rel = g.player.relics[Math.floor(Math.random() * g.player.relics.length)];
+                g.player.addRelic({ ...rel });
+                return "DUPLICATED: " + rel.name;
+            } },
+            // The market scans you on the way out — sells the data,
+            // and you pay the difference in fragments and integrity.
+            { text: "Refuse (-30 Fragments scanned, -3 HP)", icon: 'skull', effect: (g) => {
+                const lost = Math.min(30, g.techFragments);
+                g.techFragments -= lost;
+                g.player.takeDamage(3);
+                return `Scan complete. -${lost} Fragments. -3 HP.`;
+            } }
+        ]
+    },
+    {
+        title: "SKYGLASS RELIC",
+        art: 'obelisk',
+        desc: "A mirrored obelisk reflects a younger you. Shattering it might grant a boon.",
+        options: [
+            { text: "Shatter (take 5 DMG, random Relic)", icon: 'gem', effect: (g) => {
+                g.player.takeDamage(5);
+                const cid = g.player && g.player.classId;
+                const pool = UPGRADES_POOL.filter(r => !r.classLocked || r.classLocked === cid);
+                const item = pool[Math.floor(Math.random() * pool.length)];
+                g.player.addRelic(item);
+                return "A fragment embeds: " + item.name;
+            } },
+            { text: "Bow respectfully (+3 HP)", icon: 'heart-burst', effect: (g) => { g.player.heal(3); return "The glass hums in thanks."; } }
+        ]
+    },
+    {
+        title: "AUTOMATED MEDBAY",
+        art: 'medbay',
+        desc: "A surgical arm whirs to life, offering emergency triage.",
+        options: [
+            // Old "-40% Max HP cap THIS RUN" was a brutal one-time cost
+            // for what's effectively a heal — players almost always took
+            // Quick Stitch instead, making the option dead. Tightened to
+            // -10% Max HP (5+ HP for most builds), which is a real trade
+            // (you give up some HP cap to top off in a fight) without
+            // bricking the run.
+            { text: "Full Heal (-10% Max HP)", icon: 'heart-burst', effect: (g) => {
+                const reduction = Math.max(2, Math.floor(g.player.maxHp * 0.10));
+                g.player.maxHp = Math.max(10, g.player.maxHp - reduction);
+                g.player.currentHp = g.player.maxHp;
+                return `Restored. -${reduction} Max HP.`;
+            } },
+            { text: "Quick Stitch (+15 HP)", icon: 'bandage', effect: (g) => { g.player.heal(15); return "Patched up."; } },
+            // Even declining leaves you in proximity to the surgical
+            // arm. It scans you anyway and pulls a small toll.
+            { text: "Decline (-3 HP, the arm scans you)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(3); return "Scanner hum grates against your hull.";
+            } }
+        ]
+    },
+    {
+        title: "HOLO-ARENA",
+        art: 'combat-trial',
+        desc: "Challenge a simulated version of an earlier boss. Win for fragments.",
+        options: [
+            { text: "Accept challenge (Combat)", icon: 'sword', effect: (g) => { g.startCombat('elite'); return "COMBAT_STARTED"; } },
+            // Forfeiting still triggers the simulator's parting volley.
+            { text: "Forfeit (lose 20% current HP)", icon: 'skull', effect: (g) => {
+                const dmg = Math.max(3, Math.floor(g.player.currentHp * 0.20));
+                g.player.takeDamage(dmg);
+                return `Holo-strike clips you for ${dmg} HP.`;
+            } }
+        ]
+    },
+    {
+        title: "OVERFLOW CONDUIT",
+        art: 'conduit',
+        desc: "Raw mana pours from a broken line.",
+        options: [
+            { text: "Drink deep (+2 Base Mana, -5 Max HP)", icon: 'mana-drop', effect: (g) => {
+                g.player.baseMana += 2;
+                g.player.maxHp = Math.max(5, g.player.maxHp - 5);
+                g.player.currentHp = Math.max(1, Math.min(g.player.currentHp, g.player.maxHp));
+                return "Current rises.";
+            } },
+            { text: "Bottle a sip (+1 Base Mana)", icon: 'mana-drop', effect: (g) => { g.player.baseMana += 1; return "Stored safely."; } },
+            // Sealing the line burns a Mana to weld it shut. Real cost.
+            { text: "Seal it (-1 Mana, +20 Fragments scrap)", icon: 'spark', effect: (g) => {
+                g.player.mana = Math.max(0, (g.player.mana || 0) - 1);
+                g.techFragments += 20;
+                return "Line welded. +20 Fragments salvaged.";
+            } }
+        ]
+    },
+    {
+        title: "MERCHANT DRONE",
+        art: 'merchant',
+        desc: "A flying vendor offers a rotating stock. One item, one chance.",
+        options: [
+            { text: "Buy discounted relic (-60 Fragments)", icon: 'gem', effect: (g) => {
+                if (g.techFragments < 60) return "Not enough Fragments.";
+                g.techFragments -= 60;
+                const cid = g.player && g.player.classId;
+                const pool = UPGRADES_POOL.filter(r => !r.classLocked || r.classLocked === cid);
+                const item = pool[Math.floor(Math.random() * pool.length)];
+                g.player.addRelic(item);
+                return "ACQUIRED: " + item.name;
+            } },
+            { text: "Shake them down (-10 HP, +80 Fragments)", icon: 'fist', effect: (g) => { g.player.takeDamage(10); g.techFragments += 80; return "The drone flees."; } },
+            // The drone scans you as it leaves; sells the data, pricks you.
+            { text: "Wave them off (-15 Fragments scan tax)", icon: 'coin-stack', effect: (g) => {
+                const lost = Math.min(15, g.techFragments);
+                g.techFragments -= lost;
+                return `Drone scans you. -${lost} Fragments.`;
+            } }
+        ]
+    },
+    {
+        title: "ABANDONED COMBAT SIM",
+        art: 'combat-trial',
+        desc: "A training dummy flickers in and out. Perfect for a quick warm-up.",
+        options: [
+            { text: "Train (next combat: +25% damage for first 2 turns)", icon: 'sword', effect: (g) => {
+                g.player._trainBonus = 2;
+                return "Muscle memory restored.";
+            } },
+            // Skipping practice means walking past the dummy's last
+            // training routine — its motion sensors clip you.
+            { text: "Skip the drill (-3 HP, dummy clips you)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(3); return "Holo-fist grazes your shoulder.";
+            } }
+        ]
+    },
+    {
+        title: "CORRUPT GIFT",
+        art: 'corrupt-gift',
+        desc: "A crate bound in red tape. The label warns of side effects.",
+        options: [
+            { text: "Open (random Corrupted relic)", icon: 'gem', effect: (g) => {
+                const pool = CORRUPTED_RELICS;
+                const item = pool[Math.floor(Math.random() * pool.length)];
+                g.player.addRelic(item);
+                return "WARNING: " + item.name + " installed.";
+            } },
+            { text: "Destroy (+40 Fragments)", icon: 'cross', effect: (g) => { g.techFragments += 40; return "Melted for scrap."; } }
+        ]
+    },
+    {
+        title: "MEMORY SHARD",
+        art: 'memory-shard',
+        desc: "A shard of someone else's run. Study it to learn.",
+        options: [
+            { text: "Study (Unlock Random Dice Upgrade)", icon: 'star', effect: (g) => {
+                const available = Object.keys(DICE_UPGRADES).filter(k => !g.player.hasDiceUpgrade(k));
+                if (available.length > 0) {
+                    const up = available[Math.floor(Math.random() * available.length)];
+                    g.player.diceUpgrades.push(up);
+                    return "LEARNED: " + DICE_UPGRADES[up].name;
+                }
+                g.techFragments += 50;
+                return "Nothing new. (+50 Frags)";
+            } },
+            // Refusing the memory pulls a thread of your own out with it.
+            { text: "Smash the shard (-4 HP, +20 Fragments)", icon: 'fist', effect: (g) => {
+                g.player.takeDamage(4); g.techFragments += 20;
+                return "Shards crumble. Memory dies. +20 Fragments.";
+            } }
+        ]
+    },
+    {
+        title: "LIGHT SENTRY",
+        art: 'sentry',
+        desc: "An inactive sentry could be repurposed, at a cost.",
+        options: [
+            { text: "Repurpose (Gain a Minion)", icon: 'minion', effect: (g) => {
+                if (g.player.minions.length < (g.player.maxMinions || 2)) {
+                    const Minion = g._MinionClass || null;
+                    if (Minion) {
+                        const m = new Minion(0, 0, g.player.minions.length + 1, true);
+                        g.player.minions.push(m);
+                    }
+                }
+                return "New ally online.";
+            } },
+            { text: "Cannibalize (+30 Fragments)", icon: 'gear', effect: (g) => { g.techFragments += 30; return "Parts extracted."; } }
+        ]
+    },
+    {
+        title: "BROKEN BEACON",
+        art: 'beacon',
+        desc: "A damaged distress signal. Following it might bring help, or an ambush.",
+        options: [
+            { text: "Investigate (50% ambush, 50% +100 Fragments)", icon: 'eye', effect: (g) => {
+                if (Math.random() < 0.5) { g.startCombat('elite'); return "AMBUSH! COMBAT_STARTED"; }
+                g.techFragments += 100;
+                return "You find a supply cache.";
+            } },
+            // Whoever sent the beacon was tracking it. Leaving without
+            // disabling it costs you a tail of stalkers — small chip damage.
+            { text: "Disable the signal (-5 HP, recoil burn)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(5); return "Beacon silenced. Burn marks on your hand.";
+            } }
+        ]
+    },
+    {
+        title: "FIRMWARE PIN",
+        art: 'data-vault',
+        desc: "A piece of salvaged firmware can lock one dice slot to a chosen type for 3 turns next combat.",
+        options: [
+            { text: "Seal ATTACK (3 turns)", icon: 'sword',     effect: (g) => { if (g.sealDice) g.sealDice('attack', 3); return "ATTACK pinned for 3 turns."; } },
+            { text: "Seal DEFEND (3 turns)", icon: 'shield',    effect: (g) => { if (g.sealDice) g.sealDice('defend', 3); return "DEFEND pinned for 3 turns."; } },
+            { text: "Seal MINION (3 turns)", icon: 'minion',    effect: (g) => { if (g.sealDice) g.sealDice('minion', 3); return "MINION pinned for 3 turns."; } },
+            // Discarding firmware is a real choice — it sparks as it
+            // dissolves and bites your interface during the discharge.
+            { text: "Burn it for parts (-2 HP, +30 Fragments)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(2); g.techFragments += 30;
+                return "Firmware combusts. +30 Fragments salvaged.";
+            } }
+        ]
+    },
+    /* ===== Events expansion (Sparks-aware) — significant narrative
+       outcomes that reward Sparks alongside Frag/HP trades. Each event
+       slots into the existing data shape; condition gates by sector
+       and/or class. ===== */
+    {
+        title: "CAPTIVE OPERATOR",
+        art: 'data-vault',
+        desc: "A meat-and-circuit silhouette twitches inside a holding cage. Their badge reads 'NULL-DIVISION 7' — the squad lost in Sector 2.",
+        condition: (g) => (g.sector || 1) >= 2,
+        options: [
+            { text: "Cut them free (+1 Reroll Token, +1 Spark)", icon: 'fist', effect: (g) => {
+                g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
+                g.grantSparks && g.grantSparks(1, 'event_free_operator');
+                return "They salute and vanish into the noise.";
+            } },
+            { text: "Trade them to the broker (+90 Fragments)", icon: 'coin-stack', effect: (g) => {
+                g.techFragments += 90;
+                return "Cage seals. Coin clinks. You don't look back.";
+            } },
+            { text: "Leave them (-2 HP)", icon: 'skull', effect: (g) => {
+                g.player.takeDamage(2);
+                return "Their static crawls under your skin.";
+            } }
+        ]
+    },
+    {
+        title: "BLOOD ARCHIVE",
+        art: 'relic-shrine',
+        desc: "A wet altar glistens in sub-basement light. The Stalker creed is etched in dried code: 'pay in vein, harvest in grain.'",
+        condition: (g) => (g.sector || 1) >= 2 && g.player && g.player.classId === 'bloodstalker',
+        options: [
+            { text: "Tithe deeply (-12 HP, +160 Fragments, +1 Spark)", icon: 'skull', effect: (g) => {
+                g.player.takeDamage(12); g.techFragments += 160;
+                g.grantSparks && g.grantSparks(1, 'event_blood_archive');
+                return "The altar drinks. The vault opens.";
+            } },
+            { text: "Tithe lightly (-5 HP, random Corrupted Module)", icon: 'gem', effect: (g) => {
+                g.player.takeDamage(5);
+                const pool = (typeof CORRUPTED_RELICS !== 'undefined') ? CORRUPTED_RELICS : [];
+                if (pool.length) {
+                    const item = pool[Math.floor(Math.random() * pool.length)];
+                    g.player.addRelic && g.player.addRelic(item);
+                    return "BLOOD GRANTED: " + item.name;
+                }
+                return "The altar receives. Nothing rises.";
+            } },
+            { text: "Spit on it (curse: next combat foes hit +10%)", icon: 'cross', effect: (g) => {
+                g.player.maxHp += 1;
+                g._archiveCurseTurns = 3;
+                return "The creed remembers.";
+            } }
+        ]
+    },
+    {
+        title: "TACTICIAN'S CACHE",
+        art: 'data-vault',
+        desc: "A locked footlocker with the old Joint Command sigil. Encryption is fifteen years stale.",
+        condition: (g) => g.player && g.player.classId === 'tactician',
+        options: [
+            { text: "Clean crack (+1 Reroll Token, +1 base reroll for the run)", icon: 'eye', effect: (g) => {
+                g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
+                g.maxRerolls = (g.maxRerolls || 2) + 1;
+                return "Lid hisses open. Doctrine rewards precision.";
+            } },
+            { text: "Brute force (-4 HP, +120 Fragments)", icon: 'fist', effect: (g) => {
+                g.player.takeDamage(4); g.techFragments += 120;
+                return "Hinges shred. So does your hand.";
+            } }
+        ]
+    },
+    {
+        title: "GROVE SAPLING",
+        art: 'relic-shrine',
+        desc: "A green code-spore has rooted in the floorpan. It hums when your minions pass.",
+        condition: (g) => g.player && g.player.classId === 'summoner' && (g.sector || 1) >= 2,
+        options: [
+            { text: "Graft it (+1 Max Minion this run)", icon: 'minion', effect: (g) => {
+                g.player.maxMinions = (g.player.maxMinions || 2) + 1;
+                return "Canopy widens.";
+            } },
+            { text: "Burn it (-1 HP, +60 Fragments)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(1); g.techFragments += 60;
+                return "Smoke smells of green static.";
+            } },
+            { text: "Feed a minion to it (+1 Spark)", icon: 'minion', effect: (g) => {
+                if (g.player.minions && g.player.minions.length > 0) {
+                    g.player.minions.shift();
+                    g.grantSparks && g.grantSparks(1, 'event_grove_sapling');
+                    return "Roots deepen. The grove remembers your name.";
+                }
+                return "No minion to give. Nothing happens.";
+            } }
+        ]
+    },
+    {
+        title: "AEGIS RECRUITMENT",
+        art: 'sentry',
+        desc: "An old Sentinel banner flies over a barricade. They've been holding this hall for eleven years.",
+        condition: (g) => g.player && g.player.classId === 'sentinel',
+        options: [
+            { text: "Stand the watch (+10 Max HP, +5 HP)", icon: 'shield', effect: (g) => {
+                g.player.maxHp += 10; g.player.heal && g.player.heal(5);
+                return "Plates fitted. Watch resumed.";
+            } },
+            { text: "March on (+1 Spark)", icon: 'walk-away', effect: (g) => {
+                g.grantSparks && g.grantSparks(1, 'event_aegis_recruitment');
+                return "Their salute follows you down the hall.";
+            } }
+        ]
+    },
+    {
+        title: "GLYPHWRIGHT'S DEBT",
+        art: 'obelisk',
+        desc: "A ghost-class Arcanist hangs in stasis, mid-spell. They owe you a favour from a run you don't remember.",
+        condition: (g) => g.player && g.player.classId === 'arcanist' && (g.sector || 1) >= 3,
+        options: [
+            { text: "Collect the debt (+3 Base Mana for the run)", icon: 'mana-drop', effect: (g) => {
+                g.player.baseMana = (g.player.baseMana || 3) + 3;
+                return "The flux ledger settles.";
+            } },
+            { text: "Forgive the debt (+1 Spark, random Module)", icon: 'star', effect: (g) => {
+                const cid = g.player && g.player.classId;
+                const base = (typeof UPGRADES_POOL !== 'undefined') ? UPGRADES_POOL : [];
+                const pool = base.filter(r => !r.classLocked || r.classLocked === cid);
+                if (pool.length) {
+                    const item = pool[Math.floor(Math.random() * pool.length)];
+                    g.player.addRelic && g.player.addRelic(item);
+                    g.grantSparks && g.grantSparks(1, 'event_glyphwright_debt');
+                    return "Ghost bows. Gift remains: " + item.name;
+                }
+                g.grantSparks && g.grantSparks(1, 'event_glyphwright_debt');
+                return "Ghost bows once and is gone.";
+            } }
+        ]
+    },
+    {
+        title: "DETONATION DRILL",
+        art: 'combat-trial',
+        desc: "A rigged training course. Annihilator-spec, by the look of the scorch marks. Mistime one charge and they all go.",
+        condition: (g) => g.player && g.player.classId === 'annihilator',
+        options: [
+            { text: "Run the course (-6 HP, +1 Reroll Token, +1 base reroll)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(6);
+                g.player.qteRerolls = (g.player.qteRerolls || 0) + 1;
+                g.maxRerolls = (g.maxRerolls || 2) + 1;
+                return "You finish blackened. You finish faster.";
+            } },
+            { text: "Strip it for parts (+50 Fragments)", icon: 'gear', effect: (g) => {
+                g.techFragments += 50;
+                return "Charges defused. Scrap pocketed.";
+            } }
+        ]
+    },
+    {
+        title: "HEX-BREACHED SHRINE",
+        art: 'obelisk',
+        desc: "The hex grid has split open here. Something on the other side is whispering an offer.",
+        condition: (g) => (g.sector || 1) >= 3,
+        options: [
+            { text: "Reach through (-8 HP, random Module + random Corrupted)", icon: 'gem', effect: (g) => {
+                g.player.takeDamage(8);
+                const cid = g.player && g.player.classId;
+                const aBase = (typeof UPGRADES_POOL !== 'undefined') ? UPGRADES_POOL : [];
+                const a = aBase.filter(r => !r.classLocked || r.classLocked === cid);
+                const b = (typeof CORRUPTED_RELICS !== 'undefined') ? CORRUPTED_RELICS : [];
+                if (a.length) g.player.addRelic && g.player.addRelic(a[Math.floor(Math.random() * a.length)]);
+                if (b.length) g.player.addRelic && g.player.addRelic(b[Math.floor(Math.random() * b.length)]);
+                return "The breach pays double, in two coins.";
+            } },
+            { text: "Seal it (+2 Sparks)", icon: 'shield', effect: (g) => {
+                g.grantSparks && g.grantSparks(2, 'event_hex_shrine_seal');
+                return "The whisper stops. Something nods, far away.";
+            } },
+            { text: "Listen only (-3 HP, +80 Fragments)", icon: 'eye', effect: (g) => {
+                g.player.takeDamage(3); g.techFragments += 80;
+                return "You wish you hadn't.";
+            } }
+        ]
+    },
+    {
+        title: "CARRION CONVOY",
+        art: 'merchant',
+        desc: "A train of dead drones rolls past on autopilot, every cargo bay still locked. Their navigator is wounded.",
+        condition: (g) => (g.sector || 1) >= 2 && (g.sector || 1) <= 4,
+        options: [
+            { text: "Loot the convoy (+100 Fragments)", icon: 'coin-stack', effect: (g) => {
+                g.techFragments += 100;
+                return "Bays empty. Navigator goes dark.";
+            } },
+            { text: "Escort to safety (+1 Spark)", icon: 'walk-away', effect: (g) => {
+                g.grantSparks && g.grantSparks(1, 'event_carrion_escort');
+                return "They make it. They remember.";
+            } }
+        ]
+    },
+    {
+        title: "NULL TERMINAL",
+        art: 'glitch',
+        desc: "A boot prompt blinks: '> WHO ARE YOU?'. Whatever you type, the terminal accepts.",
+        condition: (g) => (g.sector || 1) >= 4,
+        options: [
+            { text: "Type your name (+1 base reroll, +1 Spark)", icon: 'star', effect: (g) => {
+                g.maxRerolls = (g.maxRerolls || 2) + 1;
+                g.grantSparks && g.grantSparks(1, 'event_null_terminal_name');
+                return "The terminal remembers you. So does the network.";
+            } },
+            { text: "Type 'ROOT' (-6 HP, +80 Fragments)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(6); g.techFragments += 80;
+                return "Root maxed. The terminal's screen cracks.";
+            } },
+            { text: "Type nothing (-2 HP)", icon: 'skull', effect: (g) => {
+                g.player.takeDamage(2);
+                return "The cursor blinks once and goes still.";
+            } }
+        ]
+    },
+    /* Sector 2 only — only spawns when there are iced edges to clear.
+       The "thaw all" option pays a small HP cost; the "wait it out"
+       option leaves the ice in place but pays out fragments instead. */
+    {
+        title: "FROZEN VENT",
+        art: 'glitch',
+        desc: "A heat vent gushes intermittently behind a wall of ice. The temperature here could thaw a frozen path.",
+        condition: (g) => g.sector === 2
+            && g.map && g.map.icedEdges && g.map.icedEdges.size > 0,
+        options: [
+            { text: "Crack the vent (-3 HP, thaws all iced paths)", icon: 'spark', effect: (g) => {
+                g.player.takeDamage(3);
+                const n = (g.map && g.map.icedEdges) ? g.map.icedEdges.size : 0;
+                if (g.map && g.map.icedEdges) g.map.icedEdges.clear();
+                return `Steam roars through the network. ${n} frozen path${n === 1 ? '' : 's'} thawed.`;
+            } },
+            { text: "Bottle the vapour (+30 Fragments)", icon: 'coin-stack', effect: (g) => {
+                g.techFragments += 30;
+                return "You bottle the warm vapour and trade it onward. +30 Fragments.";
+            } }
+        ]
+    },
+    /* Corrupted Shrine — random pact event in NORMAL runs. Skipped in
+       Challenge Mode (the dedicated pact node already covered that beat)
+       and only spawns sectors 1-3 so the run-shaping decision lands
+       early. Each option signs one of the three pacts via _signPactCore;
+       Decline pays no cost so the option exists. The condition also
+       hides the event once all pacts are signed (rare in normal runs
+       since they only have one shrine, but defensive). */
+    {
+        title: "CORRUPTED SHRINE",
+        art: 'relic-shrine',
+        desc: "A mass of black-crystal idols hums in three frequencies. Each promises power for a price. The shrine will not let you leave with empty hands more than once.",
+        condition: (g) => !g.challengeMode
+            && (g.sector || 1) <= 3
+            && (!g.activePacts || g.activePacts.size < 3),
+        options: [
+            { text: "Sign the Pact of Ruin (-30% Max HP, +50% damage)", icon: 'skull', effect: (g) => {
+                if (g.activePacts && g.activePacts.has('ruin')) {
+                    g.techFragments += 20;
+                    return "Ruin already burns in you. The shrine pays consolation. +20 Fragments.";
+                }
+                g._signPactCore('ruin');
+                return "PACT OF RUIN signed.";
+            } },
+            { text: "Sign the Pact of Silence (rerolls free, combos disabled)", icon: 'eye', effect: (g) => {
+                if (g.activePacts && g.activePacts.has('silence')) {
+                    g.techFragments += 20;
+                    return "The Silence already holds you. +20 Fragments.";
+                }
+                g._signPactCore('silence');
+                return "PACT OF SILENCE signed.";
+            } },
+            { text: "Sign the Pact of Hunger (minions ×2 dmg, die after 1 turn)", icon: 'minion', effect: (g) => {
+                if (g.activePacts && g.activePacts.has('hunger')) {
+                    g.techFragments += 20;
+                    return "Hunger already feeds on you. +20 Fragments.";
+                }
+                g._signPactCore('hunger');
+                return "PACT OF HUNGER signed.";
+            } },
+            { text: "Decline. Walk away.", icon: 'star', effect: (g) => {
+                return "The idols dim. You leave with what you brought.";
+            } }
+        ]
+    }
+];
+
+/* =========================================
+   CUSTOM RUN MODIFIERS (Roadmap Part 29)
+   ----------------------------------------
+   Data layer only — the selection UI on character select is feature-
+   flagged off until balance playtesting. Modifier effects are applied
+   via `applyCustomRunModifiers(runState, ids)` in game.js (to be
+   written in Milestone 4). Each modifier:
+     - id: stable string used in save state
+     - kind: 'negative' | 'positive' | 'chaotic' — drives UI sorting
+     - name: display name on the modifier card
+     - desc: 1-line effect summary
+     - payoutBonus: positive number (percentage) to apply as a multiplier
+       bonus on final fragment payout; negative = reduction
+     - Flags wired by Game._applyCustomRunModifiers:
+         startHpPct, disableRest, dmgOutMult, dmgInMult, diceCount,
+         disableReroll, fragDrainPerSector, relicPickDmg, disableLore,
+         hotHandsDmg, startRelicCount, extraRerollPerTurn, bossHpMult,
+         shopDiscountPct, hideIntentNumbers, attackCritVariance,
+         relicPickDupe
+   ========================================= */
+const CUSTOM_RUN_MODIFIERS = [
+    { id: 'hard_heart',    kind: 'negative', name: 'Low-Health Start',  desc: 'Start every run at 50% HP.',                        payoutBonus: 15, startHpPct: 0.5 },
+    { id: 'no_rest',       kind: 'negative', name: 'Merciless',         desc: 'Rest nodes do nothing.',                            payoutBonus: 20, disableRest: true },
+    { id: 'glass_cannon',  kind: 'negative', name: 'Glass Cannon',      desc: '+50% DMG dealt, +50% DMG taken.',                  payoutBonus: 20, dmgOutMult: 1.5, dmgInMult: 1.5 },
+    { id: 'slim_dice',     kind: 'negative', name: 'Narrow Hand',       desc: 'Start with 3 dice instead of 4.',                  payoutBonus: 30, diceCount: 3 },
+    { id: 'no_reroll',     kind: 'negative', name: 'Locked In',         desc: 'No rerolls available.',                            payoutBonus: 35, disableReroll: true },
+    { id: 'tax_man',       kind: 'negative', name: 'Tax Man',           desc: '-10% fragments at each sector transition.',        payoutBonus: 15, fragDrainPerSector: 0.10 },
+    { id: 'cursed_deck',   kind: 'negative', name: 'Cursed Relics',     desc: 'Each relic picked deals 3 DMG on acquire.',        payoutBonus: 25, relicPickDmg: 3 },
+    { id: 'limit_lore',    kind: 'negative', name: 'Silent Chronicle',  desc: 'No lore unlocks this run.',                        payoutBonus: 10, disableLore: true },
+    { id: 'hot_hands',     kind: 'negative', name: 'Hot Hands',         desc: 'First die played each turn costs 3 HP.',           payoutBonus: 15, hotHandsDmg: 3 },
+    { id: 'starter_kit',   kind: 'positive', name: 'Starter Kit',       desc: 'Begin with 2 random common relics.',               payoutBonus: -30, startRelicCount: 2 },
+    { id: 'extra_reroll',  kind: 'positive', name: 'Steady Hand',       desc: '+1 extra reroll per turn.',                        payoutBonus: -25, extraRerollPerTurn: 1 },
+    { id: 'soft_bosses',   kind: 'positive', name: 'Soft Bosses',       desc: 'All bosses -20% HP.',                              payoutBonus: -40, bossHpMult: 0.8 },
+    { id: 'free_shops',    kind: 'positive', name: 'Open Markets',      desc: 'Shop prices -30%.',                                payoutBonus: -25, shopDiscountPct: 0.3 },
+    { id: 'double_or_none',kind: 'chaotic',  name: 'Double or None',    desc: 'Attack dice 50%: deal 2× or 0 damage.',            payoutBonus: 15, attackCritVariance: 'double_or_none' },
+    { id: 'daily_dupes',   kind: 'chaotic',  name: 'Daily Dupes',       desc: 'Each relic is duplicated on pickup.',              payoutBonus: -15, relicPickDupe: true }
+];
+
+/* Feature flag for the Custom Runs UI. Part 29 effect-applier now covers
+   every modifier in the data table above — flag flipped on. If a future
+   modifier needs wiring, disable temporarily here while the handler lands. */
+const FEATURE_CUSTOM_RUNS = true;
+
+export { CONFIG, COLORS, IMPACT_COLORS, SECTOR_CONFIG, SECTOR_MECHANICS, STATE, LORE_DATABASE, TUTORIAL_PAGES, POST_TUTORIAL_PAGES, TUTORIAL_NARRATION, PLAYER_CLASSES, DICE_TYPES, META_UPGRADES, SPARKS_UPGRADES, UPGRADES_POOL, CORRUPTED_RELICS, GLITCH_MODIFIERS, DICE_UPGRADES, SIGNATURE_DICE, ENEMIES, BOSS_DATA, EVENTS_DB, SYNERGIES, MODULE_FUSIONS, CUSTOM_RUN_MODIFIERS, FEATURE_CUSTOM_RUNS, DMG_TYPES, SECTOR_DMG_TYPE };

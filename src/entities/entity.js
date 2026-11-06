@@ -1,0 +1,1444 @@
+import { COLORS, STATE } from '../constants.js';
+import { AudioMgr } from '../audio.js';
+import { ParticleSys } from '../effects/particles.js';
+import { TooltipMgr } from '../ui/tooltip.js';
+import { Game } from '../game.js';
+import { ClassAbility } from '../ui/class-ability.js';
+import { Hints } from '../services/hints.js';
+import { CombatStats } from '../services/combat-stats.js';
+
+// Late-bound class refs (set by registerEntityClasses() after all modules load).
+// Avoids circular import TDZ: entity.js cannot eagerly import its own subclasses
+// because each subclass extends Entity at module-eval time. The instanceof checks
+// in Entity's methods only run after registration, so module-local lets are safe.
+let Player, Minion, Enemy;
+export function registerEntityClasses(p, m, e) { Player = p; Minion = m; Enemy = e; }
+
+// After dealing damage from a reflect/retaliate path, resolve the kill so
+// the boss-death win condition (or minion removal) fires immediately rather
+// than waiting for the next turn-tick to notice a corpse.
+function _resolveEnemyKill(target) {
+    if (!target || target.currentHp > 0 || !Game) return;
+    if (target === Game.enemy) {
+        Game.winCombat();
+        return;
+    }
+    if (Game.enemy && Game.enemy.minions && Game.enemy.minions.includes(target)) {
+        // v1.9.35 — Hive Assimilate + Tesseract resummon-arming both
+        // route through the BossMinionRoster.handleMinionKill() hook.
+        // Each boss's roster config registered the appropriate
+        // onMinionKill callback at spawn time. No-op for bosses
+        // without a roster.
+        if (Game.enemy.minionRoster) {
+            Game.enemy.minionRoster.handleMinionKill(target, Game);
+        }
+        Game.enemy.minions = Game.enemy.minions.filter(m => m !== target);
+    } else if (Game.player && Game.player.minions && Game.player.minions.includes(target)) {
+        Game.player.minions = Game.player.minions.filter(m => m !== target);
+    }
+}
+
+
+/* =========================================
+   3. CLASSES
+   ========================================= */
+class Entity {
+    constructor(x, y, name, maxHp) {
+        this.x = x;
+        this.y = y;
+        this.name = name;
+        this.maxHp = maxHp;
+        this.currentHp = maxHp;
+        this.shield = 0;
+        this.radius = 120;
+        this.effects = [];
+        this.anim = { type: 'idle', timer: 0, startVal: 0 };
+        this.flashTimer = 0; 
+        // NEW: Spawn Animation State
+        this.spawnTimer = 0; 
+        this.maxSpawnTimer = 1.0; // 1 second spawn in
+    }
+
+    takeDamage(amount, source = null, suppressBlockText = false, bypassShield = false) {
+        // A settled death cannot take more damage or pay out another kill.
+        if (this.currentHp <= 0) return true;
+        // --- GOD MODE INVINCIBILITY ---
+        if (this instanceof Player && Game.godMode) {
+            ParticleSys.createFloatingText(this.x, this.y - 60, "GOD MODE", "#ff0055");
+            return false;
+        }
+
+        // --- BOSS-MINION SWARM SHIELD ---
+        // v1.9.35 — boss-name-agnostic invincibility gate. Each boss
+        // declares its own gating policy through its BossMinionRoster
+        // config (`invincibleWhileAnyAlive` + `invincibleFloaterText`).
+        // Tesseract Prime is the only boss using this today; the gate
+        // returns false when its fragments are alive so all damage
+        // resolves to zero. Hive / Compiler register rosters but
+        // their `invincibleWhileAnyAlive` is false so this is a no-op.
+        if (Enemy && this instanceof Enemy && this === Game.enemy
+            && this.minionRoster && this.minionRoster.shouldGateBossDamage()) {
+            this.minionRoster.fireInvincibilityFloater();
+            return false;
+        }
+
+        // --- REALITY SHIFT — outgoing damage redirect ---
+        // v1.9.0. While the player carries the `reality_shift` debuff,
+        // their attacks heal the enemy instead of harming it. Hooked
+        // here so every damage path (single, multi, AoE, reflect)
+        // routes through the inversion. Player-side minions count
+        // as the player's hand — their attacks invert too. Effect
+        // wears off at end of player turn (1-turn duration).
+        if (Enemy && this instanceof Enemy
+            && Game && Game.player && Game.player.hasEffect && Game.player.hasEffect('reality_shift')
+            && (source instanceof Player || (Minion && source instanceof Minion && source.isPlayerSide))
+            && amount > 0) {
+            const heal = Math.max(1, Math.floor(amount));
+            this.currentHp = Math.min(this.maxHp, this.currentHp + heal);
+            ParticleSys.createFloatingText(this.x, this.y - 100, `INVERTED +${heal}`, '#bc13fe');
+            ParticleSys.createSparks(this.x, this.y, '#bc13fe', 12);
+            AudioMgr.playSound && AudioMgr.playSound('mana');
+            return false;
+        }
+
+        // --- NEWCOMER ASSIST ---
+        // First three runs of a new install reduce incoming player
+        // damage by ~15%. Cushions the early curve so players don't
+        // bounce after an unlucky boss hit on run 1. Doesn't apply to
+        // enemies, doesn't apply after run 3, doesn't apply during
+        // the Sector 0 prologue (already takedamage-clamped to 1 HP),
+        // doesn't apply if the player has manually disabled assist.
+        if (this instanceof Player && Game._isNewcomer && Game._isNewcomer()
+            && !Game.assistDisabled
+            && Game.currentState !== STATE.BREAKOUT) {
+            amount = Math.max(1, Math.floor(amount * 0.85));
+        }
+
+        // Bloodstalker — Blood Thrall siphon. Damage that lands on the
+        // thrall is fed back to the player as healing (and ×2 once the
+        // thrall has been upgraded to level 2). The actual heal is applied
+        // *after* the thrall's HP deduction below so we know how much the
+        // hit really took (shield/mitigations apply first; a hit that's
+        // fully absorbed by the thrall's shield does no healing).
+        // Replaces the old "redirect player damage to thrall" mechanic —
+        // the player now eats their own incoming damage, and the thrall
+        // pays for itself by being a heal battery while it's getting hit.
+
+        if (this instanceof Enemy && this.invincibleTurns > 0) {
+            ParticleSys.createFloatingText(this.x, this.y - 60, "INVINCIBLE", "#888");
+            AudioMgr.playSound('defend');
+            return false;
+        }
+
+        // Elite affix: Phase — alternates between HP and shield target each hit.
+        // When flagged "shield", incoming damage becomes shield-damage only.
+        if (this instanceof Enemy && this.affixes && this.affixes.includes('Phase')) {
+            this.phaseFlag = !this.phaseFlag;
+            if (this.phaseFlag) {
+                if (this.shield > 0) {
+                    const take = Math.min(this.shield, amount);
+                    this.shield -= take;
+                    ParticleSys.createFloatingText(this.x, this.y - 80, "PHASE (SHIELD)", "#bc13fe");
+                    return false;
+                }
+            } // else: normal HP damage this hit
+        }
+
+        if (this instanceof Enemy && this.glitchMod && this.glitchMod.id === 'evasive') {
+            if (Math.random() < 0.2) {
+                ParticleSys.createFloatingText(this.x, this.y - 60, "GLITCH DODGE", "#ff00ff");
+                AudioMgr.playSound('defend');
+                return false;
+            }
+        }
+
+        let actualDmg = amount;
+
+        // Phase-shift kind — Phase Stalker. 35% of incoming hits pass
+        // through the entity entirely, mirroring the dossier promise
+        // "phases between forms". Visual cue is the constant flickering
+        // alpha drawn around the entity in the render path so the
+        // player reads "this thing is incorporeal" before attacking.
+        // (Previously this block read `actualDmg` BEFORE the `let`
+        // initialised it — temporal dead zone, ReferenceError, every
+        // attack against a Phase Stalker crashed the game.)
+        if (this instanceof Enemy && this.kind === 'phase_shift' && actualDmg > 0 && Math.random() < 0.35) {
+            ParticleSys.createFloatingText(this.x, this.y - 80, "PHASE MISS", "#bc13fe");
+            ParticleSys.createSparks(this.x, this.y, "#bc13fe", 10);
+            AudioMgr.playSound('defend');
+            return false;
+        }
+
+        if (this instanceof Player && this.incomingDamageMult > 1) {
+            actualDmg = Math.floor(actualDmg * this.incomingDamageMult);
+        }
+
+        // Custom Run: Glass Cannon-style incoming-damage modifier. Applied
+        // to the player on any external source so self-costs (blood tribute,
+        // blood reroll) aren't double-punished.
+        if (this instanceof Player && Game && Game._customDmgInMult && Game._customDmgInMult !== 1 && source) {
+            actualDmg = Math.floor(actualDmg * Game._customDmgInMult);
+        }
+
+        // Expansion (5.2.1) — Foundry Golem armored plating halves incoming damage.
+        if (Enemy && this instanceof Enemy && this.kind === 'armored') {
+            actualDmg = Math.floor(actualDmg * 0.5);
+        }
+
+        // Elite affix: Brittle — enemy takes +50% incoming damage (paired
+        // with a +25% outgoing in enemy.js getEffectiveDamage). Net: a
+        // glass-cannon elite that rewards focused burst.
+        if (Enemy && this instanceof Enemy && this.affixes && this.affixes.includes('Brittle')) {
+            actualDmg = Math.floor(actualDmg * 1.5);
+        }
+
+        // PANOPTICON eye-lock (phase 2): player takes 2x damage unless a
+        // minion is alive to break line-of-sight.
+        if (this instanceof Player && Game.enemy && Game.enemy.eyeLockTurns > 0 && source === Game.enemy) {
+            const hasMinion = this.minions && this.minions.some(m => m && m.currentHp > 0);
+            if (!hasMinion) {
+                actualDmg = Math.floor(actualDmg * 2);
+                ParticleSys.createFloatingText(this.x, this.y - 170, "EYE LOCK x2", "#00ffff");
+            }
+        }
+
+        // PANOPTICON blind protocol (phase 3): miss chance on both sides
+        // when the boss is in blind mode. Default 20% with a `blindRate`
+        // override picked up from the phase-3 mechanic block (currently 35%).
+        if (Game.enemy && Game.enemy.blindProtocol) {
+            const rate = (typeof Game.enemy.blindRate === 'number') ? Game.enemy.blindRate : 0.2;
+            if (Math.random() < rate) {
+                ParticleSys.createFloatingText(this.x, this.y - 90, "BLIND MISS", "#88eaff");
+                return false;
+            }
+        }
+
+        // Ascension flat-damage twist: brittle hull
+        if (this instanceof Player && Game._ascEffects && Game._ascEffects.incomingFlat > 0 && actualDmg > 0) {
+            actualDmg += Game._ascEffects.incomingFlat;
+        }
+
+        const overcharge = this.hasEffect('overcharge');
+        if (overcharge) {
+            const modifier = overcharge.val > 0 ? 2.0 : 1.5;
+            actualDmg = Math.floor(actualDmg * modifier);
+        }
+        
+        if (this.hasEffect('frail')) {
+            // Standardise frail multiplier at +50% to match every description
+            // that references it ("+50% Dmg Taken" — see SIG_BLOOD_3, SIG_ARC_3,
+            // BLD_MANA upgrade, etc). Code previously used 1.3, so debuff
+            // values silently underperformed their advertised power.
+            actualDmg = Math.floor(actualDmg * 1.5);
+        }
+
+        // Blood Pact: player's outgoing attacks deal +50%.
+        if (source instanceof Player && source.hasRelic('c_blood_pact')) {
+            actualDmg = Math.floor(actualDmg * 1.5);
+        }
+        // Entropy: enemy attacks on the player deal +50% (paired with -20% enemy HP at combat start).
+        const isEnemyAttack = source && !(source instanceof Player) && !(source instanceof Minion && source.isPlayerSide);
+        if (this instanceof Player && this.hasRelic('c_entropy') && isEnemyAttack) {
+            actualDmg = Math.floor(actualDmg * 1.5);
+        }
+
+        // --- NEW: ARMOR PLATING (90% Reduction) ---
+        if (this.armorPlating > 0) {
+             actualDmg = Math.floor(actualDmg * 0.1); // Take 10%, mitigate 90%
+             this.armorPlating--;
+             ParticleSys.createFloatingText(this.x, this.y - 80, `ARMOR (${this.armorPlating})`, "#ffaa00");
+             // Play metallic sound? Re-using 'defend' for now
+             AudioMgr.playSound('defend');
+        }
+        // ------------------------------------------
+
+        if (this.shield > 0 && !bypassShield) {
+            const shieldWas = this.shield;
+            // Compiler phase 3 — armor-projectile mode: attacks from the
+            // Compiler in its shrapnel phase pierce half of the victim's
+            // shield. Halve the effective shield for this absorption pass
+            // then put the untouched half back after resolve.
+            let effShield = this.shield;
+            let pierced = 0;
+            if (source && source.armorProjectileMode && source.name === 'THE COMPILER') {
+                pierced = Math.floor(this.shield * 0.5);
+                effShield = this.shield - pierced;
+                if (pierced > 0) ParticleSys.createFloatingText(this.x, this.y - 140, "SHELL PIERCED", '#ff4500');
+            }
+            if (effShield >= actualDmg) {
+                this.shield = pierced + (effShield - actualDmg);
+                actualDmg = 0;
+            } else {
+                actualDmg -= effShield;
+                this.shield = pierced;
+            }
+            // Shield just broke this hit — pop a glass-shatter VFX/SFX
+            // so the collapse reads, and shake for impact.
+            if (shieldWas > 0 && this.shield === 0) {
+                ParticleSys.createShockwave(this.x, this.y, COLORS.SHIELD, 24);
+                ParticleSys.createSparks(this.x, this.y, COLORS.SHIELD, 14);
+                ParticleSys.createFloatingText(this.x, this.y - 120, "SHIELD DOWN", COLORS.SHIELD);
+                AudioMgr.playSound('grid_fracture');
+                if (Game && Game.shake) Game.shake(4);
+                if (Player && this instanceof Player) Hints.trigger('first_shield_break');
+            }
+            // Coolant Loop: shield just broke this hit → heal per stack.
+            if (this instanceof Player && shieldWas > 0 && this.shield === 0 && this.hasRelic('coolant_loop')) {
+                const stacks = Game.stackCount('coolant_loop');
+                this.heal(2 * stacks);
+                ParticleSys.createFloatingText(this.x, this.y - 100, "COOLANT +" + (2 * stacks), COLORS.SHIELD);
+            }
+            // FUSION: BRAMBLE CYCLE — +5 heal on shield break (was +2
+            // from coolant_loop). thorn_mail half lives in game.js
+            // damage-dealt path; this is the coolant half.
+            if (this instanceof Player && shieldWas > 0 && this.shield === 0 && this.hasRelic('fusion_bramble_cycle')) {
+                this.heal(5);
+                ParticleSys.createFloatingText(this.x, this.y - 100, "BRAMBLE +5", '#0f0');
+            }
+            // Sentinel trait: shield-break counterattack retaliates against
+            // the attacker. Damage scales with sector so Sector 5 bosses
+            // don't trivialise the trait — a base 4 dmg ping vs a 1000-HP
+            // boss is meaningless. Each sector adds a flat +2 on top of
+            // the trait's base value.
+            if (this instanceof Player && shieldWas > 0 && this.shield === 0 && this.traits && this.traits.shieldCounter) {
+                const sectorScale = Math.max(0, ((Game && Game.sector) || 1) - 1) * 2;
+                const retaliateDmg = this.traits.shieldCounter + sectorScale;
+                const target = source || (Game && Game.enemy);
+                if (target && target.currentHp > 0 && target !== this) {
+                    ParticleSys.createFloatingText(target.x, target.y - 100, `COUNTER ${retaliateDmg}`, '#ffffff');
+                    if (target.takeDamage(retaliateDmg)) _resolveEnemyKill(target);
+                }
+            }
+        }
+
+        // Firewall — reactive softening: when you take a 30+ damage hit,
+        // block 15 of it and gain 15 Shield back. Once per combat per stack
+        // (stacks raise both the block and the shield refund, and allow
+        // re-triggering within the same fight).
+        if (this instanceof Player && this.hasRelic('firewall') && actualDmg >= 30) {
+            const stacks = Game.stackCount('firewall');
+            const triggersUsed = this._firewallTriggersUsed || 0;
+            if (triggersUsed < stacks) {
+                const block = 15 + (stacks - 1) * 5;
+                const shieldGain = 15 + (stacks - 1) * 5;
+                actualDmg = Math.max(0, actualDmg - block);
+                this.addShield && this.addShield(shieldGain, { silent: true });
+                this._firewallTriggersUsed = triggersUsed + 1;
+                ParticleSys.createFloatingText(this.x, this.y - 140, `FIREWALL -${block}`, COLORS.SHIELD);
+                ParticleSys.createFloatingText(this.x, this.y - 170, `+${shieldGain} SHIELD`, COLORS.SHIELD);
+                AudioMgr.playSound('defend');
+            }
+        }
+        
+        if (this instanceof Player && this.traits.vulnerable && actualDmg > 0) {
+            actualDmg += 1;
+        }
+        // Module: GLASS LENS — pending +1 incoming-damage debt from a
+        // previous turn's lens-empowered first attack. Consumes one
+        // stack per hit landed.
+        if (this instanceof Player && (this._glassLensIncomingDebt || 0) > 0 && actualDmg > 0) {
+            actualDmg += 1;
+            this._glassLensIncomingDebt -= 1;
+        }
+
+        // Soft cap on a single player-bound hit so the multiplicative stack
+        // of c_entropy (×1.5) + frail (×1.3) + brittle hull + vulnerable
+        // can't one-shot a full-HP player from a sector-5 boss. Cap at
+        // 85% of maxHp before shield absorption — preserves the "you should
+        // feel that hit" tension while removing the unwinnable softlock
+        // vector the audit flagged for Bloodstalker. Boss-side damage
+        // (Enemy taking damage) is unaffected.
+        if (this instanceof Player && this.maxHp > 0 && actualDmg > 0) {
+            const burstCap = Math.floor(this.maxHp * 0.85);
+            if (actualDmg > burstCap) {
+                actualDmg = burstCap;
+                ParticleSys.createFloatingText(this.x, this.y - 200, "BURST CAP", "#ffd76a");
+            }
+        }
+
+        // Non-combat HP floor — events, relic costs, and other out-of-combat
+        // damage sources (e.g. Skyglass Shatter, Medbay decline, Static
+        // shrine) must never drop the player to 0. Nothing outside combat
+        // triggers the gameOver / second-life path, so a 0 HP player would
+        // be carried into the next fight stuck at 0 HP. Clamp the deduction
+        // so at least 1 HP remains. Combat states (incl. tutorial + breakout
+        // prologue) keep their lethal behaviour untouched.
+        if (this instanceof Player && actualDmg > 0
+            && Game && Game.currentState !== STATE.COMBAT
+            && Game.currentState !== STATE.TUTORIAL_COMBAT
+            && Game.currentState !== STATE.BREAKOUT) {
+            actualDmg = Math.min(actualDmg, Math.max(0, this.currentHp - 1));
+        }
+
+        // Hologram: 15% Dodge — routed through Game._luckyChance so
+        // Ascension 17 (Aurelia's Curse) halves it as advertised.
+        if (this instanceof Player && this.hasRelic('hologram')
+            && Game && Game._luckyChance && Game._luckyChance(0.15)) {
+            actualDmg = 0;
+            ParticleSys.createFloatingText(this.x, this.y - 60, "DODGE!", "#fff");
+            // Relic: REFLECTION GLASS — dodging an attack deals 8 DMG back.
+            if (this.hasRelic('reflection_glass')) {
+                const target = source || (Game && Game.enemy);
+                if (target && target.currentHp > 0 && target !== this) {
+                    const stacks = Game.stackCount('reflection_glass');
+                    ParticleSys.createFloatingText(this.x, this.y - 100, `GLASS ${8 * stacks}`, "#aaffff");
+                    if (target.takeDamage(8 * stacks)) _resolveEnemyKill(target);
+                }
+            }
+        }
+
+        // Phase 3: Training Dummy is unkillable until the player reaches the final tutorial step.
+        if (this.isTutorialDummy && Game.tutorialStep < 12 && (this.currentHp - actualDmg) <= 0) {
+            actualDmg = Math.max(0, this.currentHp - 1);
+            ParticleSys.createFloatingText(this.x, this.y - 80, "TRAINING", COLORS.MANA);
+        }
+
+        // Expansion (5.2.1) — Data Mite burrow: survive a fatal hit once by
+        // going underground for 2 full idle turns, re-emerging with a heavy
+        // strike on turn 3. Initial value is 3 because generateSingleIntent
+        // decrements BEFORE the idle/resurge check each turn, so the sequence
+        // is: set=3 → tick→2 idle → tick→1 idle → tick→0 resurge.
+        if (Enemy && this instanceof Enemy && this.kind === 'burrow' && !this.burrowed && actualDmg >= this.currentHp) {
+            actualDmg = Math.max(0, this.currentHp - 1);
+            this.burrowed = true;
+            this.burrowTurns = 3;
+            ParticleSys.createFloatingText(this.x, this.y - 120, "BURROWED", "#886655");
+        }
+        // Expansion (5.2.1) — Echo clone on first hit.
+        if (Enemy && this instanceof Enemy && this.kind === 'clone' && !this.cloneFired && actualDmg > 0 && Minion && Game.enemy) {
+            this.cloneFired = true;
+            for (let i = 0; i < 2; i++) {
+                const c = new Minion(this.x + (i === 0 ? -120 : 120), this.y + 40, (this.minions.length + i + 1), false, 1);
+                c.name = "Echo Shard";
+                c.maxHp = Math.max(12, Math.floor(this.maxHp * 0.35));
+                c.currentHp = c.maxHp;
+                c.dmg = Math.max(3, Math.floor(this.baseDmg * 0.5));
+                c.spawnTimer = 0.8;
+                this.minions.push(c);
+            }
+            ParticleSys.createFloatingText(this.x, this.y - 150, "ECHO SPLIT", "#88eaff");
+        }
+
+        // Snapshot HP before the deduction so the Blood Thrall siphon
+        // below can compute the *actual* HP loss (a hit fully absorbed by
+        // shield won't trigger any heal — `actualDmg` already accounts for
+        // shield, but a fatal hit may overflow currentHp, so we want the
+        // capped delta).
+        const _hpBeforeHit = this.currentHp;
+
+        // Boss phase clamp — a boss can only be killed once it's in its
+        // FINAL phase. Attacks that would drop a Phase 1 boss past the
+        // 50% threshold get clamped so Phase 2 always triggers; same for
+        // Phase 2 → Phase 3 at the 20% line. Keeps the fantasy honest:
+        // every boss gets all three phases on-screen, and a lucky 1-shot
+        // can't skip a phase.
+        if (Enemy && this instanceof Enemy && this.isBoss && actualDmg > 0) {
+            const nextHp = this.currentHp - actualDmg;
+            const p2Floor = Math.ceil(this.maxHp * 0.5) - 1;
+            const p3Floor = Math.ceil(this.maxHp * 0.2) - 1;
+            if (this.phase === 1 && nextHp < this.maxHp * 0.5) {
+                // Drop exactly INTO phase 2 range; checkPhase runs below.
+                this.currentHp = Math.max(0, p2Floor);
+            } else if (this.phase === 2 && nextHp < this.maxHp * 0.2) {
+                this.currentHp = Math.max(0, p3Floor);
+            } else {
+                this.currentHp = Math.max(0, nextHp);
+            }
+        } else {
+            this.currentHp = Math.max(0, this.currentHp - actualDmg);
+        }
+
+        // (Bloodstalker Blood Thrall siphon moved BELOW the Anchor clamp
+        // so the HP delta reflects the actual loss after Anchor floors a
+        // would-be-fatal hit at 1 HP. Without that ordering the thrall
+        // could be saved by Anchor yet still pay out a "thrall died"
+        // heal to the player.)
+
+        // Archivist Phase 3+ — REWIND. A heavy single hit (≥80 raw dmg)
+        // restores the boss back up by the value of the hit (capped at
+        // current+30%) once per turn. Applied before checkPhase so the
+        // restored HP is what the threshold check sees, preventing a
+        // phase-skip cheese where one big crit lands them in Phase 4
+        // before the boss has played out Phase 3 at all.
+        if (Enemy && this instanceof Enemy && this.name === 'THE ARCHIVIST'
+            && this.phase >= 3 && actualDmg >= 80
+            && !this._rewindUsedThisTurn) {
+            this._rewindUsedThisTurn = true;
+            const cap = Math.floor(this.maxHp * 0.3);
+            const restore = Math.min(cap, actualDmg);
+            this.currentHp = Math.min(this.maxHp, this.currentHp + restore);
+            ParticleSys.createFloatingText(this.x, this.y - 140, `REWIND +${restore}`, '#ffd76a');
+            ParticleSys.createShockwave(this.x, this.y, '#ffd76a', 36);
+            AudioMgr.playSound && AudioMgr.playSound('hex_barrier');
+            if (Game && Game.shake) Game.shake(8);
+        }
+
+        // Immediately check for phase transition so a big hit that drops
+        // the boss through a threshold plays the cinematic on the same
+        // damage tick — no waiting for the player's next die use.
+        if (Enemy && this instanceof Enemy && this.isBoss && typeof this.checkPhase === 'function') {
+            this.checkPhase();
+        }
+
+        // Low-HP threshold fanfare (Roadmap #5). When an enemy crosses
+        // below 25% HP for the first time this fight, fire a one-shot
+        // alarm sting + a brief screen pulse so the player feels the
+        // tide turn. One-shot per fight via _lowHpFired flag — cleared
+        // in startCombat / _buildBreakoutCombat.
+        if (Enemy && this instanceof Enemy && this.currentHp > 0 && !this._lowHpFired) {
+            const pct = this.currentHp / Math.max(1, this.maxHp);
+            if (pct < 0.25) {
+                this._lowHpFired = true;
+                if (typeof AudioMgr !== 'undefined' && AudioMgr.playSting) {
+                    try { AudioMgr.playSting('low_hp_warning'); } catch (_) {}
+                }
+                if (Game && Game.triggerScreenFlash) {
+                    Game.triggerScreenFlash('rgba(255, 51, 85, 0.18)', 220);
+                }
+                if (Game && Game.shake) Game.shake(6);
+                if (typeof ParticleSys !== 'undefined' && ParticleSys.createFloatingText) {
+                    ParticleSys.createFloatingText(this.x, this.y - 110, 'CRITICAL', '#ff3355');
+                }
+            }
+        }
+
+        // Track the player's highest damage dealt so Mirror enemies can
+        // reflect it on their next intent.
+        if (Game && Game.player && source instanceof Player && actualDmg > 0) {
+            Game.player._lastDamageDealt = Math.max(Game.player._lastDamageDealt || 0, actualDmg);
+        }
+
+        // Per-entity Mirror tracking — each enemy/minion remembers the most
+        // recent hit it took from the player and from the player's side
+        // (player + player-side minions). Mirror enemies read the
+        // player-only field so summoned minions don't feed the parent's
+        // reflect; mirror minions read the broader player-side field so
+        // any allied source counts.
+        if (actualDmg > 0 && source) {
+            if (source instanceof Player) {
+                this._lastPlayerHitDmg = actualDmg;
+                this._lastPlayerSideHitDmg = actualDmg;
+            } else if (Minion && source instanceof Minion && source.isPlayerSide) {
+                this._lastPlayerSideHitDmg = actualDmg;
+            }
+            // v1.9.10. If this entity has a queued mirror_attack
+            // intent, refresh its displayed value now so the tooltip
+            // and intent badge reflect the new last-hit base. The
+            // mirror branch in updateIntentValues recomputes intent.val
+            // from the freshly-set _lastPlayerHitDmg.
+            if (Enemy && this instanceof Enemy && Array.isArray(this.nextIntents)
+                && this.nextIntents.some(i => i && i.type === 'mirror_attack')
+                && typeof this.updateIntentValues === 'function') {
+                this.updateIntentValues();
+            }
+        }
+
+        // Only HP damage during the player's phase can arm a surviving
+        // carrier. No survival clamp: killing it cancels the pending blast.
+        if (Enemy && this instanceof Enemy && this.kind === 'detonator') {
+            if (this.currentHp <= 0) this._armedDetonate = false;
+            else if (actualDmg > 0) this.tryArmSelfDestruct();
+        }
+
+        if (this instanceof Player && Game.haptic) {
+            Game.haptic(actualDmg >= 30 ? 'heavy' : 'damage');
+        }
+
+        this.playAnim('shake');
+        // Phase E: damage-scaled impact VFX. When the player or an allied
+        // minion takes damage from an enemy, tint the impact with the sector's
+        // enemy-projectile color so each zone's hits feel different.
+        const particleCount = Math.min(45, 12 + Math.floor(actualDmg * 0.6));
+        let impactColor = '#fff';
+        let shockColor = '#ffffff';
+        if (this instanceof Player || (this instanceof Minion && this.isPlayerSide)) {
+            const enemySource = source && Game && Game._sourceIsEnemy && Game._sourceIsEnemy(source);
+            if (enemySource) {
+                // v1.9.44 — palette-driven impact tint. Reads source.dmgType
+                // (Compiler fire, NULL_POINTER void, Cryo Sentinel ice etc.)
+                // with sector-default fallback. Player perceives the
+                // attack's element by colour even before the damage
+                // number resolves.
+                impactColor = (Game._dmgTypeColor)
+                    ? Game._dmgTypeColor(source)
+                    : (Game._sectorEnemyProjectileColor ? Game._sectorEnemyProjectileColor() : '#f00');
+                shockColor = impactColor;
+            } else {
+                impactColor = '#f00';
+                shockColor = '#ff4444';
+            }
+        }
+        ParticleSys.createExplosion(this.x, this.y, particleCount, impactColor);
+        // Sparks on every meaningful hit — tapered streaks fan outward for
+        // a visceral "physical contact" feel. Count scales with damage.
+        if (actualDmg > 0 && ParticleSys.createSparks) {
+            const sparkCount = Math.min(14, 4 + Math.floor(actualDmg * 0.25));
+            ParticleSys.createSparks(this.x, this.y, impactColor, sparkCount);
+        }
+        if (actualDmg >= 30) {
+            ParticleSys.createShockwave(this.x, this.y, shockColor, 28);
+        }
+        
+        if (actualDmg > 0) {
+             this.flashTimer = 0.2;
+             // Enemy-side hit-stop — small but it makes hits feel decisive (skip if player is the target since they get a bigger hit-stop above).
+             // Heavy/catastrophic hits get a meaningful freeze for impact.
+             if (!(this instanceof Player) && Game.hitStop) {
+                 let hs = Math.min(80, 25 + actualDmg * 0.6);
+                 if (actualDmg >= 100) hs = 200;
+                 else if (actualDmg >= 30) hs = Math.max(hs, 110);
+                 Game.hitStop(hs);
+             }
+             // Tiered damage text — chip / solid / heavy / catastrophic.
+             // Pass source attribution so multi-target combat stays legible:
+             // white for the player's hits, cyan for their minions, red for
+             // enemy hits landing on the player side.
+             let sourceKind;
+             if (source instanceof Player) sourceKind = 'player';
+             else if (Minion && source instanceof Minion && source.isPlayerSide) sourceKind = 'minion';
+             else if ((Enemy && source instanceof Enemy) || (Minion && source instanceof Minion && !source.isPlayerSide)) sourceKind = 'enemy';
+             // v1.9.38 — consume the one-shot crit flag set by random-
+             // crit paths or by QTE perfect resolves. The flag bumps the
+             // damage text size + speed + gold colour so any crit reads
+             // visually distinct from a non-crit even when the damage
+             // amount itself doesn't cross a tier threshold.
+             const _isCrit = !!(Game && Game._nextDamageIsCrit);
+             if (Game) Game._nextDamageIsCrit = false;
+             const dmgTier = ParticleSys.createDamageText(this.x, this.y, actualDmg, this instanceof Player, sourceKind, _isCrit);
+             // Pitch-shifted + gain-scaled hit sample per tier so chip pings
+             // and catastrophic crunches feel audibly distinct.
+             AudioMgr.playHit(dmgTier);
+             // Heavy hits earn a screen flash even on enemies for the pop.
+             if (dmgTier === 'catastrophic' && Game.triggerScreenFlash) {
+                 Game.triggerScreenFlash('rgba(255,220,80,0.35)', 200);
+                 // Side-chain the music a notch so the impact cuts through.
+                 if (AudioMgr.duck) AudioMgr.duck(0.3, 220);
+             }
+             if (Game.logCombatEvent) {
+                 Game.logCombatEvent({
+                     type: 'damage',
+                     targetName: this.name,
+                     amount: actualDmg,
+                     tier: dmgTier,
+                     sourceName: source ? source.name : null
+                 });
+             }
+             
+             if (this instanceof Enemy && this.glitchMod && this.glitchMod.id === 'thorns' && source instanceof Player) {
+                 source.takeDamage(2);
+                 ParticleSys.createFloatingText(source.x, source.y - 80, "GLITCH REFLECT", "#ff00ff");
+             }
+
+             // Null Pointer phase 3 — voidling shared HP. Damage to one
+             // splashes 50% to each sibling. Siblings take raw damage (no
+             // shield recurse) so the splash feels like a linked pool, not
+             // a chain of discrete hits. Suppress if this IS the splash
+             // (via _voidSplashing flag on source) to prevent recursion.
+             // v1.8.3 — filter dead siblings out of the array right here so
+             // they don't linger as visible 0-HP corpses (the splash mutates
+             // currentHp directly without going through the damage path that
+             // normally filters dead minions; user-reported regression).
+             if (this instanceof Minion && !this.isPlayerSide && actualDmg > 0
+                 && Game.enemy && Game.enemy.name === 'NULL_POINTER'
+                 && Game.enemy.voidShared && !source?._voidSplashing) {
+                 const splash = Math.floor(actualDmg * 0.5);
+                 if (splash > 0 && Array.isArray(Game.enemy.minions)) {
+                     Game.enemy.minions.forEach(sib => {
+                         if (sib !== this && sib.currentHp > 0) {
+                             sib.currentHp = Math.max(0, sib.currentHp - splash);
+                             ParticleSys.createFloatingText(sib.x, sib.y - 60, `VOID LINK -${splash}`, '#ff00ff');
+                         }
+                     });
+                     // Cull any sibling that hit 0 from the splash.
+                     Game.enemy.minions = Game.enemy.minions.filter(
+                         m => m && m.currentHp > 0
+                     );
+                 }
+             }
+        } else {
+             if (amount > 0 && !suppressBlockText) ParticleSys.createFloatingText(this.x, this.y - 60, "BLOCKED", COLORS.SHIELD);
+             AudioMgr.playSound('defend');
+        }
+
+        if(this instanceof Player && actualDmg > 0) {
+            // Notify class abilities that the player just lost HP — Bloodstalker
+            // uses this to fill the Blood Pool.
+            ClassAbility.onEvent('damage_taken', { amount: actualDmg, source });
+            // v1.9.36 — heavy hits (≥25 dmg) swap the default shake anim
+            // for the more dramatic crush+sway 'flinch' so the player
+            // sprite reads as physically struck. Chip damage keeps the
+            // flat shake to avoid melodrama on every burn tick.
+            if (actualDmg >= 25 && typeof this.playAnim === 'function') {
+                this.playAnim('flinch');
+            }
+            // Tier-aware shake (replaces flat magnitude) — scales with damage % of max HP
+            if (Game.shakeFromDamage) Game.shakeFromDamage(actualDmg);
+            else Game.shake(Math.min(22, 4 + actualDmg / 3));
+            // Player-side hit-stop — proportional to damage, capped at 90ms
+            const hsMs = Math.min(90, 30 + actualDmg * 1.6);
+            if (Game.hitStop) Game.hitStop(hsMs);
+            // Three-tier red screen flash so every hit registers, not
+            // just brutal ones. Was: only > 50% maxHp got a flash; smaller
+            // hits felt like the player was clipping a cube. Now the
+            // flash intensity scales with damage proportion.
+            if (Game.triggerScreenFlash) {
+                const ratio = actualDmg / Math.max(1, this.maxHp);
+                if (ratio > 0.5) Game.triggerScreenFlash('rgba(255, 40, 80, 0.50)', 320);    // brutal
+                else if (ratio > 0.2) Game.triggerScreenFlash('rgba(255, 50, 90, 0.30)', 220); // heavy
+                else if (ratio > 0.05) Game.triggerScreenFlash('rgba(255, 60, 100, 0.18)', 160); // chip
+                // sub-5% (DoT ticks, sector burns) stays unflashed so the
+                // screen doesn't strobe during heat-tile turns.
+            }
+            // Heavier haptic the bigger the hit — feels physical.
+            if (Game.haptic) Game.haptic(actualDmg >= 25 ? 'warn' : actualDmg >= 12 ? 'heavy' : 'hit');
+
+            // v1.9.36 — player CRITICAL HP state. When the player drops
+            // below 20% maxHp the body gets a `player-critical-hp` class
+            // that drives a pulsing red vignette via CSS, and a heartbeat
+            // sting fires once on the threshold cross. The class is
+            // cleared when HP recovers above 25% (small hysteresis so a
+            // self-heal doesn't immediately strip the warning the moment
+            // it crosses back). One-shot per fight via _criticalHpFired.
+            try {
+                const pct = this.currentHp / Math.max(1, this.maxHp);
+                if (this.currentHp > 0 && pct < 0.2 && !this._criticalHpFired) {
+                    this._criticalHpFired = true;
+                    if (typeof document !== 'undefined' && document.body) {
+                        document.body.classList.add('player-critical-hp');
+                    }
+                    if (typeof AudioMgr !== 'undefined' && AudioMgr.playSound) {
+                        AudioMgr.playSound('heartbeat');
+                    }
+                    ParticleSys.createFloatingText(this.x, this.y - 130, 'CRITICAL', '#ff3355');
+                }
+            } catch (_) {}
+            
+             // Relic: Double Edge (Reflect 30%)
+             if(this.hasRelic('spike_armor')) {
+                const stacks = Game.stackCount('spike_armor');
+                const reflectPct = 0.3 * stacks; // 30% per stack
+                const reflectDmg = Math.max(1, Math.floor(actualDmg * reflectPct));
+
+                const target = source || Game.enemy;
+
+                if (target && target.currentHp > 0) {
+                    ParticleSys.createFloatingText(this.x, this.y - 120, `REFLECT ${reflectDmg}`, COLORS.GOLD);
+
+                    if(target.takeDamage(reflectDmg)) {
+                        if (target === Game.enemy) {
+                            Game.winCombat();
+                        } else {
+                            Game.enemy.minions = Game.enemy.minions.filter(m => m !== target);
+                            if(Game.player.hasRelic('brutalize') && !target.isPlayerSide) {
+                                Game.triggerBrutalize(target);
+                            }
+                        }
+                    }
+                }
+            }
+            // FUSION: REFLECTIVE PLATING (shield_gen × spike_armor) — same
+            // reflect-on-hit behaviour at 30% but ALSO splashes 30% of
+            // the reflected damage to a random secondary enemy. Source
+            // spike_armor is spliced out at fusion pickup so this is
+            // the only reflect path for fused players.
+            if (this.hasRelic('fusion_reflective_plating')) {
+                const reflectDmg = Math.max(1, Math.floor(actualDmg * 0.3));
+                const target = source || Game.enemy;
+                if (target && target.currentHp > 0) {
+                    ParticleSys.createFloatingText(this.x, this.y - 120, `REFLECT ${reflectDmg}`, COLORS.GOLD);
+                    target.takeDamage(reflectDmg);
+                    if (target === Game.enemy && Game.enemy && Game.enemy.currentHp <= 0) {
+                        Game.winCombat();
+                    }
+                    // Splash — pick another enemy and chip them too.
+                    if (Game.enemy && Game._enemyMinions) {
+                        const pool = [Game.enemy, ...Game._enemyMinions()].filter(e => e && e !== target && e.currentHp > 0);
+                        if (pool.length > 0) {
+                            const splashTarget = pool[Math.floor(Math.random() * pool.length)];
+                            const splashDmg = Math.max(1, Math.floor(reflectDmg * 0.3));
+                            ParticleSys.createFloatingText(splashTarget.x, splashTarget.y - 90, `SPLASH ${splashDmg}`, '#ffd76a');
+                            splashTarget.takeDamage(splashDmg);
+                        }
+                    }
+                }
+            }
+            
+            // Relic: RETALIATOR — after taking 20+ DMG in one hit, deal 10 DMG back.
+            if (this.hasRelic('retaliator') && actualDmg >= 20) {
+                const target = source || Game.enemy;
+                if (target && target.currentHp > 0 && target !== this) {
+                    const stacks = Game.stackCount('retaliator');
+                    ParticleSys.createFloatingText(this.x, this.y - 130, `RETALIATE ${10 * stacks}`, "#ff3333");
+                    if (target.takeDamage(10 * stacks)) _resolveEnemyKill(target);
+                }
+            }
+            // FUSION: WOUNDED BEAST (last_stand × retaliator). Below 33%
+            // HP, the retaliator hit triples (10 → 30) AND the gate
+            // drops to any 10+ damage hit instead of 20+. Last-stand
+            // damage bonus still rides on _lastStandActive (set in
+            // startTurn alongside _woundedBeastActive).
+            if (this.hasRelic('fusion_wounded_beast') && this instanceof Player
+                && this._woundedBeastActive && actualDmg >= 10) {
+                const target = source || Game.enemy;
+                if (target && target.currentHp > 0 && target !== this) {
+                    ParticleSys.createFloatingText(this.x, this.y - 130, `WOUNDED 30`, '#ff0044');
+                    if (target.takeDamage(30)) _resolveEnemyKill(target);
+                }
+            }
+
+            // Corrupted: MIRROR SHARD — 50% of damage taken is also dealt to a random enemy.
+            if (this.hasRelic('c_mirror_shard') && actualDmg > 0 && Game) {
+                const pool = [Game.enemy, ...(Game._enemyMinions ? Game._enemyMinions() : [])].filter(e => e && e.currentHp > 0);
+                if (pool.length > 0) {
+                    const victim = pool[Math.floor(Math.random() * pool.length)];
+                    const mirror = Math.max(1, Math.floor(actualDmg * 0.5));
+                    ParticleSys.createFloatingText(victim.x, victim.y - 110, `MIRROR ${mirror}`, "#cc00ff");
+                    if (victim.takeDamage(mirror)) _resolveEnemyKill(victim);
+                }
+            }
+
+            // Relic: Emergency Kit (Consumable)
+            if (this.currentHp < (this.maxHp * 0.3)) {
+                const kitIndex = this.relics.findIndex(r => r.id === 'emergency_kit');
+                if (kitIndex !== -1) {
+                    const healAmt = Math.floor(this.maxHp * 0.3); // Heal 30%
+                    this.heal(healAmt);
+                    this.relics.splice(kitIndex, 1); // Consume
+                    // v1.8.4 — invalidate Game.stackCount() cache.
+                    if (Game && Game.invalidateStackCache) Game.invalidateStackCache();
+                    Game.renderRelics();
+                    ParticleSys.createFloatingText(this.x, this.y - 140, "KIT USED", COLORS.NATURE_LIGHT);
+                }
+            }
+        }
+        
+        if (this.currentHp <= 0 && this instanceof Enemy && this.glitchMod && this.glitchMod.id === 'volatile') {
+            Game.player.takeDamage(15);
+            ParticleSys.createExplosion(this.x, this.y, 50, "#ff0000");
+            ParticleSys.createFloatingText(this.x, this.y, "GLITCH EXPLOSION", "#ff00ff");
+            Game.shake(15);
+        }
+
+        // Elite affix: Reflector — 50% of damage taken is reflected back at source.
+        if (this instanceof Enemy && this.affixes && this.affixes.includes('Reflector') && actualDmg > 0 && source && source !== this) {
+            const reflect = Math.max(1, Math.floor(actualDmg * 0.5));
+            ParticleSys.createFloatingText(this.x, this.y - 120, `REFLECT ${reflect}`, "#ff88cc");
+            if (source.takeDamage(reflect)) _resolveEnemyKill(source);
+        }
+
+        // Mirror kind — passive reflect on the entity itself AND on any
+        // enemy minion whose parent is a mirror-kind enemy (so the
+        // reflection trait propagates to the squad). The reflect plate
+        // sends 40% of incoming damage back at the source. Visual cue
+        // is the constant mirror shimmer drawn around the entity in
+        // the render path so the player can read "this thing reflects"
+        // before committing the attack.
+        const _isMirrorEntity = (this instanceof Enemy && this.kind === 'mirror') ||
+            (Minion && this instanceof Minion && this.isPlayerSide === false &&
+             Game && Game.enemy && Game.enemy.kind === 'mirror');
+        if (_isMirrorEntity && actualDmg > 0 && source && source !== this && !source._mirrorReflecting) {
+            const reflect = Math.max(1, Math.floor(actualDmg * 0.4));
+            ParticleSys.createFloatingText(this.x, this.y - 130, `MIRROR ${reflect}`, "#88eaff");
+            ParticleSys.createSparks(this.x, this.y, "#88eaff", 14);
+            ParticleSys.createShockwave(this.x, this.y, "#88eaff", 22);
+            // Tag the source so the reflected damage can't bounce
+            // recursively (mirror -> source -> source's mirror -> …).
+            source._mirrorReflecting = true;
+            try { if (source.takeDamage(reflect, this)) _resolveEnemyKill(source); }
+            finally { source._mirrorReflecting = false; }
+        }
+
+        // Elite affix: Vampiric — heals for 50% of damage it deals.
+        // Retaliation may already have killed the attacker. Lifesteal is
+        // healing for a survivor, never an implicit resurrection.
+        if (source instanceof Enemy && source.currentHp > 0
+            && source.affixes && source.affixes.includes('Vampiric') && actualDmg > 0) {
+            const heal = Math.max(1, Math.floor(actualDmg * 0.5));
+            source.currentHp = Math.min(source.maxHp, source.currentHp + heal);
+            ParticleSys.createFloatingText(source.x, source.y - 120, `VAMPIRIC +${heal}`, "#ff2255");
+        }
+
+        // Elite affix: Multiplier — first hit spawns a low-HP duplicate to fight alongside.
+        if (this instanceof Enemy && this.affixes && this.affixes.includes('Multiplier') && !this.multiplierTriggered && actualDmg > 0) {
+            this.multiplierTriggered = true;
+            if (Minion && Game.enemy && Game.enemy.minions) {
+                const cloneHp = Math.max(6, Math.floor(this.maxHp * 0.35));
+                const clone = new Minion(this.x + 140, this.y + 20, Game.enemy.minions.length + 1, false, 1);
+                clone.name = 'Echo';
+                clone.maxHp = cloneHp; clone.currentHp = cloneHp;
+                clone.dmg = Math.max(2, Math.floor((this.baseDmg || 4) * 0.5));
+                Game.enemy.minions.push(clone);
+                ParticleSys.createFloatingText(this.x, this.y - 180, "MULTIPLIER", "#ff88ff");
+            }
+        }
+
+        // Elite affix: Anchor — while any Anchor enemy is alive, player minions
+        // can't die this hit (HP floors at 1).
+        if (this instanceof Minion && this.isPlayerSide && this.currentHp <= 0) {
+            const anchorAlive = Game.enemy && (
+                (Game.enemy.affixes && Game.enemy.affixes.includes('Anchor') && Game.enemy.currentHp > 0) ||
+                (Game.enemy.minions || []).some(m => m && m.affixes && m.affixes.includes('Anchor') && m.currentHp > 0)
+            );
+            if (anchorAlive) {
+                this.currentHp = 1;
+                ParticleSys.createFloatingText(this.x, this.y - 120, "ANCHORED", "#ffdd33");
+            }
+        }
+
+        // Bloodstalker — Blood Thrall siphon. Runs AFTER the Anchor clamp
+        // above so a thrall whose hit was anchored back to 1 HP only pays
+        // out the actual HP lost (which can still be the full pre-anchor
+        // pool — e.g. 8 → 1 HP losing 7 — but no longer the imaginary
+        // "killed" amount). ×2 multiplier when the thrall is level ≥ 2.
+        if (Minion && this instanceof Minion && this.isPlayerSide && Game.player
+            && Game.player.traits && Game.player.traits.minionName === 'Blood Thrall') {
+            const lost = _hpBeforeHit - this.currentHp;
+            if (lost > 0) {
+                const mult = (this.level && this.level >= 2) ? 2 : 1;
+                const healAmt = lost * mult;
+                Game.player.heal(healAmt);
+                ParticleSys.createFloatingText(Game.player.x, Game.player.y - 100, `SIPHON +${healAmt}`, '#ff5577');
+            }
+        }
+
+        // Med Dispenser: heal player when an enemy (or enemy minion) is killed by player damage.
+        const diedByPlayer = this.currentHp <= 0 && source && (source instanceof Player || (source instanceof Minion && source.isPlayerSide));
+        const killedTargetIsHostile = (this instanceof Enemy) || (this instanceof Minion && !this.isPlayerSide);
+
+        // Bloodstalker class rework: Blood Tier ramps on every kill; each tier
+        // grants +1 lifesteal via traits.bloodTierLifestealBonus (see Game.player.bloodTier reader in useDie).
+        if (diedByPlayer && killedTargetIsHostile && Game.player && Game.player.traits && Game.player.traits.bloodTierPerKill > 0) {
+            // Bloodstalker module: VERMILION HUNGER — every kill grants
+            // an extra +1 Blood Tier per stack on top of the base trait.
+            const hungerStacks = (Game.player.hasRelic && Game.player.hasRelic('vermilion_hunger') && Game.stackCount)
+                ? Game.stackCount('vermilion_hunger') : 0;
+            const tierGain = Game.player.traits.bloodTierPerKill + hungerStacks;
+            Game.player.bloodTier = (Game.player.bloodTier || 0) + tierGain;
+            ParticleSys.createFloatingText(Game.player.x, Game.player.y - 150, `BLOOD TIER ${Game.player.bloodTier}`, '#ff2244');
+        }
+        // Bloodstalker module: PREDATOR'S MARK — killing an enemy that
+        // has Bleed heals 5 HP and grants +1 reroll per stack. Read
+        // BEFORE the effects array gets cleared elsewhere; check here
+        // while the corpse still carries its status icons.
+        if (diedByPlayer && killedTargetIsHostile && Game.player && Game.player.hasRelic
+            && Game.player.hasRelic('predators_mark')
+            && this.hasEffect && this.hasEffect('bleed')) {
+            const stacks = (Game.stackCount && Game.stackCount('predators_mark')) || 1;
+            Game.player.heal(5 * stacks);
+            Game.rerolls = (Game.rerolls || 0) + stacks;
+            ParticleSys.createFloatingText(Game.player.x, Game.player.y - 130,
+                `PREDATOR +${5 * stacks} HP +${stacks} REROLL`, '#ff1a3a');
+        }
+        if (diedByPlayer && killedTargetIsHostile && Game.player && Game.player.hasRelic('med_dispenser')) {
+            const stacks = Game.stackCount('med_dispenser');
+            Game.player.heal(3 * stacks);
+            ParticleSys.createFloatingText(Game.player.x, Game.player.y - 100, "MED +" + (3 * stacks), COLORS.NATURE_LIGHT);
+        }
+        // Momentum: every player-side kill bumps combat momentum.
+        if (diedByPlayer && killedTargetIsHostile && Game._tickMomentum) {
+            try { Game._tickMomentum('kill', 1); } catch (_) {}
+        }
+        // Diag — record every player-side enemy kill (boss kills are
+        // recorded separately at the winCombat path so they don't
+        // double-count).
+        if (diedByPlayer && killedTargetIsHostile && !this.isBoss
+            && typeof window !== 'undefined' && window.__diag) {
+            try { window.__diag.event('enemy_kill', { name: this.name || '?' }); } catch (_) {}
+        }
+        // v1.9.8 hidden-lore trigger: cumulative enemy kills across
+        // all runs unlocks entry 40 at 1000. Boss kills count too;
+        // the call site lives outside the !this.isBoss gate above.
+        if (diedByPlayer && killedTargetIsHostile && Game && typeof Game._checkHiddenLoreTriggers === 'function') {
+            try { Game._checkHiddenLoreTriggers('enemy_kill'); } catch (_) {}
+        }
+        // v1.9.8 hidden-lore trigger 37: track player-minion losses
+        // during boss fights. When ANY player-side minion drops in a
+        // boss fight, increment a runStats counter. The end-of-run
+        // check at run_win reads zero to award the entry.
+        if (Minion && this instanceof Minion && this.isPlayerSide
+            && this.currentHp <= 0
+            && Game && Game.enemy && Game.enemy.isBoss
+            && Game.runStats) {
+            Game.runStats.bossFightMinionLosses = (Game.runStats.bossFightMinionLosses || 0) + 1;
+        }
+        // Death-burst VFX — fire once per non-boss kill. Boss deaths run
+        // their dedicated `_runBossDeathDissolve` cinematic separately so
+        // we skip them here to avoid double-blast. Skipped on tutorial
+        // dummy and non-hostile target sides.
+        if (this.currentHp <= 0 && killedTargetIsHostile && !this.isBoss && !this.isTutorialDummy && Game.deathBurst) {
+            try { Game.deathBurst(this, { hostile: true }); } catch (_) {}
+        }
+        // v1.9.0 — fire _resolveEnemyKill on the LETHAL HIT so a dead
+        // enemy minion is removed from `enemy.minions` immediately,
+        // not at the start of the next enemy-minion turn loop. Two
+        // playtest reports (Void Spawn at 0 HP attacking, Hive
+        // Drones rendering at "0" before the start-of-turn filter
+        // ran) traced back to the same gap: the filter ran later
+        // than the minion's last queued intent and last render
+        // pass. By calling the resolver here we close that gap for
+        // every enemy minion, including any new ones added later.
+        if (Minion && this instanceof Minion && !this.isPlayerSide
+            && this.currentHp <= 0 && Game && Game.enemy && Game.enemy.minions
+            && Game.enemy.minions.includes(this)) {
+            _resolveEnemyKill(this);
+        }
+        // Module: SIPHON BLADE — kills heal +4 HP and refund 1 Mana. Stacks
+        // multiply the heal but the mana refund stays at 1 (otherwise
+        // stacking trivialises the mana economy).
+        if (diedByPlayer && killedTargetIsHostile && Game.player && Game.player.hasRelic('siphon_blade')) {
+            const stacks = Game.stackCount('siphon_blade');
+            Game.player.heal(4 * stacks);
+            if (Game.gainMana) Game.gainMana(1, { silent: true });
+            ParticleSys.createFloatingText(Game.player.x, Game.player.y - 130, `SIPHON +${4*stacks}/+1M`, '#ff5577');
+        }
+
+        // Run stats tracking — damage taken (player side) for the victory
+        // breakdown. Counts only actual HP hits, not blocked damage.
+        if (Game.runStats && this instanceof Player && actualDmg > 0) {
+            Game.runStats.damageTaken = (Game.runStats.damageTaken || 0) + actualDmg;
+        }
+
+        // Day 4 — combat-scoped stats for the per-turn digest + per-combat
+        // recap. Source/target kind is derived from instance type so the
+        // tracker doesn't need attribution beyond what takeDamage already
+        // has access to. Run-stats above keep their own scope.
+        if (actualDmg > 0) {
+            let _srcKind = null;
+            if (source instanceof Player) _srcKind = 'player';
+            else if (Minion && source instanceof Minion) _srcKind = source.isPlayerSide ? 'minion' : 'enemyMinion';
+            else if (Enemy && source instanceof Enemy) _srcKind = 'enemy';
+            else if (source == null) _srcKind = 'env';
+            let _tgtKind = null;
+            if (this instanceof Player) _tgtKind = 'player';
+            else if (Minion && this instanceof Minion) _tgtKind = this.isPlayerSide ? 'minion' : 'enemyMinion';
+            else if (Enemy && this instanceof Enemy) _tgtKind = 'enemy';
+            if (_srcKind && _tgtKind) {
+                CombatStats.recordDamage(actualDmg, _srcKind, _tgtKind);
+            }
+        }
+
+        // Direct-hit damage statistics retain their player-action scope.
+        if (Game.runStats && source instanceof Player && killedTargetIsHostile) {
+            Game.runStats.totalDamage = (Game.runStats.totalDamage || 0) + actualDmg;
+            if (actualDmg > (Game.runStats.highestHit || 0)) {
+                Game.runStats.highestHit = actualDmg;
+            }
+            // Damage-tier achievements
+            if (typeof window !== 'undefined' && window.Achievements) {
+                if (actualDmg >= 50)  window.Achievements.unlock('BIG_HIT_50');
+                if (actualDmg >= 100) window.Achievements.unlock('BIG_HIT_100');
+                if (actualDmg >= 250) window.Achievements.unlock('BIG_HIT_250');
+            }
+        }
+
+        // Player-owned summons defeat enemies on the player's behalf too.
+        if (Game.runStats && diedByPlayer && killedTargetIsHostile) {
+            Game.runStats.kills = (Game.runStats.kills || 0) + 1;
+            if (typeof window !== 'undefined' && window.Achievements) {
+                window.Achievements.unlock('FIRST_KILL');
+            }
+        }
+        // Per-turn stats for end-of-turn summary. Old gate
+        // (`source instanceof Player && killedTargetIsHostile`) only
+        // counted damage on the killing blow — every non-fatal hit was
+        // unrecorded, so the summary read +0 DMG on turns the player
+        // poured 60+ damage into a boss without finishing it. Now
+        // counts ALL player-side outgoing damage (player + player-side
+        // minions) against ALL hostile targets (Enemy + enemy-side
+        // minions), regardless of whether the hit killed.
+        if (Game.turnStats) {
+            if (this instanceof Player && actualDmg > 0) Game.turnStats.dmgTaken += actualDmg;
+            const sourceIsPlayerSide = (source instanceof Player) ||
+                (source instanceof Minion && source.isPlayerSide === true);
+            const targetIsHostile = (this instanceof Enemy) ||
+                (this instanceof Minion && this.isPlayerSide === false);
+            if (sourceIsPlayerSide && targetIsHostile && actualDmg > 0) {
+                Game.turnStats.dmgDealt += actualDmg;
+            }
+        }
+
+        return this.currentHp <= 0;
+    }
+
+    // Apply outgoing-damage debuffs (Constrict/Digital Rot, Weak) to a base
+    // attack value. Shared between enemy-side minions (direct attacks),
+    // player-side minions (dart VFX resolves their hits), and the hover
+    // tooltip so the displayed Atk always matches what the minion will
+    // actually deal. Overridden on Enemy to stack the Brittle affix.
+    getEffectiveDamage(baseVal) {
+        let dmg = (baseVal !== undefined) ? baseVal : (this.dmg || 0);
+        const constrict = this.hasEffect('constrict');
+        if (constrict) dmg = Math.floor(dmg * (constrict.val ?? 1));
+        const weak = this.hasEffect('weak');
+        if (weak) dmg = Math.floor(dmg * 0.5);
+        return Math.max(0, dmg);
+    }
+
+    heal(amount) {
+        // --- REALITY SHIFT — incoming heal redirect ---
+        // v1.9.0. When the player carries `reality_shift`, every heal
+        // they would receive becomes self-damage AND splashes onto
+        // their living minions. Deduct HP directly so the inverted heal
+        // cannot be shielded or recursively trigger Blood Thrall siphons.
+        // Effect wears off at end of player turn.
+        if (Player && this instanceof Player
+            && this.hasEffect && this.hasEffect('reality_shift')
+            && amount > 0) {
+            const dmg = Math.max(1, Math.floor(amount));
+            this.currentHp = Math.max(0, this.currentHp - dmg);
+            let minionLosses = 0;
+            (this.minions || []).forEach(m => {
+                if (m && m.currentHp > 0) {
+                    m.currentHp = Math.max(0, m.currentHp - dmg);
+                    if (m.currentHp <= 0) minionLosses++;
+                }
+            });
+            if (Game && Game.player === this) {
+                if (minionLosses > 0 && Game.enemy?.isBoss && Game.runStats) {
+                    Game.runStats.bossFightMinionLosses = (Game.runStats.bossFightMinionLosses || 0) + minionLosses;
+                }
+                Game._cullPlayerMinions?.();
+            }
+            ParticleSys.createFloatingText(this.x, this.y - 100, `INVERTED -${dmg}`, '#bc13fe');
+            ParticleSys.createSparks(this.x, this.y, '#bc13fe', 12);
+            if (Game && Game.shake) Game.shake(6);
+            return;
+        }
+
+        let actualHeal = amount;
+
+        const constrict = this.hasEffect('constrict');
+        if (constrict) {
+            actualHeal = Math.floor(actualHeal * constrict.val);
+            ParticleSys.createFloatingText(this.x, this.y - 100, "HEAL REDUCED", "#ff0000");
+        }
+
+        actualHeal = Math.max(0, actualHeal);
+
+        // Ascension 14 (Conservation Law) — overheal becomes a bleed DoT on
+        // the player. Computed BEFORE the cap so we know how much heal the
+        // player actually consumed vs threw away. Applied after the cap so
+        // the heal numbers + flash still read normally first.
+        let overheal = 0;
+        if (Player && this instanceof Player && actualHeal > 0
+            && Game && Game._ascEffects && Game._ascEffects.overhealBecomesDot) {
+            overheal = Math.max(0, (this.currentHp + actualHeal) - this.maxHp);
+        }
+
+        this.currentHp = Math.min(this.maxHp, this.currentHp + actualHeal);
+
+        ParticleSys.createFloatingText(this.x, this.y - 80, "+" + actualHeal, '#0f0');
+        // Heal-moment impact — the bare floater + 'mana' sting was easy
+        // to miss in the middle of combat noise, so even a 30-HP relief
+        // from a Nano-Repair landed as nearly silent. Now spawns a
+        // green shockwave + sparks burst scaled to the heal magnitude
+        // (bigger heal = louder visual). Skipped on zero-effective heal
+        // so a constrict-blocked attempt doesn't fake a celebration.
+        if (actualHeal > 0) {
+            const healSize = Math.min(38, 14 + Math.floor(actualHeal / 2));
+            const sparkCount = Math.min(18, 6 + Math.floor(actualHeal / 4));
+            ParticleSys.createShockwave(this.x, this.y, '#00ff66', healSize);
+            ParticleSys.createSparks(this.x, this.y, '#00ff66', sparkCount);
+            // Tier audio — small heals keep the soft mana ping; bigger
+            // recoveries get an extra upgrade-style sting layered on top.
+            if (actualHeal >= 10) AudioMgr.playSound('upgrade');
+        }
+        AudioMgr.playSound('mana');
+        if (Player && this instanceof Player && actualHeal > 0) {
+            Hints.trigger('first_heal');
+            // Per-turn heal accumulator for the end-of-turn summary so
+            // healing-build runs see their recovery beat called out
+            // alongside damage. Was tracked-but-never-written — dead
+            // field on turnStats until now.
+            if (Game.turnStats) Game.turnStats.healed += actualHeal;
+            // v1.9.36 — clear the CRITICAL HP state once HP recovers
+            // above 25% (small hysteresis above the 20% trigger so a
+            // single tick on/off doesn't strobe the vignette). Re-arms
+            // _criticalHpFired so the next dip below 20% fires the
+            // sting again.
+            const pct = this.currentHp / Math.max(1, this.maxHp);
+            if (pct >= 0.25 && this._criticalHpFired) {
+                this._criticalHpFired = false;
+                if (typeof document !== 'undefined' && document.body) {
+                    document.body.classList.remove('player-critical-hp');
+                }
+            }
+        }
+
+        if (overheal > 0) {
+            // Cap the per-heal bleed so a chain of small overheals still
+            // matters but a single huge overheal doesn't one-shot the player.
+            const tick = Math.max(1, Math.min(8, Math.ceil(overheal / 4)));
+            this.addEffect('bleed', 3, tick, '🩸',
+                `Overheal sickness. ${tick} DMG at end of turn.`, 'OVERHEAL ROT');
+            ParticleSys.createFloatingText(this.x, this.y - 120, `OVERHEAL → ROT ${tick}`, '#ff3333');
+        }
+    }
+
+    addShield(amount, { force = false, silent = false } = {}) {
+        // Void Shell: once the startup 30 shield is granted (with force=true),
+        // the player cannot gain further shield from cards/relics during the run.
+        if (!force && this instanceof Player && this.hasRelic('c_void_shell')) {
+            ParticleSys.createFloatingText(this.x, this.y - 80, "SHIELD BLOCKED", "#555");
+            return;
+        }
+        // Bloodstalker thralls don't wear armour — the class fantasy is flesh
+        // paying the cost, not metal. Any would-be shield (Bulwark augments,
+        // Sentinel shield-on-defend bonuses, relic payouts, forced startup
+        // shields, etc.) feeds the minion's HP pool instead so the thrall
+        // ends up larger rather than over-shielded.
+        if (amount > 0 && Minion && this instanceof Minion && this.isPlayerSide
+            && Game && Game.player && Game.player.classId === 'bloodstalker') {
+            this.maxHp += amount;
+            this.currentHp += amount;
+            this.playAnim('pulse');
+            ParticleSys.createFloatingText(this.x, this.y - 60, `+${amount} HP`, '#ff2244');
+            return;
+        }
+        this.shield += amount;
+        this.playAnim('pulse');
+        // Shield-gain chime — a pitched "click" reads as the metallic plate
+        // clicking into place. Silent flag suppresses it for inherent combat-
+        // start shields so we don't double-cue with the combat boot sound.
+        if (!silent && amount > 0) {
+            AudioMgr.playSound('click', { playbackRate: 0.7, volume: 0.8 });
+        }
+        // Class-ability: broadcast to Sentinel SHIELD WALL when the player gains shield.
+        // `silent` suppresses the broadcast so inherent class-start shield (Sentinel's
+        // startShield trait) doesn't pre-charge the glyph widget on combat open.
+        if (!silent && this instanceof Player && amount > 0) {
+            ClassAbility.onEvent('shield_gained', { amount });
+            // Per-turn shield accumulator for the end-of-turn summary so
+            // shield-build runs see their plate stack called out
+            // alongside damage / heal. `silent` writes are skipped
+            // because they're combat-start setup, not a turn beat.
+            if (Game && Game.turnStats) {
+                Game.turnStats.shieldGained = (Game.turnStats.shieldGained || 0) + amount;
+            }
+        }
+        // Module: KINETIC BATTERY — every 5 shields gained crosses a
+        // threshold; each cross hands the player +1 reroll PER stack.
+        // Stacking now scales the REWARD (not the threshold), so 2x
+        // reads as "every 5 shields → +2 rerolls" instead of the old
+        // "every 6 shields → +2 rerolls" (same ratio = no benefit).
+        if (!silent && this instanceof Player && amount > 0 && this.hasRelic('kinetic_battery') && Game) {
+            this._kineticCounter = (this._kineticCounter || 0) + amount;
+            const triggers = Math.floor(this._kineticCounter / 5);
+            if (triggers > 0) {
+                this._kineticCounter -= triggers * 5;
+                const stacks = (Game.stackCount && Game.stackCount('kinetic_battery')) || 1;
+                const rolls = triggers * stacks;
+                Game.rerolls = (Game.rerolls || 0) + rolls;
+                ParticleSys.createFloatingText(this.x, this.y - 140, `KINETIC +${rolls} REROLL`, '#00f3ff');
+            }
+        }
+    }
+
+    addEffect(id, duration, val, icon, desc, displayName = null) {
+        // Status-immune entities (currently THE ARCHIVIST — Sector X) reject
+        // every debuff outright. addEffect is only used for negative
+        // statuses (bleed, poison, weak, frail, voodoo, overcharge,
+        // constrict, stun) — buffs go through dedicated paths
+        // (lifesteal_buff, addRelic, etc.), so a blanket bail here is
+        // safe. Floats a quick "IMMUNE" tag so the player sees their
+        // debuff was rejected rather than silently dropped.
+        if (this.isImmuneToStatuses) {
+            const tagName = displayName || id.toUpperCase();
+            if (typeof ParticleSys !== 'undefined' && ParticleSys.createFloatingText) {
+                ParticleSys.createFloatingText(this.x, this.y - 100,
+                    `IMMUNE · ${tagName}`, '#ffd76a');
+            }
+            return;
+        }
+        const existing = this.effects.find(e => e.id === id);
+        const name = displayName || id.toUpperCase();
+
+        // Per-effect signature colour. Mirrors the aura ring palette in
+        // game.js so the burst at application matches the persistent
+        // ring drawn around the entity afterwards.
+        const FX_COLOR = {
+            bleed:      '#ff3344',
+            poison:     '#6aff6a',
+            constrict:  '#bc13fe',
+            frail:      '#ff9cf2',
+            overcharge: '#ffaa22',
+            voodoo:     '#ff00aa',
+            weak:       '#6fe8ff'
+        };
+        const fxColor = FX_COLOR[id] || '#ff00ff';
+
+        if (existing) {
+            // ── Duration now stacks CUMULATIVELY across every effect type
+            // (bleed, poison, constrict / digital rot, weak, frail,
+            // overcharge, voodoo, etc.). Re-applying the same status
+            // adds its turns on top of the remaining ones instead of
+            // taking the max. Effect STRENGTH never stacks — `val`
+            // takes the maximum so a stronger source still raises the
+            // floor, but a weaker re-apply doesn't drop the bar.
+            existing.duration = (existing.duration || 0) + (duration || 0);
+            if (displayName) existing.name = displayName;
+            // weak's val is "incoming-damage multiplier" (lower = harsher),
+            // so the inverse rule applies — keep the SMALLER value.
+            if (id === 'weak') {
+                if (val < existing.val) existing.val = val;
+            } else {
+                if (val > existing.val) existing.val = val;
+            }
+            // DoTs no longer multi-stack — tick damage is plain `val`.
+            // Force stacks to 1 so legacy saves with stacks > 1 don't
+            // keep multiplying ticks indefinitely after this rewrite.
+            if (id === 'bleed' || id === 'poison') existing.stacks = 1;
+            ParticleSys.createFloatingText(this.x, this.y - 120, `${name} +${duration}T`, fxColor);
+            ParticleSys.createShockwave(this.x, this.y, fxColor, 22);
+            ParticleSys.createSparks(this.x, this.y, fxColor, 10);
+        } else {
+            const eff = { id, duration, val, icon, desc, name: name };
+            if (id === 'bleed' || id === 'poison') eff.stacks = 1;
+            // v1.9.38 — fresh-apply pulse stamp. The effect-strip
+            // renderer reads this and scales + brightens the icon
+            // for ~320ms after application so the new status is
+            // perceived as "just landed" rather than appearing
+            // statically alongside existing pips.
+            eff._pulseUntil = ((typeof performance !== 'undefined') ? performance.now() : Date.now()) + 320;
+            this.effects.push(eff);
+            // Fresh application — louder than a refresh. Shockwave +
+            // sparks + floater all in the effect's signature colour so
+            // every debuff landing reads as a deliberate moment, not a
+            // silent state change. Applies on player AND enemy targets.
+            ParticleSys.createShockwave(this.x, this.y, fxColor, 26);
+            ParticleSys.createSparks(this.x, this.y, fxColor, 12);
+            ParticleSys.createFloatingText(this.x, this.y - 100, name, fxColor);
+            try { AudioMgr.playSound(id === 'bleed' || id === 'poison' ? 'click' : 'hex_barrier'); } catch (_) {}
+        }
+
+        // Reality Shift: when the debuff lands on the player, add a
+        // body-level class that drives the full-viewport magenta
+        // overlay + banner so the inversion state can never be
+        // missed. The class is removed in updateEffects when the
+        // effect's duration ticks to 0 (filtered out).
+        if (Player && this instanceof Player && id === 'reality_shift'
+            && typeof document !== 'undefined' && document.body) {
+            document.body.classList.add('reality-shift-active');
+        }
+
+        // If this debuff changes outgoing damage (weak) or healing (constrict)
+        // and it landed on the active enemy, re-bake nextIntents so the
+        // already-queued attack reflects the reduced value in the UI AND when
+        // the attack resolves. Without this, `effectiveVal` was computed
+        // before the debuff landed and the enemy hits at full strength.
+        if (Enemy && this instanceof Enemy && typeof this.updateIntentValues === 'function') {
+            if (id === 'stun') {
+                // A stun must replace the action already previewed this turn.
+                // Its duration is consumed when that enemy phase is skipped.
+                if (!this._armedDetonate) {
+                    this.nextIntents = [{ type: 'stunned', val: 0, target: null }];
+                    this.updateIntentValues();
+                }
+            }
+            if (id === 'weak' || id === 'constrict' || id === 'frail') {
+                this.updateIntentValues();
+            }
+        }
+    }
+
+    updateEffects() {
+        const pendingActions = [];
+        for (let i = this.effects.length - 1; i >= 0; i--) {
+            const e = this.effects[i];
+            // These statuses belong to completed action phases. Expiring at
+            // turn entry would remove a one-turn effect before it can act.
+            if (!(Enemy && this instanceof Enemy && e.id === 'stun')
+                && !(Player && this instanceof Player && e.id === 'reality_shift')) e.duration--;
+
+            // Damage-over-time ticks. DoTs no longer multi-stack — tick
+            // damage is plain `val`. Re-applying bleed/poison extends
+            // duration instead of multiplying tick magnitude. Kindling
+            // still adds its flat per-stack bonus on top.
+            if ((e.id === 'bleed' || e.id === 'poison') && this.currentHp > 0 && e.val > 0) {
+                let tickDmg = e.val;
+                // Module: KINDLING — DoT ticks gain +1 damage per stack of
+                // Kindling the player owns. Stacks the relic by relic count
+                // rather than DoT count, so two Kindlings = +2 per tick on
+                // every active bleed/poison.
+                if (Game && Game.player && Game.player.hasRelic && Game.player.hasRelic('kindling')) {
+                    const kStacks = (Game.stackCount && Game.stackCount('kindling')) || 1;
+                    tickDmg += kStacks;
+                }
+                const color = e.id === 'poison' ? '#88ff00' : '#ff3333';
+                ParticleSys.createFloatingText(this.x, this.y - 80, `${e.id === 'poison' ? 'POISON' : 'BLEED'} ${tickDmg}`, color);
+                const isDead = this.takeDamage(tickDmg, null, true);
+                if (isDead) {
+                    if (this === Game.enemy) Game.winCombat();
+                    else if (Game.enemy && Game.enemy.minions && Game.enemy.minions.includes(this)) {
+                        Game.enemy.minions = Game.enemy.minions.filter(m => m !== this);
+                    } else if (Game.player && Game.player.minions && Game.player.minions.includes(this)) {
+                        Game.player.minions = Game.player.minions.filter(m => m !== this);
+                    }
+                }
+            }
+
+            if (e.id === 'voodoo' && e.duration <= 0) {
+                // Commit the curse now. Presentation cannot apply damage to
+                // this entity after the player has left the encounter.
+                pendingActions.push(Game._runCombatAction(() => {
+                    let dmg = e.val;
+                    if (dmg === 0) { 
+                        // FIX: Updated Base to 150
+                        let base = 150; 
+                        // Logic: 50% chance for 500 (Critical Curse)
+                        if (Math.random() < 0.5) {
+                            base = 500;
+                            ParticleSys.createFloatingText(this.x, this.y - 50, "VOID CRUSH!", "#f00");
+                        }
+                        dmg = Game.calculateCardDamage(base);
+                    }
+                    
+                    const isDead = this.takeDamage(dmg);
+                    ParticleSys.createFloatingText(this.x, this.y, "CURSE TRIGGERED!", "#f00");
+
+                    if (isDead) {
+                        if (Game.enemy && Game.enemy.minions.includes(this)) {
+                            Game.enemy.minions = Game.enemy.minions.filter(m => m !== this);
+                        } 
+                        else if (Game.player && Game.player.minions.includes(this)) {
+                            Game.player.minions = Game.player.minions.filter(m => m !== this);
+                        }
+                    }
+                }, async current => {
+                    if (!current()) return;
+                    Game.triggerVFX('voodoo_hit', null, this);
+                    await Game.sleep(300 * (Game.combatPaceMult || 1));
+                }).catch(error => Game._recoverFromCombatError('voodoo', error, false)));
+            }
+        }
+        this.effects = this.effects.filter(e => e.duration > 0);
+        // Reality Shift visual: when the player no longer carries
+        // the reality_shift effect (just expired in the filter
+        // above, or never had it), strip the body class so the
+        // full-viewport magenta overlay clears. Only acts on the
+        // Player so an enemy effect doesn't toggle the class.
+        if (Player && this instanceof Player
+            && typeof document !== 'undefined' && document.body) {
+            const stillActive = this.effects.some(e => e.id === 'reality_shift');
+            if (!stillActive) {
+                document.body.classList.remove('reality-shift-active');
+            }
+        }
+        if (pendingActions.length) return Promise.all(pendingActions);
+    }
+
+    hasEffect(id) {
+        return this.effects.find(e => e.id === id);
+    }
+
+    playAnim(type) {
+        // Per-type duration so lunges feel weightier than shakes.
+        const durations = { lunge: 22, shake: 12, pulse: 18, windup: 15 };
+        const t = durations[type] ?? 15;
+        this.anim.type = type;
+        this.anim.timer = t;
+        this.anim.maxTimer = t;
+    }
+}
+
+export { Entity };

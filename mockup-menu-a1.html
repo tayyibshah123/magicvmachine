@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Menu A1 — Drop Bay</title>
+<link rel="stylesheet" href="src/styles/tokens.css">
+<style>
+/* ─────────────────────────────────────────────────────────────
+   MENU MOCKUP A1 — DROP BAY
+   Vertical, portrait-centric. The class portrait is the anchor.
+   ─────────────────────────────────────────────────────────── */
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; min-height: 100vh; min-height: 100dvh;
+  background: #060912; color: rgba(255,255,255,0.92);
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Ambient backdrop — radial wash + mesh grid drift */
+.bg {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 20%, rgba(74,216,255,0.10) 0%, transparent 55%),
+    radial-gradient(ellipse at 50% 90%, rgba(255,93,122,0.08) 0%, transparent 60%),
+    #060912;
+}
+.bg-grid {
+  position: absolute; inset: 0; opacity: 0.18;
+  background-image:
+    linear-gradient(rgba(74,216,255,0.20) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(74,216,255,0.20) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(to top, transparent 0%, black 30%, black 80%, transparent 100%);
+  animation: grid-drift 22s linear infinite;
+}
+@keyframes grid-drift { from { background-position: 0 0; } to { background-position: 32px 32px; } }
+
+/* Layout shell */
+.shell {
+  position: relative; z-index: 1;
+  min-height: 100vh; min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: max(8px, env(safe-area-inset-top)) 14px max(8px, env(safe-area-inset-bottom));
+  gap: 10px;
+}
+
+/* ─── HEADER ─────────────────────────────────── */
+.hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
+}
+.hdr-left, .hdr-right { display: flex; align-items: center; gap: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: 9999px;
+  font-family: 'Audiowide', monospace; font-size: 0.62rem;
+  letter-spacing: 0.16em; text-transform: uppercase; line-height: 1;
+}
+.chip-cy { background: rgba(74,216,255,0.06); border: 1px solid rgba(74,216,255,0.45); color: #4ad8ff; }
+.chip-go { background: rgba(255,215,106,0.06); border: 1px solid rgba(255,215,106,0.45); color: #ffd76a; }
+.chip-rd { background: rgba(255,93,122,0.08); border: 1px solid rgba(255,93,122,0.45); color: #ff5d7a; }
+.gear {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.66);
+}
+
+/* ─── HERO ───────────────────────────────────── */
+.hero {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+.wordmark {
+  font-family: 'Saira', 'Orbitron', sans-serif;
+  font-weight: 900; font-style: italic;
+  font-size: clamp(1.5rem, 6.5vw, 2.4rem);
+  letter-spacing: 0.01em;
+  text-shadow: 0 0 18px rgba(74,216,255,0.35), 0 0 36px rgba(74,216,255,0.15);
+}
+.wordmark .v { color: #ff5d7a; margin: 0 0.18em; text-shadow: 0 0 14px rgba(255,93,122,0.55); }
+
+/* Portrait — hexagonal frame with sweeping radar arc + sigil */
+.portrait {
+  position: relative;
+  width: min(60vw, 240px); aspect-ratio: 1;
+  margin: 4px 0 6px;
+}
+.portrait .hex {
+  position: absolute; inset: 0;
+  background: linear-gradient(160deg, #0a0f1c 0%, #181f36 100%);
+  clip-path: polygon(50% 0%, 95% 25%, 95% 75%, 50% 100%, 5% 75%, 5% 25%);
+}
+.portrait .hex-edge {
+  position: absolute; inset: 0;
+  background: linear-gradient(160deg, rgba(74,216,255,0.65), rgba(255,93,122,0.45));
+  clip-path: polygon(50% 0%, 95% 25%, 95% 75%, 50% 100%, 5% 75%, 5% 25%, 50% 0%, 50% 4%, 8% 27%, 8% 73%, 50% 96%, 92% 73%, 92% 27%, 50% 4%);
+  filter: drop-shadow(0 0 8px rgba(74,216,255,0.45));
+}
+/* Radar sweep — rotating cone */
+.portrait .radar {
+  position: absolute; inset: 8%; border-radius: 50%;
+  background: conic-gradient(from 0deg,
+    rgba(74,216,255,0) 0deg,
+    rgba(74,216,255,0.18) 30deg,
+    rgba(74,216,255,0) 90deg,
+    rgba(74,216,255,0) 360deg);
+  animation: radar 4s linear infinite;
+  mix-blend-mode: screen;
+}
+@keyframes radar { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.portrait .ring {
+  position: absolute; inset: 14%; border-radius: 50%;
+  border: 1px dashed rgba(74,216,255,0.30);
+}
+/* Class sigil (placeholder shape — represents the rotating class entity) */
+.portrait .sigil {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font-family: 'Audiowide', monospace; color: #4ad8ff;
+  font-size: 1rem; letter-spacing: 0.4em;
+  text-shadow: 0 0 12px rgba(74,216,255,0.6);
+  animation: pulse 3.4s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 0.85; transform: scale(1); } 50% { opacity: 1; transform: scale(1.04); } }
+/* Class name + signature die under portrait */
+.id-block { text-align: center; margin-top: -2px; }
+.id-class {
+  font-family: 'Saira', sans-serif; font-weight: 800; font-style: italic;
+  font-size: 1.1rem; letter-spacing: 0.04em; color: #fff;
+}
+.id-sig {
+  font-family: 'Audiowide', monospace; font-size: 0.62rem;
+  letter-spacing: 0.16em; color: rgba(255,255,255,0.55);
+  text-transform: uppercase; margin-top: 2px;
+}
+
+/* Ops readout strip */
+.ops {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px; margin-top: 4px;
+  font-family: 'Audiowide', monospace; text-transform: uppercase;
+}
+.ops-cell {
+  padding: 6px 8px; border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+  border-left: 2px solid rgba(74,216,255,0.6);
+  text-align: left;
+}
+.ops-cell .lbl { font-size: 0.58rem; letter-spacing: 0.18em; color: rgba(255,255,255,0.45); }
+.ops-cell .val { font-size: 0.95rem; letter-spacing: 0.04em; color: #fff; margin-top: 1px; }
+.ops-cell.warn { border-left-color: rgba(255,93,122,0.7); }
+.ops-cell.gold { border-left-color: rgba(255,215,106,0.7); }
+
+/* ─── DEPLOY console ─────────────────────────── */
+.console { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+
+.deploy {
+  position: relative;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 14px 18px;
+  background: linear-gradient(180deg, rgba(74,216,255,0.18), rgba(74,216,255,0.05));
+  border: 1px solid rgba(74,216,255,0.65);
+  border-radius: 12px;
+  color: #fff; cursor: pointer;
+  box-shadow: 0 0 24px rgba(74,216,255,0.25), inset 0 1px 0 rgba(255,255,255,0.10);
+  overflow: hidden;
+}
+.deploy::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.18) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: shimmer 3.6s ease-in-out infinite;
+}
+@keyframes shimmer { 0% { transform: translateX(-100%); } 60%, 100% { transform: translateX(100%); } }
+.deploy .eyebrow {
+  font-family: 'Audiowide', monospace; font-size: 0.62rem;
+  letter-spacing: 0.20em; color: #4ad8ff; text-transform: uppercase;
+}
+.deploy .label {
+  font-family: 'Saira', sans-serif; font-weight: 900; font-style: italic;
+  font-size: 1.6rem; letter-spacing: 0.02em;
+  text-shadow: 0 0 14px rgba(74,216,255,0.45);
+}
+.deploy .arrow {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  font-family: 'Audiowide', monospace; color: #4ad8ff; font-size: 1.4rem;
+  text-shadow: 0 0 12px rgba(74,216,255,0.55);
+}
+
+/* Inline RESUME bar */
+.resume {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 8px 12px;
+  background: rgba(255,215,106,0.04);
+  border: 1px solid rgba(255,215,106,0.35);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.resume .left { display: flex; flex-direction: column; gap: 1px; }
+.resume .ey { font-family: 'Audiowide', monospace; font-size: 0.58rem; letter-spacing: 0.18em; color: #ffd76a; text-transform: uppercase; }
+.resume .meta { font-family: 'Saira', sans-serif; font-weight: 700; font-size: 0.95rem; letter-spacing: 0.02em; color: #fff; }
+.resume .right { font-family: 'Audiowide', monospace; color: #ffd76a; font-size: 0.95rem; }
+
+/* ─── INSTRUMENT CLUSTER (bottom angled tabs) ── */
+.cluster {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 6px; padding-top: 6px;
+}
+.tab {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; padding: 10px 4px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 8px;
+  color: rgba(255,255,255,0.86);
+  text-align: center;
+  cursor: pointer;
+  /* angled top edge */
+  clip-path: polygon(8% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 12%);
+}
+.tab::before {
+  content: ''; position: absolute; left: 0; top: 0; height: 3px; width: 100%;
+  background: linear-gradient(90deg, transparent, currentColor, transparent);
+  opacity: 0.6;
+}
+.tab .icon { font-size: 1rem; line-height: 1; opacity: 0.9; }
+.tab .ey { font-family: 'Audiowide', monospace; font-size: 0.5rem; letter-spacing: 0.18em; opacity: 0.55; text-transform: uppercase; }
+.tab .ttl { font-family: 'Saira', sans-serif; font-weight: 700; font-style: italic; font-size: 0.72rem; letter-spacing: 0.04em; }
+.tab.cy { color: #4ad8ff; }
+.tab.go { color: #ffd76a; }
+.tab.gr { color: #5eead4; }
+.tab.rd { color: #ff5d7a; }
+.tab.gy { color: rgba(255,255,255,0.86); }
+
+/* footer crumb */
+.foot {
+  display: flex; justify-content: space-between; align-items: center;
+  font-family: 'Audiowide', monospace; font-size: 0.58rem;
+  color: rgba(255,255,255,0.30); letter-spacing: 0.16em; text-transform: uppercase;
+  padding-top: 4px;
+}
+.back { color: rgba(255,255,255,0.55); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="bg"><div class="bg-grid"></div></div>
+
+<div class="shell">
+
+  <!-- HEADER -->
+  <div class="hdr">
+    <div class="hdr-left">
+      <span class="chip chip-cy">OPERATOR · TAZ</span>
+      <span class="chip chip-rd">A2</span>
+    </div>
+    <div class="hdr-right">
+      <span class="chip chip-go">✦ 1240</span>
+      <span class="gear">⚙</span>
+    </div>
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="wordmark">MAGIC<span class="v">v</span>MACHINE</div>
+
+    <div class="portrait">
+      <div class="hex"></div>
+      <div class="hex-edge"></div>
+      <div class="radar"></div>
+      <div class="ring"></div>
+      <div class="sigil">◆ TAC</div>
+    </div>
+
+    <div class="id-block">
+      <div class="id-class">TACTICIAN</div>
+      <div class="id-sig">// SIG: COMMAND PIPS · TIER 2</div>
+    </div>
+
+    <div class="ops">
+      <div class="ops-cell"><div class="lbl">// LAST</div><div class="val">S3 · 47%</div></div>
+      <div class="ops-cell gold"><div class="lbl">// SPARKS</div><div class="val">1240</div></div>
+      <div class="ops-cell warn"><div class="lbl">// FILES</div><div class="val">12</div></div>
+    </div>
+
+    <!-- CONSOLE — DEPLOY + RESUME -->
+    <div class="console">
+      <div class="deploy">
+        <span class="eyebrow">// READY TO DROP</span>
+        <span class="label">INITIATE RUN</span>
+        <span class="arrow">▶</span>
+      </div>
+      <div class="resume">
+        <div class="left">
+          <span class="ey">CONTINUE</span>
+          <span class="meta">SECTOR 3 · TACTICIAN</span>
+        </div>
+        <span class="right">↻</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- INSTRUMENT CLUSTER -->
+  <div class="cluster">
+    <div class="tab go"><span class="icon">⚔</span><span class="ey">MODE</span><span class="ttl">CHALLENGE</span></div>
+    <div class="tab gr"><span class="icon">✦</span><span class="ey">HUB</span><span class="ttl">SANCTUARY</span></div>
+    <div class="tab cy"><span class="icon">▤</span><span class="ey">FILES</span><span class="ttl">INTEL</span></div>
+    <div class="tab gy"><span class="icon">⊟</span><span class="ey">SLOTS</span><span class="ttl">SAVES</span></div>
+    <div class="tab rd"><span class="icon">▶</span><span class="ey">PRACTICE</span><span class="ttl">TUTORIAL</span></div>
+  </div>
+
+  <div class="foot">
+    <a class="back" href="mockup-menu.html">← BACK TO PICKER</a>
+    <span>VARIANT A1 · DROP BAY</span>
+  </div>
+
+</div>
+
+</body>
+</html>
