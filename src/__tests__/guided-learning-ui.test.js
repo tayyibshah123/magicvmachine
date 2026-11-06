@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { Game } from '../game.js';
-import { STATE } from '../constants.js';
+import { STATE, META_UPGRADES } from '../constants.js';
 import { Breakout } from '../services/breakout.js';
 import { Onboarding } from '../services/onboarding.js';
 import { Hints } from '../services/hints.js';
@@ -9,7 +9,9 @@ import { Unlocks } from '../services/unlocks.js';
 import { CombatStats } from '../services/combat-stats.js';
 import { CombatLog } from '../services/combat-log.js';
 import { decorateClassSelection, showObjective, hideObjective, showPracticeLibrary,
-    hidePracticeLibrary, showBossRules, hideBossRules, dismissLearningOverlay } from '../ui/learning-ui.js';
+    hidePracticeLibrary, showBossRules, hideBossRules, dismissLearningOverlay,
+    decorateSanctuary, hideSanctuaryGuidance, decorateOutcome, hideOutcomeGuidance,
+    decorateReward } from '../ui/learning-ui.js';
 import { setupCombatFixture, teardownCombatFixture } from './helpers/combat-fixture.js';
 
 const markup = readFileSync('index.html', 'utf8');
@@ -28,6 +30,7 @@ beforeEach(() => {
     Game.techFragments = 123;
     Game.sparks = 42;
     delete Game._showAllLearningOperators;
+    delete Game._learningSanctuaryBrowseAll;
     delete Game._onGuidedCoreComplete;
     delete Game._onGuidedCoreProgress;
     window.Game = Game;
@@ -46,6 +49,8 @@ afterEach(() => {
     hidePracticeLibrary();
     hideBossRules();
     hideObjective();
+    hideSanctuaryGuidance();
+    hideOutcomeGuidance();
     Hints.suspend();
     Unlocks.suspendAnnouncements();
     if (Hints._visibilityHandler) document.removeEventListener('visibilitychange', Hints._visibilityHandler);
@@ -159,6 +164,134 @@ describe('guided choices and reference UI', () => {
         hidePracticeLibrary();
         expect(close).toHaveBeenCalledTimes(1);
         expect(Game._practiceSession).toBe(false);
+    });
+});
+
+describe('guided first-return choices', () => {
+    function renderSanctuary({ sparks = 8, owned = [] } = {}) {
+        Game.sparks = sparks;
+        Game.metaUpgrades = [...owned];
+        Game.metaToggledOff = new Set();
+        Game.renderMeta();
+        return document.getElementById('upgrade-list');
+    }
+
+    it('offers at most three affordable working unowned upgrades with this operator first', () => {
+        renderSanctuary({ sparks: 8, owned: ['m_life'] });
+        const section = decorateSanctuary(Game, { mode: 'guided', introductory: true, classId: 'tactician' });
+        const ids = [...section.querySelectorAll('[data-upgrade-id]')].map(card => card.dataset.upgradeId);
+        expect(ids).toEqual(['cls_tactician', 'm_shield', 'm_mana']);
+        expect(section.querySelector('[data-upgrade-id="cls_tactician"]').textContent).toContain('YOUR OPERATOR');
+        for (const id of ids) {
+            expect(META_UPGRADES.find(upgrade => upgrade.id === id).cost).toBeLessThanOrEqual(Game.sparks);
+        }
+        expect(section.textContent).not.toContain('Foresight');
+        expect(section.textContent).not.toContain('Challenge');
+    });
+
+    it('routes a suggested purchase through the real card once and preserves its normal save', () => {
+        renderSanctuary({ sparks: 8 });
+        const section = decorateSanctuary(Game, { mode: 'guided', introductory: true, classId: 'sentinel' });
+        const purchase = section.querySelector('[data-upgrade-id="cls_sentinel"]');
+        purchase.click();
+        purchase.click();
+        expect(Game.sparks).toBe(0);
+        expect(Game.metaUpgrades.filter(id => id === 'cls_sentinel')).toHaveLength(1);
+        expect(JSON.parse(localStorage.getItem('mvm_upgrades'))).toContain('cls_sentinel');
+        expect(document.querySelectorAll('#upgrade-list .upgrade-name').length).toBeGreaterThan(20);
+    });
+
+    it('keeps the full catalogue and its original owned-toggle handlers behind Browse All', () => {
+        const list = renderSanctuary({ owned: ['m_life'] });
+        const originalCards = [...list.querySelectorAll('.upgrade-card')];
+        const ownedCard = originalCards.find(card => card.querySelector('.upgrade-name')?.textContent === "Gaia's Heart");
+        const toggle = vi.spyOn(Game, 'toggleMetaUpgrade');
+        decorateSanctuary(Game, { mode: 'guided', introductory: true });
+        const browse = document.querySelector('.learning-sanctuary-browse');
+        expect(list.classList.contains('learning-sanctuary-focused')).toBe(true);
+        browse.click();
+        expect(list.classList.contains('learning-sanctuary-focused')).toBe(false);
+        expect(browse.getAttribute('aria-expanded')).toBe('true');
+        expect(originalCards.every(card => card.isConnected)).toBe(true);
+        expect(list.querySelectorAll('.cosmetic-card').length).toBeGreaterThan(0);
+        ownedCard.click();
+        expect(toggle).toHaveBeenCalledTimes(1);
+        expect(toggle).toHaveBeenCalledWith('m_life');
+        expect(Game.metaToggledOff.has('m_life')).toBe(true);
+    });
+
+    it('explains an unaffordable class goal without presenting it as a buyable recommendation', () => {
+        renderSanctuary({ sparks: 5 });
+        const section = decorateSanctuary(Game, { mode: 'guided', introductory: true, classId: 'summoner' });
+        expect(section.querySelector('[data-upgrade-id="cls_summoner"]')).toBeNull();
+        expect(section.querySelector('.learning-sanctuary-goal').textContent).toContain('Save 3 more Sparks');
+        expect([...section.querySelectorAll('[data-upgrade-id]')].map(card => card.dataset.upgradeId))
+            .toEqual(['m_life', 'm_cache_primer', 'm_greed']);
+        renderSanctuary({ sparks: 0 });
+        const empty = decorateSanctuary(Game, { mode: 'guided', introductory: true, classId: 'summoner' });
+        expect(empty.querySelectorAll('[data-upgrade-id]')).toHaveLength(0);
+        expect(empty.textContent).toContain('No suggested upgrade is affordable yet');
+    });
+
+    it('redecorates idempotently and leaves experienced or Full Rules catalogues unchanged', () => {
+        const list = renderSanctuary();
+        const cards = [...list.querySelectorAll('.upgrade-card')];
+        decorateSanctuary(Game, { mode: 'guided', introductory: true });
+        decorateSanctuary(Game, { mode: 'guided', introductory: true });
+        expect(document.querySelectorAll('#learning-sanctuary-intro')).toHaveLength(1);
+        decorateSanctuary(Game, { mode: 'full', introductory: true });
+        expect(document.getElementById('learning-sanctuary-intro')).toBeNull();
+        expect(list.classList.contains('learning-sanctuary-focused')).toBe(false);
+        decorateSanctuary(Game, { mode: 'guided', introductory: false });
+        expect(document.getElementById('learning-sanctuary-intro')).toBeNull();
+        expect(cards.every(card => card.isConnected)).toBe(true);
+    });
+
+    it('keeps retry controls and offers a relevant optional drill without changing mode or progression', () => {
+        const practise = vi.fn(), acknowledge = vi.fn();
+        const retry = document.getElementById('btn-retry-class');
+        const originalState = Game.currentState;
+        decorateOutcome(Game, { mode: 'guided', introductory: true, onPractice: practise,
+            practiceLabel: 'PRACTISE DEFENCE', onDismiss: acknowledge });
+        const note = document.getElementById('learning-outcome-note');
+        expect(note.nextElementSibling).toBe(retry);
+        expect(note.textContent).toContain('Sparks stay banked between runs');
+        expect(note.textContent).toContain('Fragments and augmentations reset');
+        expect(note.textContent).not.toContain('Challenge');
+        const button = note.querySelector('.learning-outcome-practice');
+        button.click();
+        button.click();
+        expect(practise).toHaveBeenCalledTimes(1);
+        expect(acknowledge).not.toHaveBeenCalled();
+        expect(Game.currentState).toBe(originalState);
+        expect(document.getElementById('btn-retry-class')).toBe(retry);
+    });
+
+    it('distinguishes saving a live run from losing one and acknowledges only an explicit dismissal', () => {
+        const acknowledge = vi.fn();
+        decorateOutcome(Game, { mode: 'guided', introductory: true, kind: 'return', host: '#screen-start .db-shell', onDismiss: acknowledge });
+        decorateOutcome(Game, { mode: 'guided', introductory: true, kind: 'return', host: '#screen-start .db-shell', onDismiss: acknowledge });
+        expect(acknowledge).not.toHaveBeenCalled();
+        const note = document.getElementById('learning-outcome-note');
+        expect(note.textContent).toContain('Save and Return keeps your current run');
+        expect(note.textContent).not.toContain('its Fragments and augmentations reset');
+        const dismiss = note.querySelector('.learning-note-dismiss');
+        dismiss.click();
+        dismiss.click();
+        expect(acknowledge).toHaveBeenCalledTimes(1);
+        decorateOutcome(Game, { mode: 'full', introductory: true });
+        expect(document.getElementById('learning-outcome-note')).toBeNull();
+    });
+
+    it('labels reward scope once without claiming instant effects are persistent purchases', () => {
+        decorateReward(Game, { mode: 'guided' });
+        decorateReward(Game, { mode: 'guided' });
+        expect(document.querySelectorAll('#learning-reward-scope')).toHaveLength(1);
+        const note = document.getElementById('learning-reward-scope');
+        expect(note.nextElementSibling.id).toBe('reward-options');
+        expect(note.textContent).toBe('Choose one augmentation for this run. Instant effects apply now.');
+        decorateReward(Game, { mode: 'full' });
+        expect(document.getElementById('learning-reward-scope')).toBeNull();
     });
 });
 
