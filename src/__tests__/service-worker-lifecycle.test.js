@@ -55,6 +55,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    browserWindow.MVMConsent?.write(false);
     vi.clearAllTimers();
     vi.useRealTimers();
     vi.restoreAllMocks();
@@ -204,7 +205,7 @@ describe('real analytics bootstrap consent', () => {
         expect(document.getElementById('analytics-consent-banner')).toBeNull();
         document.body.classList.remove('breakout-active');
         Game.currentState = 2;
-        await vi.advanceTimersByTimeAsync(1000);
+        await vi.advanceTimersByTimeAsync(1500);
         expect(document.querySelector('.analytics-consent-text').textContent).toContain('Nothing is sent automatically');
         expect(localStorage.getItem('mvm_analytics_install')).toBeNull();
     });
@@ -223,6 +224,7 @@ describe('real analytics bootstrap consent', () => {
         localStorage.removeItem('mvm_analytics_consent');
         await loadBootstrap();
         const { Analytics } = await import('../services/analytics.js');
+        await vi.advanceTimersByTimeAsync(1500);
         document.querySelector('[data-consent="granted"]').click();
         Analytics.emit('run_start', { class: 'tactician' });
         expect(Analytics.recent(1)[0].name).toBe('run_start');
@@ -232,6 +234,21 @@ describe('real analytics bootstrap consent', () => {
         Analytics.emit('combat_start');
         expect(Analytics.recent(500)).toHaveLength(before);
         expect(localStorage.getItem('mvm_analytics_consent')).toBe('denied');
+    });
+
+    it('preserves explicit Settings consent writes while automatic banners are unsafe in combat', async () => {
+        localStorage.removeItem('mvm_analytics_consent');
+        const { Game } = await import('../game.js');
+        Game.currentState = 3;
+        await loadBootstrap();
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(document.getElementById('analytics-consent-banner')).toBeNull();
+        browserWindow.MVMConsent.write(true);
+        expect(localStorage.getItem('mvm_analytics_consent')).toBe('granted');
+        expect(localStorage.getItem('mvm_analytics_install')).not.toBeNull();
+        browserWindow.MVMConsent.write(false);
+        expect(localStorage.getItem('mvm_analytics_consent')).toBe('denied');
+        expect(document.getElementById('analytics-consent-banner')).toBeNull();
     });
 
     it('starts one analytics session across repeated Allow and Decline choices', async () => {
