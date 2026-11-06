@@ -168,7 +168,11 @@ test('native Challenge briefing and replacement cancellation both preserve the c
     Unlocks.applyMenuVisibility();
     return Game._readSaveRaw();
   });
-  if (await page.locator('[data-consent="denied"]').isVisible()) await tap(page, '[data-consent="denied"]');
+  if (await page.evaluate(() => window.MVMConsent.read()) === null) {
+    await tap(page, '[data-consent="denied"]');
+    await expect(page.locator('#analytics-consent-banner')).toBeHidden();
+  }
+  expect(await page.evaluate(() => window.MVMConsent.read())).toBe(false);
   await tap(page, '#btn-challenge');
   await expect(page.locator('#learning-mode-briefing')).toBeVisible();
   expect(await page.evaluate(() => Game._readSaveRaw())).toBe(checkpoint);
