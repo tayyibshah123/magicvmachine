@@ -2383,7 +2383,8 @@ startDrag(e, die, el) {
         // play first encounter is when patterns start flexing.
         // Sector 0 Breakout uses the same simplification — the prologue
         // is for teaching the parry rhythm, not stress-testing it.
-        if (this.currentState === STATE.TUTORIAL_COMBAT || this.currentState === STATE.BREAKOUT) {
+        if (this.currentState === STATE.TUTORIAL_COMBAT || (this.currentState === STATE.BREAKOUT
+            && !(this._modernPacing && this._guidedRhythmPractice && type === 'ATTACK'))) {
             return { pattern: 'steady', waves: 1 };
         }
         if (type === 'DEFEND') {
@@ -2729,6 +2730,7 @@ startQTE(type, x, y, callback, opts) {
                 type: type,
                 shortTiming: !!opts?.shortTiming,
                 minionBoost: !!opts?.minionBoost,
+                volleyBoost: opts?.volleyBoost || null,
                 pattern: pat.pattern,
                 waveTotal: (() => {
                     // First-time multi-wave QTE → fire the chain hint so
@@ -3251,6 +3253,13 @@ startQTE(type, x, y, callback, opts) {
         ctx.font = `bold ${Math.round(txtSize * scaleBoost)}px 'Orbitron'`;
         ctx.strokeText(txt, targetX, txtY);
         ctx.fillText(txt, targetX, txtY);
+        if (this.qte.volleyBoost) {
+            const boost = this.qte.volleyBoost;
+            ctx.font = "bold 30px 'Orbitron'";
+            const preview = `ALLY POWER: BASE ${boost.base} / GOOD ${boost.good} / PERFECT ${boost.perfect}`;
+            ctx.strokeText(preview, targetX, txtY + 48);
+            ctx.fillText(preview, targetX, txtY + 48);
+        }
 
         ctx.restore();
     },
@@ -3614,6 +3623,11 @@ startQTE(type, x, y, callback, opts) {
         if (this.qte.minionBoost) {
             multiplier = quality === 'perfect' ? 1.3 : (quality === 'good' ? 1.1 : 1);
             msg = quality === 'perfect' ? 'DART +30%' : (quality === 'good' ? 'DART +10%' : 'DART READY');
+            if (this.qte.volleyBoost) {
+                const boost = this.qte.volleyBoost;
+                const total = quality === 'perfect' ? boost.perfect : quality === 'good' ? boost.good : boost.base;
+                msg = `ALLY POWER ${total} (+${total - boost.base})`;
+            }
             color = quality === 'perfect' ? COLORS.GOLD : COLORS.NATURE_LIGHT;
             if (quality === 'perfect' && this.runStats) this.runStats.perfectQTEs = (this.runStats.perfectQTEs || 0) + 1;
         }
@@ -14122,8 +14136,8 @@ updateHexBreach(dt) {
             return this._showDramaticBanner(text, subtext, variant, opts);
         }
 
-        const duration = opts.duration ?? 2200;
-        const exitMs = opts.exitMs ?? 600;
+        const duration = opts.duration ?? (this._modernPacing ? 600 : 2200);
+        const exitMs = opts.exitMs ?? (this._modernPacing ? 200 : 600);
         AudioMgr.duck(0.12, duration + exitMs + 100);
         return new Promise(resolve => {
             const banner = document.getElementById('phase-banner');
@@ -16295,11 +16309,8 @@ async startTurn() {
       }
     },
 
-    _resolvePlayerMinionStrike(minion, target) {
+    _playerMinionBaseDamage(minion) {
         const player = this.player;
-        const enemy = this.enemy;
-        const gen = this._combatGen;
-        if (!minion || minion.currentHp <= 0 || !target || target.currentHp <= 0) return Promise.resolve(true);
         let swarmBonus = 0;
         if (player.hasRelic('swarm_beacon')) {
             swarmBonus = player.minions.filter(m => m && m.currentHp > 0).length * this.stackCount('swarm_beacon');
@@ -16307,7 +16318,89 @@ async startTurn() {
         const base = typeof minion.getEffectiveDamage === 'function'
             ? minion.getEffectiveDamage(minion.dmg) : minion.dmg;
         const hunger = this.hasPact?.('hunger') ? 2 : 1;
-        const baseDamage = Math.max(0, Math.floor((base + swarmBonus) * hunger));
+        return Math.max(0, Math.floor((base + swarmBonus) * hunger));
+    },
+
+    _boostPlayerMinionDamage(baseDamage, multiplier) {
+        const bonusPercent = Math.max(0, Math.round((multiplier - 1) * 100));
+        return baseDamage + Math.ceil(baseDamage * bonusPercent / 100);
+    },
+
+    _resolvePlayerMinionVolley(minions) {
+        const player = this.player;
+        const enemy = this.enemy;
+        const gen = this._combatGen;
+        if (!player || !enemy || enemy.currentHp <= 0) return Promise.resolve(false);
+        const current = () => this._combatGen === gen && this.player === player && this.enemy === enemy
+            && [STATE.COMBAT, STATE.TUTORIAL_COMBAT, STATE.BREAKOUT].includes(this.currentState);
+        const targets = [enemy, ...this._enemyMinions()].filter(target => target && target.currentHp > 0);
+        const bombs = player.traits.minionName === 'Bomb Bot';
+        const plan = minions.filter(minion => minion && minion.currentHp > 0 && player.minions.includes(minion))
+            .map(minion => ({ minion, source: { x: minion.x, y: minion.y },
+                target: targets[Math.floor(Math.random() * targets.length)], bomb: bombs,
+                base: bombs ? 10 : this._playerMinionBaseDamage(minion) }))
+            .filter(hit => hit.target && hit.base > 0);
+        if (!plan.length) return Promise.resolve(true);
+        const darts = plan.filter(hit => !hit.bomb);
+        const total = multiplier => darts.reduce((sum, hit) => sum + this._boostPlayerMinionDamage(hit.base, multiplier), 0);
+        const preview = { base: total(1), good: total(1.1), perfect: total(1.3) };
+        const secondaryVisuals = [];
+        return this._runCombatAction(async () => {
+            const timingIntroduced = typeof this._canGuidedFeature !== 'function' || this._canGuidedFeature('allyTiming');
+            const multiplier = darts.length && timingIntroduced ? await this.startQTE('ATTACK', enemy.x, enemy.y, null,
+                { minionBoost: true, pattern: 'steady', waves: 1, volleyBoost: preview,
+                    attackerX: darts[0].source.x, attackerY: darts[0].source.y }) : 1;
+            if (!current() || player.currentHp <= 0 || enemy.currentHp <= 0) return;
+            // Commit HP and charges together. Secondary hit effects collect
+            // pure visuals, so no projectile can own a later HP change.
+            const previousQueue = this._settledCombatVfx;
+            this._settledCombatVfx = secondaryVisuals;
+            try {
+                for (const hit of plan) {
+                    hit.minion.playAnim('lunge');
+                    if (hit.bomb) {
+                        hit.minion.charges--;
+                        if (hit.minion.charges <= 0) {
+                            hit.minion.currentHp = 0;
+                            player.minions = player.minions.filter(minion => minion !== hit.minion);
+                        } else {
+                            ParticleSys.createFloatingText(hit.source.x, hit.source.y - 50,
+                                `${hit.minion.charges} CHARGES LEFT`, COLORS.GOLD);
+                        }
+                        if (player.currentHp > 0) {
+                            for (const target of targets) if (target.currentHp > 0) target.takeDamage(10, hit.minion);
+                        }
+                    } else if (player.currentHp > 0) {
+                        const target = hit.target.currentHp > 0 ? hit.target
+                            : targets.find(candidate => candidate.currentHp > 0);
+                        if (target) {
+                            hit.target = target;
+                            target.takeDamage(this._boostPlayerMinionDamage(hit.base, multiplier), hit.minion);
+                            if (target !== enemy && target.currentHp <= 0 && player.hasRelic('brutalize')) {
+                                this.triggerBrutalize(target);
+                            }
+                        }
+                    }
+                }
+                this._cullEnemyMinions();
+            } finally {
+                this._settledCombatVfx = previousQueue;
+            }
+        }, live => {
+            if (!live()) return;
+            // Lethal early hits never discard later committed launches.
+            for (const hit of plan) this.triggerVFX(hit.bomb ? 'bomb_missile' : 'nature_dart',
+                hit.source, hit.bomb ? enemy : hit.target, null, hit.bomb ? {} : { settledDamage: true });
+            for (const visual of secondaryVisuals) this.triggerVFX(visual.type, visual.source, visual.target, null, visual.opts);
+        }, { minimumPresentationMs: 1200 });
+    },
+
+    _resolvePlayerMinionStrike(minion, target) {
+        const player = this.player;
+        const enemy = this.enemy;
+        const gen = this._combatGen;
+        if (!minion || minion.currentHp <= 0 || !target || target.currentHp <= 0) return Promise.resolve(true);
+        const baseDamage = this._playerMinionBaseDamage(minion);
         // A disabled attack has no timing reward. Positive attacks always
         // keep their base damage, and a successful boost rounds upward so
         // even a fresh one-damage spirit gains a visible integer benefit.
@@ -16320,8 +16413,7 @@ async startTurn() {
                 || this.currentState === STATE.BREAKOUT;
             if (!inCombat || this._combatGen !== gen || this.player !== player || this.enemy !== enemy || minion.currentHp <= 0
                 || target.currentHp <= 0 || player.currentHp <= 0) return;
-            const bonusPercent = Math.max(0, Math.round((multiplier - 1) * 100));
-            const damage = baseDamage + Math.ceil(baseDamage * bonusPercent / 100);
+            const damage = this._boostPlayerMinionDamage(baseDamage, multiplier);
             target.takeDamage(damage, minion);
             if (target !== enemy && target.currentHp <= 0) {
                 enemy.minions = enemy.minions.filter(m => m !== target);
@@ -22910,6 +23002,10 @@ drawEffects() {
         // from the wrong position. Right-to-left order + snapshot makes
         // removal order match the rendered layout and avoids the skip.
         const minionOrder = this.player.minions.slice().sort((a, b) => b.x - a.x);
+        if (this._modernPacing) {
+            const continued = await this._resolvePlayerMinionVolley(minionOrder);
+            if (!continued || !stillLive()) return;
+        } else {
         // Each minion's input, settled damage and full visual presentation
         // finish before the next action or enemy phase can begin.
         for (const m of minionOrder) {
@@ -22947,6 +23043,7 @@ drawEffects() {
             await this.sleep(500);
             if (!stillLive()) return;
         }
+        }
 
         // Pact of Hunger — minions burn out one turn after spawning. Done
         // AFTER they attack so the player still gets the ×2 strike, then
@@ -22967,6 +23064,10 @@ drawEffects() {
         if(!this.enemy || this.enemy.currentHp <= 0) { this.winCombat(); return; }
 
         this._finishPlayerTurnStatuses();
+        if (this._modernPacing && alliesAct) {
+            await this.showPhaseBanner('ENEMY ACTS', 'INCOMING DATA STREAM', 'enemy');
+            if (!stillLive()) return;
+        }
 
         // --- ENEMY INTENT PHASE ---
         for (const intent of this.enemy.nextIntents) {
@@ -23685,7 +23786,9 @@ drawEffects() {
                 }
             }
             
-            await this.sleep(1200);
+            const presentationCompleted = ['attack', 'multi_attack', 'purge_attack',
+                'aoe_sweep', 'frost_aoe', 'immolate'].includes(intent.type);
+            if (!this._modernPacing || !presentationCompleted) await this.sleep(1200);
             if (!stillLive()) return;
         }
 
@@ -23792,7 +23895,7 @@ drawEffects() {
                 const continued = await this._resolveEnemyMinionStrike(min, t, { mirror: !!_mirrorMinion });
                 if (!continued || !stillLive()) return;
             }
-            await this.sleep(600);
+            if (!this._modernPacing) await this.sleep(600);
             if (!stillLive()) return;
         }
 
