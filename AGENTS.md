@@ -176,7 +176,7 @@ can reuse results if the tested source has not changed.
 The approved two-edition release uses `npm run check:editions -- --stable
 PATH --guided PATH`. It verifies independent saves, updates and cold offline
 launches in one browser profile. Keep Stable source on `main`, Guided source
-on `codex/guided-v1.10.0`, and publish the validated dual bundle on `gh-pages`.
+on `codex/guided-v1.10.1`, and publish the validated dual bundle on `gh-pages`.
 Never commit `release-site/` or `www/` to a source branch. Reused evidence must
 match the full source fingerprint. Preserve the frozen v1.9.55 and
 v1.9.56 refs when publishing later fixes.
@@ -199,6 +199,9 @@ not configured; tests are the gate.
 
 If you ship visual changes, briefly note manual QA done (or admit
 "not visually tested") in the commit body.
+For layout changes, inspect named native browser screenshots at 360px and
+390px before publication. Include measured separation and reachable tap
+checks, and keep the image paths and bounds in the browser evidence.
 
 ---
 

@@ -40,6 +40,9 @@ its real callers and its rendered browser behaviour.
 - After deployment, verify the public version/cache/files match the tested
   source and perform a fresh launch. Reuse results for an unchanged-source
   deployment retry.
+- Before publishing a layout change, inspect named native browser screenshots
+  at 360px and 390px. Pair visibility checks with measured content separation
+  and reachable tap targets. Keep image paths and bounds in the browser evidence.
 
 For the Stable and Guided release pair, use `npm run check:editions --
 --stable PATH --guided PATH`. It checks both source trees, packages only
