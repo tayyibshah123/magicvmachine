@@ -146,15 +146,21 @@ export class BossMinionRoster {
         const rule = this.config.resummonRule;
         if (!rule || typeof rule.cadenceFn !== 'function') return false;
         if (!this.boss) return false;
+        // Intent generation can run several times for one enemy round.
+        // Only its first slot samples the roster or advances the clock.
+        if (this._lastRespawnRound === turnCount) return false;
+        this._lastRespawnRound = turnCount;
         const cap = (typeof rule.cap === 'number') ? rule.cap : Infinity;
-        if (this.living().length >= cap) return false;
-        // Cadence flag — consumer increments this each enemy turn so
-        // the modulo check fires consistently independent of skipped
-        // turns from other intents.
         const counterKey = rule.counterKey || '_swarmRespawnCounter';
+        if (this.living().length >= cap) {
+            this.boss[counterKey] = 0;
+            return false;
+        }
         this.boss[counterKey] = (this.boss[counterKey] || 0) + 1;
         const cadence = rule.cadenceFn(this.boss);
         if (cadence <= 0) return false;
-        return (this.boss[counterKey] % cadence) === 0;
+        if (this.boss[counterKey] < cadence) return false;
+        this.boss[counterKey] = 0;
+        return true;
     }
 }

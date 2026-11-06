@@ -121,10 +121,11 @@ export function setupCombatFixture({ classId = 'tactician', maxHp = 100, hp = ma
     document.body.className = '';
     localStorage.clear();
     Object.assign(Game, {
-        currentState: state, sector: 1, turnCount: 3, combatPaceMult: 1,
+        currentState: state, sector: 1, turnCount: 3, combatPaceMult: 1, corruptionLevel: 0,
         _combatGen: 10, _combatActionDepth: 0, _combatStartedAt: 0,
         _endTurnRunning: false, _winCombatRunning: false, _resolvingSelfDestruct: false,
-        _revivePending: null, _settledCombatVfx: undefined, _activeCombatPresentation: null,
+        _revivePending: null, _turnStartOwner: null, _enemyTurnFeedback: null,
+        _settledCombatVfx: undefined, _activeCombatPresentation: null,
         _combatPresentations: new Set(), _presentationEffectOwners: new WeakMap(),
         _combatActionInputWasLocked: false, inputLocked: false, paused: false,
         inputCooldown: 0, godMode: false, assistDisabled: true, autoQTE: false,

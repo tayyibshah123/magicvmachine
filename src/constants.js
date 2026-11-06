@@ -707,34 +707,34 @@ const GLITCH_MODIFIERS = [
 // Names are class-flavored; T2/T3 are the upgraded forms.
 const SIGNATURE_DICE = {
     tactician: [
-        { key: 'SIG_TACT_1', name: 'Volley',    icon: ICONS.classTactician, color: '#00f3ff', desc: 'Deal 7 DMG. +1 Reroll next turn.\n[QTE]: Crit x1.3', cost: 0, target: 'enemy' },
-        { key: 'SIG_TACT_2', name: 'Salvo',     icon: ICONS.classTactician, color: '#00f3ff', desc: 'Deal 10 DMG. +1 Reroll this turn.\n[QTE]: Crit x1.4', cost: 0, target: 'enemy' },
-        { key: 'SIG_TACT_3', name: 'Checkmate', icon: ICONS.classTactician, color: '#00f3ff', desc: 'Deal 14 DMG. +2 Rerolls. Draw 1 Die.\n[QTE]: Crit x1.5', cost: 0, target: 'enemy' }
+        { key: 'SIG_TACT_1', name: 'Volley',    icon: ICONS.classTactician, color: '#00f3ff', desc: 'Deal 7 DMG. +1 Reroll next turn.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_TACT_2', name: 'Salvo',     icon: ICONS.classTactician, color: '#00f3ff', desc: 'Deal 10 DMG. +1 Reroll this turn.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_TACT_3', name: 'Checkmate', icon: ICONS.classTactician, color: '#00f3ff', desc: 'Deal 14 DMG. +2 Rerolls. Draw 1 Die.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' }
     ],
     arcanist: [
-        { key: 'SIG_ARC_1', name: 'Spark', icon: ICONS.classArcanist, color: '#bc13fe', desc: 'Deal 6 DMG. +1 Mana.\n[QTE]: Crit x1.3', cost: 0, target: 'enemy' },
-        { key: 'SIG_ARC_2', name: 'Hex',   icon: ICONS.classArcanist, color: '#bc13fe', desc: 'Deal 12 DMG. +2 Mana.\n[QTE]: Crit x1.4', cost: 0, target: 'enemy' },
-        { key: 'SIG_ARC_3', name: 'Rite',  icon: ICONS.classArcanist, color: '#bc13fe', desc: 'Deal 18 DMG. +3 Mana. Apply Weak.\n[QTE]: Crit x1.5', cost: 0, target: 'enemy' }
+        { key: 'SIG_ARC_1', name: 'Spark', icon: ICONS.classArcanist, color: '#bc13fe', desc: 'Deal 6 DMG. +1 Mana.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_ARC_2', name: 'Hex',   icon: ICONS.classArcanist, color: '#bc13fe', desc: 'Deal 12 DMG. +2 Mana.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_ARC_3', name: 'Rite',  icon: ICONS.classArcanist, color: '#bc13fe', desc: 'Deal 18 DMG. +3 Mana. Apply Weak.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' }
     ],
     bloodstalker: [
-        { key: 'SIG_BLOOD_1', name: 'Bite',  icon: ICONS.classBloodstalker, color: '#ff0000', desc: 'Deal 8 DMG. Heal 3 HP.\n[QTE]: Crit x1.3', cost: 0, target: 'enemy' },
-        { key: 'SIG_BLOOD_2', name: 'Gouge', icon: ICONS.classBloodstalker, color: '#ff0000', desc: 'Deal 12 DMG. Heal 6 HP.\n[QTE]: Crit x1.4', cost: 0, target: 'enemy' },
-        { key: 'SIG_BLOOD_3', name: 'Maul',  icon: ICONS.classBloodstalker, color: '#ff0000', desc: 'Deal 18 DMG. Heal 10 HP. Apply Frail.\n[QTE]: Crit x1.5', cost: 0, target: 'enemy' }
+        { key: 'SIG_BLOOD_1', name: 'Bite',  icon: ICONS.classBloodstalker, color: '#ff0000', desc: 'Deal 8 DMG. Heal 3 HP.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_BLOOD_2', name: 'Gouge', icon: ICONS.classBloodstalker, color: '#ff0000', desc: 'Deal 12 DMG. Heal 6 HP.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_BLOOD_3', name: 'Maul',  icon: ICONS.classBloodstalker, color: '#ff0000', desc: 'Deal 18 DMG. Heal 10 HP. Apply Frail.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' }
     ],
     annihilator: [
-        { key: 'SIG_ANNI_1', name: 'Blast',      icon: ICONS.classAnnihilator, color: '#ff8800', desc: 'Deal 12 DMG. Ignore Shield.\n[QTE]: Crit x1.3', cost: 0, target: 'enemy' },
-        { key: 'SIG_ANNI_2', name: 'Barrage',    icon: ICONS.classAnnihilator, color: '#ff8800', desc: 'Deal 18 DMG. Ignore Shield. Apply Weak.\n[QTE]: Crit x1.4', cost: 0, target: 'enemy' },
-        { key: 'SIG_ANNI_3', name: 'Annihilate', icon: ICONS.classAnnihilator, color: '#ff8800', desc: 'Deal 28 DMG. Ignore Shield. Stuns 1 turn.\n[QTE]: Crit x1.6', cost: 0, target: 'enemy' }
+        { key: 'SIG_ANNI_1', name: 'Blast',      icon: ICONS.classAnnihilator, color: '#ff8800', desc: 'Deal 12 DMG. Ignore Shield.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_ANNI_2', name: 'Barrage',    icon: ICONS.classAnnihilator, color: '#ff8800', desc: 'Deal 18 DMG. Ignore Shield. Apply Weak.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_ANNI_3', name: 'Annihilate', icon: ICONS.classAnnihilator, color: '#ff8800', desc: 'Deal 28 DMG. Ignore Shield. Stuns 1 turn.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' }
     ],
     sentinel: [
-        { key: 'SIG_SENT_1', name: 'Bash',        icon: ICONS.classSentinel, color: '#ffffff', desc: 'Gain 10 Shield. Deal 4 DMG.\n[QTE]: Crit x1.3', cost: 0, target: 'enemy' },
-        { key: 'SIG_SENT_2', name: 'Slam',        icon: ICONS.classSentinel, color: '#ffffff', desc: 'Gain 15 Shield. Deal 8 DMG. Taunt.\n[QTE]: Crit x1.4', cost: 0, target: 'enemy' },
-        { key: 'SIG_SENT_3', name: 'Aegis Break', icon: ICONS.classSentinel, color: '#ffffff', desc: 'Gain 22 Shield. Deal 14 DMG. Taunt + Thorns.\n[QTE]: Crit x1.5', cost: 0, target: 'enemy' }
+        { key: 'SIG_SENT_1', name: 'Bash',        icon: ICONS.classSentinel, color: '#ffffff', desc: 'Gain 10 Shield. Deal 4 DMG.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_SENT_2', name: 'Slam',        icon: ICONS.classSentinel, color: '#ffffff', desc: 'Gain 15 Shield. Deal 8 DMG. Taunt.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_SENT_3', name: 'Aegis Break', icon: ICONS.classSentinel, color: '#ffffff', desc: 'Gain 22 Shield. Deal 14 DMG. Taunt + Thorns.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' }
     ],
     summoner: [
-        { key: 'SIG_SUM_1', name: 'Call',        icon: ICONS.classSummoner, color: '#00ff99', desc: 'Summon a Spirit. Deal 4 DMG.\n[QTE]: Crit x1.3', cost: 0, target: 'enemy' },
-        { key: 'SIG_SUM_2', name: 'Rouse',       icon: ICONS.classSummoner, color: '#00ff99', desc: 'Summon a Spirit. Deal 8 DMG. Heal Minions 3 HP.\n[QTE]: Crit x1.4', cost: 0, target: 'enemy' },
-        { key: 'SIG_SUM_3', name: 'Primal Roar', icon: ICONS.classSummoner, color: '#00ff99', desc: 'Summon 2 Spirits. Deal 12 DMG. Minions: +3 DMG this turn.\n[QTE]: Crit x1.5', cost: 0, target: 'enemy' }
+        { key: 'SIG_SUM_1', name: 'Call',        icon: ICONS.classSummoner, color: '#00ff99', desc: 'Summon a Spirit. Deal 4 DMG.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_SUM_2', name: 'Rouse',       icon: ICONS.classSummoner, color: '#00ff99', desc: 'Summon a Spirit. Deal 8 DMG. Heal Minions 3 HP.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' },
+        { key: 'SIG_SUM_3', name: 'Primal Roar', icon: ICONS.classSummoner, color: '#00ff99', desc: 'Summon 2 Spirits. Deal 12 DMG. Minions: +3 DMG this turn.\n[QTE]: Perfect +60% damage', cost: 0, target: 'enemy' }
     ]
 };
 
