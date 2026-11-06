@@ -6,6 +6,7 @@ import { Breakout } from '../services/breakout.js';
 import { Hints } from '../services/hints.js';
 import { Unlocks } from '../services/unlocks.js';
 import { ClassAbility } from '../ui/class-ability.js';
+import { Learning } from '../services/learning.js';
 import { setupCombatFixture, teardownCombatFixture, createCombatPlayer } from './helpers/combat-fixture.js';
 
 const markup = readFileSync('index.html', 'utf8');
@@ -20,9 +21,13 @@ beforeEach(() => {
     Game._modernPacing = true;
     Game._practiceSession = false;
     Game._guidedRun = null;
+    Game.momentum = 0;
+    Game._momentumApexArmed = false;
+    Game._momentumTriggeredThisTurn = false;
     Game._menuPulseRaf = null;
     window.Game = Game;
     ClassAbility.endCombat();
+    Learning.init();
     Object.assign(Breakout, { _active: false, _practice: false, _guided: false, _restorePractice: null, _advancing: false });
     vi.spyOn(Game, '_startMenuPulse').mockImplementation(() => {});
     vi.spyOn(Game, 'triggerVFX').mockImplementation(() => {});
@@ -63,6 +68,7 @@ async function use(type, target, quality) {
 describe('guided core opening and completion', () => {
     it.each(cases)('%s %s opening in room %s preserves a real enemy phase before core completion', async (classId, quality, roomIndex) => {
         createCombatPlayer(classId);
+        Game._guidedRun = Learning.createRun(classId);
         const attackTurns = new Map();
         const useDie = Game.useDie;
         vi.spyOn(Game, 'useDie').mockImplementation(function (die, el, target) {
