@@ -22,6 +22,7 @@ function deferred() {
 
 beforeEach(() => {
     vi.useFakeTimers();
+    vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
     document.body.innerHTML = `
         <div id="game-container"><div id="screen-flash"></div></div>
         <div id="dice-container"></div><div id="reroll-badge"></div>

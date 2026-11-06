@@ -98,10 +98,17 @@ because by the time the sleep resolves, combat may have ended.
 
 ## Combat damage and presentation
 
-Use `Game._runCombatAction(resolveDamage, present)` for attacks. Complete
+Use `Game._runCombatAction(resolveDamage, present)` for health-changing
+actions, including support actions that can invert healing. Complete
 timing prompts before applying damage, then present the settled result.
 Committed multi-hit animations finish even if an early hit is lethal;
 remaining visual hits must not apply damage or change the outcome.
+
+Wait for the committed effects and their delayed spawns to complete, not
+just a fixed delay. Presentation time stops during pauses and cancels on
+combat replacement. Surviving support actions can release input without
+waiting for cosmetic effects; terminal outcomes keep the action locked
+until their presentation finishes.
 
 The action boundary locks input and defers victory/death until presentation
 finishes. Synchronous VFX calls inside the default damage resolver collect

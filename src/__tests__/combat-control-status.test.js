@@ -15,7 +15,7 @@ beforeEach(() => {
     vi.useFakeTimers();
     now = 0;
     hidden = false;
-    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
     vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden);
     document.body.innerHTML = '<div id="game-container"></div><button id="btn-end-turn"></button>';
     document.body.className = '';
@@ -252,7 +252,7 @@ describe('Archivist turn clock', () => {
         const remaining = Game._archivistTimerRemaining;
         hidden = true;
         document.dispatchEvent(new Event('visibilitychange'));
-        now += 60000;
+        vi.setSystemTime(Date.now() + 60000);
         hidden = false;
         document.dispatchEvent(new Event('visibilitychange'));
 
@@ -365,6 +365,7 @@ describe('settled enemy-minion strikes', () => {
         expect(prompt).toHaveBeenCalledWith('DEFEND', Game.player.x, Game.player.y, null,
             expect.objectContaining({ shortTiming: true, incomingDamage: 10 }));
         answer(0.6);
+        await advance(1300);
         await strike;
 
         expect(Game.player.currentHp).toBe(94);
@@ -382,8 +383,12 @@ describe('settled enemy-minion strikes', () => {
         vi.spyOn(Game, 'sleep').mockResolvedValue();
         vi.spyOn(Game, 'triggerVFX').mockImplementation(() => {});
 
-        await Game._resolveEnemyMinionStrike(minion, Game.player);
-        await Game._resolveEnemyMinionStrike(minion, Game.player, { voidDrain: true });
+        const blocked = Game._resolveEnemyMinionStrike(minion, Game.player);
+        await advance(1300);
+        await blocked;
+        const blockedVoid = Game._resolveEnemyMinionStrike(minion, Game.player, { voidDrain: true });
+        await advance(1300);
+        await blockedVoid;
 
         expect(Game.player.currentHp).toBe(100);
         expect(Game.player.mana).toBe(3);
@@ -510,8 +515,10 @@ describe('settled player-minion darts', () => {
             expect(Game.enemy.currentHp).toBe(100);
             expect(Game._combatActionDepth).toBe(1);
             expect(prompt).toHaveBeenCalledWith('ATTACK', Game.enemy.x, Game.enemy.y, null,
-                { shortTiming: true, minionBoost: true, pattern: 'steady', waves: 1 });
+                { shortTiming: true, minionBoost: true, pattern: 'steady', waves: 1,
+                    attackerX: minion.x, attackerY: minion.y });
             answer(multiplier);
+            await advance(1300);
             await strike;
 
             expect(Game.enemy.currentHp).toBe(expectedHp);
@@ -557,6 +564,7 @@ describe('settled player-minion darts', () => {
         Game.qte.radius = 30;
         Game.inputCooldown = 0;
         Game.checkQTE();
+        await advance(1300);
         await strike;
 
         expect(Game.qte.active).toBe(false);

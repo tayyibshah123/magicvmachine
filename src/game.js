@@ -2578,7 +2578,7 @@ startQTE(type, x, y, callback, opts) {
                     this._tryResolveExpiredTurn();
                 }
             };
-            this.inputCooldown = 0.6;
+            this.inputCooldown = opts?.shortTiming ? 0.25 : 0.6;
 
             // Accessibility: auto-QTE resolves at 'good' tier without player input.
             if (this.autoQTE) {
@@ -3671,6 +3671,8 @@ startQTE(type, x, y, callback, opts) {
             this._endTurnRunning = false;
             this._winCombatRunning = false;
             this._combatActionDepth = 0;
+            this._revivePending = null;
+            this._combatRecoveryRestart = false;
             this.clearTrackedTimers();
         }
         let direction = 'up';
@@ -6823,7 +6825,7 @@ triggerPhaseGlitch() {
         return s === STATE.MAP || s === STATE.COMBAT || s === STATE.REWARD
             || s === STATE.SHOP || s === STATE.EVENT
             || s === STATE.TUTORIAL || s === STATE.TUTORIAL_COMBAT
-            || s === STATE.HEX || s === STATE.STORY || s === STATE.COMBAT_WIN;
+            || s === STATE.HEX || s === STATE.STORY || s === STATE.COMBAT_WIN || s === STATE.BREAKOUT;
     },
 
     installErrorBoundary() {
@@ -10957,7 +10959,7 @@ triggerSystemCrash() {
     // older files run through _migrateSave() before being consumed. Keeps
     // mid-run saves forward-compatible across class-rework / new-feature
     // deploys without forcing the player to restart.
-    SAVE_SCHEMA_VERSION: 2,
+    SAVE_SCHEMA_VERSION: 3,
 
     // ─── Save slots ────────────────────────────────────────────────
     // Three named slots (A / B / C) stored under per-slot keys. The
@@ -11219,11 +11221,33 @@ triggerSystemCrash() {
         }
     },
 
+    _combatRecoverySnapshot() {
+        const inCombat = this.currentState === STATE.COMBAT
+            || this.currentState === STATE.TUTORIAL_COMBAT || this.currentState === STATE.BREAKOUT;
+        if (!inCombat || !this.player) return null;
+        const pending = this._revivePending;
+        const reviving = pending && pending.gen === this._combatGen
+            && pending.player === this.player && pending.enemy === this.enemy;
+        const outcome = this.currentState === STATE.BREAKOUT ? 'breakout'
+            : (this.player.currentHp <= 0 ? 'death' : (reviving ? 'revive' : null));
+        if (!outcome) return null;
+        const enemy = this.enemy;
+        return {
+            outcome,
+            encounterType: enemy?.isBoss ? 'boss' : (enemy?.isElite ? 'elite' : 'combat'),
+            enemy: enemy ? {
+                name: enemy.name, hp: enemy.currentHp, maxHp: enemy.maxHp,
+                damage: enemy.baseDmg, isBoss: !!enemy.isBoss, isElite: !!enemy.isElite
+            } : null
+        };
+    },
+
     saveGame() {
         if (!this.map.currentIdx) this.map.currentIdx = 'start';
 
         const data = {
             v: this.SAVE_SCHEMA_VERSION,
+            combatRecovery: this._combatRecoverySnapshot(),
             fragments: this.techFragments,
             meta: this.metaUpgrades,
             encrypted: this.encryptedFiles,
@@ -11287,6 +11311,17 @@ triggerSystemCrash() {
                 if (!Array.isArray(data.player.upgrades)) data.player.upgrades = [];
                 if (!Array.isArray(data.player.relics))   data.player.relics   = [];
                 if (typeof data.player.signatureTier !== 'number') data.player.signatureTier = 1;
+            }
+        },
+        {
+            from: 2, to: 3,
+            migrate(data) {
+                // A legacy zero-HP snapshot represents an unresolved death,
+                // not permission to refill health on the next launch.
+                if (!data.combatRecovery) {
+                    data.combatRecovery = typeof data.player?.hp === 'number' && data.player.hp <= 0
+                        ? { outcome: 'death', enemy: null, encounterType: null } : null;
+                }
             }
         }
         // Future migrations append here. Example:
@@ -11377,18 +11412,11 @@ triggerSystemCrash() {
             this.player = new Player(classConfig);
 
             this.player.maxHp = typeof data.player.maxHp === 'number' ? data.player.maxHp : this.player.maxHp;
-            // Saved HP floor. If a prior session softlocked or otherwise
-            // persisted with currentHp <= 0, naively restoring the value
-            // puts the player into combat already dead — at which point
-            // the enemy-intent loop's `currentHp <= 0` guard at the
-            // bottom of endTurn silently returns (no gameOver fires) and
-            // the run hangs with no path forward. Treat any saved value
-            // <= 0 (or non-finite) as a corrupted state and restore to
-            // maxHp; legitimate low-HP saves (e.g. 1 HP between rooms)
-            // round-trip unchanged.
+            // Preserve a committed death through reload. Recovery below
+            // applies the ordinary death/revive rules before accepting input.
             const savedHp = (data.player && typeof data.player.hp === 'number' && Number.isFinite(data.player.hp))
                 ? data.player.hp : this.player.maxHp;
-            this.player.currentHp = (savedHp > 0) ? savedHp : this.player.maxHp;
+            this.player.currentHp = Math.max(0, savedHp);
             this.player.baseMana = typeof data.player.mana === 'number' ? data.player.mana : this.player.baseMana;
             this.player.relics = (data.player.relics || []).map(r => {
                 const canonical = UPGRADES_POOL.find(u => u.id === r.id) || META_UPGRADES.find(u => u.id === r.id);
@@ -11418,6 +11446,13 @@ triggerSystemCrash() {
             AudioMgr.startMusic();
             this.renderRelics();
 
+            const recovery = data.combatRecovery;
+            if (this.player.currentHp <= 0
+                || ['death', 'revive', 'breakout'].includes(recovery?.outcome)) {
+                this._restoreCombatRecovery(recovery || { outcome: 'death' });
+                return;
+            }
+
             this.changeState(STATE.MAP);
             this.renderMap();
 
@@ -11434,6 +11469,48 @@ triggerSystemCrash() {
                 );
             } catch (_) {}
             this.goToCharSelect();
+        }
+    },
+
+    _restoreCombatRecovery(recovery) {
+        this._combatGen = (this._combatGen || 0) + 1;
+        this._combatActionDepth = 0;
+        this._revivePending = null;
+        this._endTurnRunning = false;
+        this._winCombatRunning = false;
+        this.paused = false;
+        this.inputLocked = true;
+        this.dicePool = [];
+        if (this.qte) { this.qte.active = false; this.qte.callback = null; }
+        // Training deaths never consume a run revive or end the profile's
+        // prologue. Restart its safe rooms instead of treating it as a loss.
+        if (recovery.outcome === 'breakout') {
+            this.player.currentHp = this.player.maxHp;
+            Breakout.start(this);
+            this.saveGame();
+            return;
+        }
+        const summary = recovery.enemy;
+        const node = this.map.nodes.find(n => n.id === this.map.currentIdx);
+        const encounterType = recovery.encounterType || node?.type || 'combat';
+        const template = Object.values(BOSS_DATA).find(e => e.name === summary?.name)
+            || ENEMIES.find(e => e.name === summary?.name)
+            || (encounterType === 'boss' ? BOSS_DATA[this.sector] : null)
+            || { name: 'UNKNOWN', hp: 1, dmg: 0, sector: this.sector };
+        this.enemy = new Enemy(template, 0, encounterType === 'elite');
+        if (summary) {
+            this.enemy.maxHp = Math.max(1, summary.maxHp || this.enemy.maxHp);
+            this.enemy.currentHp = typeof summary.hp === 'number' ? Math.max(0, summary.hp) : this.enemy.maxHp;
+            this.enemy.baseDmg = summary.damage || this.enemy.baseDmg;
+        }
+        this.changeState(STATE.COMBAT);
+        if (recovery.outcome === 'revive' && this.player.currentHp > 0) {
+            // Its relic was already consumed and the healed HP was saved.
+            this._scheduleReviveTurn({ restartEncounter: true });
+        } else {
+            this.player.currentHp = 0;
+            this._combatRecoveryRestart = true;
+            this.gameOver();
         }
     },
 
@@ -14021,6 +14098,8 @@ updateHexBreach(dt) {
         this._endTurnRunning = false;
         this._winCombatRunning = false;
         this._combatActionDepth = 0;
+        this._revivePending = null;
+        this._combatRecoveryRestart = false;
         this.effects = [];
         ParticleSys.clear();
         if (CombatLog && CombatLog.clear) CombatLog.clear();
@@ -14176,6 +14255,8 @@ async startCombat(type) {
         this._endTurnRunning = false;
         this._winCombatRunning = false;
         this._combatActionDepth = 0;
+        this._revivePending = null;
+        this._combatRecoveryRestart = false;
         this.enemy = null;
         this.effects = [];
         ParticleSys.clear();
@@ -15024,7 +15105,134 @@ async startCombat(type) {
         this.startTurn();
     },
 
-    async _runCombatAction(resolveDamage, present, { minimumPresentationMs = 0 } = {}) {
+    _createCombatPresentation(current) {
+        const group = {
+            current, effects: new Set(), jobs: [], delays: [], elapsed: 0,
+            lastSample: performance.now(), suspended: !!this.paused || document.hidden,
+            sealed: false, finished: false, minimumUntil: 0, maximumUntil: Infinity
+        };
+        if (!this._combatPresentations) this._combatPresentations = new Set();
+        this._combatPresentations.add(group);
+        if (!this._presentationVisibilityBound) {
+            this._presentationVisibilityBound = true;
+            document.addEventListener('visibilitychange', () => {
+                for (const active of this._combatPresentations || []) {
+                    const now = performance.now();
+                    if (active.suspended) this._shiftPresentationEffects(active, now - active.lastSample);
+                    active.lastSample = now;
+                    active.suspended = !!this.paused || document.hidden;
+                }
+            });
+        }
+        const finish = completed => {
+            if (group.finished) return;
+            group.finished = true;
+            group.completed = completed;
+            this._combatPresentations.delete(group);
+            for (const delay of group.delays) delay.resolve(false);
+            group.delays = [];
+            group.jobs = [];
+            if (group.resolve) group.resolve(completed);
+        };
+        group.finish = finish;
+        const tick = () => {
+            if (group.finished) return;
+            if (!current()) { finish(false); return; }
+            const now = performance.now();
+            const suspended = !!this.paused || document.hidden;
+            const elapsed = Math.max(0, now - group.lastSample);
+            if (!suspended && !group.suspended) group.elapsed += elapsed;
+            else this._shiftPresentationEffects(group, elapsed);
+            group.lastSample = now;
+            group.suspended = suspended;
+            if (!suspended) {
+                const ready = group.jobs.filter(job => job.due <= group.elapsed);
+                group.jobs = group.jobs.filter(job => job.due > group.elapsed);
+                for (const job of ready) {
+                    if (!current()) break;
+                    try { this._captureCombatPresentation(group, job.fn); }
+                    catch (err) { finish(false); throw err; }
+                }
+                for (const effect of group.effects) {
+                    if (!this.effects.includes(effect)) group.effects.delete(effect);
+                }
+                const waiting = [];
+                for (const delay of group.delays) {
+                    if (group.elapsed >= delay.due) delay.resolve(true);
+                    else waiting.push(delay);
+                }
+                group.delays = waiting;
+                if (group.sealed && group.elapsed >= group.minimumUntil
+                    && ((!group.effects.size && !group.jobs.length) || group.elapsed >= group.maximumUntil)) {
+                    if (group.elapsed >= group.maximumUntil) {
+                        // Retire broken visual descriptors as well, so an
+                        // enclosing action cannot wait on the same orphan.
+                        this.effects = this.effects.filter(effect => !group.effects.has(effect));
+                    }
+                    finish(true);
+                    return;
+                }
+            }
+            // Short polling also cancels old groups after tracked combat
+            // timers have been drained. No damage runs from this callback.
+            globalThis.setTimeout(tick, 20);
+        };
+        globalThis.setTimeout(tick, 20);
+        return group;
+    },
+
+    _captureCombatPresentation(group, fn) {
+        if (!group || group.finished || !group.current()) return;
+        const before = new Set(this.effects);
+        const previous = this._activeCombatPresentation;
+        this._activeCombatPresentation = group;
+        try { return fn(); }
+        finally {
+            this._activeCombatPresentation = previous;
+            if (!this._presentationEffectOwners) this._presentationEffectOwners = new WeakMap();
+            for (const effect of this.effects) if (!before.has(effect)) {
+                group.effects.add(effect);
+                if (!this._presentationEffectOwners.has(effect)) this._presentationEffectOwners.set(effect, group);
+            }
+        }
+    },
+
+    _shiftPresentationEffects(group, ms) {
+        if (!(ms > 0)) return;
+        for (const effect of group.effects) {
+            if (this._presentationEffectOwners?.get(effect) === group && typeof effect.startMs === 'number') {
+                effect.startMs += ms;
+            }
+        }
+    },
+
+    _scheduleCombatPresentation(group, fn, ms) {
+        if (!group) return globalThis.setTimeout(fn, ms);
+        if (group.finished || !group.current()) return;
+        if (!(ms > 0)) return this._captureCombatPresentation(group, fn);
+        group.jobs.push({ fn, due: group.elapsed + Math.max(0, ms || 0) });
+    },
+
+    _delayCombatPresentation(group, ms) {
+        if (group.finished) return Promise.resolve(false);
+        return new Promise(resolve => group.delays.push({ due: group.elapsed + ms, resolve }));
+    },
+
+    _finishCombatPresentation(group, minimumMs = 0) {
+        if (group.finished) return Promise.resolve(group.completed);
+        group.sealed = true;
+        group.minimumUntil = group.elapsed + minimumMs;
+        // A broken renderer must not lock input forever. Paused and hidden
+        // time does not consume this fallback budget.
+        group.maximumUntil = group.elapsed + 10000;
+        if (!minimumMs && !group.effects.size && !group.jobs.length) {
+            group.finish(true);
+            return Promise.resolve(true);
+        }
+        return new Promise(resolve => { group.resolve = resolve; });
+    },
+
+    async _runCombatAction(resolveDamage, present, { minimumPresentationMs = 0, waitForPresentation = true } = {}) {
         const gen = this._combatGen;
         const player = this.player;
         const enemy = this.enemy;
@@ -15035,6 +15243,7 @@ async startCombat(type) {
         if (!(this._combatActionDepth > 0)) this._combatActionInputWasLocked = this.inputLocked;
         this._combatActionDepth = (this._combatActionDepth || 0) + 1;
         this.inputLocked = true;
+        const presentation = this._createCombatPresentation(current);
         let survived = false;
         try {
             // Resolve all logical hits before starting the presentation.
@@ -15046,26 +15255,32 @@ async startCombat(type) {
                 // Only synchronous resolution collects effects. An awaited
                 // QTE keeps its live aiming animation and input feedback.
                 this._settledCombatVfx = present ? previousQueue : queued;
-                resolved = resolveDamage();
+                resolved = this._captureCombatPresentation(presentation, resolveDamage);
             } finally {
                 this._settledCombatVfx = previousQueue;
             }
             await resolved;
-            if (current() && present) await present(current);
+            const mustWait = waitForPresentation || player.currentHp <= 0 || enemy.currentHp <= 0;
+            if (current() && present) await this._captureCombatPresentation(presentation, () => present(current));
             else if (current() && queued.length) {
                 for (let i = 0; i < queued.length; i++) {
-                    if (i > 0) await this.sleep(200 * (this.combatPaceMult || 1));
+                    if (i > 0 && mustWait && !await this._delayCombatPresentation(presentation, 200)) break;
                     if (!current()) break;
                     const effect = queued[i];
-                    this.triggerVFX(effect.type, effect.source, effect.target, null, effect.opts);
+                    this._captureCombatPresentation(presentation, () =>
+                        this.triggerVFX(effect.type, effect.source, effect.target, null, effect.opts));
                 }
-                if (current()) await this.sleep(1200 * (this.combatPaceMult || 1));
-            } else if (current() && minimumPresentationMs > 0) {
-                // Class signatures create effect descriptors directly,
-                // rather than queueing triggerVFX calls.
-                await this.sleep(minimumPresentationMs * (this.combatPaceMult || 1));
             }
+            if (current()) {
+                const completed = this._finishCombatPresentation(presentation,
+                    mustWait ? Math.max(minimumPresentationMs, queued.length ? 1200 : 0) : 0);
+                if (mustWait) await completed;
+            }
+        } catch (err) {
+            presentation.finish(false);
+            throw err;
         } finally {
+            if (!current()) presentation.finish(false);
             // A quit or new encounter owns its own lock and action counter.
             if (current()) {
                 this._combatActionDepth = Math.max(0, this._combatActionDepth - 1);
@@ -15082,17 +15297,23 @@ async startCombat(type) {
     },
 
     async _presentCombatHits(type, source, target, count, current, opts = {}) {
+        const presentation = this._createCombatPresentation(current);
+        try {
         // VFX callbacks are deliberately absent. Even a lethal first hit
         // gets the complete committed animation, with no later HP mutation.
         for (let hit = 0; hit < count; hit++) {
-            if (!current()) return;
-            if (hit > 0) await this.sleep(200 * (this.combatPaceMult || 1));
-            if (!current()) return;
-            this.triggerVFX(type, source, target, null, opts);
+            if (!current()) { presentation.finish(false); return; }
+            if (hit > 0 && !await this._delayCombatPresentation(presentation, 200)) return;
+            if (!current()) { presentation.finish(false); return; }
+            this._captureCombatPresentation(presentation, () => this.triggerVFX(type, source, target, null, opts));
         }
         // Signature effects use real-time impact timers up to 1.1 seconds.
         // Keep the encounter visible until the final effect has landed.
-        if (count > 0) await this.sleep(1200 * (this.combatPaceMult || 1));
+        return this._finishCombatPresentation(presentation, count > 0 ? 1200 : 0);
+        } catch (err) {
+            presentation.finish(false);
+            throw err;
+        }
     },
 
     async _resolveEnemyAreaStrike(intent) {
@@ -15928,7 +16149,8 @@ async startTurn() {
         const gen = this._combatGen;
         return this._runCombatAction(async () => {
             const multiplier = await this.startQTE('ATTACK', target.x, target.y, null,
-                { shortTiming: true, minionBoost: true, pattern: 'steady', waves: 1 });
+                { shortTiming: true, minionBoost: true, pattern: 'steady', waves: 1,
+                    attackerX: minion.x, attackerY: minion.y });
             const inCombat = this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT
                 || this.currentState === STATE.BREAKOUT;
             if (!inCombat || this._combatGen !== gen || this.player !== player || this.enemy !== enemy || minion.currentHp <= 0
@@ -17609,6 +17831,19 @@ async startTurn() {
 
     useDie(die, el, target) {
         if (this.inputLocked || this._endTurnRunning || this.qte?.active || this._combatActionDepth > 0) return;
+        if (!this.player) return;
+        const stopForPlayerDeath = () => {
+            const revive = this._revivePending;
+            if (revive && revive.player === this.player && revive.enemy === this.enemy
+                && revive.gen === this._combatGen) return true;
+            if (this.player.currentHp > 0) return false;
+            if (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT
+                || this.currentState === STATE.BREAKOUT) this.gameOver();
+            return true;
+        };
+        // An invalid self-drop can still land on a living ally. Reject every
+        // die while the player is dead, before any cost or HP floor can run.
+        if (stopForPlayerDeath()) return;
         if(die.used) return;
         const data = DICE_TYPES[die.type];
         const isUpgraded = this.player.hasDiceUpgrade(die.type);
@@ -17620,6 +17855,7 @@ async startTurn() {
             this.player.takeDamage(this._customHotHandsDmg, null, false, /*bypassShield*/ true);
             ParticleSys.createFloatingText(this.player.x, this.player.y - 140,
                 `HOT HANDS -${this._customHotHandsDmg}`, '#ff6600');
+            if (stopForPlayerDeath()) return;
         }
 
         if (target) {
@@ -17726,6 +17962,7 @@ async startTurn() {
         // global state.
         this.player._lastPlayedDieType = die.type;
         this._onDieConsumed(die);
+        if (stopForPlayerDeath()) return;
         // Unified-die burst (Tier 8/#33) — fire a class-tinted radial pulse at
         // the die's on-screen position BEFORE renderDiceUI rebuilds the DOM,
         // so the impact flash lingers visually even as the die dims out.
@@ -17734,6 +17971,7 @@ async startTurn() {
 
         // Class-ability: broadcast dice use (fills Tactician pips, Annihilator heat)
         ClassAbility.onEvent('dice_used', { type: die.type });
+        if (stopForPlayerDeath()) return;
 
         // Class-themed particle burst on every die use
         if (this.player && this.player.classId) {
@@ -18278,11 +18516,15 @@ async startTurn() {
                 const eyeStacksMana = die._tacticiansEye ? (this.stackCount('tacticians_eye') || 1) : 0;
                 let manaGain = (isUpgraded ? 2 : 1) + eyeStacksMana;
                 this.gainMana(manaGain);
+                // Mana-triggered healing can be inverted into lethal damage.
+                // Stop before Blood Price's ordinary one-HP self-cost floor.
+                if (this.player.currentHp <= 0) return;
                 if (die._tacticiansEye) {
                     ParticleSys.createFloatingText(this.player.x, this.player.y - 110, `EYE +${eyeStacksMana}`, "#00f3ff");
                 }
                 if(isUpgraded) {
                     this.player.heal(1); // Skill: Soul Battery (Heal 1)
+                    if (this.player.currentHp <= 0) return;
                 }
                 // Combo: OVERFLOW — each MANA in an overflow-combo roll also grants a reroll.
                 if (this.comboOverflow) {
@@ -18312,6 +18554,7 @@ async startTurn() {
                         // Blood Price: +2 mana total, -1 HP. Base mana die already
                         // awarded 1 mana above, so add 1 more here; pay 1 HP.
                         this.gainMana(1, { silent: true });
+                        if (this.player.currentHp <= 0) return;
                         const hpCost = 1;
                         // Compute the actual HP delta — at 1 HP, Math.max(1, ...)
                         // clamps so no HP is actually lost. Previously the
@@ -18577,9 +18820,11 @@ async startTurn() {
             }
         };
 
-        const executeAction = (multiplier = 1) => this._isAttackSlot(type)
-            ? this._runCombatAction(() => resolveAction(multiplier), null, { minimumPresentationMs: 1200 })
-            : resolveAction(multiplier);
+        const executeAction = (multiplier = 1) => {
+            const attack = this._isAttackSlot(type);
+            return this._runCombatAction(() => resolveAction(multiplier), null,
+                { waitForPresentation: attack, minimumPresentationMs: attack ? 1200 : 0 });
+        };
 
         if (this.currentState === STATE.TUTORIAL_COMBAT && this.tutorialStep === 5 && this._dieSlot(type) === 'attack') {
             this.tutorialStep = 6;
@@ -18739,6 +18984,8 @@ async startTurn() {
     // loop in drawEffects picks them up and renders them. Effects are
     // time-gated via `life`/`maxLife` and self-clean when expired.
     triggerSignatureVFX(classId, source, target) {
+        const presentation = this._activeCombatPresentation;
+        const setTimeout = (fn, ms) => this._scheduleCombatPresentation(presentation, fn, ms);
         if (!source || !target) return;
         const sx = source.x, sy = source.y;
         const tx = target.x, ty = target.y;
@@ -19257,6 +19504,8 @@ async startTurn() {
     },
 
 triggerVFX(type, source, target, onHitCallback = null, opts = {}) {
+        const presentation = this._activeCombatPresentation;
+        const setTimeout = (fn, ms) => this._scheduleCombatPresentation(presentation, fn, ms);
         if (this._settledCombatVfx) {
             this._settledCombatVfx.push({ type, source, target, opts });
             // Damage belongs to the settled action. The later animation
@@ -24759,25 +25008,51 @@ drawEffects() {
         });
     },
 
-    _scheduleReviveTurn() {
+    _scheduleReviveTurn({ restartEncounter = false } = {}) {
         const enemy = this.enemy;
         const player = this.player;
         const gen = this._combatGen;
-        this.setTimer(() => {
+        const existing = this._revivePending;
+        if (existing && existing.gen === gen && existing.player === player && existing.enemy === enemy) return;
+        const pending = { gen, player, enemy, restartEncounter };
+        this._revivePending = pending;
+        this._combatRecoveryRestart = false;
+        this.inputLocked = true;
+        const button = document.getElementById('btn-end-turn');
+        if (button) button.disabled = true;
+        // Persist the consumed relic and its earned health immediately.
+        // Reloading during this delay must not consume a second revive.
+        this.saveGame();
+        const restart = () => {
+            if (this._revivePending !== pending) return;
             const inCombat = this.currentState === STATE.COMBAT
                 || this.currentState === STATE.TUTORIAL_COMBAT || this.currentState === STATE.BREAKOUT;
             if (!inCombat || this._combatGen !== gen || this.enemy !== enemy
-                || this.player !== player || !enemy || !player || player.currentHp <= 0) return;
+                || this.player !== player || !enemy || !player) {
+                this._revivePending = null;
+                return;
+            }
+            if (this.paused || document.hidden || this._combatActionDepth > 0
+                || this.qte?.active || this._endTurnRunning) {
+                this.setTimer(restart, 100);
+                return;
+            }
+            this._revivePending = null;
+            if (player.currentHp <= 0) { this.gameOver(); return; }
             // Retaliation can kill the carrier in the same blast that
             // consumed the revive. Settle that win instead of starting
             // a locked turn against a corpse.
             if (enemy.currentHp <= 0) this.winCombat();
+            else if (restartEncounter) this.startCombat(enemy.isBoss ? 'boss' : (enemy.isElite ? 'elite' : 'combat'));
             else this.startTurn();
-        }, 1000);
+        };
+        this.setTimer(restart, 1000);
     },
 
     gameOver() {
         if (this._combatActionDepth > 0) return;
+        if (this._revivePending && this._revivePending.gen === this._combatGen
+            && this._revivePending.player === this.player && this.player?.currentHp > 0) return;
         // BREAKOUT death-shield. Sector 0 rooms must never end the run;
         // the prologue is meant to teach, not punish. If the player's HP
         // crosses zero in a Breakout room, restore HP and reset the
@@ -24851,13 +25126,13 @@ drawEffects() {
             this.player.playAnim('pulse');
             this.renderRelics();
             this.updateHUD();
-            this._scheduleReviveTurn();
+            this._scheduleReviveTurn({ restartEncounter: !!this._combatRecoveryRestart });
             return;
         }
         const revive = this.player.relics.findIndex(r => r.id === 'second_life');
         if(revive !== -1) {
             this.player.relics.splice(revive, 1);
-            this.player.currentHp = Math.floor(this.player.maxHp * 0.5);
+            this.player.currentHp = Math.max(1, Math.floor(this.player.maxHp * 0.5));
 
             ParticleSys.createFloatingText(this.player.x, this.player.y - 150, "REVIVED!", COLORS.GOLD);
             AudioMgr.playSound('mana');
@@ -24865,7 +25140,7 @@ drawEffects() {
             this.renderRelics();
             this.updateHUD();
 
-            this._scheduleReviveTurn();
+            this._scheduleReviveTurn({ restartEncounter: !!this._combatRecoveryRestart });
 
             return;
         }

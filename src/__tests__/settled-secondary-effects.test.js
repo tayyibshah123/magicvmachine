@@ -14,6 +14,7 @@ function makeEnemy(hp = 40) {
 
 beforeEach(() => {
     vi.useFakeTimers();
+    vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
     localStorage.clear();
     document.body.innerHTML = `
         <div id="game-container"><div id="screen-flash"></div></div>
@@ -64,6 +65,20 @@ afterEach(() => {
 });
 
 describe('Bomb Bot settled damage', () => {
+    async function renderMissile() {
+        Game.ctx = new Proxy({}, {
+            get: (target, key) => target[key] ?? (() => {}),
+            set: (target, key, value) => { target[key] = value; return true; }
+        });
+        vi.spyOn(ParticleSys, '_acquire').mockImplementation(() => ({}));
+        const start = Date.now();
+        // Exercise the real projectile renderer at the low-tier frame rate.
+        for (let frame = 1; frame <= 36; frame++) {
+            await vi.advanceTimersByTimeAsync(start + Math.round(frame * 1000 / 30) - Date.now());
+            Game.drawEffects();
+        }
+    }
+
     it('damages the enemy and its minions immediately, then presents a missile without a damage callback', async () => {
         const minion = new Minion(0, 0, 1, false, 1);
         minion.currentHp = minion.maxHp = 30;
@@ -80,7 +95,7 @@ describe('Bomb Bot settled damage', () => {
         await vi.advanceTimersByTimeAsync(0);
         const missile = Game.effects.find(effect => effect.type === 'bomb_missile');
         expect(missile).toMatchObject({ sx: 25, sy: 55, onHit: null });
-        await vi.advanceTimersByTimeAsync(1200);
+        await renderMissile();
         await action;
         expect(enemyDamage).toHaveBeenCalledTimes(1);
         expect(minionDamage).toHaveBeenCalledTimes(1);
@@ -97,7 +112,7 @@ describe('Bomb Bot settled damage', () => {
         expect(minion.currentHp).toBe(0);
         expect(Game.enemy.minions).toEqual([]);
         expect(Game.winCombat).not.toHaveBeenCalled();
-        await vi.advanceTimersByTimeAsync(1200);
+        await renderMissile();
         await action;
         expect(Game.winCombat).toHaveBeenCalledTimes(1);
     });

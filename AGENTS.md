@@ -46,7 +46,7 @@ src/
   services/             combat-recap, ascension, streak, dailies, perf, etc.
   ui/                   modal helpers, tooltips
   styles/               (rarely used — most styles live in /style.css)
-  __tests__/            vitest suite (13 files, 98 tests)
+  __tests__/            vitest suite (23 files, 262 tests)
 scripts/
   build-www.mjs         clean-build to ./www/ for Capacitor
   compress-music.mjs    OGG → M4A pass for Android payload
@@ -67,7 +67,7 @@ Files **never** to commit: `node_modules/`, `www/` (regenerated),
 | Command | What it does |
 |---|---|
 | `npm install` | Install dev deps (vitest, jsdom, @capacitor/*). |
-| `npm test` | Vitest run, 98 tests, ~7s. **Must stay green.** |
+| `npm test` | Vitest run, 262 tests. **Must stay green.** |
 | `npm run test:watch` | Watch mode for local dev. |
 | `npm run build:www` | Wipes `www/`, rebuilds the shippable web bundle. |
 | `npm run android:sync` | `build:www` then `npx cap sync android`. |
@@ -123,11 +123,15 @@ session re-discover them.
    throwaway — the canonical state lives at `origin/main`. Every commit
    is followed by `git push`. Never leave commits unpushed.
 
-9. **Settle damage before attack presentation.** Use
+9. **Settle health changes before action presentation.** Use
    `Game._runCombatAction` for damage and its subsequent animation.
+   Support actions also use this boundary to settle inverted healing
+   and deaths. Surviving support actions need not hold input for VFX.
    Finish committed multi-hit visuals even after a lethal first hit.
    VFX callbacks must not change HP or settle victory/death. Collect
    timing input first, then resolve damage and play cosmetic effects.
+   Wait for actual presentation completion, including delayed effects;
+   a fixed wall-clock delay cannot cover low frame rates or pauses.
    After awaits, verify combat generation, state and entity identity.
 
 ---

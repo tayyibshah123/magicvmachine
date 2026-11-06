@@ -93,28 +93,23 @@ describe('save schema migration', () => {
 
     it('survives a migration step that throws — keeps progress to that point', async () => {
         const { Game } = await import('../game.js');
-        // Inject a temporary v2→v3 migration that throws, run migration,
+        // Inject a migration after the production schema that throws,
         // then restore the registry. This exercises the inner try/catch
         // without permanently changing schema state for other tests.
         const originalMigrations = Game.SAVE_MIGRATIONS;
         const originalVersion = Game.SAVE_SCHEMA_VERSION;
         Game.SAVE_MIGRATIONS = [
             ...originalMigrations,
-            { from: 2, to: 3, migrate() { throw new Error('boom'); } }
+            { from: originalVersion, to: originalVersion + 1, migrate() { throw new Error('boom'); } }
         ];
-        Game.SAVE_SCHEMA_VERSION = 3;
+        Game.SAVE_SCHEMA_VERSION = originalVersion + 1;
         try {
             const v1Save = { player: { classId: 'tactician' } };
             const migrated = Game._migrateSave(v1Save);
-            // Even though the v2→v3 step threw, the data object should be
-            // populated up to v2 (defensive defaults applied), and the
-            // version should reflect the highest successfully-applied step.
+            // Production defaults survive even when the appended step fails.
             expect(migrated).not.toBeNull();
             expect(Array.isArray(migrated.player.upgrades)).toBe(true);
-            // v ends up at 3 because the step swallows but still bumps —
-            // that's a tradeoff: prevents the migrator from re-running a
-            // throwing step on every load. Documented in _migrateSave.
-            expect(migrated.v).toBe(3);
+            expect(migrated.v).toBe(originalVersion + 1);
         } finally {
             Game.SAVE_MIGRATIONS = originalMigrations;
             Game.SAVE_SCHEMA_VERSION = originalVersion;
@@ -123,18 +118,32 @@ describe('save schema migration', () => {
 
     it('breaks the chain cleanly if a migration step is missing', async () => {
         const { Game } = await import('../game.js');
-        // Saved at v1, target is v3, but no v2→v3 migration registered.
-        // The migrator should advance from v1→v2 and stop, never looping.
+        // Remove the newest production step and ask to advance beyond it.
         const originalVersion = Game.SAVE_SCHEMA_VERSION;
-        Game.SAVE_SCHEMA_VERSION = 3;
+        const originalMigrations = Game.SAVE_MIGRATIONS;
+        Game.SAVE_MIGRATIONS = originalMigrations.filter(m => m.to < originalVersion);
+        Game.SAVE_SCHEMA_VERSION = originalVersion + 1;
         try {
             const v1Save = { player: { classId: 'tactician' } };
             const migrated = Game._migrateSave(v1Save);
             expect(migrated).not.toBeNull();
             // Advanced as far as the chain allowed.
-            expect(migrated.v).toBe(2);
+            expect(migrated.v).toBe(originalVersion - 1);
         } finally {
+            Game.SAVE_MIGRATIONS = originalMigrations;
             Game.SAVE_SCHEMA_VERSION = originalVersion;
         }
+    });
+
+    it('marks a legacy zero-HP snapshot for canonical death recovery', async () => {
+        const { Game } = await import('../game.js');
+        const dead = Game._migrateSave({ v: 2, player: { hp: 0, relics: [{ id: 'second_life' }] } });
+        expect(dead.v).toBe(Game.SAVE_SCHEMA_VERSION);
+        expect(dead.combatRecovery.outcome).toBe('death');
+        expect(dead.player.hp).toBe(0);
+        expect(dead.player.relics).toEqual([{ id: 'second_life' }]);
+        const alive = Game._migrateSave({ v: 2, player: { hp: 1 } });
+        expect(alive.combatRecovery).toBeNull();
+        expect(alive.player.hp).toBe(1);
     });
 });

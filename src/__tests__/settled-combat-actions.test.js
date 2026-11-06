@@ -38,6 +38,7 @@ function tripleAttack() {
 
 beforeEach(() => {
     vi.useFakeTimers();
+    vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
     vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
     document.body.innerHTML = `
         <div id="game-container"><div id="screen-flash"></div></div>
@@ -136,13 +137,14 @@ describe('settled action helpers', () => {
         await vi.advanceTimersByTimeAsync(0);
         expect(Game.effects).toHaveLength(1);
         expect(Game.effects[0].type).toBe('orbital_strike');
+        const visualEffect = Game.effects[0];
         // Replaying an impact cannot apply the original damage a second time.
-        Game.effects[0].onHit();
+        visualEffect.onHit();
         expect(enemy.currentHp).toBe(85);
         await vi.runAllTimersAsync();
         await action;
 
-        Game.effects[0].onHit();
+        visualEffect.onHit();
         expect(damageCallback).toHaveBeenCalledTimes(1);
         expect(enemy.currentHp).toBe(85);
         expect(Game._combatActionDepth).toBe(0);
@@ -522,6 +524,12 @@ describe('signature presentation lifetime', () => {
         expect(ClassAbility.endCombat).not.toHaveBeenCalled();
         expect(Game.showCombatWin).not.toHaveBeenCalled();
         await vi.advanceTimersByTimeAsync(1);
+        expect(Game.inputLocked).toBe(true);
+        expect(ClassAbility.endCombat).not.toHaveBeenCalled();
+        // This fixture has no renderer. Retire its five completed darts
+        // explicitly; timer expiry alone must not finish the presentation.
+        Game.effects = [];
+        await vi.advanceTimersByTimeAsync(20);
         await action;
 
         expect(Game._combatActionDepth).toBe(0);

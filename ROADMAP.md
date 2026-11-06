@@ -7,12 +7,11 @@ in `docs/archive/`.
 
 ## Status
 
-- **Current build:** v1.9.8 (Intel Codex deep dive complete: 40
-  structured entries with multi-paragraph bodies, dedicated modal
-  popup, format-specific rendering, rare unlock triggers wired)
-- **Last ship:** 2026-05-08
+- **Current build:** v1.9.54 (combat recovery, support-action death
+  settlement, complete attack presentation and minion prompt fixes)
+- **Last ship:** 2026-11-06
 - **Active branch:** main
-- **Test baseline:** 98/98 passing
+- **Test baseline:** 262/262 passing
 - **Frame metrics:** truthful (intervalBuf + workBuf split shipped v1.8.9)
 
 Live checklist of what was claimed open in the old docs but is actually

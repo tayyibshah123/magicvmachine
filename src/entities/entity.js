@@ -1074,20 +1074,29 @@ class Entity {
         // --- REALITY SHIFT — incoming heal redirect ---
         // v1.9.0. When the player carries `reality_shift`, every heal
         // they would receive becomes self-damage AND splashes onto
-        // their living minions. Recursive call into takeDamage uses
-        // bypassShield/source=this so the inverted hit can't be
-        // mitigated by shield or relics that key on enemy-source.
+        // their living minions. Deduct HP directly so the inverted heal
+        // cannot be shielded or recursively trigger Blood Thrall siphons.
         // Effect wears off at end of player turn.
         if (Player && this instanceof Player
             && this.hasEffect && this.hasEffect('reality_shift')
             && amount > 0) {
             const dmg = Math.max(1, Math.floor(amount));
+            this.currentHp = Math.max(0, this.currentHp - dmg);
+            let minionLosses = 0;
+            (this.minions || []).forEach(m => {
+                if (m && m.currentHp > 0) {
+                    m.currentHp = Math.max(0, m.currentHp - dmg);
+                    if (m.currentHp <= 0) minionLosses++;
+                }
+            });
+            if (Game && Game.player === this) {
+                if (minionLosses > 0 && Game.enemy?.isBoss && Game.runStats) {
+                    Game.runStats.bossFightMinionLosses = (Game.runStats.bossFightMinionLosses || 0) + minionLosses;
+                }
+                Game._cullPlayerMinions?.();
+            }
             ParticleSys.createFloatingText(this.x, this.y - 100, `INVERTED -${dmg}`, '#bc13fe');
             ParticleSys.createSparks(this.x, this.y, '#bc13fe', 12);
-            this.currentHp = Math.max(0, this.currentHp - dmg);
-            (this.minions || []).forEach(m => {
-                if (m && m.currentHp > 0) m.currentHp = Math.max(0, m.currentHp - dmg);
-            });
             if (Game && Game.shake) Game.shake(6);
             return;
         }
