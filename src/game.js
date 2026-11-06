@@ -18073,16 +18073,6 @@ async startTurn() {
         const data = DICE_TYPES[die.type];
         const isUpgraded = this.player.hasDiceUpgrade(die.type);
 
-        // Custom Run: Hot Hands — first die played each turn bites HP. Flag
-        // is reset in the turn-start routine (startTurn).
-        if (this._customHotHandsDmg && !this._hotHandsUsedThisTurn) {
-            this._hotHandsUsedThisTurn = true;
-            this.player.takeDamage(this._customHotHandsDmg, null, false, /*bypassShield*/ true);
-            ParticleSys.createFloatingText(this.player.x, this.player.y - 140,
-                `HOT HANDS -${this._customHotHandsDmg}`, '#ff6600');
-            if (stopForPlayerDeath()) return;
-        }
-
         if (target) {
             const isTargetEnemy = (target instanceof Enemy || (target instanceof Minion && !target.isPlayerSide));
             const isTargetPlayer = (target instanceof Player || (target instanceof Minion && target.isPlayerSide));
@@ -18095,20 +18085,6 @@ async startTurn() {
                  ParticleSys.createFloatingText(target.x, target.y - 120, "TARGET SELF/ALLY", "#888");
                  return;
             }
-        }
-
-        // Panopticon Analyse: first valid action of the turn is nullified.
-        if (this.player._panopticonNullifyFirst) {
-            this.player._panopticonNullifyFirst = false;
-            if (this.enemy) this.enemy.analyzing = false;
-            die.used = true;
-            this.renderDiceUI();
-            ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "NULLIFIED", "#00ffff");
-            if (this.enemy) ParticleSys.createFloatingText(this.enemy.x, this.enemy.y + 80, "MOVE ANALYSED", "#00ffff");
-            AudioMgr.playSound('hex_barrier');
-            this.shake(6);
-            Hints.trigger && Hints.trigger('first_nullified_die');
-            return;
         }
 
         // Paradox Loop: first die of turn is free, subsequent dice cost +1.
@@ -18134,10 +18110,9 @@ async startTurn() {
             }
         }
         // Relic: ECHO CHAMBER — first skill die each combat costs 0 Mana.
-        if (data.isSkill && this.player.hasRelic('echo_chamber') && !this._echoChamberUsedThisCombat) {
+        const usesEchoChamber = data.isSkill && this.player.hasRelic('echo_chamber') && !this._echoChamberUsedThisCombat;
+        if (usesEchoChamber) {
             effectiveCost = 0;
-            this._echoChamberUsedThisCombat = true;
-            ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "ECHO CHAMBER", COLORS.GOLD);
         }
 
         if(effectiveCost > 0 && this.player.mana < effectiveCost) {
@@ -18146,6 +18121,35 @@ async startTurn() {
             setTimeout(() => el.style.transform = 'translateX(-5px)', 50);
             setTimeout(() => el.style.transform = '', 100);
             return;
+        }
+
+        // Commit a first-play fee only after the target and actual mana cost
+        // are accepted. Invalid drops and unaffordable cards remain free.
+        if (this._customHotHandsDmg && !this._hotHandsUsedThisTurn) {
+            this._hotHandsUsedThisTurn = true;
+            this.player.takeDamage(this._customHotHandsDmg, null, false, /*bypassShield*/ true);
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 140,
+                `HOT HANDS -${this._customHotHandsDmg}`, '#ff6600');
+            if (stopForPlayerDeath()) return;
+        }
+
+        // Analyse consumes a legal play, but does not spend its mana or its
+        // free-skill charge. A lethal first-play fee takes priority.
+        if (this.player._panopticonNullifyFirst) {
+            this.player._panopticonNullifyFirst = false;
+            if (this.enemy) this.enemy.analyzing = false;
+            die.used = true;
+            this.renderDiceUI();
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "NULLIFIED", "#00ffff");
+            if (this.enemy) ParticleSys.createFloatingText(this.enemy.x, this.enemy.y + 80, "MOVE ANALYSED", "#00ffff");
+            AudioMgr.playSound('hex_barrier');
+            this.shake(6);
+            Hints.trigger && Hints.trigger('first_nullified_die');
+            return;
+        }
+        if (usesEchoChamber) {
+            this._echoChamberUsedThisCombat = true;
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "ECHO CHAMBER", COLORS.GOLD);
         }
 
         if(effectiveCost > 0) {
