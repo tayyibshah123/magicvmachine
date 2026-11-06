@@ -34,6 +34,7 @@
 .learning-modal-panel { width: min(100%, 520px); max-height: calc(100dvh - 24px); display: flex; flex-direction: column; overflow: auto; padding: 16px; border: 1px solid #6fe8ff; border-radius: 8px; background: #080b17; color: #fff; font-family: var(--font-main); line-height: 1.4; }
 .learning-modal-title { flex: none; margin: 0 0 10px; font-size: 1.25rem; }
 .learning-modal-intro { flex: none; margin: 0 0 12px; }
+.learning-return-content { border: 0; padding: 0; margin: 0; background: transparent; }
 .learning-practice-list { display: grid; gap: 8px; }
 .learning-practice-lesson { min-height: 60px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px; border: 1px solid #506979; background: #101b28; color: #fff; font-family: var(--font-main); font-size: 1rem; text-align: left; }
 .learning-practice-lesson:disabled { opacity: .6; }

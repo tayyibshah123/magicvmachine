@@ -11,7 +11,7 @@ import { CombatLog } from '../services/combat-log.js';
 import { decorateClassSelection, showObjective, hideObjective, showPracticeLibrary,
     hidePracticeLibrary, showBossRules, hideBossRules, dismissLearningOverlay,
     decorateSanctuary, hideSanctuaryGuidance, decorateOutcome, hideOutcomeGuidance,
-    decorateReward } from '../ui/learning-ui.js';
+    decorateReward, showReturnGuidance, hideReturnGuidance } from '../ui/learning-ui.js';
 import { setupCombatFixture, teardownCombatFixture } from './helpers/combat-fixture.js';
 
 const markup = readFileSync('index.html', 'utf8');
@@ -51,6 +51,7 @@ afterEach(() => {
     hideObjective();
     hideSanctuaryGuidance();
     hideOutcomeGuidance();
+    hideReturnGuidance();
     Hints.suspend();
     Unlocks.suspendAnnouncements();
     if (Hints._visibilityHandler) document.removeEventListener('visibilitychange', Hints._visibilityHandler);
@@ -292,6 +293,68 @@ describe('guided first-return choices', () => {
         expect(note.textContent).toBe('Choose one augmentation for this run. Instant effects apply now.');
         decorateReward(Game, { mode: 'full' });
         expect(document.getElementById('learning-reward-scope')).toBeNull();
+    });
+
+    it('puts first-return copy in a body-level dialog without changing the fixed menu layout', () => {
+        const menu = document.getElementById('screen-start');
+        const before = menu.innerHTML;
+        showReturnGuidance(Game);
+        const modal = document.getElementById('learning-return-guidance');
+        expect(modal.parentElement).toBe(document.body);
+        expect(modal.getAttribute('aria-modal')).toBe('true');
+        expect(modal.textContent).toContain('Sparks stay banked');
+        expect(modal.textContent).toContain('Save and Return keeps your current run');
+        expect(modal.querySelectorAll('button')).toHaveLength(1);
+        expect(modal.querySelector('button').textContent).toBe('GOT IT');
+        expect(menu.innerHTML).toBe(before);
+    });
+
+    it('acknowledges only the explicit Got It button and restores focus', () => {
+        const acknowledge = vi.fn();
+        const previous = document.getElementById('btn-settings-main');
+        previous.focus();
+        showReturnGuidance(Game, { onDismiss: acknowledge });
+        const button = document.querySelector('#learning-return-guidance .learning-modal-close');
+        expect(document.activeElement).toBe(button);
+        button.click();
+        button.click();
+        expect(acknowledge).toHaveBeenCalledTimes(1);
+        expect(document.activeElement).toBe(previous);
+        expect(document.getElementById('learning-return-guidance')).toBeNull();
+    });
+
+    it('lets Escape and native overlay dismissal close unread return copy without marking it seen', () => {
+        const acknowledge = vi.fn();
+        showReturnGuidance(Game, { onDismiss: acknowledge });
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        expect(document.getElementById('learning-return-guidance')).toBeNull();
+        expect(acknowledge).not.toHaveBeenCalled();
+        showReturnGuidance(Game, { onDismiss: acknowledge });
+        expect(dismissLearningOverlay()).toBe(true);
+        expect(acknowledge).not.toHaveBeenCalled();
+    });
+
+    it('closes the return dialog before optional practice opens and does not consume acknowledgement', () => {
+        const acknowledge = vi.fn();
+        const practise = vi.fn(() => {
+            expect(document.getElementById('learning-return-guidance')).toBeNull();
+            showPracticeLibrary({ lessons: [] });
+        });
+        showReturnGuidance(Game, { onPractice: practise, practiceLabel: 'PRACTISE DEFENCE', onDismiss: acknowledge });
+        document.querySelector('#learning-return-guidance .learning-outcome-practice').click();
+        expect(practise).toHaveBeenCalledTimes(1);
+        expect(acknowledge).not.toHaveBeenCalled();
+        expect(document.getElementById('learning-practice-library')).not.toBeNull();
+    });
+
+    it('replaces return guidance without duplicate dialogs or old acknowledgement callbacks', () => {
+        const old = vi.fn(), current = vi.fn();
+        showReturnGuidance(Game, { onDismiss: old });
+        showReturnGuidance(Game, { onDismiss: current });
+        expect(document.querySelectorAll('#learning-return-guidance')).toHaveLength(1);
+        document.querySelector('#learning-return-guidance .learning-modal-close').click();
+        expect(old).not.toHaveBeenCalled();
+        expect(current).toHaveBeenCalledTimes(1);
     });
 });
 
