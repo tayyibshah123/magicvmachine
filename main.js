@@ -1,4 +1,5 @@
 import { Game } from './src/game.js';
+import { STATE } from './src/constants.js';
 import { Analytics } from './src/services/analytics.js';
 import { Perf } from './src/services/perf.js';
 import { ParticleSys } from './src/effects/particles.js';
@@ -12,10 +13,9 @@ import { NativeSplash } from './src/services/native-splash.js';
 Perf.detect();
 ParticleSys.quality = Perf.particleQuality();
 
-// First-launch analytics consent. Respects the prior choice on subsequent
-// visits; on a fresh install, emit events ONLY after the player explicitly
-// opts in (GDPR/CCPA-safe). Decline permanently disables the emitter until
-// re-toggled in Settings. Choice persisted in localStorage.
+// Optional local diagnostics. Respect the stored choice and record nothing
+// before an explicit opt-in. There is no network transport. Settings can
+// change the choice later.
 const CONSENT_KEY = 'mvm_analytics_consent';
 let analyticsInitialized = false;
 function applyAnalyticsConsent(granted) {
@@ -38,6 +38,8 @@ function writeConsent(granted) {
     applyAnalyticsConsent(granted);
     const banner = document.getElementById('analytics-consent-banner');
     if (banner) banner.remove();
+    const setting = document.getElementById('chk-local-diagnostics');
+    if (setting) setting.checked = granted;
 }
 
 // Apply consent before initialization can record a session or install ID.
@@ -53,7 +55,7 @@ function showConsentBanner() {
     el.innerHTML = `
         <div class="analytics-consent-inner">
             <p class="analytics-consent-text">
-                Share <b>anonymous gameplay data</b> (run length, class picks, crashes) to help balance the game? No ads, no personal data. You can change this later in Settings.
+                Enable <b>optional local diagnostics</b>? Gameplay and error events are kept on this device for troubleshooting, with recent events saved when you leave. Nothing is sent automatically. You can change this in Settings.
             </p>
             <div class="analytics-consent-actions">
                 <button class="btn secondary" data-consent="denied">Decline</button>
@@ -66,18 +68,20 @@ function showConsentBanner() {
     });
 }
 
-// Defer the first-launch banner until the intro splash is dismissed so it
-// doesn't cover the brand moment. If the intro is already gone (reload,
-// tests, etc.) show immediately. Otherwise poll briefly — intro dismisses
-// on first user tap and is removed from the DOM after ~750ms.
+// Ask at a visible menu or map after onboarding, never over an action or
+// a teaching overlay. Diagnostics stay off throughout the wait.
 function showConsentWhenReady() {
     if (readConsent() !== null) return;
     const poll = () => {
         if (readConsent() !== null) return;
-        const intro = document.getElementById('intro-overlay');
-        if (!intro) { showConsentBanner(); return; }
-        // Still there — check again soon. Caps at 60s to avoid a runaway loop.
-        if ((poll._tries = (poll._tries || 0) + 1) < 60) setTimeout(poll, 1000);
+        const blocked = document.getElementById('intro-overlay')
+            || document.getElementById('onboarding-overlay')
+            || document.body.classList.contains('breakout-active')
+            || document.querySelector('#modal-settings:not(.hidden), #cipher-intro, #sector-intro.active');
+        const safeState = Game.currentState === STATE.MENU || Game.currentState === STATE.MAP;
+        if (!document.hidden && !blocked && safeState) { showConsentBanner(); return; }
+        // Wait for a menu or map, including tutorials longer than one minute.
+        setTimeout(poll, 1000);
     };
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', poll);

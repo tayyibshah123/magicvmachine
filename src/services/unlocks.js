@@ -5,8 +5,10 @@
 // `Unlocks.has(key)` to decide whether to render the button.
 
 import { Analytics } from './analytics.js';
+import { STATE } from '../constants.js';
 
 const KEY = 'mvm_unlocks_v1';
+const PENDING_KEY = 'mvm_unlock_announcements_v1';
 
 const DEFAULT = {
     daily: false,       // first run complete (win or lose) → CHALLENGE
@@ -35,6 +37,10 @@ export const Unlocks = {
 
     init() {
         this._state = read();
+        try {
+            const saved = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
+            this._pending = [...new Set(Array.isArray(saved) ? saved : [])].filter(key => key in DEFAULT);
+        } catch (_) { this._pending = []; }
     },
 
     has(key) {
@@ -48,8 +54,9 @@ export const Unlocks = {
         this._state[key] = true;
         write(this._state);
         Analytics.emit('feature_unlocked', { key, reason: reason || 'condition_met' });
-        // Light the +NEW badge on the next main-menu render.
-        document.body.dataset.newUnlock = key;
+        this._pending ||= [];
+        if (!this._pending.includes(key)) this._pending.push(key);
+        this._savePending();
         return true;
     },
 
@@ -76,11 +83,6 @@ export const Unlocks = {
             // when all of its children are hidden via CSS rules.
             el.classList.toggle('feature-locked-hidden', !unlocked);
             el.classList.toggle('locked-feature', !unlocked); // legacy hook for any styling
-            if (unlocked && document.body.dataset.newUnlock === key) {
-                el.classList.add('just-unlocked');
-                setTimeout(() => el.classList.remove('just-unlocked'), 5000);
-                delete document.body.dataset.newUnlock;
-            }
         }
         // Daily-twist pill is conditional on Challenge being unlocked.
         const twist = document.getElementById('challenge-daily-twist');
@@ -92,5 +94,31 @@ export const Unlocks = {
                 .some(b => !b.classList.contains('feature-locked-hidden') && !b.classList.contains('hidden'));
             row.classList.toggle('feature-locked-hidden', !visible);
         });
+        this._announceNext(map);
+    },
+
+    _savePending() {
+        try { localStorage.setItem(PENDING_KEY, JSON.stringify(this._pending)); } catch (_) {}
+    },
+
+    _announceNext(map) {
+        if (this._announcing) return;
+        this._pending ||= [];
+        const game = typeof window !== 'undefined' && window.Game;
+        if (document.hidden || game && game.currentState !== STATE.MENU) return;
+        const key = this._pending.find(key => map[key] && document.getElementById(map[key]));
+        if (!key) return;
+        this._announcing = key;
+        const el = document.getElementById(map[key]);
+        el.classList.add('just-unlocked');
+        setTimeout(() => {
+            el.classList.remove('just-unlocked');
+            this._announcing = null;
+            const liveGame = typeof window !== 'undefined' && window.Game;
+            if (document.hidden || liveGame && liveGame.currentState !== STATE.MENU) return;
+            this._pending = this._pending.filter(item => item !== key);
+            this._savePending();
+            this._announceNext(map);
+        }, 5000);
     }
 };

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Exercise the real bootstrap and worker listeners without starting the game.
-vi.mock('../game.js', () => ({ Game: { init: vi.fn() } }));
+vi.mock('../game.js', () => ({ Game: { init: vi.fn(), currentState: 1 } }));
 vi.mock('../services/perf.js', () => ({
     Perf: { detect: vi.fn(), particleQuality: vi.fn(() => 1) }
 }));
@@ -177,6 +177,28 @@ describe('browser service-worker lifecycle', () => {
 });
 
 describe('real analytics bootstrap consent', () => {
+    it('waits through callsign and training before offering local diagnostics at a safe map', async () => {
+        localStorage.removeItem('mvm_analytics_consent');
+        const { Game } = await import('../game.js');
+        Game.currentState = 10;
+        const callsign = document.createElement('div');
+        callsign.id = 'onboarding-overlay';
+        document.body.appendChild(callsign);
+        await loadBootstrap();
+        await vi.advanceTimersByTimeAsync(90000);
+        expect(document.getElementById('analytics-consent-banner')).toBeNull();
+        expect(localStorage.getItem('mvm_analytics_install')).toBeNull();
+        callsign.remove();
+        document.body.classList.add('breakout-active');
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(document.getElementById('analytics-consent-banner')).toBeNull();
+        document.body.classList.remove('breakout-active');
+        Game.currentState = 2;
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(document.querySelector('.analytics-consent-text').textContent).toContain('Nothing is sent automatically');
+        expect(localStorage.getItem('mvm_analytics_install')).toBeNull();
+    });
+
     it.each([null, 'denied'])('does not record or create an install identifier before consent %s', async consent => {
         if (consent === null) localStorage.removeItem('mvm_analytics_consent');
         else localStorage.setItem('mvm_analytics_consent', consent);

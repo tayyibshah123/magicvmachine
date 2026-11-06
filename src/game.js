@@ -652,6 +652,8 @@ const Game = {
         // class definitions mid-run without abandoning combat.
         attachButtonEvent('btn-glossary', () => this._openGlossary());
         attachButtonEvent('btn-glossary-close', () => this._closeGlossary());
+        attachButtonEvent('btn-cipher-practice', () => this.startHexBreach({ practice: true }));
+        attachButtonEvent('btn-hex-exit', () => this.changeState(STATE.INTEL));
         if (!Game._origRandom) Game._origRandom = Math.random;
         attachButtonEvent('btn-start', () => {
             // Audit F7 — when a save exists, the first tap warns that
@@ -1044,6 +1046,11 @@ const Game = {
         hookSetting('chk-auto-qte', (el) => {
             this.autoQTE = !!el.checked;
         });
+        hookSetting('chk-local-diagnostics', (el) => {
+            if (window.MVMConsent) window.MVMConsent.write(!!el.checked);
+        });
+        const diagnosticsSetting = d.getElementById('chk-local-diagnostics');
+        if (diagnosticsSetting) diagnosticsSetting.checked = !!(window.MVMConsent && window.MVMConsent.read());
         hookSetting('chk-qte-wider', (el) => {
             this.qteWiderWindow = !!el.checked;
         });
@@ -2028,7 +2035,7 @@ const Game = {
                 }
 
                 if(ent instanceof Enemy) {
-                    txt += "\n(Left Click to toggle targets)";
+                    txt += "\n(Tap or click to change target focus. Hold to inspect.)";
                     
                     if (ent.nextIntents && ent.nextIntents.length > 0) {
                         txt += `\n\n--- INTENTS ---`;
@@ -3964,7 +3971,7 @@ startQTE(type, x, y, callback, opts) {
                 activate('screen-shop');
                 this.showSkeleton('shop-grid', 4);
                 setTimeout(() => this.renderShop(), 280);
-                this.showHintOnce('first_shop', "SHOP: spend Fragments on new Modules. Rarer modules scale stronger.");
+                this.showHintOnce('first_shop', "SHOP: spend run-only Fragments on modules, skills and repairs.");
                 break;
             case STATE.COMBAT:
                 document.getElementById('hud').classList.remove('hidden');
@@ -3987,6 +3994,12 @@ startQTE(type, x, y, callback, opts) {
                 // let the solid panel carry the moment — the "{BOSS}
                 // DESTROYED" banner below is now the anchor instead.
                 const rewardScreen = document.getElementById('screen-reward');
+                const rewardTitle = document.getElementById('reward-title');
+                if (rewardTitle) {
+                    const node = this.map && this.map.nodes && this.map.nodes.find(n => n.id === this.map.currentIdx);
+                    rewardTitle.textContent = node && node.type === 'boss' ? 'SECTOR CLEARED'
+                        : node && node.type === 'elite' ? 'ELITE DEFEATED' : 'COMBAT WON';
+                }
                 if (rewardScreen) {
                     rewardScreen.style.backgroundImage = '';
                     rewardScreen.classList.remove('reward-has-snap');
@@ -4037,6 +4050,7 @@ startQTE(type, x, y, callback, opts) {
         activate('screen-victory');
         break;
         }
+        if (Hints.resume) Hints.resume();
     },
     
     // Drop every document-level pointerdown listener registered by
@@ -5274,7 +5288,7 @@ startQTE(type, x, y, callback, opts) {
         },
         annihilator: {
             description: "A reckless overcharger whose output is +50%, paid for in HP whenever the rerolls run dry.",
-            style: "All offense, heat management, every reroll costs life.",
+            style: "All offense and heat management. No baseline rerolls; Perfect timing earns a reroll token, and extra rerolls cost HP.",
             minion: "Bomb Bot. Detonates on death for 10 AoE damage to every enemy.",
             ability: "Overheat Core gains +10% heat per die used. Vent yellow (50%+) for x1.4 next attack. Vent red (80%+) for 20 AoE and 5 self damage. Hit 100% without venting and you auto-take 5.",
             attack: "Blast, Barrage, Annihilate. Shield-piercing hammer that picks up Stun and Weak at higher tiers.",
@@ -5294,9 +5308,9 @@ startQTE(type, x, y, callback, opts) {
             description: "A nature commander whose Sacred Grove keeps growing free Spirits while any minion still stands.",
             style: "Swarm scaling, weak first two turns before the grove blooms, the only class with a 4-minion cap.",
             minion: "Spirit. 30% chance to revive at half HP when killed.",
-            ability: "Sacred Grove. 3 plots tick Seed, Sprout, Bloom while a minion lives. Tap a Bloomed plot for a free Spirit. With 4 minions out and all 3 plots Bloomed, tap any to APEX x2 every minion's HP and damage.",
+            ability: "Sacred Grove. 4 plots tick Seed, Sprout, Bloom while a minion lives. Tap a Bloomed plot for a free Spirit. With 4 minions out and all 4 plots Bloomed, tap any to APEX x2 every minion's HP and damage.",
             attack: "Call, Rouse, Primal Roar. Summon plus damage that scales with living minions.",
-            combo:  "WILD PACK (2 MINION + 1 ATK). All alive minions gain +3 HP and +3 damage permanently.",
+            combo:  "WILD PACK (2 MINION + 1 ATK). All alive minions gain +3 HP and +3 damage for this run.",
             difficulty: 3,
         },
     },
@@ -6458,12 +6472,12 @@ triggerPhaseGlitch() {
                 { name: 'BULWARK',      icon: '◈', color: '#00f3ff', body: 'Two or more DEFEND dice. Climax fires a hex barrier and a wide shockwave on the player.' },
                 { name: 'OVERFLOW',     icon: '◇', color: '#ffd700', body: 'Two or more MANA dice. Each MANA played in the combo also grants +1 reroll.' },
                 { name: 'SIBLING BOND', icon: '✦', color: '#00ff99', body: 'Two or more MINION dice. Each minion spawned during the combo gets +3 HP.' },
-                { name: 'PINCER',       icon: '◆', color: '#00f3ff', body: 'Tactician class combo: ATTACK + DEFEND + MANA. Reveals enemy intent and grants +1 reroll.' },
+                { name: 'PINCER',       icon: '◆', color: '#00f3ff', body: 'Tactician class combo: ATTACK + DEFEND + MANA. Clears obscured intent and grants +2 rerolls.' },
                 { name: 'CONVERGENCE',  icon: '◉', color: '#bc13fe', body: 'Arcanist class combo: 3+ MANA dice. Climax grants +2 mana on the spot.' },
                 { name: 'FEEDING FRENZY', icon: '☠', color: '#ff3355', body: 'Bloodstalker class combo: 2 ATTACK + 1 DEFEND. Climax heals 5 HP and lands a finisher.' },
                 { name: 'OVERLOAD',     icon: '✸', color: '#ff8800', body: 'Annihilator class combo: 2 ATTACK + 1 MANA. Next attack deals 50% more damage.' },
                 { name: 'FORTRESS',     icon: '◧', color: '#ffffff', body: 'Sentinel class combo: 3+ DEFEND. Climax adds 5 thorns through the next enemy turn.' },
-                { name: 'WILD PACK',    icon: '🌿', color: '#00ff99', body: 'Summoner class combo: 2 MINION + 1 ATTACK. Every alive minion gains +3 HP / +3 DMG permanently.' }
+                { name: 'WILD PACK',    icon: '🌿', color: '#00ff99', body: 'Summoner class combo: 2 MINION + 1 ATTACK. Every alive minion gains +3 HP / +3 DMG for this run.' }
             ],
             sectors: (function () {
                 const out = [];
@@ -6482,28 +6496,30 @@ triggerPhaseGlitch() {
                 return out;
             })(),
             dice: [
-                { name: 'ATTACK',  icon: '⚔', color: '#ff3355', body: 'Drag onto an enemy to deal damage. Triggers a timing ring — tap as the ring crosses the gold zone for a CRITICAL (+60% damage).' },
-                { name: 'DEFEND',  icon: '◈', color: '#00f3ff', body: 'Drag onto yourself or an ally to gain shield. Shield absorbs incoming damage before HP and decays at end of turn (carry-over relics aside).' },
-                { name: 'MANA',    icon: '◇', color: '#aa00ff', body: 'Drag onto yourself for +1 mana (or more with class-specific traits). Mana fuels skill dice (METEOR, EARTHQUAKE, etc.).' },
+                { name: 'ATTACK',  icon: '⚔', color: '#ff3355', body: 'Drag onto an enemy to deal damage. Tap anywhere as the ring reaches its inner timing band for a CRITICAL (+60% damage).' },
+                { name: 'DEFEND',  icon: '◈', color: '#00f3ff', body: 'Drag onto yourself. Most classes gain shield, which absorbs damage before HP and decays between turns. Bloodstalker heals instead; Annihilator gains Ricochet damage reduction. Read your die for its exact effect and legal targets.' },
+                { name: 'MANA',    icon: '◇', color: '#aa00ff', body: 'Drag onto yourself to gain mana for paid skills. Amount and side effects depend on your class. Blood Price gains mana by spending HP. Free signatures do not spend mana.' },
                 { name: 'MINION',  icon: '✦', color: '#00ff99', body: 'Drag onto empty space to summon a minion. Tank hits for you, attack with you. Cap depends on class.' },
                 { name: 'METEOR',  icon: '☄', color: '#bc13fe', body: 'Skill die (mana cost). Drops orbital damage on a target. Heavy single-hit. Triggers a long-window QTE.' },
-                { name: 'SIGNATURE', icon: '★', color: '#ffd700', body: 'Class-unique die. Each class has a different signature, upgraded once per boss kill (Tier 1 → Tier 2 → Tier 3).' }
+                { name: 'SIGNATURE', icon: '★', color: '#ffd700', body: 'A free class-specific die. Signature Forge unlocks evolution: Tier 2 after the Sector 2 boss, Tier 3 after the Sector 4 boss. Without the upgrade, it stays Tier 1.' }
             ],
             qte: [
-                { name: 'CRITICAL TAP', icon: '⚔', color: '#ffd700', body: 'When attacking, a ring shrinks toward a target zone. Tap inside the gold window for a critical (+60% damage). Outside but close = good hit (+15%). Miss = base damage.' },
-                { name: 'PERFECT PARRY', icon: '◈', color: '#ffd700', body: 'When defending, perfect tap halves the incoming damage AND ripostes 50% of what you took (25% of incoming) back at the attacker. Good = 40% damage reduction. Miss = full damage.' },
+                { name: 'CRITICAL TAP', icon: '⚔', color: '#ffd700', body: 'When attacking, a ring shrinks toward a target zone. Tap anywhere when it reaches the inner timing band: Perfect adds 60% damage, Good adds 15%, and a miss deals base damage.' },
+                { name: 'ALLY BOOST', icon: '✦', color: '#00ff99', body: 'A short prompt appears before an ally strikes. Perfect adds 30% damage; Good adds 10%, rounded up. Missing keeps its base damage. The projectile then shows the already-resolved strike.' },
+                { name: 'MINION DEFENCE', icon: '◈', color: '#00f3ff', body: 'A short defensive prompt appears before a hostile minion strikes. Perfect blocks that hit completely. Good reduces it by 40%. This short block does not riposte at the boss.' },
+                { name: 'PERFECT PARRY', icon: '◈', color: '#ffd700', body: 'For ordinary enemy attacks, Perfect timing halves the incoming damage and counterattacks. Sentinel blocks it completely. Good reduces damage by 40%; a miss takes the full hit before other defences.' },
                 { name: 'STEADY',      icon: '─', color: '#ffd700', body: 'Default rhythm — ring shrinks at constant speed. Most regular enemies use this.' },
                 { name: 'ACCELERATE',  icon: '↗', color: '#ff3355', body: 'Slow start, fast finish. Bosses use this — read the wind-up, commit late.' },
                 { name: 'PULSE',       icon: '∿', color: '#ff66dd', body: 'Speed wobbles. Elites + chaotic / observer enemies use this. Stay focused, the rhythm shifts.' },
-                { name: 'CHAIN (multi)', icon: '∞', color: '#00f3ff', body: 'Multi-hit attacks fire N waves in sequence. Tap each wave at the perfect window — final multiplier is the WORST quality across all waves.' }
+                { name: 'CHAIN (multi)', icon: '∞', color: '#00f3ff', body: 'Multi-hit defence has one timing wave per hit. The weakest result sets the defensive multiplier. Starfall instead scores each successful attack wave separately. Finish timing before the committed hits animate.' }
             ],
             classes: [
                 { name: 'TACTICIAN',   icon: '◆', color: '#00f3ff', body: 'Pip Track fills as you play dice. Three pips → spend for +reroll, +shield, or +damage. Class combo: PINCER grants +2 rerolls and breaks intent-obscure.' },
-                { name: 'ARCANIST',    icon: '◉', color: '#bc13fe', body: 'Glyph cycle (Fire/Ice/Lightning) ticks each turn. Tap when the right glyph is lit for that effect. Mana scales attacks.' },
+                { name: 'ARCANIST',    icon: '◉', color: '#bc13fe', body: 'Fire, Ice and Lightning cycle every 0.7 seconds. Tap the widget when your chosen glyph is lit. One activation per turn. Mana scales attacks.' },
                 { name: 'BLOODSTALKER',icon: '☠', color: '#ff3355', body: 'Damage taken fills the Blood Pool. Spend for tributes: minor (+reroll), major (attack + bleed), grand (heavy strike + mana + rerolls).' },
                 { name: 'ANNIHILATOR', icon: '✸', color: '#ff8800', body: 'Heat fills as you play dice. Vent in yellow zone for ×1.4 next attack; vent in red zone for AoE blast (5 self-DMG).' },
                 { name: 'SENTINEL',    icon: '◧', color: '#ffffff', body: 'Shield gained fills 3 plates. Full plates = AEGIS PRIMED — next enemy attack is fully nullified.' },
-                { name: 'SUMMONER',    icon: '🌿', color: '#00ff99', body: 'Sacred Grove plots grow from summons. Tap a bloomed plot for a free spirit, or APEX (3 blooms + max minions) for ×2 to every minion.' }
+                { name: 'SUMMONER',    icon: '🌿', color: '#00ff99', body: 'Four Sacred Grove plots grow while minions live; summons bloom a plot. Tap a bloomed plot for a free Spirit. With all four plots bloomed and four minions alive, tap for APEX: x2 to every minion.' }
             ]
         };
     },
@@ -6606,6 +6622,11 @@ triggerPhaseGlitch() {
     // overlay where dismiss has special "abort" semantics, and a player
     // stuck in a maze should always be able to back out.
     dismissOpenOverlay() {
+        const cipherIntro = document.getElementById('cipher-intro');
+        if (cipherIntro) {
+            cipherIntro.remove();
+            return true;
+        }
         const hackOverlay = document.getElementById('hack-minigame-overlay');
         if (hackOverlay && !hackOverlay.classList.contains('hidden')) {
             const resultEl = document.getElementById('hack-result');
@@ -6975,6 +6996,10 @@ triggerPhaseGlitch() {
     },
 
     showHintOnce(flagId, text) {
+        if (['first_shop', 'first_reward', 'first_event'].includes(flagId)) {
+            Hints.trigger(flagId);
+            return;
+        }
         if (this.tutorialHintsEnabled === false) return;
         this.seenFlags = this.seenFlags || {};
         if (this.seenFlags[flagId]) return;
@@ -7391,7 +7416,7 @@ triggerPhaseGlitch() {
                 'NULL_POINTER':    'REALITY SHATTER. SYSTEMS BLEEDING',
                 'THE COMPILER':    'STRUCTURAL COLLAPSE. SHRAPNEL LIVE',
                 'HIVE PROTOCOL':   'ASSIMILATION PROTOCOL',
-                'TESSERACT PRIME': 'REALITY SPLIT. EVERY HIT TWICE',
+                'TESSERACT PRIME': 'REALITY REWRITTEN. THE CORE SHIFTS AGAIN',
                 'THE ARCHIVIST':   'REWIND ENGAGED. HEAVY HITS UNDONE',
             },
             4: {
@@ -8556,7 +8581,7 @@ triggerSystemCrash() {
             // breakdown doesn't capture. Append them as a player-side note.
             const playerReasons = [];
             if (this.player && this.player.hasEffect && this.player.hasEffect('vulnerable')) playerReasons.push('VULNERABLE (+1)');
-            if (this.player && this.player.hasEffect && this.player.hasEffect('frail')) playerReasons.push('FRAIL (+30%)');
+            if (this.player && this.player.hasEffect && this.player.hasEffect('frail')) playerReasons.push('FRAIL (+50%)');
             if (playerReasons.length) {
                 modLine += `\n<small style="color:#a88;">+ on you: ${playerReasons.join(', ')}</small>`;
             }
@@ -8588,7 +8613,7 @@ triggerSystemCrash() {
                 body = `Outgoing damage reduced to <strong>50%</strong>.`;
                 break;
             case 'frail':
-                body = `Incoming damage increased by <strong>30%</strong>.`;
+                body = `Incoming damage increased by <strong>50%</strong>.`;
                 break;
             case 'vulnerable':
                 body = `Takes <strong>+1 damage</strong> from every source.`;
@@ -13406,20 +13431,56 @@ triggerSystemCrash() {
         this._customDmgInMult = (this._customBaseDmgInMult || 1) * ((twist && twist.dmgInMult) || 1);
     },
 
-    startHexBreach() {
-        if (this.encryptedFiles <= 0) return;
-        
+    startHexBreach({ practice = false, confirmed = false } = {}) {
+        if (!practice && this.encryptedFiles <= 0) return;
+        if (!practice && !confirmed) {
+            this._showCipherIntro();
+            return;
+        }
+        document.getElementById('cipher-intro')?.remove();
         this.changeState(STATE.HEX);
         this.hex = {
+            practice,
             round: 1,
-            maxRounds: Math.floor(Math.random() * 3) + 3, 
+            maxRounds: practice ? 3 : Math.floor(Math.random() * 3) + 3,
             sequence: [],
             playerInput: [],
             acceptingInput: false
         };
-        
+        const hex = this.hex;
+        const title = document.getElementById('hex-title');
+        if (title) title.textContent = practice ? 'HEX BREACH: PRACTICE' : 'HEX BREACH';
+        document.getElementById('hex-result')?.classList.add('hidden');
         this.renderHexGrid();
-        setTimeout(() => { if (this.currentState === STATE.HEX) this.nextHexRound(); }, 1000);
+        setTimeout(() => { if (this.currentState === STATE.HEX && this.hex === hex) this.nextHexRound(); }, 1000);
+    },
+
+    _showCipherIntro() {
+        if (document.getElementById('cipher-intro')) return;
+        const overlay = document.createElement('div');
+        overlay.id = 'cipher-intro';
+        overlay.className = 'cipher-intro-overlay';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-labelledby', 'cipher-intro-title');
+        overlay.innerHTML = `
+            <div class="cipher-intro-card">
+                <h2 id="cipher-intro-title">DECRYPT ONE FILE</h2>
+                <p>Watch the flashing nodes, then tap them in the same order. Complete 3 to 5 growing sequences. There is no input time limit.</p>
+                <p><strong>Success:</strong> spend 1 encrypted file and earn 8 Sparks, plus the next locked lore entry when available. Silent Chronicle blocks lore rewards.</p>
+                <p><strong>Two mistakes:</strong> spend 1 encrypted file and earn no Sparks or lore. Returning to Intel before the result keeps your file.</p>
+                <p>Practice uses no files and awards no Sparks or lore.</p>
+                <div class="cipher-intro-actions">
+                    <button id="btn-cipher-cancel" class="btn secondary" type="button">CANCEL</button>
+                    <button id="btn-cipher-practise-now" class="btn secondary" type="button">PRACTISE FREE</button>
+                    <button id="btn-cipher-start" class="btn primary" type="button">DECRYPT ONE FILE</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelector('#btn-cipher-cancel').onclick = () => overlay.remove();
+        overlay.querySelector('#btn-cipher-practise-now').onclick = () => this.startHexBreach({ practice: true });
+        overlay.querySelector('#btn-cipher-start').onclick = () => this.startHexBreach({ confirmed: true });
+        overlay.querySelector('#btn-cipher-cancel').focus();
     },
 
     renderHexGrid() {
@@ -13545,6 +13606,9 @@ updateHexBreach(dt) {
     },
 
     async nextHexRound() {
+        const hex = this.hex;
+        const current = () => this.currentState === STATE.HEX && this.hex === hex && !hex.finished;
+        if (!current()) return;
         this.hex.playerInput = [];
         this.hex.acceptingInput = false;
         this.hex.showingSequence = true; 
@@ -13560,6 +13624,7 @@ updateHexBreach(dt) {
         document.getElementById('hex-round').innerText = this.hex.sequence.length;
 
         await this.sleep(500);
+        if (!current()) return;
 
         for (let i = 0; i < this.hex.sequence.length; i++) {
             const id = this.hex.sequence[i];
@@ -13570,11 +13635,13 @@ updateHexBreach(dt) {
             
             AudioMgr.playSound('mana');
             await this.sleep(600); 
+            if (!current()) return;
             
             // Deactivate
             node.el.classList.remove('active');
             
             await this.sleep(200); 
+            if (!current()) return;
         }
 
         this.hex.showingSequence = false; 
@@ -13584,7 +13651,8 @@ updateHexBreach(dt) {
     },
 
     handleHexInput(index) {
-        if (!this.hex.acceptingInput) return;
+        if (this.currentState !== STATE.HEX || !this.hex || !this.hex.acceptingInput || this.hex.finished) return;
+        const hex = this.hex;
 
         const node = this.hex.nodes[index];
         
@@ -13607,7 +13675,7 @@ updateHexBreach(dt) {
                 } else {
                     this.hex.round++;
                     this.hex.acceptingInput = false;
-                    setTimeout(() => { if (this.currentState === STATE.HEX) this.nextHexRound(); }, 1000);
+                    setTimeout(() => { if (this.currentState === STATE.HEX && this.hex === hex) this.nextHexRound(); }, 1000);
                 }
             }
         } else {
@@ -13629,7 +13697,7 @@ updateHexBreach(dt) {
                     node.el.style.boxShadow = `0 0 5px ${node.color}`;
                 }, 500);
 
-                setTimeout(() => { if (this.currentState === STATE.HEX) this.nextHexRound(); }, 1500);
+                setTimeout(() => { if (this.currentState === STATE.HEX && this.hex === hex) this.nextHexRound(); }, 1500);
             } else {
                 this.failHexBreach(node.el);
             }
@@ -13637,7 +13705,14 @@ updateHexBreach(dt) {
     },
 
     winHexBreach() {
+        if (!this.hex || this.hex.finished) return;
+        this.hex.finished = true;
         this.hex.acceptingInput = false;
+        if (this.hex.practice) {
+            this._showHexResult({ kind: 'win', title: 'PRACTICE COMPLETE',
+                rewards: ['No file spent', 'No Sparks or lore awarded'] });
+            return;
+        }
         document.getElementById('hex-status').innerText = "DECRYPTION SUCCESSFUL";
         AudioMgr.playSound('upgrade');
 
@@ -13954,7 +14029,14 @@ updateHexBreach(dt) {
     },
 
     failHexBreach(el) {
+        if (!this.hex || this.hex.finished) return;
+        this.hex.finished = true;
         this.hex.acceptingInput = false;
+        if (this.hex.practice) {
+            this._showHexResult({ kind: 'fail', title: 'PRACTICE ENDED',
+                rewards: ['No file spent', 'No Sparks or lore awarded. Try again whenever you like.'] });
+            return;
+        }
         if (el) el.classList.add('error');
         AudioMgr.playSound('explosion');
         document.getElementById('hex-status').innerText = "BREACH DETECTED - FILE PURGED";
@@ -13975,6 +14057,7 @@ updateHexBreach(dt) {
     // read the outcome before being yanked back to Intel. Tap CONTINUE
     // (or wait 4s as a safety net) to leave.
     _showHexResult({ kind, title, rewards }) {
+        const hex = this.hex;
         const host = document.getElementById('hex-result');
         if (!host) {
             // Fallback: jump back to Intel rather than strand the player.
@@ -14009,7 +14092,7 @@ updateHexBreach(dt) {
         // doesn't get stuck on the result screen. Routed via setTimer
         // so a state change cleans it up if the player navigates away.
         this.setTimer(() => {
-            if (!host.classList.contains('hidden')) dismiss();
+            if (this.hex === hex && this.currentState === STATE.HEX && !host.classList.contains('hidden')) dismiss();
         }, 6000);
         host.classList.remove('hidden');
     },
@@ -18625,7 +18708,7 @@ async startTurn() {
                         }
                         ParticleSys.createFloatingText(this.player.x, this.player.y - 100, `+1 MANA / -${actualHp} HP`, "#990000");
                         if (isUpgraded && this.enemy) {
-                            this.enemy.addEffect('frail', 2, 0, '💢', '+30% Dmg Taken.', 'FRAIL');
+                            this.enemy.addEffect('frail', 2, 0, '💢', '+50% Dmg Taken.', 'FRAIL');
                             ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "FRAIL", "#ff0055");
                         }
                     } else if (cid === 'annihilator') {
@@ -22915,7 +22998,7 @@ drawEffects() {
                     const duration = isImproved ? 3 : 2;
                     let desc = "";
                     if (id === 'weak') desc = "Deals 50% less DMG.";
-                    if (id === 'frail') desc = "Takes 30% more DMG.";
+                    if (id === 'frail') desc = "Takes 50% more DMG.";
                     this.player.addEffect(id, duration, 0, '🦠', desc);
                     ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "SYSTEM HACKED", "#00ff00");
                     AudioMgr.playSound('attack');

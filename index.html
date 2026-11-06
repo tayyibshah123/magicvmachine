@@ -671,6 +671,7 @@
                     <div class="intel-cipher-header">
                         <span class="intel-cipher-progress" id="intel-cipher-progress">0 / 0 decrypted</span>
                         <button id="btn-decrypt" class="btn primary neon-border-pink intel-cipher-btn">DECRYPT FILE</button>
+                        <button id="btn-cipher-practice" class="btn secondary" type="button">PRACTISE FREE</button>
                     </div>
                     <div id="intel-cipher-chapters" class="intel-cipher-chapters"></div>
                 </div>
@@ -710,7 +711,7 @@
 
             <!-- Hex Breach Minigame Overlay -->
             <div id="screen-hex" class="screen hidden" style="background: rgba(0,0,0,0.95); z-index: 200;">
-                <h2 class="neon-text-pink">HEX BREACH</h2>
+                <h2 id="hex-title" class="neon-text-pink">HEX BREACH</h2>
                 <p id="hex-status" style="font-family: 'Orbitron'; color: #fff;">MEMORIZE THE PATTERN</p>
 
                 <div id="hex-grid" class="hex-grid">
@@ -720,6 +721,7 @@
                 <div id="hex-progress" class="neon-text-blue" style="margin-top: 20px; font-family: 'Orbitron';">
                     SEQUENCE: <span id="hex-round">1</span> / <span id="hex-max-round">3</span>
                 </div>
+                <button id="btn-hex-exit" class="btn secondary" type="button">RETURN TO INTEL</button>
 
                 <!-- Result panel — populated + revealed by JS on win/fail.
                      Replaces the previous alert() popup. -->
@@ -794,6 +796,10 @@
 
             <!-- Map Screen -->
             <div id="screen-map" class="screen hidden">
+                <nav class="map-navigation" aria-label="Run navigation">
+                    <button id="btn-map-settings" class="btn secondary" type="button">SETTINGS / HELP</button>
+                    <button id="btn-map-return" class="btn secondary" type="button">SAVE AND RETURN</button>
+                </nav>
                 <h2 class="neon-text-blue map-title"><span id="map-title-text">SECTOR MAP</span> <span id="map-sector-display" style="font-size: 0.6em; color: var(--neon-gold); margin-left: 15px;"></span></h2>
                 <div id="map-legend-top" class="map-legend-top"></div>
                 <div id="map-nodes" class="map-container"></div>
@@ -851,7 +857,7 @@
                             <path d="M9 17 L7 20 M15 17 L17 20" stroke="currentColor" stroke-width="1.6"/>
                         </svg>
                         <span class="rest-option-label">MEDITATE</span>
-                        <span class="rest-option-desc">+1 Max Reroll · permanent</span>
+                        <span class="rest-option-desc">+1 Reroll per turn · this run</span>
                     </button>
 
                     <button id="btn-rest-tinker" class="rest-option rest-option--tinker" data-quadrant="bl">
@@ -1035,7 +1041,7 @@
                     <h2 class="info-title">SANCTUARY</h2>
                     <p class="info-lede">Everything you install here survives death. The Sanctuary is the one place the Panopticon cannot reach.</p>
                     <div class="info-bullets">
-                        <div class="info-bullet"><span class="info-icon">◆</span><span><strong>Fragments</strong> drop from every combat. Spend them on permanent stat and dice upgrades.</span></div>
+                        <div class="info-bullet"><span class="info-icon">◆</span><span><strong>Fragments</strong> drop in combat and buy upgrades for this run. <strong>Sparks</strong> buy permanent Sanctuary upgrades.</span></div>
                         <div class="info-bullet"><span class="info-icon" style="color:#ffd76a">✦</span><span><strong>Sparks</strong> drop from boss kills. Spend them on new options, modes, and quality-of-life unlocks.</span></div>
                         <div class="info-bullet"><span class="info-icon">▣</span><span>Tap a node to install. <strong>Locked</strong> nodes are dim. <strong>Installed</strong> nodes glow green.</span></div>
                         <div class="info-bullet"><span class="info-icon">↻</span><span>Every install carries into <strong>every future run</strong>, every class.</span></div>
@@ -1054,7 +1060,7 @@
 
             <!-- Reward Screen -->
             <div id="screen-reward" class="screen hidden">
-                <h2 class="neon-text-gold">SECTOR CLEARED</h2>
+                <h2 id="reward-title" class="neon-text-gold">COMBAT WON</h2>
                 <div id="reward-boss-destroyed" class="reward-boss-destroyed hidden"></div>
                 <p style="font-family: 'Orbitron'; margin-bottom: 20px;">Select augmentation:</p>
                 <div id="reward-options" class="card-container"></div>
@@ -1259,8 +1265,12 @@
                                 <input type="file" id="file-import-save" accept="application/json" style="display:none;">
                             </div>
                             <div class="setting-row setting-action">
-                                <label>Export analytics (JSON)</label>
+                                <label>Export local diagnostics (JSON)</label>
                                 <button id="btn-export-analytics" class="btn-inline btn-dev">EXPORT</button>
+                            </div>
+                            <div class="setting-row">
+                                <label for="chk-local-diagnostics">Optional local diagnostics <span class="setting-hint">(stored on this device; nothing sent automatically)</span></label>
+                                <input type="checkbox" id="chk-local-diagnostics">
                             </div>
                             <div class="setting-row setting-action">
                                 <label>Reset all progress</label>
@@ -1345,7 +1355,10 @@
                     <div class="spacer"></div>
                     <button id="btn-glossary" class="btn secondary">QUICK RULES</button>
                     <button id="btn-resume" class="btn primary">RESUME</button>
-                    <button id="btn-quit" class="btn danger">ABORT RUN</button>
+                    <button id="btn-quit" class="btn secondary">SAVE AND RETURN</button>
+                    <p class="run-exit-help">Return to the menu with this run saved. In combat, resume restarts the encounter.</p>
+                    <button id="btn-abandon-run" class="btn danger">ABANDON RUN</button>
+                    <p class="run-exit-help">Delete this run in the active save slot. Sparks and permanent progress stay banked.</p>
                 </div>
             </div>
         </div>
