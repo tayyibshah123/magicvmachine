@@ -40,7 +40,7 @@ export const Onboarding = {
     // existing tutorial/main-menu pipeline runs after.
     //
     // `hooks` = { onFinished(), onStartTutorial() }
-    run({ onFinished, onStartTutorial } = {}) {
+    run({ onFinished, onStartTutorial, onModeChoice, mode = 'guided' } = {}) {
         Analytics.emit('onboarding_stage_complete', { stage: 'start', seconds: 0 });
 
         const root = document.createElement('div');
@@ -52,6 +52,7 @@ export const Onboarding = {
             stage: 1,
             stageStart: performance.now(),
             name: this.getName(),
+            mode: mode === 'full' ? 'full' : 'guided',
             idleTimer: null,
             finished: false
         };
@@ -103,16 +104,39 @@ export const Onboarding = {
                     <label for="onb-name" class="onb-name-label">CALLSIGN (OPTIONAL)</label>
                     <input type="text" id="onb-name" class="onb-input" maxlength="16" placeholder="OPERATOR" autocomplete="off">
                     <p class="onb-name-help">Leave this blank to play as OPERATOR. Continue when you are ready.</p>
+                    ${onModeChoice ? `<div class="onb-mode-choices" role="radiogroup" aria-label="Learning style">
+                        <button type="button" class="onb-mode-choice" data-learning-mode="guided" role="radio" aria-checked="${state.mode === 'guided'}"><strong>GUIDED (RECOMMENDED)</strong><span>Learn a little at a time, with short practice and simpler early choices.</span></button>
+                        <button type="button" class="onb-mode-choice" data-learning-mode="full" role="radio" aria-checked="${state.mode === 'full'}"><strong>FULL RULES</strong><span>Start with every system available. Practice and help remain optional.</span></button>
+                    </div>` : ''}
                     <div class="onb-actions onb-actions-single">
                         <button class="btn primary onb-next" id="onb-next-1">START</button>
                     </div>
                 </div>
             `;
             const handoffToTutorial = () => {
+                if (state.finished) return;
+                if (onModeChoice) onModeChoice(state.mode);
                 emitStage('1_welcome');
                 finish();
-                if (onStartTutorial) onStartTutorial();
+                if (onStartTutorial) onStartTutorial(state.mode);
             };
+            root.querySelectorAll('[data-learning-mode]').forEach(button => {
+                button.tabIndex = button.dataset.learningMode === state.mode ? 0 : -1;
+                button.onclick = () => {
+                    state.mode = button.dataset.learningMode;
+                    root.querySelectorAll('[data-learning-mode]').forEach(option => {
+                        option.setAttribute('aria-checked', String(option === button));
+                        option.tabIndex = option === button ? 0 : -1;
+                    });
+                };
+                button.onkeydown = event => {
+                    if (!['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+                    event.preventDefault();
+                    const next = [...root.querySelectorAll('[data-learning-mode]')].find(option => option !== button);
+                    next?.click();
+                    next?.focus();
+                };
+            });
             document.getElementById('onb-next-1').onclick = () => {
                 const input = document.getElementById('onb-name');
                 state.name = this.setName(input.value);

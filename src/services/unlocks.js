@@ -101,6 +101,13 @@ export const Unlocks = {
         try { localStorage.setItem(PENDING_KEY, JSON.stringify(this._pending)); } catch (_) {}
     },
 
+    suspendAnnouncements() {
+        clearTimeout(this._announcementTimer);
+        this._announcementTimer = null;
+        document.querySelectorAll('.just-unlocked').forEach(element => element.classList.remove('just-unlocked'));
+        this._announcing = null;
+    },
+
     _announceNext(map) {
         if (this._announcing) return;
         this._pending ||= [];
@@ -111,7 +118,7 @@ export const Unlocks = {
         this._announcing = key;
         const el = document.getElementById(map[key]);
         el.classList.add('just-unlocked');
-        setTimeout(() => {
+        this._announcementTimer = setTimeout(() => {
             el.classList.remove('just-unlocked');
             this._announcing = null;
             const liveGame = typeof window !== 'undefined' && window.Game;

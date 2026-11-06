@@ -51,6 +51,14 @@ function isEnemySide(kind) {
 }
 
 export const CombatStats = {
+    capturePracticeState() {
+        const priorCombat = this.snapshotCombat();
+        const priorTurn = this.snapshotTurn();
+        return () => {
+            combat = { ...priorCombat, combos: priorCombat.combos.slice() };
+            turn = { ...priorTurn };
+        };
+    },
     startCombat() {
         combat = EMPTY_COMBAT();
         turn = EMPTY_TURN();

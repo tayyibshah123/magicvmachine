@@ -129,6 +129,20 @@ export const Hints = {
         else if (!this._active && this._canShow()) this._showNext();
     },
 
+    suspend() {
+        clearTimeout(this._dismissTimer);
+        clearTimeout(this._fadeTimer);
+        this._dismissTimer = null;
+        this._fadeTimer = null;
+        if (this._activeId && !this._queue.includes(this._activeId)) this._queue.unshift(this._activeId);
+        this._activeId = null;
+        this._active = false;
+        this._closing = false;
+        this._root?.classList.remove('open');
+        this._root?.classList.add('hidden');
+        this._persistPending();
+    },
+
     // Call this from game code when a condition is first met.
     trigger(id) {
         if (!this._seen) this.init();
@@ -214,7 +228,7 @@ export const Hints = {
         this._activeId = null;
         this._persistPending();
         this._root.classList.remove('open');
-        setTimeout(() => {
+        this._fadeTimer = setTimeout(() => {
             this._root.classList.add('hidden');
             this._closing = false;
             this._active = false;
