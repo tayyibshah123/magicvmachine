@@ -100,6 +100,26 @@ describe('production ordinary intents and separately staged threats', () => {
 });
 
 describe('later introductions remain tied to actual context', () => {
+    it('delivers an earned Command draw on the next real player turn without exposing hidden tools', async () => {
+        const { Game, ClassAbility } = active;
+        enter('allies');
+        ClassAbility.init(Game);
+        ClassAbility.startCombat();
+        ClassAbility.onEvent('dice_used', { type: 'TAC_ATTACK' });
+        ClassAbility.onEvent('dice_used', { type: 'TAC_ATTACK' });
+        ClassAbility._activate('tact-shield');
+        expect(Game.player.bonusDrawNextTurn).toBe(1);
+        const turn = Game.startTurn();
+        await vi.advanceTimersByTimeAsync(1500);
+        await turn;
+        expect(Game.dicePool).toHaveLength(6);
+        expect(Game.dicePool.some(die => die.type === 'SIGNATURE' || die.type === 'CONSTRICT')).toBe(false);
+        expect(Game.player.bonusDrawNextTurn).toBe(0);
+        const next = Game.startTurn();
+        await vi.advanceTimersByTimeAsync(1500);
+        await next;
+        expect(Game.dicePool).toHaveLength(5);
+    });
     it.each(['tactician', 'sentinel', 'arcanist', 'bloodstalker', 'annihilator', 'summoner'])
         ('adds %s signature without removing the learned ally or paid skill', async classId => {
             const { Game, Learning, Player, PLAYER_CLASSES } = active;

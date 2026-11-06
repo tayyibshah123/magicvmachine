@@ -16400,8 +16400,9 @@ async startTurn() {
         }
         // Tactician Command Track: 3-pip spend queues a bonus die for the next
         // hand (reroll + draw synergy).
-        if (this.player.bonusDrawNextTurn > 0) {
-            diceToRoll += this.player.bonusDrawNextTurn;
+        const earnedDraw = Math.max(0, Math.floor(Number(this.player.bonusDrawNextTurn) || 0));
+        if (earnedDraw > 0) {
+            diceToRoll += earnedDraw;
             ParticleSys.createFloatingText(this.player.x, this.player.y - 130, `+${this.player.bonusDrawNextTurn} DRAW`, "#00f3ff");
             this.player.bonusDrawNextTurn = 0;
         }
@@ -16431,7 +16432,7 @@ async startTurn() {
         }
 
         this.inputLocked = false;
-        this.rollDice(diceToRoll);
+        this.rollDice(diceToRoll, { earnedDraw });
 
         const btnEnd = document.getElementById('btn-end-turn');
         if(btnEnd) {
@@ -17293,7 +17294,7 @@ async startTurn() {
         return pick;
     },
 
-    rollDice(count) {
+    rollDice(count, { earnedDraw = 0 } = {}) {
         this.dicePool = [];
 
         // BREAKOUT RIGGING — Sector 0 prologue. Each room declares the
@@ -17368,6 +17369,11 @@ async startTurn() {
         if (this._isGuidedRun()) {
             const plan = Learning.handPlan(this._guidedRun, this.player?.classId);
             if (plan) {
+                const types = this._getAvailableDiceTypes();
+                const reserved = new Set(plan.filter(type => this.UNIQUE_PER_HAND.has(type)));
+                // The curriculum replaces only the normal opening hand.
+                // Actual earned draws still add already introduced dice.
+                for (let index = 0; index < earnedDraw; index++) plan.push(this._pickDiceType(types, reserved));
                 this.dicePool = plan.map((type, id) => ({ id, type, used: false, selected: false }));
                 this._detectAndApplyCombos();
                 this.renderDiceUI();
