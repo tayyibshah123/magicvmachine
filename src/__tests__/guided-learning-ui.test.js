@@ -11,7 +11,8 @@ import { CombatLog } from '../services/combat-log.js';
 import { decorateClassSelection, showObjective, hideObjective, showPracticeLibrary,
     hidePracticeLibrary, showBossRules, hideBossRules, dismissLearningOverlay,
     decorateSanctuary, hideSanctuaryGuidance, decorateOutcome, hideOutcomeGuidance,
-    decorateReward, showReturnGuidance, hideReturnGuidance } from '../ui/learning-ui.js';
+    decorateReward, showReturnGuidance, hideReturnGuidance, decorateClassDetail,
+    showModeBriefing, hideModeBriefing } from '../ui/learning-ui.js';
 import { setupCombatFixture, teardownCombatFixture } from './helpers/combat-fixture.js';
 
 const markup = readFileSync('index.html', 'utf8');
@@ -52,6 +53,7 @@ afterEach(() => {
     hideSanctuaryGuidance();
     hideOutcomeGuidance();
     hideReturnGuidance();
+    hideModeBriefing();
     Hints.suspend();
     Unlocks.suspendAnnouncements();
     if (Hints._visibilityHandler) document.removeEventListener('visibilitychange', Hints._visibilityHandler);
@@ -98,13 +100,51 @@ describe('guided choices and reference UI', () => {
         decorateClassSelection(Game, { mode: 'guided', coreComplete: false });
         expect(grid.querySelectorAll('.learning-recommended')).toHaveLength(2);
         expect(grid.querySelectorAll('.learning-advanced-hidden')).toHaveLength(4);
+        expect(grid.classList.contains('learning-recommended-grid')).toBe(true);
+        expect(document.getElementById('learning-hand-notice').textContent).toContain('Your full kit arrives during the run');
         document.getElementById('btn-more-operators').click();
         expect(grid.querySelectorAll('.char-card')).toHaveLength(6);
         expect(grid.querySelectorAll('.learning-advanced-hidden')).toHaveLength(0);
+        expect(grid.classList.contains('learning-recommended-grid')).toBe(false);
         expect(document.getElementById('btn-more-operators').getAttribute('aria-expanded')).toBe('true');
         decorateClassSelection(Game, { mode: 'full' });
         expect(document.getElementById('btn-more-operators')).toBeNull();
         expect(grid.querySelectorAll('.learning-advanced-hidden')).toHaveLength(0);
+        expect(document.getElementById('learning-hand-notice')).toBeNull();
+    });
+
+    it('keeps recommended labels and plain roles after the real card name without intercepting its click', () => {
+        const grid = document.getElementById('char-grid');
+        const open = vi.fn();
+        for (const id of ['tactician', 'sentinel']) {
+            const card = document.createElement('div');
+            card.className = 'char-card'; card.dataset.classId = id;
+            card.innerHTML = '<canvas class="char-preview"></canvas><div class="char-name">' + id + '</div>';
+            card.onclick = () => open(id);
+            grid.appendChild(card);
+        }
+        decorateClassSelection(Game, { mode: 'guided', coreComplete: false });
+        const card = grid.querySelector('[data-class-id="tactician"]');
+        expect(card.querySelector('.char-name').nextElementSibling.className).toBe('learning-recommended-badge');
+        expect(card.querySelector('.learning-operator-role').textContent).toBe('Flexible attacks and rerolls');
+        card.querySelector('.learning-operator-role').click();
+        expect(open).toHaveBeenCalledWith('tactician');
+        expect(grid.querySelector('[data-class-id="sentinel"] .learning-operator-role').textContent).toBe('Shield and automatic protection');
+        decorateClassSelection(Game, { mode: 'guided', coreComplete: false });
+        expect(document.querySelectorAll('#learning-hand-notice')).toHaveLength(1);
+        expect(grid.querySelectorAll('.learning-operator-role')).toHaveLength(2);
+    });
+
+    it('explains the early Guided Annihilator exception without replacing its normal class description', () => {
+        const description = document.querySelector('.char-detail-desc');
+        description.textContent = 'Full class: six dice and HP-paid rerolls.';
+        decorateClassDetail(Game, { mode: 'guided', coreComplete: false, classId: 'annihilator' });
+        const note = document.getElementById('learning-class-detail-note');
+        expect(note.previousElementSibling).toBe(description);
+        expect(note.textContent).toContain('3 dice and 2 free rerolls per turn');
+        expect(description.textContent).toBe('Full class: six dice and HP-paid rerolls.');
+        decorateClassDetail(Game, { mode: 'full', classId: 'annihilator' });
+        expect(document.getElementById('learning-class-detail-note')).toBeNull();
     });
 
     it('puts combat coaching in its reserved control row rather than over targets', () => {
@@ -355,6 +395,49 @@ describe('guided first-return choices', () => {
         document.querySelector('#learning-return-guidance .learning-modal-close').click();
         expect(old).not.toHaveBeenCalled();
         expect(current).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('optional mode briefing', () => {
+    it('defaults focus to Back and describes consequences in a body-level modal without starting', () => {
+        const start = vi.fn();
+        showModeBriefing({ title: 'CHALLENGE', text: 'Five bosses with Rest stops.',
+            consequence: 'Starting replaces the current checkpoint after confirmation.', onStart: start });
+        const modal = document.getElementById('learning-mode-briefing');
+        expect(modal.parentElement).toBe(document.body);
+        expect(modal.textContent).toContain('Five bosses with Rest stops.');
+        expect(modal.querySelector('.learning-mode-consequence').textContent).toContain('replaces the current checkpoint');
+        expect(document.activeElement.textContent).toBe('BACK');
+        expect(start).not.toHaveBeenCalled();
+    });
+
+    it('runs Start once only after the dialog closes and restores the previous focus', () => {
+        const previous = document.getElementById('btn-settings-main');
+        previous.focus();
+        const cancel = vi.fn();
+        const start = vi.fn(() => {
+            expect(document.getElementById('learning-mode-briefing')).toBeNull();
+            expect(document.activeElement).toBe(previous);
+        });
+        showModeBriefing({ onStart: start, onCancel: cancel });
+        const button = document.querySelector('.learning-mode-start');
+        button.click(); button.click();
+        hideModeBriefing();
+        expect(start).toHaveBeenCalledTimes(1);
+        expect(cancel).not.toHaveBeenCalled();
+    });
+
+    it.each(['back', 'escape', 'native-back', 'programmatic'])('%s cancels once without starting or acknowledging the mode', method => {
+        const start = vi.fn(), cancel = vi.fn();
+        showModeBriefing({ onStart: start, onCancel: cancel });
+        if (method === 'back') document.querySelector('#learning-mode-briefing .learning-modal-close').click();
+        else if (method === 'escape') document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        else if (method === 'native-back') expect(dismissLearningOverlay()).toBe(true);
+        else hideModeBriefing();
+        hideModeBriefing();
+        expect(start).not.toHaveBeenCalled();
+        expect(cancel).toHaveBeenCalledTimes(1);
+        expect(document.getElementById('learning-mode-briefing')).toBeNull();
     });
 });
 
