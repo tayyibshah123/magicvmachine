@@ -152,7 +152,7 @@ for (const codec of [{ name: 'native Chromium Vorbis', extension: '.ogg', forceA
             offline = true;
             await enterMenu(page);
             expect(await page.evaluate(() => window.__qaAudioDocument)).not.toBe(documentId);
-            expect(await page.evaluate(prefix => localStorage.getItem(prefix + 'mvm_qa_audio_seed_count'), storagePrefix)).toBe('1');
+            expect(await page.evaluate(() => localStorage.getItem('mvm_qa_audio_seed_count'))).toBe('1');
             await expect.poll(() => page.evaluate(() => window.MVMOfflineAudio?.status.state)).toBe('ready');
             const cold = await inspectActualAudio(page, codec.extension);
             for (const cancellation of cancellations) {
