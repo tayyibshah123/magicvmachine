@@ -7,21 +7,104 @@ in `docs/archive/`.
 
 ## Status
 
-- **Current build:** v1.9.55 (combat lifecycle, save recovery, consent,
-  offline coverage and standard menu effects)
-- **Last ship:** 2026-11-06
-- **Active branch:** main
-- **Test baseline:** 381/381 passing, repeated in shuffled order;
-  9/9 mobile browser journeys and regressions passing
+- **Implementation complete:** Stable v1.9.57 and Guided v1.10.0.
+- **Release status:** final Guided gate and public deployment verification
+  pending. These are release candidates, not a claim of live publication.
+- **Earlier Stable reference:** v1.9.56 remains frozen at `d51d8b1` with
+  552 normal checks, 552 shuffled checks, 15 browser cases and 150 layout
+  checks passed. The v1.9.57 gate includes the additional consent fix.
+- **Final Stable evidence:** runtime and checks at `088aec7`, 566 normal
+  checks, 566 shuffled checks, 16 browser cases and 150 layout checks passed.
+  Report: `test-results/2026-11-06T21-46-20-271Z/summary.json` in the Stable checkout.
+- **Guided final evidence:** pending final source commit, normal and shuffled
+  totals, browser cases, layout checks and report path.
 - **Frame metrics:** truthful (intervalBuf + workBuf split shipped v1.8.9)
 
-v1.9.55 also consolidates checks into seven shared areas and one release
-command. Regressions now cover lethal reroll costs, cancelled touch input,
-stale prompts and turn transitions, full attack presentation, Firmware Pin
-duration and run reset, legacy save import, offline module coverage, and
-first-install/update persistence. Glitch Overlay and Drift Echo are
-standard menu effects; earned streak styles remain rewards. Browser QA
-uses Chromium touch emulation, with visual menu checks at 360px and 390px.
+### Completed dual-edition implementation
+
+| Edition | Version | Publication destination |
+|---|---|---|
+| Stable | 1.9.57 | [Existing root URL](https://tayyibshah123.github.io/magicvmachine/) |
+| Guided | 1.10.0 | [Separate Guided URL](https://tayyibshah123.github.io/magicvmachine/guided/) |
+
+Stable preserves the five-room prologue and ordinary map progression.
+Guided adds optional staged learning. Full Rules remains available at the
+start, all six operators remain selectable, and difficulty is a separate
+choice. Both editions retain the visible ALPHA V1 stamp. The frozen
+`stable-v1.9.55` tag remains a fallback.
+
+The editions use separate profiles, saves, wallets, settings, imports,
+resets, PWA identities and scoped worker caches. Stable retains its existing
+profile keys; Guided uses its own storage namespace. One edition's update
+or reset must leave the other intact. Packaging and the cross-edition gate
+check both builds together before publication.
+
+Completed correctness work includes unobstructed dice and control zones,
+larger class-action targets, distinct Save and Return and Abandon actions,
+checkpoint replacement confirmation, recoverable pending rewards, safer
+save import and quota handling, and refunds for unwired permanent offers.
+Optional callsigns no longer advance on an idle timer. Diagnostics consent
+waits for a safe screen and describes local logging without new network
+collection. Its banner disappears on gameplay or modal transitions, rejects
+queued gameplay taps and waits for a quiet safe screen before returning.
+Keyboard navigation can reach its buttons. Teaching feedback follows actual outcomes. Reference copy,
+currency labels, integer minion boosts and passive-orb handling match the
+active rules. Glitch Overlay and Drift Echo are standard menu effects;
+earned streak styles remain rewards.
+
+Guided implementation now provides:
+
+- Two class-aware core drills covering attack, the real defensive action,
+  intent, timing and a genuine enemy phase. Perfect timing is optional.
+  Class-specific enemy HP keeps tested Good loops within four attack turns
+  per room. The second drill uses the selected class's actual attack rhythm.
+- A smaller opening hand, then four, five and six dice as resources, allies
+  and signature tools are introduced. Summoner keeps its essential ally
+  identity early. HP costs are explained before their normal rules apply.
+- A versioned first-sector route that separates rerolls, recovery, Mana and
+  a paid skill, shops, allies, optional ally timing, status effects, hostile
+  target priority, multi-hit attacks and signatures before the boss.
+  Enemy and offer pools follow the same introductions.
+- Later-sector lessons for sector rules, combos, momentum, synergies and
+  new enemy types. Existing Guided v1 checkpoints retain their route; new
+  runs receive the current route. Active run rules survive a cold resume.
+- Optional reward-free practice with real resource costs and lesson actions.
+  Leaving restores the original run and profile. Practice does not consume
+  a checkpoint or award currency, modules or route progression.
+- Clear run-only reward wording, first-return and loss currency guidance,
+  affordable working Sanctuary suggestions, and Browse All access to the
+  full catalogue. Existing players retain their content and can choose a
+  refresher without a mandatory new funnel.
+- Shorter routine phase waits, complete committed attack presentation,
+  readable encounter rules and explicit advanced-mode consequences. A
+  meaningful friendly volley can use one optional boost prompt; Bomb Bots
+  retain their charge and detonation controls. Challenge is optional and
+  is not the recommended recovery path after a beginner loss.
+
+### Validation and remaining limits
+
+Stable's final gate is complete. The final Guided gate and combined edition
+report still need their final counts recorded here. Public version,
+cache and fresh-launch checks for both destination URLs are also pending.
+
+A separate balance stress probe at source `5589b26` ran 6,480 cases:
+5,480 wins, 951 losses and 49 turn-limit results. The turn-limit cases are
+censored outcomes. These are automated stress results across configured
+classes, sectors, builds, timing qualities and HP models, not human win
+rates or proof of campaign balance.
+
+Actual-method playtests at `79c31c0` completed all 14 stops and 11 combat
+wins on the earned Sector 1 route with all six classes, including the real
+reroll lesson, rewards and purchases. A further simple-policy run cleared Sector 2 and then lost in
+Sector 3 without an observed softlock. Those losses do not establish that
+Sector 3 is impossible. Full campaign balance and first-time human learning
+remain unproven by these checks.
+
+Browser evidence uses Chromium touch emulation. Optional Windows WebKit
+could not launch because Application Control blocked it. No Safari or
+physical iPhone coverage is claimed. Physical-device browser chrome,
+keyboard, installed-PWA lifecycle and Android wrapper behaviour still need
+their own checks.
 
 Live checklist of what was claimed open in the old docs but is actually
 shipped, removed during this consolidation:
@@ -33,12 +116,14 @@ shipped, removed during this consolidation:
   Intel screen. see `_renderIntelCipher` in game.js:12477)
 
 <a id="proposed-experience-and-onboarding-plan-awaiting-approval"></a>
-## Approved experience and onboarding work
+## Approved experience and onboarding work: original audit and scope
 
-Approved on 2026-11-06. The user authorised completing all recommended
-work and publishing two independently playable editions, with recommended
-decisions resolved autonomously. Release targets are Stable v1.9.56 and
-Guided v1.10.0. The frozen v1.9.55 snapshot remains a separate fallback.
+Approved on 2026-11-06. The user authorised the two-edition implementation
+and publication, with recommended decisions resolved autonomously. The
+implementation summary and current release evidence are above. The
+following v1.9.55 findings and proposed sequence are retained as the audit
+record, not a list of current open defects. Final publication remains
+subject to the remaining gate and live verification.
 
 ### Baseline and scope
 
