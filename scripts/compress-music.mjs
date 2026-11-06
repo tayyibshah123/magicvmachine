@@ -1,7 +1,7 @@
 // Compress the OGG music library to AAC (.m4a) for the Android APK.
 //
 // Why: the 5 .ogg files in ./music total ~103 MB at full quality,
-// pushing the APK above the 100 MB Play Store warning. AAC at ~96 kbps
+// pushing the APK above the 100 MB Play Store warning. AAC at 64 kbps
 // preserves perceived quality on a phone speaker / earbud setup while
 // roughly halving the size.
 //
@@ -17,16 +17,22 @@
 // Run once:
 //   node scripts/compress-music.mjs
 //
-// Re-run is idempotent — existing .m4a files are overwritten.
+// Existing AAC files are preserved. --force explicitly regenerates them.
+// --sfx also creates the small AAC alternatives needed by sample playback.
 
 import { spawnSync } from 'node:child_process';
-import { readdirSync, statSync, existsSync, rmSync } from 'node:fs';
+import { readdirSync, statSync, existsSync, renameSync, rmSync } from 'node:fs';
 import { resolve, join, dirname, basename, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const MUSIC_DIR = join(ROOT, 'music');
+const AUDIO_DIRS = [MUSIC_DIR, ...(process.argv.includes('--sfx') ? [join(ROOT, 'sfx')] : [])];
+const FORCE = process.argv.includes('--force');
+for (const argument of process.argv.slice(2)) {
+    if (!['--sfx', '--force'].includes(argument)) throw new Error('Unknown audio option: ' + argument);
+}
 
 const BITRATE = '64k';
 // Override the ffmpeg binary path with the FFMPEG_BIN env var, e.g.
@@ -34,12 +40,8 @@ const BITRATE = '64k';
 // Useful when ffmpeg is bundled with another app (Stacher, OBS,
 // VLC, etc.) and you don't want to install a global copy.
 const FFMPEG = process.env.FFMPEG_BIN || 'ffmpeg';
-// Ratio we'll accept before keeping the AAC output: 0.85 = output
-// must be at least 15% smaller than the OGG, otherwise we delete
-// the .m4a so the build-www OGG-strip path leaves the original
-// alone. Some sources are already low-bitrate Vorbis and AAC at
-// the same target ends up bigger — no point shipping a worse copy.
-const KEEP_THRESHOLD = 0.85;
+// Existing sources and AAC alternatives are kept even when their sizes
+// are similar: browser codec support is independent of compression ratio.
 
 function checkFfmpeg() {
     const r = spawnSync(FFMPEG, ['-version'], { stdio: 'pipe' });
@@ -58,29 +60,34 @@ function fmtMb(bytes) {
 function compressOne(srcPath) {
     const name = basename(srcPath, extname(srcPath));
     const outPath = join(dirname(srcPath), name + '.m4a');
+    const stagedPath = join(dirname(srcPath), name + '.tmp.m4a');
+    const inSz = statSync(srcPath).size;
+    if (!FORCE && existsSync(outPath)) {
+        console.log(`compress-music: preserving existing ${basename(outPath)}`);
+        return { kept: true, inSz, outSz: statSync(outPath).size };
+    }
     console.log(`compress-music: ${basename(srcPath)} → ${basename(outPath)}`);
     const r = spawnSync(FFMPEG, [
         '-y',
+        '-nostdin',
         '-i', srcPath,
         '-c:a', 'aac',
         '-b:a', BITRATE,
+        '-threads', '1',
         '-movflags', '+faststart',
-        outPath,
+        stagedPath,
     ], { stdio: 'inherit' });
     if (r.status !== 0) {
+        rmSync(stagedPath, { force: true });
         console.error(`compress-music: ffmpeg failed for ${srcPath}`);
         process.exit(r.status || 1);
     }
-    const inSz  = statSync(srcPath).size;
+    // An interrupted encode must never replace a usable compatibility file
+    // or leave a partial sibling that a later build mistakes for success.
+    renameSync(stagedPath, outPath);
     const outSz = statSync(outPath).size;
-    if (outSz > inSz * KEEP_THRESHOLD) {
-        // The source was already well-compressed; AAC at this bitrate
-        // either matches or beats it only marginally. Drop the m4a so
-        // the OGG ships alone in the APK.
-        rmSync(outPath);
-        console.log(`  ${fmtMb(inSz)} → ${fmtMb(outSz)}  (skipped: not enough savings)`);
-        return { kept: false, inSz, outSz: inSz };
-    }
+    // AAC is required for codec compatibility even when it saves little
+    // space. Never remove a usable alternative because of a size ratio.
     console.log(`  ${fmtMb(inSz)} → ${fmtMb(outSz)}  (saved ${fmtMb(inSz - outSz)})`);
     return { kept: true, inSz, outSz };
 }
@@ -91,9 +98,9 @@ function main() {
         process.exit(1);
     }
     checkFfmpeg();
-    const oggs = readdirSync(MUSIC_DIR)
+    const oggs = AUDIO_DIRS.flatMap(directory => readdirSync(directory)
         .filter(f => f.toLowerCase().endsWith('.ogg'))
-        .map(f => join(MUSIC_DIR, f));
+        .map(f => join(directory, f)));
     if (oggs.length === 0) {
         console.warn('compress-music: no .ogg files in ./music');
         return;
