@@ -322,6 +322,7 @@ new file) that locks the regression. Tests are cheaper than a re-discovery.
 
 - `npm test` — vitest unit + integration suite.
 - `npm run build:www` — wipes `www/` and rebuilds the shippable web bundle.
-- `npm run android:sync` — `build:www` then `npx cap sync android`.
+- `npm run build:native`: rebuilds the compact Android wrapper bundle.
+- `npm run android:sync`: `build:native` then `npx cap sync android`.
 
 `www/` is gitignored. Don't commit it.
