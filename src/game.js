@@ -2597,6 +2597,12 @@ startQTE(type, x, y, callback, opts) {
                     && this.enemy === enemy && (this.currentState === STATE.COMBAT
                         || this.currentState === STATE.TUTORIAL_COMBAT || this.currentState === STATE.BREAKOUT);
                 try {
+                    const feedback = this._enemyTurnFeedback;
+                    if (!cancelled && stillLive && type === 'DEFEND' && !opts?.minionBoost
+                        && feedback && feedback.gen === gen && feedback.player === player
+                        && feedback.enemy === enemy && this.qte.id === qteId && this.qte.quality) {
+                        feedback.defences.push({ quality: this.qte.quality, shortTiming: !!opts?.shortTiming });
+                    }
                     if (!cancelled && stillLive && callback) await callback(multiplier);
                 } catch (err) {
                     this._recoverFromCombatError('QTE action', err, false);
@@ -2609,7 +2615,7 @@ startQTE(type, x, y, callback, opts) {
 
             // Accessibility: auto-QTE resolves at 'good' tier without player input.
             if (this.autoQTE) {
-                this.qte = { id: qteId, active: true, type, phase: 'auto', callback: complete,
+                this.qte = { id: qteId, active: true, type, phase: 'auto', quality: 'good', callback: complete,
                     cancel: () => complete(0, true) };
                 // Mimic resolveQTE('good') multipliers — tracks the tier
                 // values in resolveQTE: attack=1.15, defend=0.6.
@@ -3363,6 +3369,7 @@ startQTE(type, x, y, callback, opts) {
         // null it out on the qte object so a double-fire (re-entrant
         // resolveQTE, failsafe race) can't invoke the awaiter twice.
         const cb = this.qte.callback;
+        this.qte.quality = quality;
         this.qte.callback = null;
         this.qte.active = false;
 
@@ -14969,9 +14976,9 @@ async startCombat(type) {
             for(let i=0; i<this.player.traits.startMinions; i++) {
                 const m = new Minion(0, 0, this.player.minions.length + 1, true);
                 if (buff > 1) {
-                    m.maxHp = Math.floor(m.maxHp * buff);
+                    m.maxHp = Math.ceil(m.maxHp * buff);
                     m.currentHp = m.maxHp;
-                    m.dmg = Math.max(1, Math.floor(m.dmg * buff));
+                    m.dmg = Math.max(1, Math.ceil(m.dmg * buff));
                 }
                 if(this.player.traits.startShield) m.addShield(10);
                 this.player.minions.push(m);
@@ -16034,7 +16041,22 @@ async startTurn() {
         // Sector 0 Breakout — enemy phase resolved, new turn beginning.
         // Fires beats keyed on `wait: 'enemy_turn'`.
         if (Breakout && Breakout.isActive && Breakout.isActive()) {
-            try { Breakout.notify('enemy_turn', {}); } catch (_) {}
+            const feedback = this._enemyTurnFeedback;
+            this._enemyTurnFeedback = null;
+            let defences = [];
+            let damageTaken = 0;
+            if (feedback && feedback.gen === this._combatGen && feedback.player === this.player
+                && feedback.enemy === this.enemy && feedback.completed) {
+                defences = feedback.defences;
+                damageTaken = feedback.damageTaken;
+            }
+            const ordinary = defences.filter(result => !result.shortTiming);
+            const relevant = ordinary.length ? ordinary : defences;
+            const rank = { fail: 0, early: 0, good: 1, perfect: 2 };
+            const worst = relevant.reduce((previous, result) =>
+                !previous || rank[result.quality] < rank[previous.quality] ? result : previous, null);
+            const defenceOutcome = worst ? (rank[worst.quality] === 0 ? 'miss' : worst.quality) : 'none';
+            try { Breakout.notify('enemy_turn', { defenceOutcome, defences, damageTaken }); } catch (_) {}
         }
 
          this.rerolls = (this.player.traits.noRerolls) ? 0 : (2 + rerollStacks + (gamblerStacks * 2));
@@ -16194,6 +16216,19 @@ async startTurn() {
         const player = this.player;
         const enemy = this.enemy;
         const gen = this._combatGen;
+        if (!minion || minion.currentHp <= 0 || !target || target.currentHp <= 0) return Promise.resolve(true);
+        let swarmBonus = 0;
+        if (player.hasRelic('swarm_beacon')) {
+            swarmBonus = player.minions.filter(m => m && m.currentHp > 0).length * this.stackCount('swarm_beacon');
+        }
+        const base = typeof minion.getEffectiveDamage === 'function'
+            ? minion.getEffectiveDamage(minion.dmg) : minion.dmg;
+        const hunger = this.hasPact?.('hunger') ? 2 : 1;
+        const baseDamage = Math.max(0, Math.floor((base + swarmBonus) * hunger));
+        // A disabled attack has no timing reward. Positive attacks always
+        // keep their base damage, and a successful boost rounds upward so
+        // even a fresh one-damage spirit gains a visible integer benefit.
+        if (!baseDamage) return Promise.resolve(true);
         return this._runCombatAction(async () => {
             const multiplier = await this.startQTE('ATTACK', target.x, target.y, null,
                 { shortTiming: true, minionBoost: true, pattern: 'steady', waves: 1,
@@ -16202,14 +16237,9 @@ async startTurn() {
                 || this.currentState === STATE.BREAKOUT;
             if (!inCombat || this._combatGen !== gen || this.player !== player || this.enemy !== enemy || minion.currentHp <= 0
                 || target.currentHp <= 0 || player.currentHp <= 0) return;
-            let swarmBonus = 0;
-            if (player.hasRelic('swarm_beacon')) {
-                swarmBonus = player.minions.filter(m => m && m.currentHp > 0).length * this.stackCount('swarm_beacon');
-            }
-            const base = typeof minion.getEffectiveDamage === 'function'
-                ? minion.getEffectiveDamage(minion.dmg) : minion.dmg;
-            const hunger = this.hasPact?.('hunger') ? 2 : 1;
-            target.takeDamage(Math.floor((base + swarmBonus) * multiplier * hunger), minion);
+            const bonusPercent = Math.max(0, Math.round((multiplier - 1) * 100));
+            const damage = baseDamage + Math.ceil(baseDamage * bonusPercent / 100);
+            target.takeDamage(damage, minion);
             if (target !== enemy && target.currentHp <= 0) {
                 enemy.minions = enemy.minions.filter(m => m !== target);
                 if (player.hasRelic('brutalize') && !target.isPlayerSide) this.triggerBrutalize(target);
@@ -16224,16 +16254,18 @@ async startTurn() {
         const current = () => this._combatGen === gen && this.player === player && this.enemy === enemy
             && (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT
                 || this.currentState === STATE.BREAKOUT);
-        if (!minion || minion.currentHp <= 0 || !target || target.currentHp <= 0) return Promise.resolve(true);
+        if (!minion || minion.currentHp <= 0 || minion._pacifist
+            || !target || target.currentHp <= 0) return Promise.resolve(true);
+        let damage;
+        if (mirror) {
+            const percent = ({ 1: 0.5, 2: 0.75, 3: 1.0, 4: 1.5, 5: 2.0 })[this.sector || 1] || 0.5;
+            damage = Math.max(4, Math.floor((minion._lastPlayerSideHitDmg || minion.dmg) * percent));
+        } else {
+            damage = typeof minion.getEffectiveDamage === 'function'
+                ? minion.getEffectiveDamage(minion.dmg) : minion.dmg;
+        }
+        if (!(damage > 0)) return Promise.resolve(true);
         return this._runCombatAction(async () => {
-            let damage;
-            if (mirror) {
-                const percent = ({ 1: 0.5, 2: 0.75, 3: 1.0, 4: 1.5, 5: 2.0 })[this.sector || 1] || 0.5;
-                damage = Math.max(4, Math.floor((minion._lastPlayerSideHitDmg || minion.dmg) * percent));
-            } else {
-                damage = typeof minion.getEffectiveDamage === 'function'
-                    ? minion.getEffectiveDamage(minion.dmg) : minion.dmg;
-            }
             const block = multiplier ?? await this.startQTE('DEFEND', target.x, target.y, null, {
                 shortTiming: true, pattern: 'steady', incomingDamage: damage,
                 attackerX: minion.x, attackerY: minion.y
@@ -22631,6 +22663,10 @@ drawEffects() {
       const gen = this._combatGen || 0;
       const turnPlayer = this.player;
       const turnEnemy = this.enemy;
+      const feedback = this._enemyTurnFeedback = {
+          gen, player: turnPlayer, enemy: turnEnemy, defences: [], completed: false,
+          damageTakenAtStart: this.runStats?.damageTaken ?? this.turnStats?.dmgTaken ?? 0, damageTaken: 0
+      };
       const stillLive = () => this._combatGen === gen && this.player === turnPlayer && this.enemy === turnEnemy
           && (this.currentState === STATE.COMBAT || this.currentState === STATE.TUTORIAL_COMBAT
               || this.currentState === STATE.BREAKOUT);
@@ -22777,7 +22813,9 @@ drawEffects() {
              btnEnd.style.opacity = 0.5;
         }
 
-        await this.showPhaseBanner("ENEMY PHASE", "INCOMING DATA STREAM", 'enemy');
+        const alliesAct = this.player.minions.some(minion => minion && minion.currentHp > 0);
+        await this.showPhaseBanner(alliesAct ? 'ALLIES ACT' : 'ENEMY ACTS',
+            alliesAct ? 'FRIENDLY REINFORCEMENTS' : 'INCOMING DATA STREAM', 'enemy');
         if (!stillLive()) return;
 
         // --- PLAYER MINION PHASE ---
@@ -23604,7 +23642,10 @@ drawEffects() {
             // Snapshot was taken before the loop, but a previous minion in
             // this same loop (chained kills, splash) may have just zeroed
             // this one's HP. Skip the corpse rather than fire its intent.
-            if (!min || min.currentHp <= 0) continue;
+            if (!min || min.currentHp <= 0 || min._pacifist) continue;
+            const minionDamage = typeof min.getEffectiveDamage === 'function'
+                ? min.getEffectiveDamage(min.dmg) : min.dmg;
+            if (!min.isVoidSpawn && this.enemy.kind !== 'mirror' && !(minionDamage > 0)) continue;
             // --- VOID SPAWN: consume a player minion (heal boss by its HP) or drain mana on hit. ---
             if (min.isVoidSpawn) {
                 min.playAnim('lunge');
@@ -23726,6 +23767,9 @@ drawEffects() {
                 TurnDigest.show(_snap);
             }
         } catch (_) {}
+        feedback.completed = true;
+        feedback.damageTaken = Math.max(0,
+            (this.runStats?.damageTaken ?? this.turnStats?.dmgTaken ?? 0) - feedback.damageTakenAtStart);
         this.startTurn();
       } catch (err) {
         this._recoverFromCombatError('endTurn', err, false);
@@ -24257,14 +24301,16 @@ drawEffects() {
             // sector's theme on the menu.
             AudioMgr.clearSectorMusic && AudioMgr.clearSectorMusic();
 
-            // ── ARCHIVIST GATE. If the player owns the 1000-spark Archivist
-            // Key sanctuary upgrade and hasn't already faced the Archivist
-            // this run, route into the Sector X archive arena before either
+            // ── ARCHIVIST GATE. Ascension 20 requires the Archivist without
+            // buying a key. Other standard runs retain optional key access.
+            // If not already faced, route into Sector X before either
             // the ending cinematic OR the endless prompt fires. The
             // Archivist's victory hook (`_archivistVictoryChoice`) presents
             // the continue-Endless / return-home decision after the kill.
+            const requiresArchivist = !!(this._ascEffects?.forceArchivist
+                || Ascension.activeEffects(Ascension.getSelected() || 0).forceArchivist);
             if (!wasChallenge && !this._archivistFacedThisRun
-                && this.hasMetaUpgrade('s_archivist_key')) {
+                && (requiresArchivist || this.hasMetaUpgrade('s_archivist_key'))) {
                 this._archivistFacedThisRun = true;
                 // Run isn't ending — restore the frag balance we just wiped.
                 this.techFragments = this._lastRunFinalFrags || 0;
