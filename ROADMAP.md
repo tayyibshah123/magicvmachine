@@ -8,16 +8,17 @@ in `docs/archive/`.
 ## Status
 
 - **Implementation complete:** Stable v1.9.57 and Guided v1.10.0.
-- **Release status:** final Guided gate and public deployment verification
-  pending. These are release candidates, not a claim of live publication.
+- **Release status:** both source gates passed. Combined-edition checks and
+  public deployment verification are pending; publication is not yet claimed.
 - **Earlier Stable reference:** v1.9.56 remains frozen at `d51d8b1` with
   552 normal checks, 552 shuffled checks, 15 browser cases and 150 layout
   checks passed. The v1.9.57 gate includes the additional consent fix.
 - **Final Stable evidence:** runtime and checks at `088aec7`, 566 normal
   checks, 566 shuffled checks, 16 browser cases and 150 layout checks passed.
   Report: `test-results/2026-11-06T21-46-20-271Z/summary.json` in the Stable checkout.
-- **Guided final evidence:** pending final source commit, normal and shuffled
-  totals, browser cases, layout checks and report path.
+- **Final Guided evidence:** source `4cd2e4c`, 753 normal checks,
+  753 shuffled checks, 29 browser cases and 150 layout checks passed.
+  Report: `test-results/2026-11-06T22-08-35-398Z/summary.json` in the Guided checkout.
 - **Frame metrics:** truthful (intervalBuf + workBuf split shipped v1.8.9)
 
 ### Completed dual-edition implementation
@@ -58,6 +59,10 @@ Guided implementation now provides:
   intent, timing and a genuine enemy phase. Perfect timing is optional.
   Class-specific enemy HP keeps tested Good loops within four attack turns
   per room. The second drill uses the selected class's actual attack rhythm.
+  Deterministic critical-hit checks cover both drills for all six classes.
+  Annihilator's 32-HP and Sentinel's 13-HP teaching targets preserve the
+  intended enemy phase and next-hand step even with the tested critical
+  opening and parry combination.
 - A smaller opening hand, then four, five and six dice as resources, allies
   and signature tools are introduced. Summoner keeps its essential ally
   identity early. HP costs are explained before their normal rules apply.
@@ -83,9 +88,9 @@ Guided implementation now provides:
 
 ### Validation and remaining limits
 
-Stable's final gate is complete. The final Guided gate and combined edition
-report still need their final counts recorded here. Public version,
-cache and fresh-launch checks for both destination URLs are also pending.
+Both final source gates passed with frozen runtime, test and bundle inputs.
+The combined-edition report and public version, cache and fresh-launch checks
+for both destination URLs are still pending.
 
 A separate balance stress probe at source `5589b26` ran 6,480 cases:
 5,480 wins, 951 losses and 49 turn-limit results. The turn-limit cases are
