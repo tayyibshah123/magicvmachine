@@ -89,9 +89,9 @@ class Player extends Entity {
             for(let i=0; i<this.traits.startMinions; i++) {
                  const m = new Minion(0, 0, i+1, true);
                  if (buff !== 1) {
-                    m.maxHp = Math.max(1, Math.floor(m.maxHp * buff));
+                    m.maxHp = Math.max(1, Math.ceil(m.maxHp * buff));
                     m.currentHp = m.maxHp;
-                    m.dmg = Math.max(1, Math.floor(m.dmg * buff));
+                    m.dmg = Math.max(1, Math.ceil(m.dmg * buff));
                  }
                  this.minions.push(m);
             }

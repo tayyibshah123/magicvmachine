@@ -21,7 +21,7 @@ beforeEach(() => {
         player: null, enemy: null, sector: 1, challengeMode: false, archiveMode: false,
         customRunModifiers: new Set(), activePacts: new Set(), map: { nodes: [], currentIdx: 'start' },
         techFragments: 0, encryptedFiles: 0, corruptionLevel: 0, godMode: false,
-        _challengeTwist: null, _archivistFacedThisRun: false, _activeSectorMech: null,
+        _challengeTwist: null, _archivistFacedThisRun: false, _activeSectorMech: null, _ascEffects: {},
         metaUpgrades: [], runStats: { turns: 5 },
         momentum: 0, _carriedUnusedDice: 0, _disabledMetaThisRun: new Set()
     });
@@ -135,8 +135,11 @@ describe('final run routing', () => {
         { challenge: true, keyOwned: false, state: STATE.VICTORY, sector: 5, archive: false },
         { challenge: true, keyOwned: true, state: STATE.VICTORY, sector: 5, archive: false },
         { challenge: false, keyOwned: false, state: STATE.ENDING, sector: 5, archive: false },
-        { challenge: false, keyOwned: true, state: STATE.MAP, sector: 6, archive: true }
-    ])('routes challenge=$challenge and key=$keyOwned to $state', async expected => {
+        { challenge: false, keyOwned: true, state: STATE.MAP, sector: 6, archive: true },
+        { challenge: false, keyOwned: false, ascension: 19, state: STATE.ENDING, sector: 5, archive: false },
+        { challenge: false, keyOwned: false, ascension: 20, state: STATE.MAP, sector: 6, archive: true },
+        { challenge: true, keyOwned: false, ascension: 20, state: STATE.VICTORY, sector: 5, archive: false }
+    ])('routes challenge=$challenge, key=$keyOwned and ascension=$ascension to $state', async expected => {
         makePlayer();
         Game.enemy = new Enemy({ name: 'TESSERACT PRIME', hp: 500, dmg: 5, actionsPerTurn: 2 }, 0);
         Game.enemy.currentHp = 0;
@@ -154,7 +157,8 @@ describe('final run routing', () => {
             '_checkHiddenLoreTriggers', '_checkTrophyChallenges', '_renderPactPills', 'playSectorIntro', 'saveGame', '_clearSave']) {
             vi.spyOn(Game, name).mockImplementation(() => {});
         }
-        vi.spyOn(Ascension, 'getSelected').mockReturnValue(0);
+        vi.spyOn(Ascension, 'getSelected').mockReturnValue(expected.ascension || 0);
+        Game._ascEffects = Ascension.activeEffects(expected.ascension || 0);
         vi.spyOn(Ascension, 'onRunVictory').mockReturnValue(false);
         vi.spyOn(Achievements, 'unlock').mockImplementation(() => {});
         vi.spyOn(Achievements, 'isUnlocked').mockReturnValue(false);
@@ -164,5 +168,10 @@ describe('final run routing', () => {
         expect(Game.currentState).toBe(expected.state);
         expect(Game.archiveMode).toBe(expected.archive);
         expect(Game.sector).toBe(expected.sector);
+        if (expected.archive) {
+            expect(Game._archivistFacedThisRun).toBe(true);
+            expect(Game.map.nodes.find(node => node.id === 'boss-x')).toMatchObject({ type: 'boss', nodeSector: 6 });
+            expect(Game.techFragments).toBe(100);
+        }
     });
 });

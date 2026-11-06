@@ -339,12 +339,11 @@ class Enemy extends Entity {
             // v1.9.35 — resummon cadence migrated to BossMinionRoster.
             // The roster's `cadenceFn` reads `_hiveResummonEvery` (set by
             // Game._applyBossPhaseMechanic on phase transitions) and
-            // increments `_hiveTurnCounter` to track the cadence. The
-            // low-HP death-spiral guard stays here because it's not a
-            // swarm property — it's a boss AI safety rail.
+            // samples Game.turnCount once, independent of the three AI
+            // action slots. Phase 3 deliberately accelerates the cadence
+            // to three rounds, including the low-HP closing phase.
             if (this.name === "HIVE PROTOCOL" && this.minionRoster) {
-                const lowHp = this.currentHp < this.maxHp * 0.3;
-                if (!lowHp && this.minionRoster.shouldRespawn(0)) {
+                if (this.minionRoster.shouldRespawn(Game.turnCount || 0)) {
                     return { type: 'summon_hive', val: 0 };
                 }
             }
