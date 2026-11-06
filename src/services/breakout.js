@@ -863,10 +863,10 @@ function guidedRoomFor(index, classId, game) {
     if (index > 1) return null;
     const cd = classDice(classId);
     // Leave room for a class-boosted Perfect opening and the first ally
-    // volley before the required enemy phase. Killing the second drone
-    // before that phase restarts the drill, so low per-class HP could
-    // punish the exact successful timing this sequence asks the player to try.
-    const hp = 64;
+    // volley, while keeping a typical Good loop to two to four attack
+    // turns. Arcanist's Fire-assisted Perfect opener can deal 21 damage.
+    const hp = { tactician: 20, sentinel: 10, arcanist: 26,
+        bloodstalker: 20, annihilator: 26, summoner: 20 }[classId] || 26;
     if (index === 0) {
         const base = roomFor(0, classId);
         const sequence = base.sequence.map(beat => ({ ...beat }));
