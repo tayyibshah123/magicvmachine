@@ -89,6 +89,9 @@ function validate(blob) {
             try { profile = JSON.parse(value); } catch (_) { return false; }
             if (!plain(profile) || profile.v !== 1 || !['guided', 'full'].includes(profile.mode)
                 || typeof profile.coreComplete !== 'boolean' || !plain(profile.classes)
+                || (profile.legacy !== undefined && typeof profile.legacy !== 'boolean')
+                || (profile.acknowledged !== undefined && (!Array.isArray(profile.acknowledged)
+                    || !profile.acknowledged.every(id => typeof id === 'string')))
                 || !Array.isArray(profile.queue) || !profile.queue.every(id => typeof id === 'string')) return false;
             for (const bucket of [profile.shared, ...Object.values(profile.classes)]) {
                 if (!plain(bucket) || !['available', 'introduced', 'practised', 'skipped'].every(key =>

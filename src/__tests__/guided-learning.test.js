@@ -117,9 +117,9 @@ describe('actual Guided hand, pool and encounter callers', () => {
 
     it('uses the real route and enemy constructor without the two opening rests or early complex enemies', async () => {
         const { Game, STATE } = await game();
-        expect(Game.map.nodes.slice(1).map(node => node.type)).toEqual([
-            'combat', 'combat', 'rest', 'combat', 'shop', 'combat', 'combat', 'elite', 'rest', 'boss'
-        ]);
+        expect(Game.map.nodes.slice(1, 6).map(node => node.type)).toEqual(['combat', 'combat', 'rest', 'combat', 'shop']);
+        expect(Game.map.nodes.filter(node => node.type === 'rest')).toHaveLength(2);
+        expect(Game.map.nodes.map(node => node.lesson)).toEqual(expect.arrayContaining(['status', 'hostile', 'multiwave', 'signature']));
         Game.currentState = STATE.MAP;
         vi.spyOn(Math, 'random').mockReturnValue(0.99);
         const entered = Game.startCombat('combat');
@@ -159,7 +159,9 @@ describe('actual Guided hand, pool and encounter callers', () => {
         expect(Game._availableDiceUpgrades()).not.toContain('EARTHQUAKE');
         Game.pendingReward = null;
         Game.currentState = STATE.MAP;
-        Game.visitNode(Game.map.nodes.find(node => node.guideStage === 2));
+        const rest = Game.map.nodes.find(node => node.guideStage === 2);
+        rest.status = 'available';
+        Game.visitNode(rest);
         expect(document.getElementById('btn-rest-tinker').classList.contains('hidden')).toBe(true);
         expect(document.getElementById('btn-rest-meditate').classList.contains('hidden')).toBe(true);
         Game._openModulePicker();
@@ -177,7 +179,7 @@ describe('actual Guided hand, pool and encounter callers', () => {
 
     it('gives the first boss explicit Guided rules while leaving its actual phase identity intact', async () => {
         const { Game, Learning, STATE } = await game();
-        Learning.boundary(Game._guidedRun, 9);
+        Learning.boundary(Game._guidedRun, Game.map.nodes.find(node => node.type === 'boss').guideStage);
         Game.currentState = STATE.MAP;
         const entered = Game.startCombat('boss');
         await vi.advanceTimersByTimeAsync(3300);
@@ -191,10 +193,13 @@ describe('actual Guided hand, pool and encounter callers', () => {
         expect(Game.getBossRules().map(rule => rule.id)).toEqual(expect.arrayContaining(['guided-patrol', 'actions', 'support', 'analyse']));
     });
 
-    it('graduates only after a real boss win and carries a six-die base into Sector 2 without ignoring smaller dealt hands', async () => {
-        const { Game, STATE } = await game();
+    it('carries six base dice into Sector 2 after a real boss win while keeping later introductions staged', async () => {
+        const { Game, STATE, Learning } = await game();
         Game.currentState = STATE.MAP;
-        Game.visitNode(Game.map.nodes.find(node => node.guideStage === 9));
+        const boss = Game.map.nodes.find(node => node.type === 'boss');
+        for (let stage = 0; stage < boss.guideStage; stage++) Learning.boundary(Game._guidedRun, stage);
+        boss.status = 'available';
+        Game.visitNode(boss);
         await vi.advanceTimersByTimeAsync(3300);
         expect(Game._guidedRun.finished).toBe(false);
         vi.spyOn(Game, '_runBossDeathDissolve').mockResolvedValue();
@@ -202,7 +207,10 @@ describe('actual Guided hand, pool and encounter callers', () => {
         const won = Game.winCombat();
         await vi.advanceTimersByTimeAsync(1000);
         await won;
-        expect(Game._guidedRun.finished).toBe(true);
+        expect(Game._guidedRun.foundationComplete).toBe(true);
+        expect(Game._guidedRun.finished).toBe(false);
+        expect(Game._canGuidedFeature('fusions')).toBe(false);
+        expect(Game._canGuidedFeature('combos')).toBe(false);
         expect(Game._guidedRun.combats).toBe(1);
         expect(Game._canGuidedFeature('allyTiming')).toBe(true);
         Game.changeState(STATE.REWARD);
