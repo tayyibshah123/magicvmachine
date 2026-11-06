@@ -16,15 +16,15 @@ function copy(value) {
 
 async function importSession() {
     const [{ Game }, { Player }, { Enemy }, constants, { AudioMgr }, { ParticleSys },
-        { ClassAbility }, { ClassBriefing }, { ClassVfx }, { Diag }, { Breakout }, { Challenge }] = await Promise.all([
+        { ClassAbility }, { ClassBriefing }, { ClassVfx }, { Diag }, { Breakout }, { Challenge }, { Learning }] = await Promise.all([
         import('../../game.js'), import('../../entities/player.js'), import('../../entities/enemy.js'),
         import('../../constants.js'), import('../../audio.js'), import('../../effects/particles.js'),
         import('../../ui/class-ability.js'), import('../../services/class-briefing.js'),
         import('../../services/class-vfx.js'), import('../../services/diag.js'),
-        import('../../services/breakout.js'), import('../../services/dailies.js')
+        import('../../services/breakout.js'), import('../../services/dailies.js'), import('../../services/learning.js')
     ]);
     const context = { Game, Player, Enemy, AudioMgr, ParticleSys, ClassAbility, ClassBriefing,
-        ClassVfx, Diag, Breakout, Challenge, ...constants };
+        ClassVfx, Diag, Breakout, Challenge, Learning, ...constants };
     context.keys = new Set(Object.keys(Game));
     context.defaults = copy(Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(Game))
         .filter(([, descriptor]) => 'value' in descriptor)

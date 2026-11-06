@@ -30,6 +30,8 @@ import { Intel } from './services/intel.js';
 import { SaveSync } from './services/save-sync.js';
 import { RetiredUpgrades } from './services/retired-upgrades.js';
 import { Onboarding } from './services/onboarding.js';
+import { Learning } from './services/learning.js';
+import { APP_EDITION } from './version.js';
 import { ClassBriefing } from './services/class-briefing.js';
 import { Perf } from './services/perf.js';
 import { FpsHud } from './services/fps-hud.js';
@@ -201,6 +203,7 @@ const Game = {
             return;
         }
         this._retiredRefundNotice = refund.refunded;
+        if (APP_EDITION === 'guided') Learning.init({ enabled: true, practice: !!this._practiceSession });
         // Idempotency guard — Game.init is called once at boot in
         // production, but a debug reload, hot-module replacement during
         // development, or a third-party harness re-importing the module
@@ -508,6 +511,9 @@ const Game = {
                 // First-launch onboarding (§1.1). Skipped on subsequent launches.
                 if (!Onboarding.isComplete()) {
                     Onboarding.run({
+                        ...(APP_EDITION === 'guided' ? {
+                            mode: Learning.getMode(), onModeChoice: mode => Learning.setMode(mode)
+                        } : {}),
                         onFinished: () => {
                             // Don't trust that the menu is still visible — on
                             // iOS Safari/Brave the screen-start's .active flag
@@ -528,6 +534,11 @@ const Game = {
                             }
                         },
                         onStartTutorial: () => {
+                            if (APP_EDITION === 'guided') {
+                                this.tutorialAutoRun = false;
+                                this.goToCharSelect?.();
+                                return;
+                            }
                             // Ensure the tutorial auto-runs after class selection.
                             try { localStorage.removeItem('mvm_first_run_done'); } catch (e) {}
                             this.tutorialAutoRun = true;
@@ -737,7 +748,8 @@ const Game = {
         // `_tutorialReturnToMenu` flag routes openPostTutorial /
         // skipFirstRunTutorial back to STATE.MENU on completion instead
         // of dropping the player into Sector 1.
-        attachButtonEvent('btn-menu-tutorial', () => this.startMenuTutorial());
+        attachButtonEvent('btn-menu-tutorial', () => APP_EDITION === 'guided'
+            ? this.openPracticeLibrary() : this.startMenuTutorial());
         attachButtonEvent('btn-finish-story', () => { 
             AudioMgr.startMusic(); 
             this.changeState(STATE.MENU); 
@@ -3732,6 +3744,10 @@ startQTE(type, x, y, callback, opts) {
         const FORWARD = new Set([STATE.CHAR_SELECT, STATE.MAP, STATE.COMBAT, STATE.TUTORIAL_COMBAT, STATE.BREAKOUT, STATE.REWARD, STATE.COMBAT_WIN, STATE.SHOP, STATE.EVENT, STATE.HEX, STATE.STORY, STATE.ENDING, STATE.VICTORY]);
         const BACKWARD = new Set([STATE.MENU, STATE.GAMEOVER]);
         const prev = this.currentState;
+        if (APP_EDITION === 'guided' && prev === STATE.BREAKOUT && newState === STATE.MENU
+            && !this._practiceSession && Breakout.isActive?.()) {
+            Breakout.cancel?.({ returnToMenu: false });
+        }
         // Drain combat-scoped tracked timers when leaving combat so a long
         // run doesn't accumulate stuck setTimeouts. Combat-internal flow
         // states (REWARD, COMBAT_WIN) keep timers — they're transient
@@ -3924,6 +3940,7 @@ startQTE(type, x, y, callback, opts) {
         switch(newState) {
             case STATE.MENU:
                 this._newRunConsent = null;
+                this._learningUI?.hideObjective?.();
                 activate('screen-start');
                 if (this._retiredRefundNotice > 0) {
                     this.showHintToast?.(`${this._retiredRefundNotice} Sparks refunded for retired upgrades. Permanent earnings are unchanged.`, 6500);
@@ -5425,6 +5442,9 @@ startQTE(type, x, y, callback, opts) {
             div.onclick = () => this.openCharDetail(cls);
             grid.appendChild(div);
         });
+        if (APP_EDITION === 'guided') this._learningUI?.decorateClassSelection?.(this, {
+            mode: Learning.getMode(), coreComplete: Learning.coreComplete()
+        });
 
         // Paint each class preview exactly once into its canvas. drawEntity is
         // too expensive to run per-frame × 6 canvases; we bake each class into
@@ -5856,6 +5876,9 @@ startQTE(type, x, y, callback, opts) {
         this._newRunConsent = null;
         this.pendingReward = null;
         this._rewardContext = null;
+        this._guidedRun = APP_EDITION === 'guided' && Learning.getMode() === 'guided'
+            && !this.challengeMode && !this.archiveMode && !(this.customRunModifiers?.size > 0)
+            ? Learning.createRun(cls.id) : null;
         document.getElementById('btn-load-save').style.display = "none";
         
         // --- FIX: RESET ALL SEEN FLAGS ---
@@ -5987,6 +6010,16 @@ startQTE(type, x, y, callback, opts) {
         
         this.generateMap();
         this.renderRelics();
+
+        if (APP_EDITION === 'guided') {
+            this.tutorialAutoRun = false;
+            if (this._guidedRun && !Learning.coreComplete()) {
+                this._guidedRun.core = { roomIndex: 0, actions: [] };
+                Breakout.start(this, { guided: true });
+            } else this.changeState(STATE.MAP);
+            this.saveGame();
+            return;
+        }
 
         // First-run auto-tutorial (Phase 3). Profile-level flag (persists across runs).
         const firstRunDone = localStorage.getItem('mvm_first_run_done') === '1';
@@ -9159,6 +9192,10 @@ triggerSystemCrash() {
     },
 
     generateMap() {
+        if (this._isGuidedRun() && this.sector === 1 && !this.challengeMode && !this.archiveMode) {
+            this.map = Learning.route();
+            return;
+        }
         // Archive Mode — Sector X. Single fight against THE ARCHIVIST.
         // Map is start → boss with no other nodes; visitNode hands off to
         // startCombat which sees `this.sector === 6` and picks BOSS_DATA[6].
@@ -9991,6 +10028,7 @@ triggerSystemCrash() {
     },
 
     renderMap() {
+        this._showLearningObjective();
         const titleEl = document.getElementById('map-sector-display');
         const titleTextEl = document.getElementById('map-title-text');
         // Challenge Mode rebrands the whole title so the player can never
@@ -10264,6 +10302,10 @@ triggerSystemCrash() {
 
         // 2. Update Player Position (Crucial for completeCurrentNode to work)
         this.map.currentIdx = node.id;
+        if (this._isGuidedRun() && Number.isInteger(node.guideStage)) {
+            Learning.boundary(this._guidedRun, node.guideStage, { practice: !!this._practiceSession });
+            this._showLearningObjective();
+        }
 
         // ── After-move sector specials — S1 sweep + S4 corruption
         // re-arm so the NEXT map view shows the new watched/infested
@@ -10320,6 +10362,8 @@ triggerSystemCrash() {
             }
             const available = this._availableDiceUpgrades();
             const btnTinker = document.getElementById('btn-rest-tinker');
+            btnTinker?.classList.toggle('hidden', !this._canGuidedFeature('skills'));
+            document.getElementById('btn-rest-meditate')?.classList.toggle('hidden', !this._canGuidedFeature('mana'));
 
             if (available.length === 0) {
                 btnTinker.innerHTML = "<div>🛒 ACCESS SHOP</div><div style='font-size: 0.8rem; color: #aaa;'>All Skills Maxed</div>";
@@ -10362,6 +10406,9 @@ triggerSystemCrash() {
     },
 
     handleRest(action) {
+        if (action === 'tinker' && !this._canGuidedFeature('skills')) return;
+        if (action === 'meditate' && !this._canGuidedFeature('mana')) return;
+        this._recordLearningAction('rest');
         // Common actions for Sleep/Meditate hide the screen immediately
         if (action === 'sleep') {
             document.getElementById('screen-rest').classList.remove('active');
@@ -10428,6 +10475,7 @@ triggerSystemCrash() {
         // Build the pool — mirror the post-combat reward filters so this
         // picker plays by the same rules every offer screen does.
         let pool = [...UPGRADES_POOL];
+        pool = this._guidedPool(pool, 'modules');
         if (this.player.classId) {
             const cid = this.player.classId;
             pool = pool.filter(r => !r.classLocked || r.classLocked === cid);
@@ -11044,7 +11092,7 @@ triggerSystemCrash() {
     // older files run through _migrateSave() before being consumed. Keeps
     // mid-run saves forward-compatible across class-rework / new-feature
     // deploys without forcing the player to restart.
-    SAVE_SCHEMA_VERSION: 4,
+    SAVE_SCHEMA_VERSION: 5,
 
     // ─── Save slots ────────────────────────────────────────────────
     // Three named slots (A / B / C) stored under per-slot keys. The
@@ -11293,12 +11341,14 @@ triggerSystemCrash() {
     },
 
     saveGame() {
+        if (this._practiceSession) return true;
         if (!this.map.currentIdx) this.map.currentIdx = 'start';
 
         const data = {
             v: this.SAVE_SCHEMA_VERSION,
             combatRecovery: this._combatRecoverySnapshot(),
             pendingReward: this.pendingReward || null,
+            guidance: APP_EDITION === 'guided' ? (this._guidedRun || null) : null,
             fragments: this.techFragments,
             meta: this.metaUpgrades,
             encrypted: this.encryptedFiles,
@@ -11380,6 +11430,10 @@ triggerSystemCrash() {
             migrate(data) {
                 data.pendingReward = null;
             }
+        },
+        {
+            from: 4, to: 5,
+            migrate(data) { data.guidance = null; }
         }
         // Future migrations append here. Example:
         // { from: 2, to: 3, migrate(data) { data.player.bloodTier = data.player.bloodTier || 0; } }
@@ -11459,6 +11513,7 @@ triggerSystemCrash() {
             Challenge.markActive(this.challengeMode);
             this.activePacts = new Set(Array.isArray(data.activePacts) ? data.activePacts : []);
             this.pendingReward = data.pendingReward || null;
+            this._guidedRun = APP_EDITION === 'guided' ? Learning.restoreRun(data.guidance) : null;
             this._renderPactPills && this._renderPactPills();
 
             const classConfig = PLAYER_CLASSES.find(c => c.id === (data.player && data.player.classId))
@@ -11488,6 +11543,7 @@ triggerSystemCrash() {
             // Restore ongoing rules without repeating starting HP changes
             // or the starter relic grant already included in this snapshot.
             this._applyCustomRunModifiers({ restore: true });
+            if (this._isGuidedRun() && this._guidedRun.finished) this.player.diceCount = Math.max(6, this.player.diceCount || 0);
             this._challengeTwist = this.challengeMode ? Challenge.todayTwist() : null;
 
             // Rehydrate runStats from save. Defensive merge — missing fields
@@ -11552,7 +11608,8 @@ triggerSystemCrash() {
         // prologue. Restart its safe rooms instead of treating it as a loss.
         if (recovery.outcome === 'breakout') {
             this.player.currentHp = this.player.maxHp;
-            Breakout.start(this);
+            Breakout.start(this, this._guidedRun?.core
+                ? { guided: true, progress: this._guidedRun.core } : undefined);
             this.saveGame();
             return;
         }
@@ -11581,6 +11638,11 @@ triggerSystemCrash() {
     },
 
     startEvent() {
+        if (!this._canGuidedFeature('events')) {
+            this.completeCurrentNode();
+            this.changeState(STATE.MAP);
+            return;
+        }
         // FIX: Filter events based on conditions (e.g. don't show upgrade events if maxed)
         const validEvents = EVENTS_DB.filter(e => !e.condition || e.condition(this));
 
@@ -11750,6 +11812,7 @@ triggerSystemCrash() {
                 }
             }
         ];
+        items = this._guidedPool(items, 'shop');
 
         // ... (Filtering Logic Remains Same) ...
         const coreCount = this.stackCount('minion_core');
@@ -11797,7 +11860,7 @@ triggerSystemCrash() {
             [availableUpgrades[i], availableUpgrades[j]] = [availableUpgrades[j], availableUpgrades[i]];
         }
         
-        const shopUpgrades = availableUpgrades.slice(0, 3);
+        const shopUpgrades = this._canGuidedFeature('advanced') ? availableUpgrades.slice(0, 3) : [];
         let discountIndex = shopUpgrades.length > 0 ? Math.floor(Math.random() * shopUpgrades.length) : -1;
 
         shopUpgrades.forEach((key, idx) => {
@@ -11830,6 +11893,7 @@ triggerSystemCrash() {
     // visit, gated by ≥100 fragments. `_shopHacked` resets in
     // `generateShop` so a fresh shop is hackable again.
     async hackShop() {
+        if (!this._canGuidedFeature('shopHack')) return;
         if (!this.shopInventory) return;
         if (this._shopHacked) return;
         if ((this.techFragments || 0) < 100) {
@@ -12222,6 +12286,7 @@ triggerSystemCrash() {
     _refreshHackButton() {
         const btn = document.getElementById('btn-hack-shop');
         if (!btn) return;
+        btn.classList.toggle('hidden', !this._canGuidedFeature('shopHack'));
         if (!btn.dataset.wired) {
             btn.addEventListener('click', () => this.hackShop());
             btn.dataset.wired = '1';
@@ -12255,6 +12320,7 @@ triggerSystemCrash() {
             if (this.player.hasDiceUpgrade(key)) return false;
             const baseDie = DICE_TYPES[key];
             if (!baseDie) return false;
+            if (!Learning.allowDie(key, this._isGuidedRun() ? this._guidedRun : null)) return false;
             // Gate: class dice belong only to their class; shared skills pass.
             if (baseDie.classId && baseDie.classId !== playerClass) return false;
             if (!baseDie.locked) return true;
@@ -14118,6 +14184,7 @@ updateHexBreach(dt) {
     },
 
     saveData() {
+        if (this._practiceSession) return;
         try {
             // Fragments are run-only — they live in saveGame's run blob
             // (which has its own localStorage slot) and the live HUD,
@@ -14438,8 +14505,17 @@ async startCombat(type) {
         
         if (isBoss) {
             template = BOSS_DATA[this.sector] || BOSS_DATA[1];
+            if (this._isGuidedRun() && !this._guidedRun.finished && this.sector === 1) {
+                template = { ...template, hp: 180, dmg: 12, actionsPerTurn: 1 };
+                this._guidedBossRules = [{ id: 'guided-patrol', title: 'Guided gatekeeper',
+                    text: '180 base HP, 12 base damage and one action per turn. Its phase and intent rules still apply.', tone: 'info' }];
+            } else this._guidedBossRules = null;
         } else {
             let pool = ENEMIES.filter(e => e.sector === this.sector);
+            if (this._isGuidedRun() && !this._guidedRun.finished && this.sector === 1) {
+                pool = pool.filter(e => this._guidedRun.stage < 5
+                    ? e.name === 'Sentry Drone' : ['Sentry Drone', 'Heavy Loader'].includes(e.name));
+            }
             if (pool.length === 0) pool = ENEMIES.filter(e => e.sector === 3); 
             if (pool.length === 0) pool = ENEMIES.filter(e => e.sector === 1); 
             template = pool[Math.floor(Math.random() * pool.length)];
@@ -14462,6 +14538,9 @@ async startCombat(type) {
 
         // Create New Enemy
         this.enemy = new Enemy(template, level, isElite);
+        if (isElite && this._isGuidedRun() && !this._guidedRun.finished && this.sector === 1) {
+            this.enemy.affixes = ['Shielded'];
+        }
 
         // v1.9.44 — propagate the damage-type tag from the template /
         // BOSS_DATA entry onto the spawned enemy so entity.takeDamage's
@@ -14972,7 +15051,7 @@ async startCombat(type) {
         }
 
         // Apply Glitch Modifiers
-        if (this.corruptionLevel > 0 && !isBoss) {
+        if (this.corruptionLevel > 0 && !isBoss && this._canGuidedFeature('advanced')) {
             if (Math.random() < (0.3 + this.corruptionLevel * 0.1)) {
                 const mod = GLITCH_MODIFIERS[Math.floor(Math.random() * GLITCH_MODIFIERS.length)];
                 this.enemy.affixes.push(mod.id);
@@ -17057,6 +17136,7 @@ async startTurn() {
     _getAvailableDiceTypes() {
         const classBase = new Set(this._getClassBaseDice());
         return Object.keys(DICE_TYPES).filter(key => {
+            if (!Learning.allowDie(key, this._isGuidedRun() ? this._guidedRun : null)) return false;
             const d = DICE_TYPES[key];
             if (key === 'SIGNATURE') return false;
             // Class base dice — only include this class's 4
@@ -17204,8 +17284,18 @@ async startTurn() {
         }
 
         // STANDARD LOGIC
+        if (this._isGuidedRun()) {
+            const plan = Learning.handPlan(this._guidedRun, this.player?.classId);
+            if (plan) {
+                this.dicePool = plan.map((type, id) => ({ id, type, used: false, selected: false }));
+                this._detectAndApplyCombos();
+                this.renderDiceUI();
+                this._showLearningObjective();
+                return;
+            }
+        }
         const availableTypes = this._getAvailableDiceTypes();
-        const hasSignature = !!DICE_TYPES.SIGNATURE;
+        const hasSignature = !!DICE_TYPES.SIGNATURE && this._canGuidedFeature('signature');
         const SIG_RATE = 0.22;
         // Pity: guarantee SIGNATURE after two straight misses.
         const sigPity = (this.player.sigMissStreak || 0) >= 2;
@@ -18013,6 +18103,7 @@ async startTurn() {
      * actually granted.
      */
     grantSparks(amount, reason, opts) {
+        if (this._practiceSession) return 0;
         if (!amount || amount <= 0) return 0;
         const silent = !!(opts && opts.silent);
         // Track first-ever grant — surfaces the introductory hint after
@@ -18195,6 +18286,9 @@ async startTurn() {
             Hints.trigger && Hints.trigger('first_mana_spent');
         }
         this.diceUsedThisTurn = (this.diceUsedThisTurn || 0) + 1;
+        this._recordLearningAction(this._dieSlot(die.type) || 'skill', {
+            skill: !!data.isSkill, cost: effectiveCost, signature: die.type === 'SIGNATURE'
+        });
         // Diag — count dice used + attacks for the diagnostic dump.
         // NOTE: `type` is declared later via `const type = die.type;` so
         // referencing the bare symbol here was a TDZ error. Read straight
@@ -19598,6 +19692,7 @@ async startTurn() {
         }
 
         // Apply Cost
+        this._recordLearningAction('reroll');
         // Per-turn reroll accumulator for the end-of-turn summary —
         // counts every reroll regardless of how it was paid (banked,
         // QTE token, blood, free-via-Dice-Cache, fracture, silence).
@@ -22825,6 +22920,7 @@ drawEffects() {
       if (this._combatStartedAt && (Date.now() - this._combatStartedAt) < 500) return;
       if (this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT && this.currentState !== STATE.BREAKOUT) return;
       this._endTurnRunning = true;
+      this._recordLearningAction('endTurn');
       // v1.9.0 — Archivist time-control: hide the overlay the moment the
       // turn ends so the countdown doesn't sit stuck during the enemy
       // phase. Budget itself is preserved (keepBudget) so next turn
@@ -24733,6 +24829,10 @@ drawEffects() {
         };
 
         const skipReward = wasElite && this._ascEffects?.noEliteRewards;
+        if (this._isGuidedRun()) Learning.recordWin(this._guidedRun, this.map.currentIdx, {
+            boss: wasBoss && this.sector === 1, practice: !!this._practiceSession
+        });
+        if (this._isGuidedRun() && this._guidedRun.finished) this.player.diceCount = Math.max(6, this.player.diceCount || 0);
         this.pendingReward = null;
         if (!skipReward) {
             this._rewardContext = { encounterType: wasBoss ? 'boss' : (wasElite ? 'elite' : 'combat'), killName };
@@ -24888,6 +24988,7 @@ drawEffects() {
         if(this.player.hasRelic('manifestor')) choices = 4;
         
         let pool = [...UPGRADES_POOL];
+        pool = this._guidedPool(pool, 'modules');
 
         // Class-locked modules surface ONLY in the matching class's
         // reward screens. Generic-pool modules are unaffected. Each
@@ -24900,7 +25001,7 @@ drawEffects() {
 
         // --- ADD CORRUPTED RELICS (If Ascended) ---
         // Gated entries require minimum corruption level.
-        if (this.corruptionLevel > 0 && typeof CORRUPTED_RELICS !== 'undefined') {
+        if (this.corruptionLevel > 0 && typeof CORRUPTED_RELICS !== 'undefined' && this._canGuidedFeature('corrupted')) {
             const level = this.corruptionLevel;
             const eligible = CORRUPTED_RELICS.filter(r => !r.minAscension || level >= r.minAscension);
             pool.push(...eligible);
@@ -24986,6 +25087,9 @@ drawEffects() {
 
         // Select Options
         options = pool.slice(0, choices);
+        if (this._isGuidedRun() && this._guidedRun.combats <= 2 && !this._guidedRun.finished) {
+            options = Learning.firstRewards(pool);
+        }
 
         // ── MODULE FUSIONS (Hades-style Duos). When the player owns BOTH
         // source modules of any unfired fusion, surface the fusion as
@@ -24994,7 +25098,7 @@ drawEffects() {
         // optionally take. Picking it consumes both source modules and
         // installs the fusion (handled in the card.onclick below).
         this.firedFusions = this.firedFusions || new Set();
-        if (typeof MODULE_FUSIONS !== 'undefined') {
+        if (typeof MODULE_FUSIONS !== 'undefined' && this._canGuidedFeature('fusions')) {
             const ownedSet = new Set((this.player.relics || []).map(r => r.id));
             for (const fusion of MODULE_FUSIONS) {
                 if (this.firedFusions.has(fusion.id)) continue;
@@ -26011,7 +26115,115 @@ drawEffects() {
         return true;
     },
 
+    _isGuidedRun() {
+        return APP_EDITION === 'guided' && !!this._guidedRun && !this._practiceSession
+            && !this.challengeMode && !this.archiveMode;
+    },
+
+    _canGuidedFeature(feature) {
+        if (APP_EDITION !== 'guided') return true;
+        // Optional practice uses the drill's own explicit tools, never the
+        // unfinished curriculum of the suspended real run.
+        if (this._practiceSession) return true;
+        return Learning.canFeature(feature, this._isGuidedRun() ? this._guidedRun : null);
+    },
+
+    _guidedPool(items, kind) {
+        return Learning.filterPool(items, kind, this._isGuidedRun() ? this._guidedRun : null);
+    },
+
+    _recordLearningAction(action, details = {}) {
+        if (APP_EDITION !== 'guided' || this._practiceSession) return;
+        Learning.recordAction(action, { ...details, classId: this.player?.classId });
+        this._showLearningObjective();
+    },
+
+    _showLearningObjective() {
+        if (APP_EDITION !== 'guided' || this._practiceSession || this.tutorialHintsEnabled === false
+            || !this._isGuidedRun() || [STATE.MENU, STATE.CHAR_SELECT, STATE.GAMEOVER, STATE.VICTORY].includes(this.currentState)) {
+            this._learningUI?.hideObjective?.();
+            return;
+        }
+        let route = this._guidedRun;
+        if (this.currentState === STATE.MAP) {
+            const next = this.map.nodes.find(node => node.status === 'available' && Number.isInteger(node.guideStage));
+            if (next) route = { ...route, stage: next.guideStage };
+        }
+        const objective = Learning.objective(route, this.player?.classId);
+        if (objective) this._learningUI?.showObjective?.({ ...objective,
+            ...(this.currentState === STATE.MAP ? { host: document.getElementById('screen-map') } : {}),
+            onHelp: () => this.openPracticeLibrary() });
+        else this._learningUI?.hideObjective?.();
+    },
+
+    _onGuidedCoreProgress(progress) {
+        if (!this._isGuidedRun() || this._practiceSession || !progress) return;
+        this._guidedRun.core = { roomIndex: progress.roomIndex, actions: [...(progress.actions || [])] };
+        this.saveGame();
+    },
+
+    _onGuidedCoreComplete() {
+        if (!this._isGuidedRun() || this._practiceSession || !this._guidedRun.core) return;
+        Learning.recordCore(this.player.classId);
+        this._guidedRun.core = null;
+        Breakout._grantCellkey?.(this);
+        try {
+            localStorage.setItem('mvm_first_run_done', '1');
+            localStorage.setItem('mvm_breakout_done', '1');
+        } catch (_) {}
+        this.sector = 1;
+        this.enemy = null;
+        this.player.minions = [];
+        this.player.currentHp = this.player.maxHp;
+        this.generateMap();
+        this.changeState(STATE.MAP);
+        this.saveGame();
+    },
+
+    setLearningMode(mode) {
+        if (APP_EDITION !== 'guided' || this._practiceSession) return false;
+        // Mode changes affect the next run. A saved route keeps its rules.
+        return Learning.setMode(mode);
+    },
+
+    getBossRules() {
+        const enemy = this.enemy;
+        if (APP_EDITION !== 'guided' || !enemy?.isBoss) return [];
+        const rules = [...(this._guidedBossRules || [])];
+        const actions = enemy.bossData?.actionsPerTurn || 1;
+        rules.push({ id: 'actions', title: 'Read every intent',
+            text: `${actions} action${actions === 1 ? '' : 's'} per turn. Timing bonuses are optional; a miss keeps the normal base outcome.`, tone: 'info' });
+        const allies = (enemy.minions || []).filter(minion => minion.currentHp > 0);
+        if (allies.length) rules.push({ id: 'support', title: 'Supporting enemies',
+            text: `${allies.length} supporting enemies are active. Each has its own health and intent; you can target them separately.`, tone: 'warning' });
+        if (enemy.shield > 0) rules.push({ id: 'shield', title: 'Current shield',
+            text: `${enemy.shield} shield currently absorbs ordinary damage before HP.`, tone: 'info' });
+        if (enemy.name === 'THE PANOPTICON') rules.push({ id: 'analyse', title: 'Analyse',
+            text: 'An ANALYSE intent cancels your first otherwise valid die next turn. Read the intent before committing a valuable die.', tone: 'warning' });
+        return rules;
+    },
+
+    openPracticeLibrary() {
+        if (APP_EDITION !== 'guided' || this._practiceSession) return;
+        const lessons = Learning.lessons(this.player?.classId);
+        this._learningUI?.showPracticeLibrary?.({ lessons,
+            onSelect: id => {
+                const lesson = lessons.find(item => item.id === (id?.id || id));
+                if (!lesson) return;
+                const classId = this.player?.classId;
+                const begin = () => Breakout.start(this, { practiceRoom: lesson.room, classId });
+                // Rehearsal begins from a durable checkpoint, after any
+                // earned victory settles. Never suspend half an action.
+                if (this._isInActiveRun()) {
+                    const saved = this.saveAndReturn();
+                    if (saved?.then) saved.then(ok => { if (ok) begin(); });
+                    else if (saved) begin();
+                } else begin();
+            }, onClose: () => {} });
+    },
+
     saveAndReturn() {
+        if (this._practiceSession) { Breakout.cancel?.({ returnToMenu: true }); return true; }
         // Keep the full victory presentation and its receipt together. A
         // menu request during it saves only after the earned choice exists.
         const completion = this._winCombatRunning && this._winCombatCompletion;
@@ -26045,6 +26257,7 @@ drawEffects() {
     },
 
     abandonRun() {
+        if (this._practiceSession) { Breakout.cancel?.({ returnToMenu: true }); return true; }
         if (!this._isInActiveRun() && !this._readSaveRaw()) return false;
         const slot = this._activeSlot();
         if (!window.confirm(`Abandon the run in save slot ${slot}? Its checkpoint, modules and Fragments will be removed. Sparks and permanent upgrades remain.`)) return false;
