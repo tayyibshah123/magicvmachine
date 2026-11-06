@@ -1,5 +1,5 @@
 import { test, expect, storagePrefix } from './fixtures.js';
-import { openGame, configureEncounter, tap, tapQTE, playUntil } from './game-driver.js';
+import { openGame, configureEncounter, tap, dragDie, tapQTE, playUntil } from './game-driver.js';
 import { STATE } from '../../src/constants.js';
 
 test('a fresh player can choose Full Rules without mandatory training or a changed difficulty choice', async ({ page }) => {
@@ -135,6 +135,20 @@ test('mobile encounter rules pause safely in a readable body-level panel and clo
   await tap(page, '#learning-boss-rules .learning-modal-close');
   await expect(panel).toHaveCount(0);
   expect(await page.evaluate(() => Game.paused)).toBe(false);
+});
+
+test('a wrong native drop gives a useful target correction and leaves the die available', async ({ page }) => {
+  await openGame(page, { returning: true });
+  await configureEncounter(page, { classId: 'tactician', dice: ['TAC_ATTACK', 'TAC_DEFEND'] });
+  await page.evaluate(async () => {
+    const { Learning } = await import('/src/services/learning.js');
+    Game._guidedRun = Learning.createRun('tactician');
+  });
+  await dragDie(page, 0, 'player');
+  await expect(page.locator('#hint-toast')).toContainText('living hostile');
+  expect(await page.evaluate(() => ({ hp: Game.player.currentHp,
+    enemyHp: Game.enemy.currentHp, used: Game.dicePool[0].used, qte: Game.qte.active })))
+    .toEqual({ hp: 100, enemyHp: 500, used: false, qte: false });
 });
 
 for (const [classId, pattern, waves] of [

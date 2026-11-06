@@ -2360,6 +2360,9 @@ startDrag(e, die, el) {
                 }
                 if (this.haptic) this.haptic('hit');
                 try { AudioMgr.playSound('snap'); } catch (e) {}
+                if (this._isGuidedRun()) this.showHintToast?.(isMinionDie ? 'Drag this summon into the play area.'
+                    : DICE_TYPES[dieToUse.type]?.target === 'enemy' ? 'Drag this die onto a living hostile.'
+                        : 'Drag this die onto your operator or an ally.', 3500);
                 this.dragState.dieElement = null;
             }
             return; // Exit function after handling
@@ -18317,10 +18320,12 @@ async startTurn() {
             
             if (data.target === 'enemy' && !isTargetEnemy) {
                  ParticleSys.createFloatingText(target.x, target.y - 120, "INVALID TARGET", "#888");
+                 if (this._isGuidedRun()) this.showHintToast?.('Drag this die onto a living hostile.', 3500);
                  return;
             }
             if ((data.target === 'self') && !isTargetPlayer) {
                  ParticleSys.createFloatingText(target.x, target.y - 120, "TARGET SELF/ALLY", "#888");
+                 if (this._isGuidedRun()) this.showHintToast?.('Drag this die onto your operator or an ally.', 3500);
                  return;
             }
         }
