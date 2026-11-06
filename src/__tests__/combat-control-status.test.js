@@ -1,66 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Game } from '../game.js';
 import { Enemy } from '../entities/enemy.js';
-import { Player } from '../entities/player.js';
 import { Minion } from '../entities/minion.js';
-import { PLAYER_CLASSES, STATE } from '../constants.js';
-import { AudioMgr } from '../audio.js';
+import { STATE } from '../constants.js';
 import { ParticleSys } from '../effects/particles.js';
 import { Hints } from '../services/hints.js';
+import { setupCombatFixture, teardownCombatFixture } from './helpers/combat-fixture.js';
+import { mountGamePage, trackBrowserListeners } from './helpers/browser-events.js';
 
-let now;
 let hidden;
 
 beforeEach(() => {
-    vi.useFakeTimers();
-    now = 0;
+    setupCombatFixture({ enemyTemplate: { name: 'Test target', hp: 100, dmg: 9, kind: 'detonator' },
+        profiles: ['cosmetics'] });
     hidden = false;
-    vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
     vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden);
-    document.body.innerHTML = '<div id="game-container"></div><button id="btn-end-turn"></button>';
-    document.body.className = '';
-    Object.assign(Game, {
-        currentState: STATE.COMBAT, sector: 1, turnCount: 3, _combatGen: 1,
-        _endTurnRunning: false, _winCombatRunning: false, _combatActionDepth: 0,
-        _combatStartedAt: 0, inputLocked: false, paused: false, autoQTE: false,
-        inputCooldown: 0, qte: { active: false }, _ascEffects: {}, godMode: false,
-        assistDisabled: true, metaUpgrades: [], metaToggledOff: new Set(),
-        _disabledMetaThisRun: new Set(), _customDmgInMult: 1,
-        effects: [], runStats: null, turnStats: null, _activeSectorMech: null,
-        deadMinionsThisTurn: 0, player: null, enemy: null, combatPaceMult: 1,
-        _nextDamageIsCrit: false,
-        _archivistTimerBudget: undefined, _archivistTurnExpired: false,
-        _archivistClockGen: null, _archivistClockEnemy: null
-    });
-    for (const method of ['createDamageText', 'createExplosion', 'createFloatingText', 'createShockwave', 'createSparks']) {
-        vi.spyOn(ParticleSys, method).mockImplementation(() => {});
-    }
-    for (const method of ['playSound', 'playHit', 'playSting', 'duck']) {
-        vi.spyOn(AudioMgr, method).mockImplementation(() => {});
-    }
-    for (const method of ['shake', 'shakeFromDamage', 'hitStop', 'triggerScreenFlash', 'haptic', 'drawQTE', '_qteWindupAudio']) {
+    for (const method of ['drawQTE', '_qteWindupAudio']) {
         vi.spyOn(Game, method).mockImplementation(() => {});
     }
-    vi.spyOn(Game, 'showPhaseBanner').mockResolvedValue();
-    vi.spyOn(Game, '_isNewcomer').mockReturnValue(false);
     vi.spyOn(Hints, 'trigger').mockImplementation(() => {});
-    Game.player = new Player(PLAYER_CLASSES.find(c => c.id === 'tactician'));
-    Game.player.classId = 'tactician';
-    Game.player.maxHp = Game.player.currentHp = 100;
-    Game.enemy = new Enemy({ name: 'Test target', hp: 100, dmg: 9, kind: 'detonator' }, 0);
-    Game.invalidateStackCache();
 });
 
-afterEach(() => {
-    Game._stopArchivistTimeControl();
-    Game.clearTrackedTimers();
-    vi.clearAllTimers();
-    vi.useRealTimers();
-    vi.restoreAllMocks();
-});
+afterEach(teardownCombatFixture);
 
 async function advance(ms) {
-    now += ms;
     await vi.advanceTimersByTimeAsync(ms);
 }
 
@@ -73,6 +36,78 @@ function stubTurnPresentation() {
 }
 
 describe('combat turn input', () => {
+    it.each(['pointercancel', 'hidden pointerup'])('does not play a die after %s interrupts its drag', async interruption => {
+        const presentationVisibilityWasBound = Game._presentationVisibilityBound;
+        const cleanup = trackBrowserListeners();
+        try {
+            Game.canvas = mountGamePage();
+            for (const method of ['renderDiceUI', 'updateHUD', '_spawnDieUseBurst', 'saveGame']) {
+                vi.spyOn(Game, method).mockImplementation(() => {});
+            }
+            vi.spyOn(Game.canvas, 'getBoundingClientRect').mockReturnValue({
+                left: 0, top: 0, right: 1080, bottom: 1920, width: 1080, height: 1920
+            });
+            Game.bindEvents();
+            Game.bindTabVisibility();
+            const die = { id: 1, type: 'TAC_DEFEND', used: false, selected: false };
+            Game.dicePool = [die];
+            const tile = document.createElement('div');
+            const ghost = document.createElement('div');
+            document.body.append(tile, ghost);
+            Game.dragState = { active: true, die, dieElement: tile, ghostElement: ghost,
+                startX: 0, startY: 0, hoverTarget: Game.player };
+            if (interruption === 'hidden pointerup') {
+                hidden = true;
+                document.dispatchEvent(new Event('visibilitychange'));
+            }
+            const event = new Event(interruption === 'pointercancel' ? 'pointercancel' : 'pointerup');
+            Object.assign(event, { clientX: Game.player.x, clientY: Game.player.y });
+            window.dispatchEvent(event);
+            await advance(0);
+            expect(die.used).toBe(false);
+            expect(Game.player.shield).toBe(0);
+            expect(Game.dragState.active).toBe(false);
+            expect(Game.dragState.hoverTarget).toBeNull();
+            expect(Game.dragState.ghostElement).toBeNull();
+            expect(ghost.isConnected).toBe(false);
+            expect(tile.style.opacity).toBe('1');
+        } finally {
+            hidden = false;
+            cleanup();
+            if (!presentationVisibilityWasBound) Game._presentationVisibilityBound = false;
+        }
+    });
+
+    it('uses the resume touch only to dismiss a pause gate while a timing prompt is active', async () => {
+        const cleanup = trackBrowserListeners();
+        try {
+            Game.canvas = mountGamePage();
+            Game.bindEvents();
+            Game.bindTabVisibility();
+            vi.spyOn(Game, 'saveGame').mockImplementation(() => {});
+            const timing = Game.startQTE('DEFEND', Game.player.x, Game.player.y);
+            Game.qte.phase = 'active';
+            Game.qte.radius = 30;
+            Game.inputCooldown = 0;
+            hidden = true;
+            document.dispatchEvent(new Event('visibilitychange'));
+            hidden = false;
+            document.dispatchEvent(new Event('visibilitychange'));
+            const overlay = document.getElementById('pause-overlay');
+            overlay.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+            expect(Game.qte.active).toBe(true);
+            expect(Game.paused).toBe(true);
+            overlay.dispatchEvent(new Event('touchstart', { bubbles: true }));
+            expect(Game.paused).toBe(false);
+            expect(Game.qte.active).toBe(true);
+            await Game.resolveQTE('fail');
+            await timing;
+        } finally {
+            hidden = false;
+            cleanup();
+        }
+    });
+
     it.each(['qte', 'input', 'presentation', 'enemy phase'])('rejects rerolls during %s', block => {
         Game.rerolls = 2;
         const die = { id: 1, type: 'TAC_ATTACK', used: false };
@@ -560,6 +595,8 @@ describe('settled player-minion darts', () => {
         expect(Game.qte.waveTotal).toBe(1);
         expect(Game.qte.pattern).toBe('steady');
         expect(Game.qte.minionBoost).toBe(true);
+        expect(Game.qte.attackerX).toBe(minion.x);
+        expect(Game.qte.attackerY).toBe(minion.y);
         Game.qte.phase = 'active';
         Game.qte.radius = 30;
         Game.inputCooldown = 0;

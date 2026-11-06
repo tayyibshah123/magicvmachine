@@ -7,6 +7,11 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:area": "node scripts/check-game.mjs --area",
+    "test:groups": "node scripts/check-game.mjs --list",
+    "test:browser": "node scripts/check-game.mjs --browser-only",
+    "check": "node scripts/check-game.mjs",
+    "check:comprehensive": "node scripts/check-game.mjs --comprehensive",
     "build:www": "node scripts/build-www.mjs",
     "compress:music": "node scripts/compress-music.mjs",
     "android:sync": "npm run build:www && npx cap sync android",
@@ -21,6 +26,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^6.1.2",
+    "@playwright/test": "1.65.0",
     "jsdom": "^29.0.2",
     "vitest": "^1.6.0"
   }

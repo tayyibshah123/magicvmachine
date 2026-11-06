@@ -939,31 +939,19 @@ body.cosmetic-title-centurion h1.title {
     -webkit-text-fill-color: transparent !important;
     filter: drop-shadow(0 0 14px rgba(255, 215, 106, 0.7));
 }
-/* Glitch Overlay — title flickers magenta on the off-beat. */
-body.cosmetic-title-glitch h1.title {
-    animation: cosmetic-title-glitch 4.2s steps(8, end) infinite;
-}
+/* Standard menu title effects, composed with the base animations below. */
 @keyframes cosmetic-title-glitch {
     0%, 88%, 100% { text-shadow: 0 0 12px rgba(0, 243, 255, 0.55); }
     90%   { text-shadow: -3px 0 #ff5eb9, 3px 0 #00f3ff; transform: translateX(-1px); }
     93%   { text-shadow: 2px 0 #ff5eb9, -2px 0 #00f3ff; transform: translateX(2px); }
     96%   { text-shadow: 0 0 12px rgba(255, 94, 185, 0.6); transform: translateX(0); }
 }
-body.reduced-motion.cosmetic-title-glitch h1.title,
-body.perf-low.cosmetic-title-glitch h1.title { animation: none; }
-/* Drift Echo — title leaves a ghost-trail when the menu enters.
-   One-shot via the existing screen-active class so the trail
-   reads as the menu "settling in" rather than constantly drifting. */
-body.cosmetic-title-drift #screen-start.active h1.title {
-    animation: cosmetic-title-drift 1.4s ease-out 1;
-}
+/* Drift Echo leaves a one-shot ghost trail when the menu enters. */
 @keyframes cosmetic-title-drift {
     0%   { text-shadow: -8px 0 rgba(0, 243, 255, 0.6), 8px 0 rgba(255, 94, 185, 0.6); transform: translateX(0); }
     60%  { text-shadow: -3px 0 rgba(0, 243, 255, 0.4), 3px 0 rgba(255, 94, 185, 0.4); }
     100% { text-shadow: 0 0 12px rgba(0, 243, 255, 0.5); }
 }
-body.reduced-motion.cosmetic-title-drift #screen-start.active h1.title,
-body.perf-low.cosmetic-title-drift #screen-start.active h1.title { animation: none; }
 
 /* Reward-flyer (P10): clone that animates from card → relic strip on pickup */
 .reward-flyer {
@@ -14027,6 +14015,15 @@ canvas + .game-icon { filter: none; }
        must stay on one row. Tighten letter-spacing in the keyframes
        provides breathing room without breaking the line. */
     white-space: nowrap;
+}
+/* Drift settles before the looping glitch starts, so their text shadows
+   and transforms never compete. The mid/low performance gates still apply. */
+#screen-start.active h1.title {
+    animation:
+        text-flicker 5s infinite,
+        menu-title-glow 3.2s ease-in-out infinite,
+        cosmetic-title-drift 1.4s ease-out 1,
+        cosmetic-title-glitch 4.2s steps(8, end) 1.4s infinite;
 }
 /* Beat-driven glow stacks on top of the ambient menu-title-glow so the
    kick reads as an extra punch on every beat instead of replacing the

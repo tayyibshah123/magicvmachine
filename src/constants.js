@@ -1414,9 +1414,9 @@ const EVENTS_DB = [
         art: 'data-vault',
         desc: "A piece of salvaged firmware can lock one dice slot to a chosen type for 3 turns next combat.",
         options: [
-            { text: "Seal ATTACK (3 turns)", icon: 'sword',     effect: (g) => { if (g.sealDice) g.sealDice('ATTACK', 3); return "ATTACK pinned for 3 turns."; } },
-            { text: "Seal DEFEND (3 turns)", icon: 'shield',    effect: (g) => { if (g.sealDice) g.sealDice('DEFEND', 3); return "DEFEND pinned for 3 turns."; } },
-            { text: "Seal MINION (3 turns)", icon: 'minion',    effect: (g) => { if (g.sealDice) g.sealDice('MINION', 3); return "MINION pinned for 3 turns."; } },
+            { text: "Seal ATTACK (3 turns)", icon: 'sword',     effect: (g) => { if (g.sealDice) g.sealDice('attack', 3); return "ATTACK pinned for 3 turns."; } },
+            { text: "Seal DEFEND (3 turns)", icon: 'shield',    effect: (g) => { if (g.sealDice) g.sealDice('defend', 3); return "DEFEND pinned for 3 turns."; } },
+            { text: "Seal MINION (3 turns)", icon: 'minion',    effect: (g) => { if (g.sealDice) g.sealDice('minion', 3); return "MINION pinned for 3 turns."; } },
             // Discarding firmware is a real choice — it sparks as it
             // dissolves and bites your interface during the discharge.
             { text: "Burn it for parts (-2 HP, +30 Fragments)", icon: 'spark', effect: (g) => {

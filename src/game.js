@@ -1442,6 +1442,7 @@ const Game = {
         // document) doesn't pop the next tutorial beat off the same
         // tap that resolved the QTE.
         document.addEventListener('pointerdown', (e) => {
+            if (this.paused || document.hidden) return;
             if (!this.qte || !this.qte.active) return;
             // Skip if the press is on the storyboard slate (its own
             // tap-to-continue handler) or on a settings overlay button.
@@ -1455,6 +1456,10 @@ const Game = {
         }, true);
 
         let dragRaf = null;
+        this._cancelDragFrame = () => {
+            if (dragRaf) cancelAnimationFrame(dragRaf);
+            dragRaf = null;
+        };
         window.addEventListener('pointermove', (e) => {
             if (this.dragState.active && this.dragState.ghostElement) {
                 if(e.cancelable) e.preventDefault();
@@ -1512,8 +1517,7 @@ const Game = {
         
         window.addEventListener('pointercancel', (e) => {
             if (this.dragState.active) {
-                this.handleDragEnd(e);
-                if(dragRaf) { cancelAnimationFrame(dragRaf); dragRaf = null; }
+                this._cancelDrag();
             }
         });
     },
@@ -2089,28 +2093,15 @@ const Game = {
 
 startDrag(e, die, el) {
         // NEW: Check Input Lock
-        if (this.inputLocked) return;
+        if (this.inputLocked || this._endTurnRunning || this._combatActionDepth > 0
+            || this.paused || document.hidden) return;
         // 1. Prevent default browser behavior (scrolling/zooming)
         if (e.cancelable) e.preventDefault();
         
         if (die.used || this.qte.active) return;
 
         // 2. FAILSAFE: If a previous drag got stuck, clean it up now.
-        if (this.dragState.active) {
-            if (this.dragState.ghostElement) {
-                this.dragState.ghostElement.remove();
-            }
-            // Reset opacity of the previous die if it was stuck
-            if (this.dragState.dieElement) {
-                this.dragState.dieElement.style.opacity = '1';
-            }
-            // Clear any lingering hover-target reference from the prior
-            // drag so the canvas-side lock-on ring doesn't briefly draw
-            // on a stale entity before pointermove updates it. Line
-            // 1405 below also resets hoverTarget on the new drag, but
-            // doing it here closes the semantic gap.
-            this.dragState.hoverTarget = null;
-        }
+        this._cancelDrag();
         
         this.dragState.active = true;
         this.dragState.die = die;
@@ -2178,10 +2169,28 @@ startDrag(e, die, el) {
         } catch (e) { /* swallow */ }
     },
 
+    _cancelDrag() {
+        this._cancelDragFrame?.();
+        const drag = this.dragState;
+        if (!drag) return;
+        if (drag.dieElement) drag.dieElement.style.opacity = '1';
+        drag.ghostElement?.remove?.();
+        drag.active = false;
+        drag.die = null;
+        drag.dieElement = null;
+        drag.ghostElement = null;
+        drag.hoverTarget = null;
+        TooltipMgr.hide();
+    },
+
     handleDragEnd(e) {
         TooltipMgr.hide();
 
         if (!this.dragState.active) return;
+        if (e?.type === 'pointercancel' || e?.type === 'touchcancel' || this.paused || document.hidden) {
+            this._cancelDrag();
+            return;
+        }
         
         // Safety: Ensure we don't process if die is null (already used)
         if (!this.dragState.die) {
@@ -2550,6 +2559,24 @@ startDrag(e, die, el) {
         return baseSpeed;
     },
 
+    _cancelQTE() {
+        const qte = this.qte;
+        if (!qte) return;
+        const cancel = qte.cancel;
+        qte.active = false;
+        qte.callback = null;
+        qte.cancel = null;
+        qte.perWaveCallback = null;
+        this.inputCooldown = 0;
+        this._alignedAttackVfxFired = null;
+        if (qte.id !== undefined && Array.isArray(this.effects)) {
+            this.effects = this.effects.filter(effect => effect?.qteId !== qte.id);
+        }
+        // Boundary callers invalidate the old encounter before settling its
+        // awaiter. Cancellation never runs its damage callback or turn hook.
+        if (typeof cancel === 'function') cancel();
+    },
+
 startQTE(type, x, y, callback, opts) {
         Hints.trigger('first_qte');
         // Clear any stale aligned-VFX coordination from a prior QTE so a
@@ -2563,31 +2590,32 @@ startQTE(type, x, y, callback, opts) {
             const player = this.player;
             const enemy = this.enemy;
             let completed = false;
-            const complete = async multiplier => {
+            const complete = async (multiplier, cancelled = false) => {
                 if (completed) return;
                 completed = true;
                 const stillLive = this._combatGen === gen && this.player === player
                     && this.enemy === enemy && (this.currentState === STATE.COMBAT
                         || this.currentState === STATE.TUTORIAL_COMBAT || this.currentState === STATE.BREAKOUT);
                 try {
-                    if (stillLive && callback) await callback(multiplier);
+                    if (!cancelled && stillLive && callback) await callback(multiplier);
                 } catch (err) {
                     this._recoverFromCombatError('QTE action', err, false);
                 } finally {
                     resolve(multiplier);
-                    this._tryResolveExpiredTurn();
+                    if (!cancelled) this._tryResolveExpiredTurn();
                 }
             };
             this.inputCooldown = opts?.shortTiming ? 0.25 : 0.6;
 
             // Accessibility: auto-QTE resolves at 'good' tier without player input.
             if (this.autoQTE) {
-                this.qte = { id: qteId, active: true, type, phase: 'auto', callback: complete };
+                this.qte = { id: qteId, active: true, type, phase: 'auto', callback: complete,
+                    cancel: () => complete(0, true) };
                 // Mimic resolveQTE('good') multipliers — tracks the tier
                 // values in resolveQTE: attack=1.15, defend=0.6.
                 const mult = opts?.minionBoost ? 1.1 : (this._dieSlot(type) === 'attack' ? 1.15 : 0.6);
                 this.sleep(300).then(() => {
-                    if (this.qte.id !== qteId) { resolve(mult); return; }
+                    if (completed || this.qte.id !== qteId) { resolve(mult); return; }
                     this.qte.active = false;
                     this.qte.callback = null;
                     if (this._combatGen === gen && this.player === player && this.enemy === enemy
@@ -2713,7 +2741,8 @@ startQTE(type, x, y, callback, opts) {
                 // call sites that don't pass it fall back to the legacy
                 // baseDmg-based reflect formula.
                 incomingDamage: (opts && typeof opts.incomingDamage === 'number') ? opts.incomingDamage : null,
-                callback: complete
+                callback: complete,
+                cancel: () => complete(0, true)
             };
 
             if (this._dieSlot(type) === 'attack') {
@@ -2736,6 +2765,7 @@ startQTE(type, x, y, callback, opts) {
             // that to ~2.6s. 2400ms per wave keeps a healthy margin.
             const failsafeMs = 7000 + (pat.waves - 1) * 2400;
             const tryFailsafe = () => {
+                if (!this.qte.active || this.qte.id !== qteId) return;
                 // Defer if paused — the setTimeout fires in real-world
                 // time, but the QTE itself is frozen by the loop's
                 // pause gate. Without this defer, a tab-switch longer
@@ -3647,6 +3677,7 @@ startQTE(type, x, y, callback, opts) {
     },
 
     changeState(newState) {
+        const transition = this._screenTransitionGen = (this._screenTransitionGen || 0) + 1;
         // Stop the menu beat-pulse rAF whenever we leave MENU. The tick
         // self-stops on its next frame too, but explicit cleanup here
         // avoids a one-frame leak window during the state transition.
@@ -3687,7 +3718,9 @@ startQTE(type, x, y, callback, opts) {
 
         document.querySelectorAll('.screen').forEach(el => {
             el.classList.remove('active');
-            setTimeout(() => { if(!el.classList.contains('active')) el.classList.add('hidden'); }, 500);
+            setTimeout(() => {
+                if (this._screenTransitionGen === transition && !el.classList.contains('active')) el.classList.add('hidden');
+            }, 500);
         });
         // Defensive null-guards on chrome elements — every state change
         // touches these and a missing element (template hot-swap, A/B
@@ -3727,17 +3760,7 @@ startQTE(type, x, y, callback, opts) {
         // dragState.ghostElement (the old DOM node, possibly removed
         // with the prior screen) and crash on next mouse move. Tear it
         // down explicitly here.
-        if (this.dragState && this.dragState.active) {
-            try {
-                if (this.dragState.ghostElement && this.dragState.ghostElement.remove) {
-                    this.dragState.ghostElement.remove();
-                }
-            } catch (_) {}
-            this.dragState.active = false;
-            this.dragState.die = null;
-            this.dragState.dieElement = null;
-            this.dragState.ghostElement = null;
-        }
+        this._cancelDrag();
         // Clear the canvas long-press suppression flag on every state
         // change so a long-press that fired in the previous screen
         // can't silently drop the next screen's first tap. Single-shot
@@ -3757,6 +3780,10 @@ startQTE(type, x, y, callback, opts) {
         }
 
         this.currentState = newState;
+        if ((prev === STATE.COMBAT || prev === STATE.TUTORIAL_COMBAT || prev === STATE.BREAKOUT)
+            && newState !== STATE.COMBAT && newState !== STATE.TUTORIAL_COMBAT && newState !== STATE.BREAKOUT) {
+            this._cancelQTE();
+        }
         // Combat screens auto-apply reduced-motion for mobile perf. Menus,
         // map, reward, story, etc. get full motion unless the user has
         // toggled the always-on switch in DISPLAY → Accessibility.
@@ -3787,6 +3814,12 @@ startQTE(type, x, y, callback, opts) {
         const activate = (id) => {
             const el = document.getElementById(id);
             if(!el) return;
+            const show = () => {
+                if (this._screenTransitionGen !== transition || this.currentState !== newState
+                    || document.getElementById(id) !== el || !el.isConnected) return;
+                el.classList.add('active');
+                el.classList.remove('hidden');
+            };
             el.classList.remove('hidden');
             // Retint or hide the ambient VFX layer for this screen.
             // Combat screens map to null in Vfx.PRESET_BY_SCREEN and the
@@ -3828,22 +3861,20 @@ startQTE(type, x, y, callback, opts) {
             // Use double-rAF: first frame paints initial state, second frame triggers
             // the transition by adding `.active`. Reliable in all browsers.
             requestAnimationFrame(() => requestAnimationFrame(() => {
-                el.classList.add('active');
                 // Belt-and-suspenders: re-clear .hidden in case the 500ms
                 // post-removeAll-active hidden-race callback fired between
                 // our remove('hidden') above and this rAF. Without this, a
                 // throttled rAF chain (iOS Brave swapping tabs, app backgrounded)
                 // could leave the screen stuck with both .hidden and .active,
                 // showing nothing but the canvas (the "stuck cinematic" report).
-                el.classList.remove('hidden');
+                show();
             }));
             // Last-resort fallback for rAFs that don't fire within the
             // hidden-race window (heavy throttling). Idempotent — adding an
             // already-present class is a no-op. Anything later than ~600ms
             // is past the 500ms hidden timer, so we MUST also strip .hidden.
             setTimeout(() => {
-                el.classList.add('active');
-                el.classList.remove('hidden');
+                show();
             }, 600);
         };
 
@@ -4459,21 +4490,16 @@ startQTE(type, x, y, callback, opts) {
             for (const u of orphans) grid.appendChild(buildCard(u, { accent: '#aaa' }));
         }
 
-        // Cosmetics (Roadmap Part 4.6) — pure-visual purchasables and
-        // streak unlocks. Reuses the same upgrade-card grid template
-        // so the section reads as another Sanctuary slot, not a
-        // separate screen. Equipped item gets a "EQUIPPED" pip;
-        // owned-but-unequipped items show "EQUIP". Locked items show
-        // their cost or the streak gate.
+        // Optional earned menu styles. The standard menu already includes
+        // Glitch Overlay and Drift Echo without a Sparks purchase.
         if (typeof Cosmetics !== 'undefined') {
             const cosHeader = document.createElement('div');
             cosHeader.className = 'meta-section-header';
             cosHeader.style.cssText = 'grid-column: 1 / -1; padding: 14px 0 6px; color: #5eead4; font-family: Orbitron; letter-spacing: 0.12em; border-top: 1px solid rgba(94,234,212,0.35); margin-top: 8px; text-align: center;';
-            cosHeader.textContent = '◆ COSMETICS';
+            cosHeader.textContent = '◆ MENU STYLE';
             list.appendChild(cosHeader);
             const equipped = Cosmetics.equipped();
             Cosmetics.all().forEach(c => {
-                if (c.id === 'default') return; // hide the no-op default
                 const owned = Cosmetics.isOwned(c.id);
                 const isEquipped = owned && c.id === equipped;
                 const div = document.createElement('div');
@@ -4484,7 +4510,6 @@ startQTE(type, x, y, callback, opts) {
                 else if (owned) priceText = 'EQUIP';
                 else if (c.requires === 'streak30') priceText = '30-DAY STREAK';
                 else if (c.requires === 'streak100') priceText = '100-DAY STREAK';
-                else priceText = c.cost + ' ✦';
                 div.innerHTML = `
                     <div class="upgrade-icon" style="color: #5eead4;">◆</div>
                     <div class="upgrade-info">
@@ -4495,27 +4520,15 @@ startQTE(type, x, y, callback, opts) {
                 `;
                 div.onclick = () => {
                     if (isEquipped) return;
-                    if (owned) {
-                        Cosmetics.equip(c.id);
-                        AudioMgr.playSound('click');
-                        this.renderMeta();
-                        return;
-                    }
-                    if (c.requires) {
+                    if (!owned) {
                         // Streak-gated — flash a "locked" outline and bail.
                         div.style.borderColor = '#ff3355';
                         setTimeout(() => div.style.borderColor = 'rgba(94,234,212,0.45)', 220);
                         return;
                     }
-                    if (Cosmetics.purchase(c.id)) {
-                        Cosmetics.equip(c.id);
-                        AudioMgr.playSound('upgrade');
-                        this.renderMeta();
-                    } else {
-                        try { Hints && Hints.trigger && Hints.trigger('first_sanctuary_spend'); } catch (_) {}
-                        div.style.borderColor = '#ff3355';
-                        setTimeout(() => div.style.borderColor = 'rgba(94,234,212,0.45)', 220);
-                    }
+                    Cosmetics.equip(c.id);
+                    AudioMgr.playSound('click');
+                    this.renderMeta();
                 };
                 list.appendChild(div);
             });
@@ -5843,9 +5856,10 @@ startQTE(type, x, y, callback, opts) {
             const fragEl = document.getElementById('run-fragments');
             if (fragEl) fragEl.innerText = String(this.techFragments);
         }
-        // Pacts are run-scoped — clear any leftovers so a Challenge attempt
-        // started right after a previous one doesn't carry over signed pacts.
+        // Pacts and pinned dice belong to the run that granted them.
+        // Starting another class must not inherit either reward.
         this.activePacts = new Set();
+        this.sealedDie = null;
         this._renderPactPills && this._renderPactPills();
         // Chronicle start marker (Roadmap Part 27).
         this.runStartedAt = Date.now();
@@ -6756,6 +6770,7 @@ triggerPhaseGlitch() {
                 // huge dt. Setting `paused=true` short-circuits the
                 // loop AND any per-frame state advancement on resume.
                 this.paused = true;
+                this._cancelDrag();
                 // Crash-recovery flush — Android may OOM-kill a hidden
                 // app at any moment. Persist whatever the player has
                 // built up since the last natural save boundary so the
@@ -6811,6 +6826,7 @@ triggerPhaseGlitch() {
         // page enters this state nothing else will run, so we don't
         // bother pausing or fading audio, just persist.
         window.addEventListener('pagehide', () => {
+            this._cancelDrag();
             if (this._isInActiveRun && this._isInActiveRun()) {
                 try { this.saveGame && this.saveGame(); } catch (_) {}
             }
@@ -10994,9 +11010,14 @@ triggerSystemCrash() {
             try {
                 const legacy = localStorage.getItem('mvm_save_v1');
                 if (legacy) {
-                    localStorage.setItem(key, legacy);
-                    this._clearSave();
                     raw = legacy;
+                    // Keep the original checkpoint if promotion is blocked.
+                    // A successful copy only retires the legacy key, never
+                    // the new slot or a different currently active slot.
+                    try {
+                        localStorage.setItem(key, legacy);
+                        localStorage.removeItem('mvm_save_v1');
+                    } catch (_) {}
                 }
             } catch (_) {}
         }
@@ -11474,6 +11495,7 @@ triggerSystemCrash() {
 
     _restoreCombatRecovery(recovery) {
         this._combatGen = (this._combatGen || 0) + 1;
+        this._cancelQTE();
         this._combatActionDepth = 0;
         this._revivePending = null;
         this._endTurnRunning = false;
@@ -11481,7 +11503,6 @@ triggerSystemCrash() {
         this.paused = false;
         this.inputLocked = true;
         this.dicePool = [];
-        if (this.qte) { this.qte.active = false; this.qte.callback = null; }
         // Training deaths never consume a run revive or end the profile's
         // prologue. Restart its safe rooms instead of treating it as a loss.
         if (recovery.outcome === 'breakout') {
@@ -14095,6 +14116,7 @@ updateHexBreach(dt) {
         // Reset combat-side state that startCombat normally clears so
         // dice/turn counters/effects don't leak between rooms.
         this._combatGen = (this._combatGen || 0) + 1;
+        this._cancelQTE();
         this._endTurnRunning = false;
         this._winCombatRunning = false;
         this._combatActionDepth = 0;
@@ -14128,11 +14150,6 @@ updateHexBreach(dt) {
         // value at room-build is left over from the prior fight's QTE.
         this.inputCooldown = 0;
         this.inputLocked = false;
-        // Defensive: cancel any in-flight QTE so it can't feed taps
-        // from the new room into a dead callback.
-        if (this.qte) {
-            this.qte.active = false;
-        }
         if (this.player) {
             this.player.minions = [];
             this.player.shield = 0;
@@ -14232,6 +14249,9 @@ updateHexBreach(dt) {
     },
 
 async startCombat(type) {
+        // Keep the entry scene inert until its first player hand is ready.
+        // A map-node release can otherwise reach End Turn during briefing.
+        this.inputLocked = true;
         // --- CLEANUP PHASE ---
         // Recovery clamp for legacy saves where an out-of-combat damage
         // event (e.g. Skyglass Shatter, Medbay decline) dropped the player
@@ -14249,6 +14269,9 @@ async startCombat(type) {
         // it no longer matches. Prevents "enemy takes a turn immediately
         // on combat start" when the prior combat ended mid-attack.
         this._combatGen = (this._combatGen || 0) + 1;
+        const combatGen = this._combatGen;
+        const combatPlayer = this.player;
+        this._cancelQTE();
         // Reset the endTurn single-flight gate — if the previous combat
         // ended through an early-return path (enemy died mid-phase via
         // reflect/thorns/bomb), the flag might still be stuck `true`.
@@ -15054,12 +15077,16 @@ async startCombat(type) {
         this._enemyMinions().forEach(m => m.spawnTimer = 1.0);
 
         this.changeState(STATE.COMBAT);
+        const combatEnemy = this.enemy;
+        const entryCurrent = () => this._combatGen === combatGen && this.player === combatPlayer
+            && this.enemy === combatEnemy && this.currentState === STATE.COMBAT;
 
         // Class briefing — fires ONCE per class, AFTER the combat scene is
         // fully up so it doesn't overlay the sector map. Skipped during the
         // scripted tutorial combat.
         if (this.currentState === STATE.COMBAT && this.player && this.player.classId) {
             try { await ClassBriefing.show(this.player.classId); } catch (e) { /* swallow */ }
+            if (!entryCurrent()) return;
         }
 
         if (isBoss) {
@@ -15082,6 +15109,7 @@ async startCombat(type) {
             ParticleSys.createSparks(this.enemy.x, this.enemy.y, '#ff0055', 24);
             Game.shake(32);
             await this.sleep(450);
+            if (!entryCurrent()) return;
             Hints.trigger('first_boss');
         }
 
@@ -15093,6 +15121,7 @@ async startCombat(type) {
         // pre-turn beat. The user reported the PLAYER PHASE banner
         // landing on top of the slate's title — this is the gap fix.
         await this.sleep(isBoss ? 2050 : 500);
+        if (!entryCurrent()) return;
 
         this.enemy.decideTurn();
         ClassAbility.startCombat();
@@ -15111,6 +15140,9 @@ async startCombat(type) {
             lastSample: performance.now(), suspended: !!this.paused || document.hidden,
             sealed: false, finished: false, minimumUntil: 0, maximumUntil: Infinity
         };
+        // One completion signal can be observed by its action and a later
+        // terminal action without replacing either observer.
+        group.completion = new Promise(resolve => { group.resolve = resolve; });
         if (!this._combatPresentations) this._combatPresentations = new Set();
         this._combatPresentations.add(group);
         if (!this._presentationVisibilityBound) {
@@ -15229,7 +15261,7 @@ async startCombat(type) {
             group.finish(true);
             return Promise.resolve(true);
         }
-        return new Promise(resolve => { group.resolve = resolve; });
+        return group.completion;
     },
 
     async _runCombatAction(resolveDamage, present, { minimumPresentationMs = 0, waitForPresentation = true } = {}) {
@@ -15275,6 +15307,15 @@ async startCombat(type) {
                 const completed = this._finishCombatPresentation(presentation,
                     mustWait ? Math.max(minimumPresentationMs, queued.length ? 1200 : 0) : 0);
                 if (mustWait) await completed;
+            }
+            if (current() && (player.currentHp <= 0 || enemy.currentHp <= 0)) {
+                // Responsive support actions may have already released input
+                // while their committed visuals continue. A terminal action
+                // must let those finish too. Unsealed ancestor groups are
+                // still resolving this action, so waiting on them would cycle.
+                const earlier = [...(this._combatPresentations || [])]
+                    .filter(group => group !== presentation && group.sealed && !group.finished && group.current());
+                await Promise.all(earlier.map(group => group.completion));
             }
         } catch (err) {
             presentation.finish(false);
@@ -15442,7 +15483,10 @@ async startTurn() {
               || this.currentState === STATE.BREAKOUT);
       // A turn must never restart a departed combat or interrupt the
       // presentation of an action whose logical damage has already landed.
-      if (!stillLive() || this._combatActionDepth > 0) return;
+      const previousTurn = this._turnStartOwner;
+      if (!stillLive() || this._combatActionDepth > 0 || this.qte?.active
+          || (previousTurn && previousTurn.gen === gen && previousTurn.player === player
+              && previousTurn.enemy === enemy)) return;
       const settleDeath = () => {
           if (!stillLive()) return true;
           if (player.currentHp <= 0) { this.gameOver(); return true; }
@@ -15450,6 +15494,7 @@ async startTurn() {
           return false;
       };
       if (settleDeath()) return;
+      const owner = this._turnStartOwner = { gen, player, enemy };
       try {
         this.inputLocked = true;
         // Resolve the pending blast before new-turn healing, DoTs, shield
@@ -16140,6 +16185,8 @@ async startTurn() {
         if (!stillLive()) return;
         this._endTurnRunning = false;
         this._recoverFromCombatError('startTurn', err, false);
+      } finally {
+        if (this._turnStartOwner === owner) this._turnStartOwner = null;
       }
     },
 
@@ -16779,14 +16826,22 @@ async startTurn() {
     sealedDie: null,
 
     sealDice(type, turns) {
-        this.sealedDie = { type, turnsLeft: turns };
+        // Events name a base slot; hands contain this class's concrete die.
+        // Also accept legacy uppercase slot names and already resolved types.
+        const classDice = PLAYER_CLASSES.find(cls => cls.id === this.player?.classId)?.classDice;
+        const resolvedType = classDice?.[String(type).toLowerCase()] || type;
+        this.sealedDie = { type: resolvedType, turnsLeft: turns, awaitingFirstHand: true };
         if (this.player) {
-            ParticleSys.createFloatingText(this.player.x, this.player.y - 180, `SEALED: ${type} (${turns}t)`, COLORS.GOLD);
+            const label = DICE_TYPES[resolvedType]?.name || resolvedType;
+            ParticleSys.createFloatingText(this.player.x, this.player.y - 180, `SEALED: ${label} (${turns}t)`, COLORS.GOLD);
         }
     },
 
     _tickSealedDie() {
         if (!this.sealedDie) return;
+        // startTurn ticks before dealing. Do not consume the first promised
+        // hand, or a turn canceled before any hand was actually delivered.
+        if (this.sealedDie.awaitingFirstHand) return;
         this.sealedDie.turnsLeft--;
         if (this.sealedDie.turnsLeft <= 0) this.sealedDie = null;
     },
@@ -17029,6 +17084,7 @@ async startTurn() {
             this.dicePool.push({ id: i, type: k, used: false, selected: false, sealed: !!sealedSlot });
         }
 
+        if (sealed) sealed.awaitingFirstHand = false;
         this.player.sigMissStreak = sigPlaced ? 0 : ((this.player.sigMissStreak || 0) + 1);
 
         // Per-slot pity streak update (Roadmap Part 2.1.1) — after each
@@ -19362,6 +19418,13 @@ async startTurn() {
             ParticleSys.createFloatingText(this.player.x, this.player.y - 120, "SILENT REROLL", "#ff77aa");
         } else {
             this.rerolls--;
+        }
+        // A lethal self-cost settles death or revival before either this roll
+        // or an earlier pending reroll can mutate the hand.
+        if (this.player.currentHp <= 0) {
+            this._clearRerollIntervals();
+            this.gameOver();
+            return;
         }
         // Diag — count rerolls for the diagnostic dump.
         try { Diag.event && Diag.event('reroll'); } catch (_) {}
@@ -22548,6 +22611,9 @@ drawEffects() {
       // turn 1 and kicking the enemy phase before the player could act.
       if (this._endTurnRunning || this.inputLocked || this.qte?.active
           || this._combatActionDepth > 0 || this.paused || document.hidden) return;
+      // Breakout and the scripted tutorial build their own turn-zero hands.
+      // Normal combat must finish its initial startTurn before accepting this.
+      if (this.currentState === STATE.COMBAT && !(this.turnCount > 0)) return;
       if (this._combatStartedAt && (Date.now() - this._combatStartedAt) < 500) return;
       if (this.currentState !== STATE.COMBAT && this.currentState !== STATE.TUTORIAL_COMBAT && this.currentState !== STATE.BREAKOUT) return;
       this._endTurnRunning = true;

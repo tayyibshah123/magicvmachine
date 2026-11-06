@@ -1,78 +1,54 @@
-// Pause-aware sleep() — combat callbacks must NOT resume mid-flow while
-// the game is paused (tab hidden, modal open). Real-time setTimeout
-// fires on its own schedule; sleep() defers the actual resolution
-// until `Game.paused` clears.
-
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Game } from '../game.js';
 
 beforeEach(() => {
-    document.body.innerHTML = `
-        <div id="game-container">
-            <canvas id="gameCanvas" width="1080" height="1920"></canvas>
-            <div id="dice-container"></div>
-            <div id="reroll-badge"></div>
-            <div id="hud"></div>
-            <div id="tutorial-spotlight"></div>
-        </div>
-    `;
+    vi.useFakeTimers();
+    Game.paused = false;
+    Game.combatPaceMult = 1;
 });
 
-describe('Game.sleep — pause awareness', () => {
-    it('resolves normally when not paused', async () => {
-        const { Game } = await import('../game.js');
-        Game.paused = false;
-        const start = Date.now();
-        await Game.sleep(50);
-        const elapsed = Date.now() - start;
-        // Sleep ms is scaled by combatPaceMult (default 1). 50ms target,
-        // allow generous slack for jsdom timer jitter.
-        expect(elapsed).toBeGreaterThanOrEqual(40);
-    });
+afterEach(() => {
+    Game.paused = false;
+    Game.combatPaceMult = 1;
+    vi.clearAllTimers();
+    vi.useRealTimers();
+});
 
-    it('does NOT resolve while Game.paused is true', async () => {
-        const { Game } = await import('../game.js');
+describe('Game.sleep pause awareness', () => {
+    it.each([[1, 50, 50], [2, 100, 50], [0.5, 50, 100]])(
+        'waits for the scaled boundary at pace %s', async (pace, requested, duration) => {
+            Game.combatPaceMult = pace;
+            const resolved = vi.fn();
+            const sleep = Game.sleep(requested).then(resolved);
+            await vi.advanceTimersByTimeAsync(duration - 1);
+            expect(resolved).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(1);
+            await sleep;
+            expect(resolved).toHaveBeenCalledTimes(1);
+        });
+
+    it('keeps an initially paused wait pending until the player resumes', async () => {
         Game.paused = true;
-        let resolved = false;
-        Game.sleep(20).then(() => { resolved = true; });
-        // Wait well past the sleep duration. Even after 200ms the promise
-        // must still be pending because the game is paused.
-        await new Promise(r => setTimeout(r, 250));
-        expect(resolved).toBe(false);
-        // Cleanup — clear pause so the deferred resolve eventually fires.
+        const resolved = vi.fn();
+        const sleep = Game.sleep(20).then(resolved);
+        await vi.advanceTimersByTimeAsync(5000);
+        expect(resolved).not.toHaveBeenCalled();
         Game.paused = false;
-        await new Promise(r => setTimeout(r, 250));
-        expect(resolved).toBe(true);
+        await vi.advanceTimersByTimeAsync(250);
+        await sleep;
+        expect(resolved).toHaveBeenCalledTimes(1);
     });
 
-    it('resumes the moment pause clears', async () => {
-        const { Game } = await import('../game.js');
-        Game.paused = false;
-        const sleepPromise = Game.sleep(20);
-        // Pause MID-sleep (between schedule and resolve).
-        await new Promise(r => setTimeout(r, 5));
+    it('does not resume an in-flight wait while a later pause is active', async () => {
+        const resolved = vi.fn();
+        const sleep = Game.sleep(20).then(resolved);
+        await vi.advanceTimersByTimeAsync(5);
         Game.paused = true;
-        // Allow the inner setTimeout to fire — it'll see paused and defer.
-        await new Promise(r => setTimeout(r, 50));
-        // Promise still pending.
-        let resolved = false;
-        sleepPromise.then(() => { resolved = true; });
-        await new Promise(r => setTimeout(r, 50));
-        expect(resolved).toBe(false);
-        // Unpause — within ~200ms (poll cadence) the resolve should fire.
+        await vi.advanceTimersByTimeAsync(5000);
+        expect(resolved).not.toHaveBeenCalled();
         Game.paused = false;
-        await new Promise(r => setTimeout(r, 300));
-        expect(resolved).toBe(true);
-    });
-
-    it('honours combatPaceMult scaling on the base wait', async () => {
-        const { Game } = await import('../game.js');
-        Game.paused = false;
-        Game.combatPaceMult = 2; // 2x faster
-        const start = Date.now();
-        await Game.sleep(100);
-        const elapsed = Date.now() - start;
-        // Scaled to 50ms. Allow slack for jitter.
-        expect(elapsed).toBeLessThan(150);
-        Game.combatPaceMult = 1;
+        await vi.advanceTimersByTimeAsync(250);
+        await sleep;
+        expect(resolved).toHaveBeenCalledTimes(1);
     });
 });

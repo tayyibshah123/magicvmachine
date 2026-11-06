@@ -1,6 +1,17 @@
 # Mobile QA Checklist
 
-> Day-2 deliverable from `WEEKLY_ROADMAP.md`. Walks the four target widths through every gameplay screen with concrete pass/fail criteria, then collects screenshots so future regressions are caught against a known-good baseline.
+The automated entry point is `npm run test:browser`, or `npm run check` for
+the complete release gate. The portable browser suite owns the fresh-player
+and returning-player journeys, targeted combat/input checks, first worker
+installation, offline cold launch and updating an existing saved run.
+
+Use the checklist below for additional layout and physical-device coverage.
+Its blank cells are a template, not evidence of completed testing. Routine
+mechanical changes use the 390px journey and the targeted 360px timing case.
+Repeat the wider layout checks when layout changes warrant them. Record
+the tested source, device/browser and result with the release evidence.
+Physical Safari/PWA and Android wrapper checks must not be reported as
+passed based solely on desktop browser emulation.
 
 ## How to run this
 

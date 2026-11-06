@@ -6,12 +6,20 @@
 //   - registers a backButton listener on native
 //   - routes to handleBackPress, falls through to exitApp when not handled
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest';
 
 beforeEach(() => {
+    document.body.innerHTML = '';
     delete window.Capacitor;
     delete window.Game;
     vi.resetModules();
+});
+
+afterEach(() => {
+    vi.restoreAllMocks();
+    delete window.Capacitor;
+    delete window.Game;
+    document.body.innerHTML = '';
 });
 
 function makeMockApp() {
@@ -63,7 +71,7 @@ describe('NativeBack', () => {
         const { NativeBack } = await import('../services/native-back.js');
         NativeBack.init();
         App._fire('backButton', {});
-        expect(window.Game.handleBackPress).toHaveBeenCalled();
+        expect(window.Game.handleBackPress).toHaveBeenCalledTimes(1);
         expect(App.exitApp).not.toHaveBeenCalled();
     });
 
@@ -74,7 +82,7 @@ describe('NativeBack', () => {
         const { NativeBack } = await import('../services/native-back.js');
         NativeBack.init();
         App._fire('backButton', {});
-        expect(App.exitApp).toHaveBeenCalled();
+        expect(App.exitApp).toHaveBeenCalledTimes(1);
     });
 
     it('calls exitApp when Game is unavailable', async () => {
@@ -84,7 +92,7 @@ describe('NativeBack', () => {
         const { NativeBack } = await import('../services/native-back.js');
         NativeBack.init();
         App._fire('backButton', {});
-        expect(App.exitApp).toHaveBeenCalled();
+        expect(App.exitApp).toHaveBeenCalledTimes(1);
     });
 
     it('init is idempotent — second call does not double-register', async () => {
@@ -93,6 +101,41 @@ describe('NativeBack', () => {
         const { NativeBack } = await import('../services/native-back.js');
         NativeBack.init();
         NativeBack.init();
+        expect(App.addListener).toHaveBeenCalledTimes(1);
+    });
+
+    it('routes real overlay priority, active-run settings and menu exit once per press', async () => {
+        const { Game } = await import('../game.js');
+        const { STATE } = await import('../constants.js');
+        document.body.innerHTML = '<div id="modal-settings"></div>'
+            + '<div id="modal-glossary"><button id="btn-glossary-close"></button></div>';
+        Game.currentState = STATE.COMBAT;
+        Game.player = { currentHp: 100 };
+        window.Game = Game;
+        const closeGlossary = vi.spyOn(Game, '_closeGlossary');
+        document.getElementById('btn-glossary-close').onclick = () => Game._closeGlossary();
+        const handle = vi.spyOn(Game, 'handleBackPress');
+        const App = makeMockApp();
+        installCapacitorMock(App);
+        const { NativeBack } = await import('../services/native-back.js');
+        NativeBack.init();
+        NativeBack.init();
+
+        App._fire('backButton', {});
+        expect(closeGlossary).toHaveBeenCalledTimes(1);
+        expect(document.getElementById('modal-glossary').classList.contains('hidden')).toBe(true);
+        expect(document.getElementById('modal-settings').classList.contains('hidden')).toBe(false);
+        App._fire('backButton', {});
+        expect(document.getElementById('modal-settings').classList.contains('hidden')).toBe(true);
+        App._fire('backButton', {});
+        expect(document.getElementById('modal-settings').classList.contains('hidden')).toBe(false);
+        expect(App.exitApp).not.toHaveBeenCalled();
+        expect(closeGlossary).toHaveBeenCalledTimes(1);
+        document.getElementById('modal-settings').classList.add('hidden');
+        Game.currentState = STATE.MENU;
+        App._fire('backButton', {});
+        expect(App.exitApp).toHaveBeenCalledTimes(1);
+        expect(handle).toHaveBeenCalledTimes(4);
         expect(App.addListener).toHaveBeenCalledTimes(1);
     });
 });

@@ -1,0 +1,33 @@
+{
+  "v": 3,
+  "fragments": 12,
+  "encrypted": 0,
+  "meta": [],
+  "lore": [],
+  "sector": 1,
+  "currentIdx": "start",
+  "map": {
+    "currentIdx": "start",
+    "nodes": [
+      { "id": "start", "type": "start", "status": "completed", "x": 50, "y": 92, "connections": ["fight"] },
+      { "id": "fight", "type": "combat", "status": "available", "x": 50, "y": 70, "connections": [] }
+    ]
+  },
+  "bossDefeated": false,
+  "challengeMode": false,
+  "archiveMode": false,
+  "endlessActive": false,
+  "customRunModifiers": [],
+  "activePacts": [],
+  "combatRecovery": null,
+  "runStats": { "turns": 0, "totalDamage": 0, "highestHit": 0, "kills": 0, "rerollsUsed": 0, "perfectQTEs": 0, "totalQTEs": 0, "damageTaken": 0, "synergies": [], "deaths": 0, "bossFightMinionLosses": 0 },
+  "player": {
+    "classId": "tactician",
+    "hp": 30,
+    "maxHp": 30,
+    "mana": 3,
+    "relics": [],
+    "upgrades": [],
+    "signatureTier": 1
+  }
+}

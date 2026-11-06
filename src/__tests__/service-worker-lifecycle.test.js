@@ -2,9 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Exercise the real bootstrap and worker listeners without starting the game.
 vi.mock('../game.js', () => ({ Game: { init: vi.fn() } }));
-vi.mock('../services/analytics.js', () => ({
-    Analytics: { init: vi.fn(), setEnabled: vi.fn(), emit: vi.fn() }
-}));
 vi.mock('../services/perf.js', () => ({
     Perf: { detect: vi.fn(), particleQuality: vi.fn(() => 1) }
 }));
@@ -29,7 +26,10 @@ beforeEach(() => {
             <button id="btn-sw-dismiss">Dismiss</button>
         </div>
     `;
+    localStorage.clear();
+    sessionStorage.clear();
     localStorage.setItem('mvm_analytics_consent', 'granted');
+    vi.spyOn(console, 'debug').mockImplementation(() => {});
     vi.spyOn(document, 'readyState', 'get').mockReturnValue('complete');
 
     registration = Object.assign(new EventTarget(), {
@@ -60,6 +60,7 @@ afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     localStorage.clear();
+    sessionStorage.clear();
 });
 
 async function loadBootstrap(controller = null) {
@@ -86,14 +87,6 @@ function finishInstallingWorker() {
 }
 
 describe('browser service-worker lifecycle', () => {
-    it('keeps the first visit running when a worker first claims the page', async () => {
-        await loadBootstrap();
-
-        takeControl({ version: 'first install' });
-
-        expect(reload).not.toHaveBeenCalled();
-    });
-
     it('reloads once when the controller of an already controlled page is replaced', async () => {
         await loadBootstrap({ version: 'previous build' });
 
@@ -147,17 +140,6 @@ describe('browser service-worker lifecycle', () => {
         expect(reload).toHaveBeenCalledTimes(1);
     });
 
-    it('retains the refresh fallback when the waiting worker does not take control', async () => {
-        await loadBootstrap({ version: 'previous build' });
-        registration.waiting = { postMessage: vi.fn() };
-        finishInstallingWorker();
-
-        document.getElementById('btn-sw-refresh').click();
-        vi.advanceTimersByTime(600);
-
-        expect(reload).toHaveBeenCalledTimes(1);
-    });
-
     it('does not reload again when takeover arrives after the refresh fallback', async () => {
         await loadBootstrap({ version: 'previous build' });
         registration.waiting = { postMessage: vi.fn() };
@@ -170,5 +152,65 @@ describe('browser service-worker lifecycle', () => {
         takeControl({ version: 'slow update' });
 
         expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('dismisses an update without activating or reloading it', async () => {
+        await loadBootstrap({ version: 'previous build' });
+        registration.waiting = { postMessage: vi.fn() };
+        finishInstallingWorker();
+        document.getElementById('btn-sw-dismiss').click();
+        await vi.advanceTimersByTimeAsync(240);
+        expect(document.getElementById('sw-update-banner').classList.contains('hidden')).toBe(true);
+        expect(registration.waiting.postMessage).not.toHaveBeenCalled();
+        expect(reload).not.toHaveBeenCalled();
+    });
+
+    it('checks for updates only while the document is visible', async () => {
+        vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+        await loadBootstrap({ version: 'previous build' });
+        await vi.advanceTimersByTimeAsync(60000);
+        expect(registration.update).not.toHaveBeenCalled();
+        vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+        await vi.advanceTimersByTimeAsync(60000);
+        expect(registration.update).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('real analytics bootstrap consent', () => {
+    it.each([null, 'denied'])('does not record or create an install identifier before consent %s', async consent => {
+        if (consent === null) localStorage.removeItem('mvm_analytics_consent');
+        else localStorage.setItem('mvm_analytics_consent', consent);
+        await loadBootstrap();
+        const { Analytics } = await import('../services/analytics.js');
+        expect(Analytics.recent()).toEqual([]);
+        expect(localStorage.getItem('mvm_analytics_install')).toBeNull();
+        expect(sessionStorage.getItem('mvm_analytics_session')).toBeNull();
+    });
+
+    it('enables later events only after Allow and persists a later decline', async () => {
+        localStorage.removeItem('mvm_analytics_consent');
+        await loadBootstrap();
+        const { Analytics } = await import('../services/analytics.js');
+        document.querySelector('[data-consent="granted"]').click();
+        Analytics.emit('run_start', { class: 'tactician' });
+        expect(Analytics.recent(1)[0].name).toBe('run_start');
+        expect(localStorage.getItem('mvm_analytics_consent')).toBe('granted');
+        const before = Analytics.recent(500).length;
+        browserWindow.MVMConsent.write(false);
+        Analytics.emit('combat_start');
+        expect(Analytics.recent(500)).toHaveLength(before);
+        expect(localStorage.getItem('mvm_analytics_consent')).toBe('denied');
+    });
+
+    it('starts one analytics session across repeated Allow and Decline choices', async () => {
+        localStorage.removeItem('mvm_analytics_consent');
+        await loadBootstrap();
+        const { Analytics } = await import('../services/analytics.js');
+        browserWindow.MVMConsent.write(true);
+        const session = sessionStorage.getItem('mvm_analytics_session');
+        browserWindow.MVMConsent.write(false);
+        browserWindow.MVMConsent.write(true);
+        expect(sessionStorage.getItem('mvm_analytics_session')).toBe(session);
+        expect(Analytics.recent(500).filter(event => event.name === 'session_start')).toHaveLength(1);
     });
 });

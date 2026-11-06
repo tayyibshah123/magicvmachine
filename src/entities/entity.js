@@ -60,6 +60,8 @@ class Entity {
     }
 
     takeDamage(amount, source = null, suppressBlockText = false, bypassShield = false) {
+        // A settled death cannot take more damage or pay out another kill.
+        if (this.currentHp <= 0) return true;
         // --- GOD MODE INVINCIBILITY ---
         if (this instanceof Player && Game.godMode) {
             ParticleSys.createFloatingText(this.x, this.y - 60, "GOD MODE", "#ff0055");
@@ -1015,23 +1017,25 @@ class Entity {
             }
         }
 
-        // Run stats tracking (player-dealt damage + kills)
+        // Direct-hit damage statistics retain their player-action scope.
         if (Game.runStats && source instanceof Player && killedTargetIsHostile) {
             Game.runStats.totalDamage = (Game.runStats.totalDamage || 0) + actualDmg;
             if (actualDmg > (Game.runStats.highestHit || 0)) {
                 Game.runStats.highestHit = actualDmg;
-            }
-            if (diedByPlayer) {
-                Game.runStats.kills = (Game.runStats.kills || 0) + 1;
-                if (typeof window !== 'undefined' && window.Achievements) {
-                    window.Achievements.unlock('FIRST_KILL');
-                }
             }
             // Damage-tier achievements
             if (typeof window !== 'undefined' && window.Achievements) {
                 if (actualDmg >= 50)  window.Achievements.unlock('BIG_HIT_50');
                 if (actualDmg >= 100) window.Achievements.unlock('BIG_HIT_100');
                 if (actualDmg >= 250) window.Achievements.unlock('BIG_HIT_250');
+            }
+        }
+
+        // Player-owned summons defeat enemies on the player's behalf too.
+        if (Game.runStats && diedByPlayer && killedTargetIsHostile) {
+            Game.runStats.kills = (Game.runStats.kills || 0) + 1;
+            if (typeof window !== 'undefined' && window.Achievements) {
+                window.Achievements.unlock('FIRST_KILL');
             }
         }
         // Per-turn stats for end-of-turn summary. Old gate

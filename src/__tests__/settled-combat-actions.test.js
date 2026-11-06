@@ -1,19 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setupCombatFixture, teardownCombatFixture } from './helpers/combat-fixture.js';
 import { Game } from '../game.js';
 import { Enemy } from '../entities/enemy.js';
-import { Player } from '../entities/player.js';
 import { Minion } from '../entities/minion.js';
-import { BOSS_DATA, PLAYER_CLASSES, STATE } from '../constants.js';
-import { AudioMgr } from '../audio.js';
-import { ParticleSys } from '../effects/particles.js';
+import { BOSS_DATA, STATE } from '../constants.js';
 import { ClassAbility } from '../ui/class-ability.js';
-import { Intel } from '../services/intel.js';
-import { Diag } from '../services/diag.js';
-import { Hints } from '../services/hints.js';
-import { Unlocks } from '../services/unlocks.js';
-import { Achievements } from '../services/achievements.js';
-import { Analytics } from '../services/analytics.js';
-import { Assist } from '../services/assist.js';
 
 let visuals;
 let storedCallbacks;
@@ -37,70 +28,12 @@ function tripleAttack() {
 }
 
 beforeEach(() => {
-    vi.useFakeTimers();
-    vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
-    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
-    document.body.innerHTML = `
-        <div id="game-container"><div id="screen-flash"></div></div>
-        <div id="dice-container"></div><div id="reroll-badge"></div>
-        <div id="hud"></div><div id="screen-combat-win" class="screen"></div>
-        <div id="modal-settings" class="hidden"></div>
-        <button id="btn-end-turn"></button><button id="btn-load-save"></button>
-    `;
-    localStorage.clear();
-    Object.assign(Game, {
-        currentState: STATE.COMBAT, turnCount: 3, sector: 1, combatPaceMult: 1,
-        _combatGen: 10, _combatActionDepth: 0, _combatStartedAt: 0,
-        _endTurnRunning: false, _winCombatRunning: false, _resolvingSelfDestruct: false,
-        inputLocked: false, paused: false, godMode: false, assistDisabled: true,
-        challengeMode: false, archiveMode: false, autoQTE: false, qte: { active: false },
-        _archivistTurnExpired: false, _archivistClockEnemy: null,
-        _ascEffects: {}, metaUpgrades: [], metaToggledOff: new Set(),
-        _disabledMetaThisRun: new Set(), _customDmgInMult: 1, _customDmgOutMult: 1,
-        runStats: null, turnStats: null, effects: [], _activeSectorMech: null,
-        deadMinionsThisTurn: 0, sealedDie: null, techFragments: 0, encryptedFiles: 0,
-        dicePool: [], comboFlurry: false, comboDoubleStrike: false,
-        attacksThisTurn: 0, diceUsedThisTurn: 0, firstAttackDealt: false,
-        player: null, enemy: null
+    setupCombatFixture({
+        enemyTemplate: { name: 'Action Test', hp: 100, dmg: 20 },
+        profiles: ['cosmetics', 'ui', 'terminal-services', 'class-events', 'qte']
     });
-    for (const method of ['createDamageText', 'createExplosion', 'createFloatingText',
-        'createShockwave', 'createSparks', 'createClassBurst', 'clear']) {
-        vi.spyOn(ParticleSys, method).mockImplementation(() => {});
-    }
-    for (const method of ['playSound', 'playHit', 'playSting', 'duck',
-        'stopSectorAmbient', 'clearSectorMusic', 'startMusic']) {
-        vi.spyOn(AudioMgr, method).mockImplementation(() => {});
-    }
-    for (const method of ['shake', 'shakeFromDamage', 'hitStop', 'triggerScreenFlash',
-        'haptic', '_checkHiddenLoreTriggers', 'rollDice', 'updateHUD', 'renderRelics',
-        'renderDiceUI', '_spawnDieUseBurst', '_renderPactPills', '_resetRunCurrency',
-        '_showVictoryTally', 'saveGame', 'grantSparks', '_clearSave', '_logRunHistory',
-        'renderDeathCards', 'renderRunSummary']) {
-        vi.spyOn(Game, method).mockImplementation(() => {});
-    }
-    vi.spyOn(Game, 'showCombatWin').mockImplementation(() => Game.changeState(STATE.COMBAT_WIN));
-    vi.spyOn(Game, 'showPhaseBanner').mockResolvedValue();
-    vi.spyOn(Game, '_runBossDeathDissolve').mockResolvedValue();
-    vi.spyOn(Game, 'showTurnSummary').mockImplementation(() => {});
-    vi.spyOn(Game, '_isNewcomer').mockReturnValue(false);
-    vi.spyOn(Game, '_recoverFromCombatError').mockImplementation((where, error) => { throw error; });
-    vi.spyOn(Game, 'startQTE').mockResolvedValue(1);
-    for (const method of ['endCombat', 'onTurnStart', 'onTurnEnd', 'onEvent']) {
-        vi.spyOn(ClassAbility, method).mockImplementation(() => {});
-    }
-    vi.spyOn(ClassAbility, 'consumeAttackBlock').mockReturnValue(false);
-    for (const [object, method] of [[Intel, 'recordKill'], [Diag, 'event'], [Diag, 'dump'],
-        [Hints, 'trigger'], [Unlocks, 'grant'], [Achievements, 'unlock'], [Analytics, 'emit'],
-        [Assist, 'recordWin'], [Assist, 'recordLoss']]) {
-        vi.spyOn(object, method).mockImplementation(() => {});
-    }
-    Game.player = new Player(PLAYER_CLASSES.find(c => c.id === 'tactician'));
-    Game.player.classId = 'tactician';
-    Game.player.maxHp = 100;
-    Game.player.currentHp = 100;
     Game.player.mana = 10;
-    Game.enemy = makeEnemy();
-    Game.invalidateStackCache();
+    vi.spyOn(Game, 'rollDice').mockImplementation(() => {});
     visuals = [];
     storedCallbacks = [];
     vi.spyOn(Game, 'triggerVFX').mockImplementation((type, source, target, callback) => {
@@ -109,13 +42,8 @@ beforeEach(() => {
     });
 });
 
-afterEach(() => {
-    Game.clearTrackedTimers();
-    vi.clearAllTimers();
-    vi.restoreAllMocks();
-    vi.useRealTimers();
-    localStorage.clear();
-});
+afterEach(teardownCombatFixture);
+
 
 describe('settled action helpers', () => {
     it('resolves callback-backed damage synchronously and queues a pure visual', async () => {

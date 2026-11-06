@@ -4,6 +4,54 @@ Conventions and patterns to follow when adding new code. These exist because we
 hit each one of these as a bug at some point — please don't make a future
 session re-discover them.
 
+Purely cosmetic menu improvements are standard features and must not
+require Sparks or a separate upgrade. Glitch Overlay and Drift Echo are
+part of the normal menu title styling.
+
+## Testing procedure
+
+Tests have seven reporting owners in `scripts/test-groups.mjs`: health,
+decisions, actions, timing, saves, platform and supporting services. Put new
+regressions in the owning area and preserve the distinction between a rule,
+its real callers and its rendered browser behaviour.
+
+- During development, run the affected area with `npm run test:area -- AREA`.
+- Before publication, run `npm run check`: all rules/integration tests, the
+  web build, cache/version/asset validation and the portable browser suite.
+- When changing fixtures or reorganising checks, run
+  `npm run check:comprehensive` to include shuffled ordering. Do not reduce
+  worker parallelism without measuring an improvement.
+- The runner continues gathering evidence after a failed phase, writes one
+  ignored `test-results/` summary, and exits nonzero if any required phase
+  fails. A red discovery check blocks publication; preserve it while the
+  underlying defect is reported and assessed.
+- After deployment, verify the public version/cache/files match the tested
+  source and perform a fresh launch. Reuse results for an unchanged-source
+  deployment retry.
+
+Use `helpers/combat-fixture.js` for reset state, clocks and explicit optional
+cosmetic stubs. Opt into real rendering through `helpers/combat-renderer.js`.
+Do not globally mock QTE, damage, death or victory: a test must choose any
+such stub deliberately. Cold recovery uses `helpers/session-fixture.js` to
+load Game, entities and services from the same fresh dependency graph.
+
+Restore clocks, random values, subscriptions, timers and presentation groups.
+Use fake time for boundary checks and observable completion for browser
+actions. Do not copy gameplay implementations into a test. Historical save
+payloads remain frozen fixtures rather than current saves with an older
+version number substituted.
+
+Install test tooling with `npm ci` and `npx playwright install chromium`.
+Browser paths come from Playwright, not a developer's machine. The browser
+suite runs one game at a time, targets real touch input, retains failure
+screenshots, state, saved checkpoints and resource errors, and uses no automatic retries. Enable
+`MVM_QA_TRACE=1` only for a focused diagnostic run if a trace is useful.
+Do not concurrently rebuild `www/` while another browser suite serves it.
+
+Desktop touch emulation does not verify iPhone browser chrome, the home
+indicator, installed-PWA audio/background behaviour or Android OS Back.
+Record physical-device coverage explicitly using `mobile-qa.md`.
+
 ---
 
 ## Reduced motion (accessibility)

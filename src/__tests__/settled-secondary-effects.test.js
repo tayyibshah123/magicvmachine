@@ -1,82 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installCanvasContext, setupCombatFixture, teardownCombatFixture } from './helpers/combat-fixture.js';
+import { renderFor } from './helpers/combat-renderer.js';
 import { Game } from '../game.js';
 import { Enemy } from '../entities/enemy.js';
 import { Minion } from '../entities/minion.js';
-import { Player } from '../entities/player.js';
-import { PLAYER_CLASSES, STATE } from '../constants.js';
-import { ParticleSys } from '../effects/particles.js';
-import { AudioMgr } from '../audio.js';
-import { ClassAbility } from '../ui/class-ability.js';
+import { STATE } from '../constants.js';
 
 function makeEnemy(hp = 40) {
     return new Enemy({ name: 'Secondary Effect Test', hp, dmg: 5, sector: 1 }, 0);
 }
 
 beforeEach(() => {
-    vi.useFakeTimers();
-    vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
-    localStorage.clear();
-    document.body.innerHTML = `
-        <div id="game-container"><div id="screen-flash"></div></div>
-        <div id="dice-container"></div><div id="hud"></div>
-        <div id="reroll-badge"></div><div id="modal-settings" class="hidden"></div>
-        <button id="btn-end-turn"></button>
-    `;
-    Object.assign(Game, {
-        currentState: STATE.COMBAT, _combatGen: 40, _combatActionDepth: 0,
-        _settledCombatVfx: undefined, _combatActionInputWasLocked: false,
-        _resolvingSelfDestruct: false, _endTurnRunning: false, _winCombatRunning: false,
-        inputLocked: false, paused: false, combatPaceMult: 1, godMode: false,
-        sector: 1, turnCount: 2, effects: [], runStats: null, turnStats: null, _activeSectorMech: null,
-        _ascEffects: {}, sealedDie: null, bonusRerollsNextTurn: 0, deadMinionsThisTurn: 0,
-        metaUpgrades: [], metaToggledOff: new Set(), _disabledMetaThisRun: new Set(),
-        _customDmgInMult: 1, _customRelicPickDmg: 0, _customRelicPickDupe: false,
-        player: null, enemy: null, activePacts: new Set()
+    setupCombatFixture({
+        maxHp: 30,
+        enemyTemplate: { name: 'Secondary Effect Test', hp: 40, dmg: 5, sector: 1 },
+        game: { _combatGen: 40, turnCount: 2 },
+        profiles: ['cosmetics', 'ui', 'class-events']
     });
-    for (const name of ['createDamageText', 'createFloatingText', 'createExplosion',
-        'createShockwave', 'createSparks']) {
-        vi.spyOn(ParticleSys, name).mockImplementation(() => {});
-    }
-    for (const name of ['playSound', 'playHit', 'clearSectorMusic', 'startMusic']) {
-        vi.spyOn(AudioMgr, name).mockImplementation(() => {});
-    }
-    for (const name of ['shake', 'shakeFromDamage', 'haptic', 'hitStop',
-        '_checkHiddenLoreTriggers', 'renderRelics', '_renderPactPills', '_resetRunCurrency', 'rollDice', 'updateHUD']) {
-        vi.spyOn(Game, name).mockImplementation(() => {});
-    }
-    vi.spyOn(Game, '_isNewcomer').mockReturnValue(false);
-    vi.spyOn(Game, 'showPhaseBanner').mockResolvedValue();
+    vi.spyOn(Game, 'rollDice').mockImplementation(() => {});
     vi.spyOn(Game, 'winCombat').mockImplementation(() => {});
     vi.spyOn(Game, 'gameOver').mockImplementation(() => {});
-    vi.spyOn(Game, '_recoverFromCombatError').mockImplementation((where, error) => { throw error; });
-    vi.spyOn(ClassAbility, 'endCombat').mockImplementation(() => {});
-    vi.spyOn(ClassAbility, 'onTurnStart').mockImplementation(() => {});
-    Game.player = new Player(PLAYER_CLASSES.find(c => c.id === 'tactician'));
-    Game.player.classId = 'tactician';
-    Game.enemy = makeEnemy();
-    Game.invalidateStackCache();
 });
 
-afterEach(() => {
-    Game.clearTrackedTimers();
-    vi.clearAllTimers();
-    vi.restoreAllMocks();
-    vi.useRealTimers();
-});
+afterEach(teardownCombatFixture);
+
 
 describe('Bomb Bot settled damage', () => {
     async function renderMissile() {
-        Game.ctx = new Proxy({}, {
-            get: (target, key) => target[key] ?? (() => {}),
-            set: (target, key, value) => { target[key] = value; return true; }
-        });
-        vi.spyOn(ParticleSys, '_acquire').mockImplementation(() => ({}));
-        const start = Date.now();
-        // Exercise the real projectile renderer at the low-tier frame rate.
-        for (let frame = 1; frame <= 36; frame++) {
-            await vi.advanceTimersByTimeAsync(start + Math.round(frame * 1000 / 30) - Date.now());
-            Game.drawEffects();
-        }
+        installCanvasContext();
+        await renderFor(1200, 30);
     }
 
     it('damages the enemy and its minions immediately, then presents a missile without a damage callback', async () => {

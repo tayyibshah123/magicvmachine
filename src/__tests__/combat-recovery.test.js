@@ -1,87 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { abandonSession, freshSession, grantRevive, warmSession } from './helpers/session-fixture.js';
+import { V2_SAVE, saveFixture } from './helpers/save-fixtures.js';
 
 let active;
 let runtimes;
-const page = readFileSync('index.html', 'utf8');
-
-async function runtime({ empty = false } = {}) {
-    vi.resetModules();
-    document.documentElement.innerHTML = page;
-    const [{ Game }, { Player }, { Enemy }, constants, { AudioMgr }, { ParticleSys },
-        { ClassAbility }, { ClassBriefing }, { ClassVfx }, { Diag }, { Breakout }] = await Promise.all([
-        import('../game.js'), import('../entities/player.js'), import('../entities/enemy.js'),
-        import('../constants.js'), import('../audio.js'), import('../effects/particles.js'),
-        import('../ui/class-ability.js'), import('../services/class-briefing.js'),
-        import('../services/class-vfx.js'), import('../services/diag.js'), import('../services/breakout.js')
-    ]);
-    for (const method of ['playSound', 'playHit', 'playSting', 'duck', 'startMusic',
-        'stopSectorAmbient', 'clearSectorMusic', 'startSectorAmbient', 'setSectorMusic']) {
-        vi.spyOn(AudioMgr, method).mockImplementation(() => {});
-    }
-    for (const method of ['createDamageText', 'createExplosion', 'createFloatingText',
-        'createShockwave', 'createSparks', 'createClassBurst', 'clear']) {
-        vi.spyOn(ParticleSys, method).mockImplementation(() => {});
-    }
-    for (const method of ['shake', 'shakeFromDamage', 'haptic', 'hitStop', 'triggerScreenFlash',
-        'renderRelics', 'renderDiceUI', '_spawnDieUseBurst', 'updateHUD', 'renderDeathCards',
-        'renderRunSummary', '_startMenuPulse']) {
-        vi.spyOn(Game, method).mockImplementation(() => {});
-    }
-    vi.spyOn(Game, 'showPhaseBanner').mockResolvedValue();
-    vi.spyOn(Game, '_recoverFromCombatError').mockImplementation((where, error) => { throw error; });
-    vi.spyOn(ClassBriefing, 'show').mockResolvedValue();
-    vi.spyOn(ClassVfx, 'playDeath').mockImplementation(() => {});
-    vi.spyOn(Diag, 'dump').mockImplementation(() => {});
-    ClassAbility.init(Game);
-    Object.assign(Game, {
-        currentState: empty ? constants.STATE.MENU : constants.STATE.COMBAT,
-        _combatGen: 10, _combatActionDepth: 0, _revivePending: null,
-        _combatRecoveryRestart: false, _endTurnRunning: false, _winCombatRunning: false,
-        _resolvingSelfDestruct: false, inputLocked: false, paused: false, autoQTE: true,
-        qte: { active: false }, sector: 1, turnCount: 2, combatPaceMult: 1,
-        metaUpgrades: [], metaToggledOff: new Set(), _disabledMetaThisRun: new Set(),
-        challengeMode: false, archiveMode: false, _ascEffects: {}, _activeSectorMech: null,
-        _customDmgInMult: 1, _customDmgOutMult: 1, _customRelicPickDupe: false,
-        _customRelicPickDmg: 0, customRunModifiers: new Set(), activePacts: new Set(),
-        effects: [], runStats: { turns: 2 }, techFragments: 12, encryptedFiles: 0,
-        canvas: document.getElementById('gameCanvas'),
-        map: { currentIdx: 'fight', nodes: [
-            { id: 'start', type: 'start', status: 'completed', x: 50, y: 92, connections: ['fight'] },
-            { id: 'fight', type: 'combat', status: 'available', x: 50, y: 70, connections: [] }
-        ] }
-    });
-    if (!empty) {
-        Game.player = new Player(constants.PLAYER_CLASSES.find(c => c.id === 'tactician'));
-        Game.player.classId = 'tactician';
-        Game.enemy = new Enemy({ ...constants.ENEMIES[0], hp: 100, dmg: 10 }, 0);
-        ClassAbility.startCombat();
-    }
-    Game.invalidateStackCache();
-    const result = { Game, Player, Enemy, Breakout, ...constants };
+async function runtime(options) {
+    const result = await freshSession(active, options);
     runtimes.push(result);
     return result;
 }
-
-function grantRevive(context, id) {
-    const record = context.UPGRADES_POOL.find(r => r.id === id)
-        || context.MODULE_FUSIONS.find(r => r.id === id);
-    context.Game.player.relics.push({ ...record });
-    context.Game.invalidateStackCache();
-}
-
-function abandon(context) {
-    context.Game._combatGen++;
-    context.Game.clearTrackedTimers();
-    for (const group of context.Game._combatPresentations || []) group.finish(false);
-}
+const abandon = abandonSession;
 
 beforeEach(async () => {
     vi.useFakeTimers();
     vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
     localStorage.clear();
     runtimes = [];
-    active = await runtime();
+    active = await warmSession();
+    runtimes.push(active);
 });
 
 afterEach(() => {
@@ -93,6 +29,43 @@ afterEach(() => {
 });
 
 describe('revive restart ownership', () => {
+    it.each(['paused', 'hidden', 'qte', 'endTurn'])('waits for %s to finish before rolling one revival hand', async blocker => {
+        const { Game } = active;
+        grantRevive(active, 'second_life');
+        Game.player.currentHp = 0;
+        const roll = vi.spyOn(Game, 'rollDice');
+        Game.gameOver();
+        if (blocker === 'paused') Game.paused = true;
+        if (blocker === 'hidden') vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+        if (blocker === 'qte') Game.qte.active = true;
+        if (blocker === 'endTurn') Game._endTurnRunning = true;
+        await vi.advanceTimersByTimeAsync(1400);
+        expect(roll).not.toHaveBeenCalled();
+        expect(Game.inputLocked).toBe(true);
+        expect(Game._revivePending).toBeTruthy();
+        Game.paused = false;
+        vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+        Game.qte.active = false;
+        Game._endTurnRunning = false;
+        await vi.advanceTimersByTimeAsync(1200);
+        expect(roll).toHaveBeenCalledTimes(1);
+        expect(Game._revivePending).toBeNull();
+        expect(Game.inputLocked).toBe(false);
+    });
+
+    it('cancels a pending revive when a replacement combat starts', async () => {
+        const { Game } = active;
+        grantRevive(active, 'second_life');
+        Game.player.currentHp = 0;
+        Game.gameOver();
+        const oldEnemy = Game.enemy;
+        const roll = vi.spyOn(Game, 'rollDice');
+        Game.startCombat('combat');
+        await vi.advanceTimersByTimeAsync(2200);
+        expect(Game.enemy).not.toBe(oldEnemy);
+        expect(Game._revivePending).toBeNull();
+        expect(roll).toHaveBeenCalledTimes(1);
+    });
     it.each(['second_life', 'fusion_phoenix_protocol'])('locks the old hand after %s and rolls exactly one fresh hand', async id => {
         const { Game } = active;
         grantRevive(active, id);
@@ -141,13 +114,38 @@ describe('revive restart ownership', () => {
 });
 
 describe('persistent pending deaths', () => {
+    it.each(['boss', 'elite'])('restarts a cold %s recovery through the real encounter setup', async encounter => {
+        const { Game, Enemy, BOSS_DATA } = active;
+        Game.sector = encounter === 'boss' ? 5 : 1;
+        Game.map.nodes[1].type = encounter;
+        Game.enemy = new Enemy(encounter === 'boss' ? BOSS_DATA[5] : active.ENEMIES[0], 0, encounter === 'elite');
+        grantRevive(active, 'second_life');
+        Game.player.currentHp = 0;
+        Game.gameOver();
+        abandon(active);
+        const fresh = await runtime({ empty: true });
+        fresh.Game.loadGame();
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(fresh.Game.currentState).toBe(fresh.STATE.COMBAT);
+        expect(fresh.Game.enemy.isBoss).toBe(encounter === 'boss');
+        expect(fresh.Game.enemy.isElite).toBe(encounter === 'elite');
+        expect(fresh.Game.player.currentHp).toBe(15);
+        expect(fresh.Game._revivePending).toBeNull();
+        if (encounter === 'boss') {
+            expect(fresh.Game.enemy.name).toBe(BOSS_DATA[5].name);
+            expect(fresh.Game.enemy.minionRoster).toBeTruthy();
+            expect(fresh.Game.enemy.minionRoster.living().length).toBeGreaterThan(0);
+        }
+    });
     it.each([2, 3])('ends a schema %s zero-HP save without granting free health', async version => {
         const { Game } = active;
         Game.player.currentHp = 0;
         Game.saveGame();
         const data = JSON.parse(Game._readSaveRaw());
-        data.v = version;
-        if (version === 2) delete data.combatRecovery;
+        if (version === 2) {
+            Object.assign(data, saveFixture(V2_SAVE, { player: { ...V2_SAVE.player, hp: 0, relics: [] } }));
+            delete data.combatRecovery;
+        }
         localStorage.setItem(Game._saveKey(), JSON.stringify(data));
         abandon(active);
         const fresh = await runtime({ empty: true });
@@ -156,6 +154,8 @@ describe('persistent pending deaths', () => {
         expect(fresh.Game.player.currentHp).toBe(0);
         expect(fresh.Game._readSaveRaw()).toBeNull();
         const history = JSON.parse(localStorage.getItem('mvm_run_history'));
+        expect(history).toHaveLength(1);
+        expect(history[0]).toMatchObject({ result: 'loss', classId: 'tactician' });
         fresh.Game.loadGame();
         expect(JSON.parse(localStorage.getItem('mvm_run_history'))).toEqual(history);
     });
@@ -166,12 +166,13 @@ describe('persistent pending deaths', () => {
         Game.player.currentHp = 1;
         let release;
         const presentation = new Promise(resolve => { release = resolve; });
-        Game._runCombatAction(() => Game.player.takeDamage(20, Game.enemy), () => presentation);
+        const action = Game._runCombatAction(() => Game.player.takeDamage(20, Game.enemy), () => presentation);
         expect(Game.player.currentHp).toBe(0);
         Game.saveGame();
         expect(JSON.parse(Game._readSaveRaw()).combatRecovery.outcome).toBe('death');
         abandon(active);
         release();
+        await action;
         const fresh = await runtime({ empty: true });
         const death = vi.spyOn(fresh.Game, 'gameOver');
         const hand = vi.spyOn(fresh.Game, 'rollDice');
@@ -261,9 +262,7 @@ describe('persistent pending deaths', () => {
         Game.player.currentHp = 1;
         Game.currentState = STATE.MAP;
         Game.saveGame();
-        const data = JSON.parse(Game._readSaveRaw());
-        data.v = 2;
-        delete data.combatRecovery;
+        const data = saveFixture(V2_SAVE, { player: { ...V2_SAVE.player, hp: 1 } });
         localStorage.setItem(Game._saveKey(), JSON.stringify(data));
         abandon(active);
         const fresh = await runtime({ empty: true });

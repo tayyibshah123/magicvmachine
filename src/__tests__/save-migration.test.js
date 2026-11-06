@@ -1,22 +1,9 @@
 // Save-data schema migration tests.
 //
-// Exercises Game._migrateSave directly so we can guarantee a v1 (pre-
-// versioning) save still loads on a v2 build, and that the migration
-// chain is forward-compatible with any future v2→v3 addition.
+// Exercise historical payloads and the migration engine independently of UI.
 
-import { describe, it, expect, beforeEach } from 'vitest';
-
-beforeEach(() => {
-    document.body.innerHTML = `
-        <div id="game-container">
-            <canvas id="gameCanvas" width="1080" height="1920"></canvas>
-            <div id="dice-container"></div>
-            <div id="reroll-badge"></div>
-            <div id="hud"></div>
-            <div id="tutorial-spotlight"></div>
-        </div>
-    `;
-});
+import { describe, it, expect } from 'vitest';
+import { LEGACY_V1_SAVE, V2_SAVE, saveFixture } from './helpers/save-fixtures.js';
 
 describe('save schema migration', () => {
     it('migrates a pre-versioning (no `v`) save to current schema', async () => {
@@ -60,10 +47,11 @@ describe('save schema migration', () => {
                 signatureTier: 2
             }
         };
-        const migrated = Game._migrateSave(currentSave);
-        expect(migrated.v).toBe(Game.SAVE_SCHEMA_VERSION);
-        expect(migrated.player.classId).toBe('sentinel');
-        expect(migrated.player.relics).toEqual([{ id: 'thorn_mail' }]);
+        currentSave.unknownExtension = { enabled: true, values: [1, 2] };
+        const complete = Game._migrateSave(currentSave);
+        expect(complete).toEqual(currentSave);
+        expect(complete).not.toBe(currentSave);
+        expect(complete.player).not.toBe(currentSave.player);
     });
 
     it('accepts a future-version save without dropping it', async () => {
@@ -145,5 +133,17 @@ describe('save schema migration', () => {
         const alive = Game._migrateSave({ v: 2, player: { hp: 1 } });
         expect(alive.combatRecovery).toBeNull();
         expect(alive.player.hp).toBe(1);
+    });
+
+    it.each([LEGACY_V1_SAVE, V2_SAVE])('preserves frozen historical progress while reaching the current schema %#', async source => {
+        const { Game } = await import('../game.js');
+        const input = saveFixture(source);
+        const before = saveFixture(input);
+        const migrated = Game._migrateSave(input);
+        expect(migrated.v).toBe(Game.SAVE_SCHEMA_VERSION);
+        expect(migrated.player.hp).toBe(17);
+        expect(migrated.map).toEqual(source.map);
+        expect(migrated.fragments).toBe(37);
+        expect(input).toEqual(before);
     });
 });

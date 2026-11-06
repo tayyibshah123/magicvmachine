@@ -46,7 +46,8 @@ src/
   services/             combat-recap, ascension, streak, dailies, perf, etc.
   ui/                   modal helpers, tooltips
   styles/               (rarely used — most styles live in /style.css)
-  __tests__/            vitest suite (23 files, 262 tests)
+  __tests__/            rules and integration checks, seven reporting areas
+tests/browser/          portable touch journeys, PWA and renderer checks
 scripts/
   build-www.mjs         clean-build to ./www/ for Capacitor
   compress-music.mjs    OGG → M4A pass for Android payload
@@ -67,8 +68,13 @@ Files **never** to commit: `node_modules/`, `www/` (regenerated),
 | Command | What it does |
 |---|---|
 | `npm install` | Install dev deps (vitest, jsdom, @capacitor/*). |
-| `npm test` | Vitest run, 262 tests. **Must stay green.** |
+| `npm test` | All rules and integration checks. Required release gate. |
 | `npm run test:watch` | Watch mode for local dev. |
+| `npm run test:groups` | List the seven test areas. |
+| `npm run test:area -- health` | Run one area (use the key from test:groups). |
+| `npm run test:browser` | Build and run mobile browser journeys and targeted checks. |
+| `npm run check` | Full tests, bundle validation and browser checks with one result summary. |
+| `npm run check:comprehensive` | Also run shuffled tests to check fixture isolation. |
 | `npm run build:www` | Wipes `www/`, rebuilds the shippable web bundle. |
 | `npm run android:sync` | `build:www` then `npx cap sync android`. |
 | `npm run compress:music` | Generates `.m4a` siblings for `.ogg` tracks. |
@@ -123,6 +129,10 @@ session re-discover them.
    throwaway — the canonical state lives at `origin/main`. Every commit
    is followed by `git push`. Never leave commits unpushed.
 
+9. **Menu polish is standard.** Purely cosmetic menu improvements must
+   not require Sparks or a separate upgrade. Glitch Overlay and Drift
+   Echo are built into the title styling.
+
 9. **Settle health changes before action presentation.** Use
    `Game._runCombatAction` for damage and its subsequent animation.
    Support actions also use this boundary to settle inverted healing
@@ -137,6 +147,14 @@ session re-discover them.
 ---
 
 ## Versioning + ship checklist
+
+Use the shared test fixtures and seven reporting areas described in
+`CONTRIBUTING.md`. Test the real production method, not a copied formula.
+Keep new failures visible and classify fixture failures separately from
+game defects. Do not skip or weaken checks to make a release green.
+`npm run check` must pass for the final release source. Use the comprehensive
+variant when changing fixtures or test organisation. A deployment retry
+can reuse results if the tested source has not changed.
 
 Every shippable change does these in one commit, in this order:
 

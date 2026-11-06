@@ -2,16 +2,24 @@
 // track so each region of the run has its own theme. lofi (single-source)
 // is left untouched.
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest';
 import { AudioMgr } from '../audio.js';
 
+let previousAudio;
 beforeEach(() => {
+    previousAudio = Object.fromEntries(['_sectorLock', '_lastShuffleIdx', 'bossSilence', 'bgm',
+        'currentTrack', '_preferredFmt'].map(key => [key, AudioMgr[key]]));
     AudioMgr._sectorLock = null;
     AudioMgr._lastShuffleIdx = -1;
     AudioMgr.bossSilence = false;
     AudioMgr.bgm = null;
     AudioMgr.currentTrack = 'synth';
     AudioMgr._preferredFmt = 'ogg'; // skip codec probe
+});
+
+afterEach(() => {
+    vi.restoreAllMocks();
+    Object.assign(AudioMgr, previousAudio);
 });
 
 describe('AudioMgr.setSectorMusic', () => {

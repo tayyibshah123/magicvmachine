@@ -1,203 +1,122 @@
-// Damage-flow integration tests. Loads the real Game module + entity
-// classes and exercises takeDamage end-to-end. These catch regressions
-// the pure-helper unit tests in shield.test.js can't see — temporal
-// dead-zone errors, instanceof mismatches, late-bound class refs, and
-// boss phase clamping interactions.
-//
-// Notable history: the v1.0 hardening pass discovered that Phase Stalker
-// (kind: 'phase_shift') referenced `actualDmg` BEFORE its `let`
-// declaration, blowing up with ReferenceError on every hit. This file's
-// "phase_shift enemy survives a damage call" test is the regression
-// guard.
-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { Game } from '../game.js';
+import { Enemy } from '../entities/enemy.js';
+import { Minion } from '../entities/minion.js';
+import { setupCombatFixture, teardownCombatFixture } from './helpers/combat-fixture.js';
 
-beforeEach(async () => {
-    // Game.init() reads canvas + various DOM elements. Provide all of them
-    // up front so the module's import-time DOM mutations don't blow up.
-    document.body.innerHTML = `
-        <div id="game-container">
-            <canvas id="gameCanvas" width="1080" height="1920"></canvas>
-            <div id="dice-container"></div>
-            <div id="reroll-badge"></div>
-            <div id="hud"></div>
-            <div id="tutorial-spotlight"></div>
-            <div id="screen-flash"></div>
-            <div id="combat-log"></div>
-        </div>
-    `;
-    // These tests exercise damage and phase state without Game.init().
-    // Keep real phase mechanics, but prevent cinematic timers from outliving
-    // the fixture or reading Game.canvas, which is never initialised here.
-    const { Game } = await import('../game.js');
-    vi.spyOn(Game, 'triggerPhaseGlitch').mockResolvedValue();
-    vi.spyOn(Game, 'triggerBossZoom').mockImplementation(() => {});
-    vi.spyOn(Game, 'showPhaseBanner').mockResolvedValue();
-});
+beforeEach(() => setupCombatFixture({ profiles: ['cosmetics', 'ui', 'terminal-observers'] }));
+afterEach(teardownCombatFixture);
 
-afterEach(() => {
-    vi.restoreAllMocks();
-});
+function enemy(template = {}) {
+    return new Enemy({ name: 'Damage target', hp: 50, dmg: 20, sector: 1, ...template }, 0);
+}
 
-describe('takeDamage — basic flow', () => {
-    it('dealing damage reduces enemy HP', async () => {
-        const { Game } = await import('../game.js');
-        const { Enemy } = await import('../entities/enemy.js');
-        // Minimal template — bypass scaling by setting actionsPerTurn so the
-        // boss-style HP/dmg passthrough applies.
-        const enemy = new Enemy(
-            { name: 'TEST_DUMMY', hp: 50, dmg: 5, sector: 1, actionsPerTurn: 1 },
-            0
-        );
-        const before = enemy.currentHp;
-        enemy.takeDamage(10);
-        expect(enemy.currentHp).toBe(before - 10);
+describe('real shield and HP damage pipeline', () => {
+    it.each([
+        { name: 'full block', shield: 10, damage: 8, remainingShield: 2, hp: 50 },
+        { name: 'exact shield break', shield: 10, damage: 10, remainingShield: 0, hp: 50 },
+        { name: 'overflow', shield: 10, damage: 15, remainingShield: 0, hp: 45 },
+        { name: 'no shield', shield: 0, damage: 12, remainingShield: 0, hp: 38 },
+        { name: 'zero damage', shield: 5, damage: 0, remainingShield: 5, hp: 50 }
+    ])('$name updates the real shield reservoir and HP', ({ shield, damage, remainingShield, hp }) => {
+        const target = enemy();
+        target.shield = shield;
+        const dead = target.takeDamage(damage);
+        expect(target.shield).toBe(remainingShield);
+        expect(target.currentHp).toBe(hp);
+        expect(dead).toBe(false);
     });
 
-    it('shield absorbs damage before HP', async () => {
-        const { Enemy } = await import('../entities/enemy.js');
-        const enemy = new Enemy(
-            { name: 'TEST_DUMMY', hp: 50, dmg: 5, sector: 1, actionsPerTurn: 1 },
-            0
-        );
-        enemy.shield = 8;
-        enemy.takeDamage(5);
-        expect(enemy.shield).toBe(3);
-        expect(enemy.currentHp).toBe(50);
+    it('returns true on lethal damage and clamps HP to zero', () => {
+        const target = enemy({ hp: 10 });
+        expect(target.takeDamage(20)).toBe(true);
+        expect(target.currentHp).toBe(0);
     });
 
-    it('damage exceeding shield bleeds into HP', async () => {
-        const { Enemy } = await import('../entities/enemy.js');
-        const enemy = new Enemy(
-            { name: 'TEST_DUMMY', hp: 50, dmg: 5, sector: 1, actionsPerTurn: 1 },
-            0
-        );
-        enemy.shield = 4;
-        enemy.takeDamage(10);
-        expect(enemy.shield).toBe(0);
-        expect(enemy.currentHp).toBe(50 - 6);
-    });
-
-    it('takeDamage returns true on lethal blow (non-boss)', async () => {
-        // Non-boss only — the boss-phase clamp keeps a P1 boss from dying
-        // in a single hit (it gets dropped to the P2 floor instead). That
-        // is intentional gameplay; we test it separately below.
-        const { Enemy } = await import('../entities/enemy.js');
-        const enemy = new Enemy(
-            { name: 'TEST_DUMMY', hp: 10, dmg: 5, sector: 1 },
-            0
-        );
-        const dead = enemy.takeDamage(20);
-        expect(dead).toBe(true);
-        expect(enemy.currentHp).toBe(0);
+    it('bypasses shield without consuming it', () => {
+        const target = enemy();
+        target.shield = 999;
+        target.takeDamage(10, null, false, true);
+        expect(target.shield).toBe(999);
+        expect(target.currentHp).toBe(40);
     });
 });
 
-describe('takeDamage — regression guards', () => {
-    it('phase_shift enemy survives a damage call without ReferenceError', async () => {
-        // Regression for the v1.0 hardening pass bug where `actualDmg` was
-        // referenced before its `let` declaration in entity.js takeDamage.
-        // Phase Stalker (kind: 'phase_shift') is a real sector-4 enemy, so
-        // any player attack against one would crash the game.
-        const { Enemy } = await import('../entities/enemy.js');
-        const enemy = new Enemy(
-            { name: 'Phase Stalker', hp: 110, dmg: 25, sector: 4, kind: 'phase_shift', actionsPerTurn: 1 },
-            0
-        );
-        // Run 50 damage attempts — phase_shift is RNG so we want broad coverage.
-        // The test only asserts no exception is thrown; HP changes are RNG-dependent.
-        expect(() => {
-            for (let i = 0; i < 50; i++) enemy.takeDamage(10);
-        }).not.toThrow();
-    });
-
-    it('boss phase 1 attack is clamped to phase 2 floor', async () => {
-        // Boss-phase clamp: a single huge hit shouldn't skip phases. A
-        // boss in P1 absorbing 200 damage when on 100 HP / 100 max should
-        // land at the P2 floor, not 0.
-        const { Enemy } = await import('../entities/enemy.js');
-        const enemy = new Enemy(
-            { name: 'TEST_BOSS', hp: 100, dmg: 5, sector: 1, actionsPerTurn: 2 },
-            0
-        );
-        // Strip the multi-phase function so the test isolates the clamp logic
-        // (without it, checkPhase fires phase transitions which we don't have
-        // a phase-list for in this minimal template).
-        enemy.checkPhase = () => {};
-        enemy.takeDamage(200);
-        // Should have clamped at P2 floor (50% - 1 = 49), not gone to 0.
-        expect(enemy.currentHp).toBeGreaterThan(0);
-        expect(enemy.currentHp).toBeLessThan(50);
-    });
-
-    it('takeDamage with bypassShield skips the shield reservoir', async () => {
-        const { Enemy } = await import('../entities/enemy.js');
-        const enemy = new Enemy(
-            { name: 'TEST_DUMMY', hp: 50, dmg: 5, sector: 1, actionsPerTurn: 1 },
-            0
-        );
-        enemy.shield = 999;
-        enemy.takeDamage(10, null, false, /* bypassShield */ true);
-        expect(enemy.shield).toBe(999);
-        expect(enemy.currentHp).toBe(40);
-    });
-
-    it('zero-damage hit is handled cleanly', async () => {
-        const { Enemy } = await import('../entities/enemy.js');
-        const enemy = new Enemy(
-            { name: 'TEST_DUMMY', hp: 50, dmg: 5, sector: 1, actionsPerTurn: 1 },
-            0
-        );
-        enemy.shield = 5;
-        const before = enemy.shield;
-        enemy.takeDamage(0);
-        expect(enemy.shield).toBe(before);
-        expect(enemy.currentHp).toBe(50);
-    });
-});
-
-describe('addEffect — debuff math', () => {
-    it('weak applied to enemy halves outgoing damage via getEffectiveDamage', async () => {
-        const { Enemy } = await import('../entities/enemy.js');
-        const enemy = new Enemy(
-            { name: 'TEST_DUMMY', hp: 50, dmg: 20, sector: 1, actionsPerTurn: 1 },
-            0
-        );
-        enemy.addEffect('weak', 1, 0, '🦠', '50% less Dmg.', 'WEAK');
-        // Base 20 → -50% → 10. Brittle/affixes are not in this template.
-        expect(enemy.getEffectiveDamage()).toBe(10);
-    });
-
-    it('constrict re-apply stacks duration cumulatively (val unchanged)', async () => {
-        const { Enemy } = await import('../entities/enemy.js');
-        const enemy = new Enemy(
-            { name: 'TEST_DUMMY', hp: 50, dmg: 20, sector: 1, actionsPerTurn: 1 },
-            0
-        );
-        // Refactor (status-effect rework): val NEVER stacks. Duration
-        // adds: 3 + 3 = 6 turns remaining. val stays at 0.5 (max-of).
-        enemy.addEffect('constrict', 3, 0.5, '🔗', 'Atk reduced.', 'CONSTRICT');
-        enemy.addEffect('constrict', 3, 0.5, '🔗', 'Atk reduced.', 'CONSTRICT');
-        const fx = enemy.hasEffect('constrict');
-        expect(fx.val).toBe(0.5);
-        expect(fx.duration).toBe(6);
-    });
-
-    it('bleed re-apply stays at 1 stack — duration adds instead', async () => {
-        const { Enemy } = await import('../entities/enemy.js');
-        const enemy = new Enemy(
-            { name: 'TEST_DUMMY', hp: 50, dmg: 5, sector: 1, actionsPerTurn: 1 },
-            0
-        );
-        for (let i = 0; i < 10; i++) {
-            enemy.addEffect('bleed', 3, 2, '🩸', '2 DMG/turn', 'BLEED');
+describe('real enemy damage regressions', () => {
+    it.each(['player', 'summon'])('credits a %s finishing blow once and ignores later corpse hits', kind => {
+        Game.runStats = { totalDamage: 0, highestHit: 0, kills: 0 };
+        const previousAchievements = window.Achievements;
+        const unlock = vi.fn();
+        window.Achievements = { unlock };
+        try {
+            const source = kind === 'player' ? Game.player : new Minion(100, 100, 1, true);
+            const target = enemy({ hp: 10 });
+            expect(target.takeDamage(10, source)).toBe(true);
+            const settledDamage = Game.runStats.totalDamage;
+            expect(Game.runStats.kills).toBe(1);
+            expect(unlock).toHaveBeenCalledWith('FIRST_KILL');
+            expect(target.takeDamage(100, source)).toBe(true);
+            expect(Game.runStats.kills).toBe(1);
+            expect(Game.runStats.totalDamage).toBe(settledDamage);
+            expect(unlock.mock.calls.filter(([id]) => id === 'FIRST_KILL')).toHaveLength(1);
+        } finally {
+            if (previousAchievements === undefined) delete window.Achievements;
+            else window.Achievements = previousAchievements;
         }
-        const bleed = enemy.hasEffect('bleed');
-        // Stacks remain 1 — DoT magnitude no longer multi-stacks.
-        expect(bleed.stacks).toBe(1);
-        // Duration is the cumulative sum: 10 applies × 3 turns each.
-        expect(bleed.duration).toBe(30);
-        // Tick value tracks the highest source — applies were all val=2.
-        expect(bleed.val).toBe(2);
+    });
+
+    it('does not award player kill credit for enemy damage or a friendly casualty', () => {
+        Game.runStats = { totalDamage: 0, highestHit: 0, kills: 0 };
+        const attacker = new Minion(100, 100, 1, false);
+        const hostile = enemy({ hp: 10 });
+        hostile.takeDamage(10, attacker);
+        const ally = new Minion(100, 100, 2, true);
+        ally.takeDamage(100, Game.player);
+        expect(Game.runStats.kills).toBe(0);
+    });
+
+    it.each([
+        ['dodge', 0.1, 110], ['land', 0.9, 100]
+    ])('phase_shift %s branch has no temporal-dead-zone error and exact damage', (branch, random, hp) => {
+        const target = enemy({ hp: 110, kind: 'phase_shift', sector: 4 });
+        vi.spyOn(Math, 'random').mockReturnValue(random);
+        expect(() => target.takeDamage(10)).not.toThrow();
+        expect(target.currentHp).toBe(hp);
+    });
+
+    it('preserves real boss phases through oversized hits before allowing the final kill', () => {
+        const boss = enemy({ name: 'TEST BOSS', hp: 100, actionsPerTurn: 2 });
+        Game.enemy = boss;
+        const transition = vi.spyOn(Game, 'triggerBossPhaseTransition').mockResolvedValue();
+        expect(boss.takeDamage(200)).toBe(false);
+        expect(boss.currentHp).toBe(49);
+        expect(boss.phase).toBe(2);
+        expect(transition).toHaveBeenLastCalledWith(boss, 2);
+        expect(boss.takeDamage(200)).toBe(false);
+        expect(boss.currentHp).toBe(19);
+        expect(boss.phase).toBe(3);
+        expect(transition).toHaveBeenLastCalledWith(boss, 3);
+        expect(boss.takeDamage(200)).toBe(true);
+        expect(boss.currentHp).toBe(0);
+        expect(boss.phase).toBe(3);
+        expect(transition).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('real status effect damage and stacking', () => {
+    it('weak halves outgoing enemy damage', () => {
+        const target = enemy();
+        target.addEffect('weak', 1, 0, '', '', 'WEAK');
+        expect(target.getEffectiveDamage()).toBe(10);
+    });
+
+    it.each([
+        ['constrict', 3, 0.5, 2, 6],
+        ['bleed', 3, 2, 10, 30]
+    ])('%s accumulates duration while preserving one stack and source strength', (id, duration, val, count, total) => {
+        const target = enemy();
+        for (let i = 0; i < count; i++) target.addEffect(id, duration, val, '', '', id);
+        expect(target.hasEffect(id)).toMatchObject({ val, duration: total });
+        if (id === 'bleed') expect(target.hasEffect(id).stacks).toBe(1);
     });
 });

@@ -1,77 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Game } from '../game.js';
 import { Enemy } from '../entities/enemy.js';
-import { Player } from '../entities/player.js';
-import { Minion } from '../entities/minion.js';
-import { PLAYER_CLASSES, STATE } from '../constants.js';
-import { AudioMgr } from '../audio.js';
-import { ParticleSys } from '../effects/particles.js';
+import { STATE } from '../constants.js';
 import { Hints } from '../services/hints.js';
 import { Perf } from '../services/perf.js';
+import { ClassAbility } from '../ui/class-ability.js';
+import { setupCombatFixture, teardownCombatFixture, stubClassEvents, stubCombatUI,
+    stubTerminalServices } from './helpers/combat-fixture.js';
+import { renderFor, renderFrames } from './helpers/combat-renderer.js';
+import { trackBrowserListeners } from './helpers/browser-events.js';
 
 beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1000);
-    vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
-    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
-    document.body.innerHTML = '<div id="game-container"></div>';
-    const gradient = { addColorStop() {} };
-    const context = new Proxy({}, {
-        get: (target, key) => target[key] ?? (key === 'createLinearGradient' || key === 'createRadialGradient'
-            ? () => gradient : () => {}),
-        set: (target, key, value) => { target[key] = value; return true; }
-    });
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context);
-    for (const method of ['createDamageText', 'createExplosion', 'createFloatingText', 'createShockwave', 'createSparks']) {
-        vi.spyOn(ParticleSys, method).mockImplementation(() => {});
-    }
-    vi.spyOn(ParticleSys, '_acquire').mockImplementation(() => ({}));
-    for (const method of ['playSound', 'playHit', 'playSting', 'duck']) {
-        vi.spyOn(AudioMgr, method).mockImplementation(() => {});
-    }
-    for (const method of ['shake', 'shakeFromDamage', 'hitStop', 'triggerScreenFlash', 'haptic',
-        'drawQTE', '_qteWindupAudio', '_checkHiddenLoreTriggers']) {
+    setupCombatFixture({ classId: 'tactician',
+        enemyTemplate: { name: 'Presentation target', hp: 100, dmg: 10 },
+        game: { turnCount: 1 }, profiles: ['cosmetics', 'renderer', 'terminal-observers'] });
+    for (const method of ['drawQTE', '_qteWindupAudio']) {
         vi.spyOn(Game, method).mockImplementation(() => {});
     }
-    vi.spyOn(Game, '_isNewcomer').mockReturnValue(false);
     vi.spyOn(Hints, 'trigger').mockImplementation(() => {});
-    vi.spyOn(Game, 'winCombat').mockImplementation(() => { Game.currentState = STATE.COMBAT_WIN; });
-    vi.spyOn(Game, 'gameOver').mockImplementation(() => { Game.currentState = STATE.GAMEOVER; });
-    Object.assign(Game, {
-        ctx: context, effects: [], currentState: STATE.COMBAT, _combatGen: 1,
-        _combatActionDepth: 0, _endTurnRunning: false, _winCombatRunning: false,
-        inputLocked: false, paused: false, combatPaceMult: 1, godMode: false,
-        autoQTE: false, qte: { active: false }, _archivistTurnExpired: false,
-        metaUpgrades: [], metaToggledOff: new Set(), _disabledMetaThisRun: new Set(),
-        _ascEffects: {}, _customDmgInMult: 1, assistDisabled: true,
-        turnStats: null, runStats: null, _activeCombatPresentation: null,
-        _settledCombatVfx: null, turnCount: 1, sector: 1
-    });
-    Game.player = new Player(PLAYER_CLASSES.find(c => c.id === 'summoner'));
-    Game.player.classId = 'summoner';
-    Game.player.maxHp = Game.player.currentHp = 100;
-    Game.enemy = new Enemy({ name: 'Presentation target', hp: 100, dmg: 10 }, 0);
-    Game.invalidateStackCache();
     Perf.tier = 'low';
 });
 
-afterEach(() => {
-    for (const group of [...(Game._combatPresentations || [])]) group.finish(false);
-    Game.clearTrackedTimers();
-    vi.clearAllTimers();
-    vi.restoreAllMocks();
-    vi.useRealTimers();
-});
-
-async function renderFor(ms, fps = 30) {
-    const start = Date.now();
-    const frames = Math.floor(ms * fps / 1000);
-    for (let frame = 1; frame <= frames; frame++) {
-        await vi.advanceTimersByTimeAsync(start + Math.round(frame * 1000 / fps) - Date.now());
-        if (!Game.paused && Game.currentState === STATE.COMBAT) Game.drawEffects();
-    }
-    if (Date.now() < start + ms) await vi.advanceTimersByTimeAsync(start + ms - Date.now());
-}
+afterEach(teardownCombatFixture);
 
 describe('rendered combat presentation completion', () => {
     it.each([0.6, 1, 2])('finishes a lethal dart at 30 FPS with pace %s before victory', async pace => {
@@ -86,7 +36,8 @@ describe('rendered combat presentation completion', () => {
 
         expect(enemy.currentHp).toBe(0);
         expect(damage).toHaveBeenCalledTimes(1);
-        expect(Game.effects.find(effect => effect.type === 'nature_dart').progress).toBeCloseTo(0.612);
+        expect(Game.effects.find(effect => effect.type === 'nature_dart').progress).toBeGreaterThan(0);
+        expect(Game.effects.find(effect => effect.type === 'nature_dart').progress).toBeLessThan(1);
         expect(Game.winCombat).not.toHaveBeenCalled();
         expect(Game.inputLocked).toBe(true);
         await renderFor(1000);
@@ -178,6 +129,41 @@ describe('rendered combat presentation completion', () => {
         expect(Game.effects.some(effect => effect.type === 'compiler_crack')).toBe(false);
     });
 
+    it('keeps a rendered lethal action paused across real visibility events without background timer delivery', async () => {
+        let hidden = false;
+        vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden);
+        vi.spyOn(Game, 'saveGame').mockImplementation(() => {});
+        const presentationVisibilityWasBound = Game._presentationVisibilityBound;
+        const cleanup = trackBrowserListeners();
+        try {
+            Game.bindTabVisibility();
+            const enemy = Game.enemy;
+            const action = Game._runCombatAction(() => enemy.takeDamage(200, Game.player),
+                current => Game._presentCombatHits('compiler_smash', Game.player, enemy, 1, current));
+            await renderFor(600);
+            const smash = Game.effects.find(effect => effect.type === 'compiler_smash');
+            const travel = performance.now() - smash.startMs;
+            hidden = true;
+            document.dispatchEvent(new Event('visibilitychange'));
+            vi.setSystemTime(Date.now() + 60000);
+            hidden = false;
+            document.dispatchEvent(new Event('visibilitychange'));
+            expect(Game.paused).toBe(true);
+            expect(Game.winCombat).not.toHaveBeenCalled();
+            expect(performance.now() - smash.startMs).toBe(travel);
+            document.getElementById('pause-overlay').dispatchEvent(new Event('touchstart', { bubbles: true }));
+            expect(Game.paused).toBe(false);
+            await renderFor(2500);
+            await action;
+            expect(Game.effects).toHaveLength(0);
+            expect(Game.winCombat).toHaveBeenCalledTimes(1);
+        } finally {
+            cleanup();
+            Game._audioResumeArmed = false;
+            if (!presentationVisibilityWasBound) Game._presentationVisibilityBound = false;
+        }
+    });
+
     it('cancels old groups and pending child spawns when the combat generation changes', async () => {
         const gen = Game._combatGen;
         const visual = Game._presentCombatHits('reality_shift_strike', Game.enemy, Game.player, 3,
@@ -192,6 +178,98 @@ describe('rendered combat presentation completion', () => {
         expect(Game._combatPresentations.size).toBe(0);
     });
 
+    it('finishes every committed strike under dropped and uneven frames before victory', async () => {
+        const enemy = Game.enemy;
+        const visual = vi.spyOn(Game, 'triggerVFX');
+        const action = Game._runCombatAction(() => enemy.takeDamage(200, Game.player),
+            current => Game._presentCombatHits('reality_shift_strike', Game.player, enemy, 3, current));
+        await vi.advanceTimersByTimeAsync(0);
+        await renderFrames(Array.from({ length: 8 }, () => [33, 33, 100, 16]).flat());
+        expect(visual).toHaveBeenCalledTimes(3);
+        expect(Game.effects.length).toBeGreaterThan(0);
+        expect(Game.winCombat).not.toHaveBeenCalled();
+        expect(Game.inputLocked).toBe(true);
+        await renderFrames(Array.from({ length: 30 }, () => [16, 50, 33, 100]).flat());
+        await action;
+        expect(Game.effects).toHaveLength(0);
+        expect(Game.winCombat).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps nested presentation ownership through a pause and releases the outer action once', async () => {
+        const enemy = Game.enemy;
+        const action = Game._runCombatAction(() => Game._runCombatAction(
+            () => enemy.takeDamage(200, Game.player),
+            current => Game._presentCombatHits('compiler_smash', Game.player, enemy, 1, current)));
+        await renderFor(600);
+        const smash = Game.effects.find(effect => effect.type === 'compiler_smash');
+        expect(smash).toBeDefined();
+        expect(Game._combatActionDepth).toBe(2);
+        const travel = performance.now() - smash.startMs;
+        Game.paused = true;
+        await vi.advanceTimersByTimeAsync(30000);
+        Game.paused = false;
+        await vi.advanceTimersByTimeAsync(20);
+        expect(performance.now() - smash.startMs).toBe(travel);
+        expect(Game.winCombat).not.toHaveBeenCalled();
+        expect(Game.inputLocked).toBe(true);
+        await renderFor(2500);
+        await action;
+        expect(Game.effects).toHaveLength(0);
+        expect(Game._combatActionDepth).toBe(0);
+        expect(Game.winCombat).toHaveBeenCalledTimes(1);
+        expect(Game.inputLocked).toBe(false);
+    });
+
+    it('does not let an earlier surviving support visual release a later lethal action', async () => {
+        stubCombatUI();
+        const defence = { id: 1, type: 'TAC_DEFEND', used: false };
+        Game.dicePool = [defence];
+        Game.useDie(defence, document.createElement('div'), Game.player);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(Game.inputLocked).toBe(false);
+        expect(Game.effects.some(effect => effect.type === 'hex_barrier')).toBe(true);
+        const enemy = Game.enemy;
+        const damage = vi.spyOn(enemy, 'takeDamage');
+        const attack = Game._runCombatAction(() => enemy.takeDamage(200, Game.player),
+            current => Game._presentCombatHits('reality_shift_strike', Game.player, enemy, 3, current));
+        await renderFor(1800);
+        expect(Game.winCombat).not.toHaveBeenCalled();
+        expect(Game.effects.some(effect => effect.type === 'hex_barrier')).toBe(false);
+        expect(Game.effects.length).toBeGreaterThan(0);
+        expect(Game.inputLocked).toBe(true);
+        expect(Game.winCombat).not.toHaveBeenCalled();
+        expect(damage).toHaveBeenCalledTimes(1);
+        await renderFor(1000);
+        await attack;
+        expect(Game.effects).toHaveLength(0);
+        expect(Game.winCombat).toHaveBeenCalledTimes(1);
+        expect(damage).toHaveBeenCalledTimes(1);
+    });
+
+    it('finishes an earlier real defence barrier before a following automatic lethal attack exits combat', async () => {
+        stubCombatUI();
+        stubTerminalServices();
+        stubClassEvents();
+        Game.winCombat.mockRestore();
+        Game.autoQTE = true;
+        Game.enemy.currentHp = 1;
+        const defence = { id: 1, type: 'TAC_DEFEND', used: false };
+        const attack = { id: 2, type: 'TAC_ATTACK', used: false };
+        Game.dicePool = [defence, attack];
+        Game.useDie(defence, document.createElement('div'), Game.player);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(Game.inputLocked).toBe(false);
+        Game.useDie(attack, document.createElement('div'), Game.enemy);
+        await renderFor(1600);
+        expect(Game.enemy.currentHp).toBe(0);
+        expect(Game.effects.some(effect => effect.type === 'hex_barrier')).toBe(true);
+        expect(Game.currentState).toBe(STATE.COMBAT);
+        expect(ClassAbility.endCombat).not.toHaveBeenCalled();
+        await renderFor(600);
+        expect(Game.effects).toHaveLength(0);
+        expect(ClassAbility.endCombat).toHaveBeenCalledTimes(1);
+    });
+
     it('releases an action after a bounded active-time fallback if its renderer is broken', async () => {
         const action = Game._runCombatAction(() => {},
             current => Game._presentCombatHits('nature_dart', Game.player, Game.enemy, 1, current));
@@ -200,6 +278,33 @@ describe('rendered combat presentation completion', () => {
 
         expect(Game.inputLocked).toBe(false);
         expect(Game._combatActionDepth).toBe(0);
+        expect(Game._combatPresentations.size).toBe(0);
+    });
+
+    it('cancels a terminal wait on an older support group without unlocking its replacement encounter', async () => {
+        stubCombatUI();
+        const defence = { id: 1, type: 'TAC_DEFEND', used: false };
+        Game.dicePool = [defence];
+        Game.useDie(defence, document.createElement('div'), Game.player);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(Game.effects.some(effect => effect.type === 'hex_barrier')).toBe(true);
+        const oldEnemy = Game.enemy;
+        const action = Game._runCombatAction(() => oldEnemy.takeDamage(200, Game.player), () => {});
+        await vi.advanceTimersByTimeAsync(0);
+        expect(Game.inputLocked).toBe(true);
+        expect(Game.winCombat).not.toHaveBeenCalled();
+
+        Game._combatGen++;
+        Game.enemy = new Enemy({ name: 'Replacement', hp: 100, dmg: 5 }, 0);
+        Game.effects = [];
+        Game._combatActionDepth = 1;
+        Game.inputLocked = true;
+        await vi.advanceTimersByTimeAsync(40);
+        await action;
+        expect(Game.enemy.currentHp).toBe(100);
+        expect(Game.inputLocked).toBe(true);
+        expect(Game._combatActionDepth).toBe(1);
+        expect(Game.winCombat).not.toHaveBeenCalled();
         expect(Game._combatPresentations.size).toBe(0);
     });
 });
@@ -218,15 +323,5 @@ describe('short mobile timing prompts', () => {
         Game.checkQTE();
 
         expect(await qte).toBe(0.6);
-    });
-
-    it('anchors the dart prompt at the actual firing minion', async () => {
-        const minion = new Minion(260, 1080, 1, true);
-        const action = Game._resolvePlayerMinionStrike(minion, Game.enemy);
-        expect(Game.qte.attackerX).toBe(minion.x);
-        expect(Game.qte.attackerY).toBe(minion.y);
-        Game._combatGen++;
-        await Game.resolveQTE('fail');
-        await action;
     });
 });

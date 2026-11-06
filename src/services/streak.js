@@ -41,7 +41,10 @@ function daysBetween(a, b) {
 }
 
 function readClaimedMilestones() {
-    try { return JSON.parse(localStorage.getItem(KEY_MILESTONES) || '[]'); }
+    try {
+        const claimed = JSON.parse(localStorage.getItem(KEY_MILESTONES) || '[]');
+        return Array.isArray(claimed) ? claimed.filter(day => Number.isInteger(day) && day > 0) : [];
+    }
     catch (e) { return []; }
 }
 

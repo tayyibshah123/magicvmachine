@@ -1,121 +1,60 @@
-// Boss intent picker — anti-repeat + phase-2 aggression bias.
-//
-// We verify the rules a player would feel:
-// - never the same move twice in a row (when there are alternatives)
-// - phase 2+ leans toward aggressive moves on bosses that mix
-//   defensive options
-// - single-move bosses don't choke on the filter
-// - the cache field tracks the LAST pick, not the LAST roll
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { Game } from '../game.js';
+import { setupCombatFixture, teardownCombatFixture } from './helpers/combat-fixture.js';
 
-import { describe, it, expect, beforeEach } from 'vitest';
+beforeEach(() => setupCombatFixture({
+    enemyTemplate: { name: 'Intent boss', hp: 100, dmg: 10, actionsPerTurn: 2 },
+    profiles: ['cosmetics']
+}));
+afterEach(teardownCombatFixture);
 
-// We test _pickBossMove in isolation by replicating its logic shape on
-// a stub object — the method is pure (no Game/DOM access) so this works
-// without standing up the full Enemy class.
-function makeBoss(phase = 1) {
-    const proto = {
-        phase,
-        _lastBossMove: null,
-        _pickBossMove(moves) {
-            if (!moves || moves.length === 0) return null;
-            if (moves.length === 1) return moves[0];
-            const last = this._lastBossMove;
-            let pool = moves;
-            if (last) {
-                const filtered = moves.filter(m => m !== last);
-                if (filtered.length > 0) pool = filtered;
-            }
-            if (this.phase >= 2) {
-                const aggressive = pool.filter(m =>
-                    m === 'attack' || m === 'multi_attack' || m === 'summon' || m === 'cataclysm'
-                );
-                if (aggressive.length > 0 && Math.random() < 0.6) {
-                    const pick = aggressive[Math.floor(Math.random() * aggressive.length)];
-                    this._lastBossMove = pick;
-                    return pick;
-                }
-            }
-            const pick = pool[Math.floor(Math.random() * pool.length)];
-            this._lastBossMove = pick;
-            return pick;
-        },
-    };
-    return proto;
-}
-
-describe('_pickBossMove anti-repeat', () => {
-    it('returns the only move when the pool is single', () => {
-        const boss = makeBoss(1);
-        for (let i = 0; i < 20; i++) {
-            expect(boss._pickBossMove(['attack'])).toBe('attack');
-        }
+describe('production boss intent selection', () => {
+    it.each([{ name: 'null', moves: null }, { name: 'empty', moves: [] }])('returns null for $name move pool', ({ moves }) => {
+        expect(Game.enemy._pickBossMove(moves)).toBeNull();
     });
 
-    it('never repeats the immediately prior move on a 4-move pool', () => {
-        const boss = makeBoss(1);
-        const moves = ['attack', 'shield', 'buff', 'debuff'];
-        let prev = null;
-        for (let i = 0; i < 200; i++) {
-            const pick = boss._pickBossMove(moves);
-            if (prev !== null) {
-                expect(pick).not.toBe(prev);
-            }
-            prev = pick;
-        }
+    it('allows the only move without filtering it away', () => {
+        Game.enemy._lastBossMove = 'attack';
+        expect(Game.enemy._pickBossMove(['attack'])).toBe('attack');
     });
 
-    it('rotates cleanly across a 3-move pool', () => {
-        const boss = makeBoss(1);
-        const moves = ['attack', 'shield', 'buff'];
-        let prev = null;
-        for (let i = 0; i < 200; i++) {
-            const pick = boss._pickBossMove(moves);
-            if (prev !== null) expect(pick).not.toBe(prev);
-            prev = pick;
-        }
+    it.each([
+        { moves: ['attack', 'shield'] },
+        { moves: ['attack', 'shield', 'buff'] },
+        { moves: ['attack', 'shield', 'buff', 'debuff'] }
+    ])('excludes the last move from $moves and records the actual pick', ({ moves }) => {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        Game.enemy._lastBossMove = 'attack';
+        const first = Game.enemy._pickBossMove(moves);
+        expect(first).toBe('shield');
+        expect(Game.enemy._lastBossMove).toBe(first);
+        const next = Game.enemy._pickBossMove(moves);
+        expect(next).toBe('attack');
+        expect(Game.enemy._lastBossMove).toBe(next);
     });
 
-    it('handles null / empty pools without throwing', () => {
-        const boss = makeBoss(1);
-        expect(boss._pickBossMove(null)).toBeNull();
-        expect(boss._pickBossMove([])).toBeNull();
+    it.each([2, 3])('uses the aggressive branch in phase %i', phase => {
+        Game.enemy.phase = phase;
+        const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+        const picked = Game.enemy._pickBossMove(['shield', 'attack', 'buff', 'multi_attack']);
+        expect(picked).toBe('attack');
+        expect(random).toHaveBeenCalledTimes(2);
+        expect(Game.enemy._lastBossMove).toBe(picked);
     });
 
-    it('updates _lastBossMove to the picked move, not the requested input', () => {
-        const boss = makeBoss(1);
-        boss._pickBossMove(['attack', 'shield']);
-        expect(boss._lastBossMove === 'attack' || boss._lastBossMove === 'shield').toBe(true);
-    });
-});
-
-describe('_pickBossMove phase-2 aggression bias', () => {
-    it('biases toward aggressive moves at phase >= 2', () => {
-        const boss = makeBoss(2);
-        const moves = ['attack', 'shield', 'buff', 'debuff', 'multi_attack'];
-        let aggressiveCount = 0;
-        const aggressive = new Set(['attack', 'multi_attack', 'summon', 'cataclysm']);
-        // Seed the last move to something non-aggressive so the filter
-        // doesn't immediately exclude one of the aggressive options.
-        boss._lastBossMove = 'shield';
-        for (let i = 0; i < 1000; i++) {
-            const pick = boss._pickBossMove(moves);
-            if (aggressive.has(pick)) aggressiveCount++;
-            // Reset the filter target each iteration so the test focuses
-            // on aggression bias, not anti-repeat dynamics.
-            boss._lastBossMove = 'shield';
-        }
-        // Without bias, P(aggressive) = 2/4 = 0.5 (after anti-repeat
-        // excludes 'shield'). With 60% bias toward aggressive when any
-        // aggressive option is in pool, P should be substantially > 0.5.
-        expect(aggressiveCount / 1000).toBeGreaterThan(0.65);
+    it('uses the ordinary pool when the aggression coin misses', () => {
+        Game.enemy.phase = 2;
+        vi.spyOn(Math, 'random').mockReturnValueOnce(0.6).mockReturnValue(0);
+        expect(Game.enemy._pickBossMove(['shield', 'attack', 'buff'])).toBe('shield');
+        expect(Game.enemy._lastBossMove).toBe('shield');
     });
 
-    it('falls back to plain pool pick when no aggressive moves are available', () => {
-        const boss = makeBoss(2);
-        const moves = ['shield', 'buff', 'debuff'];
-        for (let i = 0; i < 100; i++) {
-            const pick = boss._pickBossMove(moves);
-            expect(['shield', 'buff', 'debuff']).toContain(pick);
-        }
+    it('does not bias phase one and falls back when no aggressive move exists', () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        expect(Game.enemy._pickBossMove(['shield', 'attack'])).toBe('shield');
+        Game.enemy.phase = 2;
+        Game.enemy._lastBossMove = 'shield';
+        expect(Game.enemy._pickBossMove(['shield', 'buff', 'debuff'])).toBe('buff');
+        expect(Game.enemy._lastBossMove).toBe('buff');
     });
 });

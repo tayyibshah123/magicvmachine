@@ -5,12 +5,23 @@
 // Keep in sync with src/version.js — service worker runs in a separate
 // worker context that can't import ES modules, so the version string is
 // duplicated by design. Old caches are deleted on activate.
-const CACHE_NAME = 'mvm-shell-v1-9-54';
+const CACHE_NAME = 'mvm-shell-v1-9-55';
 const SHELL_ASSETS = [
     './',
     './index.html',
     './style.css',
     './main.js',
+    './src/version.js',
+    // Every stylesheet linked by index.html is required on a cold offline boot.
+    './src/styles/tokens.css',
+    './src/styles/components.css',
+    './src/styles/menu.css',
+    './src/styles/settings.css',
+    './src/styles/snap.css',
+    './src/styles/glass.css',
+    './src/styles/polish.css',
+    './src/styles/bracket-screens.css',
+    './src/styles/vfx.css',
     './music/synth1.ogg',
     './music/synth2.ogg',
     './music/synth3.ogg',
@@ -32,6 +43,9 @@ const SHELL_ASSETS = [
     './src/ui/icons.js',
     './src/ui/class-ability.js',
     './src/ui/intel-modal.js',
+    './src/ui/event-art.js',
+    './src/ui/class-emblems.js',
+    './src/ui/canvas-icons.js',
     // v1.1 services
     './src/services/analytics.js',
     './src/services/perf.js',
@@ -47,6 +61,27 @@ const SHELL_ASSETS = [
     './src/services/native-back.js',
     './src/services/native-splash.js',
     './src/services/combat-metrics.js',
+    // Include the complete imported module graph before clients.claim().
+    './src/services/ascension.js',
+    './src/services/assist.js',
+    './src/services/breakout.js',
+    './src/services/canvas-cache.js',
+    './src/services/class-briefing.js',
+    './src/services/class-vfx.js',
+    './src/services/combat-recap.js',
+    './src/services/combat-stats.js',
+    './src/services/cosmetics.js',
+    './src/services/dailies.js',
+    './src/services/diag.js',
+    './src/services/fps-hud.js',
+    './src/services/intel.js',
+    './src/services/onboarding.js',
+    './src/services/palette.js',
+    './src/services/perf-trace.js',
+    './src/services/save-sync.js',
+    './src/services/turn-digest.js',
+    './src/services/ui.js',
+    './src/services/vfx.js',
     './src/data/matchup-hints.js',
     './src/data/intel-codex.js',
     // SFX samples (v1.2) — precache so offline play has sound from turn 1.

@@ -1,12 +1,11 @@
-// Cosmetics shop (Roadmap Part 4.6).
+// Earned menu cosmetics (Roadmap Part 4.6).
 //
 // Owns a small catalog of cosmetic items (title frames, title tints,
 // banner glyphs) and tracks which the player has unlocked + which is
 // currently equipped. Cosmetics are PURE VISUAL — no gameplay effect.
 //
-// Funding model: Sparks (the "significant moment" currency, not raw
-// fragments). A few unlock automatically at streak milestones; the
-// rest are buyable in the Sanctuary's COSMETICS section.
+// Streak milestones unlock the optional frame and title tint. Glitch
+// Overlay and Drift Echo are now standard menu effects, with no purchase.
 //
 // Equipped cosmetic surfaces as a `cosmetic-<id>` body class so CSS
 // can layer the visual treatment without touching DOM. Frames from
@@ -22,10 +21,10 @@ const KEY_EQUIPPED = 'mvm_cosmetic_equipped';
 const COSMETICS = [
     { id: 'default',     name: 'STANDARD ISSUE',  desc: 'No frame applied.',                                    cost: 0,  kind: 'frame', bodyClass: null },
     { id: 'frame_d30',   name: 'CIRCUIT FRAME',   desc: 'Earned at a 30-day login streak. Soft cyan brackets.', cost: 0,  kind: 'frame', bodyClass: 'cosmetic-frame-circuit', requires: 'streak30' },
-    { id: 'skin_d100',   name: 'CENTURION TITLE', desc: 'Earned at a 100-day login streak. Gold-overprint.',    cost: 0,  kind: 'tint',  bodyClass: 'cosmetic-title-centurion', requires: 'streak100' },
-    { id: 'title_glitch',name: 'GLITCH OVERLAY',  desc: 'Title flickers magenta on the off-beat.',              cost: 12, kind: 'tint',  bodyClass: 'cosmetic-title-glitch' },
-    { id: 'title_drift', name: 'DRIFT ECHO',      desc: 'Title leaves a ghost-trail when the menu enters.',     cost: 18, kind: 'tint',  bodyClass: 'cosmetic-title-drift' }
+    { id: 'skin_d100',   name: 'CENTURION TITLE', desc: 'Earned at a 100-day login streak. Gold-overprint.',    cost: 0,  kind: 'tint',  bodyClass: 'cosmetic-title-centurion', requires: 'streak100' }
 ];
+
+const LEGACY_MENU_CLASSES = ['cosmetic-title-glitch', 'cosmetic-title-drift'];
 
 const _read = (key, fallback) => {
     try { const raw = localStorage.getItem(key); return raw == null ? fallback : raw; }
@@ -33,7 +32,11 @@ const _read = (key, fallback) => {
 };
 const _write = (key, val) => { try { localStorage.setItem(key, val); } catch (_) {} };
 const _readOwned = () => {
-    try { return JSON.parse(_read(KEY_OWNED, '["default"]')); }
+    try {
+        const saved = JSON.parse(_read(KEY_OWNED, '["default"]'));
+        const known = Array.isArray(saved) ? saved.filter(id => COSMETICS.some(c => c.id === id)) : [];
+        return [...new Set(['default', ...known])];
+    }
     catch (_) { return ['default']; }
 };
 const _writeOwned = (arr) => _write(KEY_OWNED, JSON.stringify(arr));
@@ -52,7 +55,8 @@ export const Cosmetics = {
         return _readOwned().slice();
     },
     equipped() {
-        return _read(KEY_EQUIPPED, 'default');
+        const id = _read(KEY_EQUIPPED, 'default');
+        return COSMETICS.some(c => c.id === id) ? id : 'default';
     },
     grant(id) {
         if (!COSMETICS.find(c => c.id === id)) return false;
@@ -62,19 +66,12 @@ export const Cosmetics = {
         _writeOwned(owned);
         return true;
     },
-    /** Tries to spend Sparks via Game.spendSparks and grant the item.
-     *  Returns true on success (or if already owned), false if the
-     *  player can't afford or the item is missing. */
+    // Compatibility for old callers. Menu cosmetics never spend Sparks.
     purchase(id) {
         const item = COSMETICS.find(c => c.id === id);
         if (!item) return false;
         if (this.isOwned(id)) return true;
-        if (item.cost > 0) {
-            if (typeof window === 'undefined' || !window.Game || !window.Game.spendSparks) return false;
-            if ((window.Game.sparks || 0) < item.cost) return false;
-            const ok = window.Game.spendSparks(item.cost, 'cosmetic_' + id);
-            if (!ok) return false;
-        } else if (item.requires) {
+        if (item.requires) {
             // Streak / achievement gated — only grantable via the dedicated
             // path (Streak.tick / Achievements.unlock). Refuse direct
             // purchase to keep the lock meaningful.
@@ -95,6 +92,7 @@ export const Cosmetics = {
         // Remove every known cosmetic body class first so equipping
         // overwrites cleanly.
         COSMETICS.forEach(c => { if (c.bodyClass) cl.remove(c.bodyClass); });
+        LEGACY_MENU_CLASSES.forEach(name => cl.remove(name));
         const equipped = this.equipped();
         const item = COSMETICS.find(c => c.id === equipped);
         if (item && item.bodyClass) cl.add(item.bodyClass);

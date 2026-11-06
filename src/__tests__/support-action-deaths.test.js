@@ -1,18 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setupCombatFixture, teardownCombatFixture } from './helpers/combat-fixture.js';
 import { Game } from '../game.js';
-import { Enemy } from '../entities/enemy.js';
-import { Player } from '../entities/player.js';
 import { Minion } from '../entities/minion.js';
-import { PLAYER_CLASSES, STATE } from '../constants.js';
-import { AudioMgr } from '../audio.js';
-import { ParticleSys } from '../effects/particles.js';
+import { STATE } from '../constants.js';
 import { ClassAbility } from '../ui/class-ability.js';
-import { Diag } from '../services/diag.js';
-import { Hints } from '../services/hints.js';
-import { Unlocks } from '../services/unlocks.js';
-import { Achievements } from '../services/achievements.js';
-import { Analytics } from '../services/analytics.js';
-import { Assist } from '../services/assist.js';
 
 function shift() {
     Game.player.effects.push({ id: 'reality_shift', duration: 1, val: 1 });
@@ -40,77 +31,23 @@ async function settleActions() {
 }
 
 beforeEach(() => {
-    vi.useFakeTimers();
-    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
-    document.body.innerHTML = `
-        <div id="game-container"><div id="screen-flash"></div></div>
-        <div id="dice-container"></div><div id="reroll-badge"></div><div id="hud"></div>
-        <div id="modal-settings" class="hidden"></div>
-        <button id="btn-end-turn"></button><button id="btn-load-save"></button>
-    `;
-    localStorage.clear();
-    Object.assign(Game, {
-        currentState: STATE.COMBAT, turnCount: 3, sector: 1, combatPaceMult: 1,
-        _combatGen: 10, _combatActionDepth: 0, _combatStartedAt: 0,
-        _endTurnRunning: false, _winCombatRunning: false, _resolvingSelfDestruct: false,
-        _revivePending: null, inputLocked: false, paused: false, godMode: false,
-        assistDisabled: true, challengeMode: false, archiveMode: false, qte: { active: false },
-        _archivistTurnExpired: false, _archivistClockEnemy: null,
-        _ascEffects: {}, metaUpgrades: [], metaToggledOff: new Set(),
-        _disabledMetaThisRun: new Set(), _customDmgInMult: 1, _customDmgOutMult: 1,
-        _customHotHandsDmg: 0, _hotHandsUsedThisTurn: false,
-        runStats: null, turnStats: null, effects: [], _activeSectorMech: null,
-        deadMinionsThisTurn: 0, sealedDie: null, techFragments: 0, encryptedFiles: 0,
-        dicePool: [], comboSets: {}, comboOverflow: false, comboBulwark: false,
-        player: null, enemy: null
+    setupCombatFixture({
+        classId: 'bloodstalker', hp: 50,
+        enemyTemplate: { name: 'Support Test', hp: 100, dmg: 5 },
+        profiles: ['cosmetics', 'ui', 'terminal-services', 'class-events']
     });
-    for (const method of ['createDamageText', 'createExplosion', 'createFloatingText',
-        'createShockwave', 'createSparks', 'createClassBurst', 'createBloodstalkerBurst', 'clear']) {
-        vi.spyOn(ParticleSys, method).mockImplementation(() => {});
-    }
-    for (const method of ['playSound', 'playHit', 'playSting', 'duck',
-        'stopSectorAmbient', 'clearSectorMusic', 'startMusic']) {
-        vi.spyOn(AudioMgr, method).mockImplementation(() => {});
-    }
-    for (const method of ['shake', 'shakeFromDamage', 'hitStop', 'triggerScreenFlash',
-        'haptic', '_checkHiddenLoreTriggers', 'rollDice', 'updateHUD', 'renderRelics',
-        'renderDiceUI', '_spawnDieUseBurst', '_renderPactPills', '_resetRunCurrency',
-        'saveGame', '_clearSave', '_logRunHistory', 'renderDeathCards', 'renderRunSummary']) {
-        vi.spyOn(Game, method).mockImplementation(() => {});
-    }
-    // The logical action/death paths are real. These tests do not need to
-    // render their cosmetic effects to inspect the resulting health/roster.
-    vi.spyOn(Game, 'triggerVFX').mockImplementation(() => {});
-    vi.spyOn(Game, 'showPhaseBanner').mockResolvedValue();
-    vi.spyOn(Game, '_isNewcomer').mockReturnValue(false);
-    vi.spyOn(Game, '_recoverFromCombatError').mockImplementation((where, error) => { throw error; });
-    vi.spyOn(Game, '_runCombatAction');
-    vi.spyOn(Game, 'gameOver');
-    for (const method of ['endCombat', 'onTurnStart', 'onTurnEnd', 'onEvent']) {
-        vi.spyOn(ClassAbility, method).mockImplementation(() => {});
-    }
-    for (const [object, method] of [[Diag, 'event'], [Diag, 'dump'], [Hints, 'trigger'],
-        [Unlocks, 'grant'], [Achievements, 'unlock'], [Analytics, 'emit'], [Assist, 'recordLoss']]) {
-        vi.spyOn(object, method).mockImplementation(() => {});
-    }
-    Game.player = new Player(PLAYER_CLASSES.find(c => c.id === 'bloodstalker'));
-    Game.player.classId = 'bloodstalker';
-    Game.player.maxHp = 100;
-    Game.player.currentHp = 50;
     Game.player.x = 540;
     Game.player.y = 1300;
     Game.player.mana = 0;
-    Game.enemy = new Enemy({ name: 'Support Test', hp: 100, dmg: 5 }, 0);
-    Game.invalidateStackCache();
+    vi.spyOn(Game, 'rollDice').mockImplementation(() => {});
+    // Keep logical actions and death real; render timing is covered separately.
+    vi.spyOn(Game, 'triggerVFX').mockImplementation(() => {});
+    vi.spyOn(Game, '_runCombatAction');
+    vi.spyOn(Game, 'gameOver');
 });
 
-afterEach(() => {
-    Game.clearTrackedTimers();
-    vi.clearAllTimers();
-    vi.restoreAllMocks();
-    vi.useRealTimers();
-    localStorage.clear();
-});
+afterEach(teardownCombatFixture);
+
 
 describe('Reality Shift support actions', () => {
     it('settles lethal Sanguine Pact exactly once and rejects Blood Price on a surviving ally', async () => {

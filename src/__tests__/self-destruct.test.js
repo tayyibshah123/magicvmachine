@@ -1,10 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setupCombatFixture, teardownCombatFixture } from './helpers/combat-fixture.js';
 import { Game } from '../game.js';
 import { Enemy } from '../entities/enemy.js';
-import { Player } from '../entities/player.js';
-import { PLAYER_CLASSES, STATE } from '../constants.js';
+import { STATE } from '../constants.js';
 import { AudioMgr } from '../audio.js';
-import { ParticleSys } from '../effects/particles.js';
 import { Diag } from '../services/diag.js';
 import { Hints } from '../services/hints.js';
 import { Unlocks } from '../services/unlocks.js';
@@ -23,68 +22,14 @@ function armEnemy() {
 }
 
 beforeEach(() => {
-    document.body.innerHTML = `
-        <div id="game-container"><div id="screen-flash"></div></div>
-        <div id="dice-container"></div><div id="reroll-badge"></div>
-        <button id="btn-end-turn"></button>
-    `;
-    localStorage.clear();
-    Object.assign(Game, {
-        currentState: STATE.COMBAT,
-        turnCount: 3,
-        sector: 1,
-        _combatGen: 1,
-        _combatStartedAt: 0,
-        _endTurnRunning: false,
-        _winCombatRunning: false,
-        _resolvingSelfDestruct: false,
-        inputLocked: false,
-        godMode: false,
-        assistDisabled: true,
-        _ascEffects: {},
-        metaUpgrades: [],
-        metaToggledOff: new Set(),
-        _disabledMetaThisRun: new Set(),
-        _customDmgInMult: 1,
-        runStats: null,
-        turnStats: null,
-        effects: [],
-        _activeSectorMech: null,
-        deadMinionsThisTurn: 0,
-        sealedDie: null,
-        player: null,
-        enemy: null
+    setupCombatFixture({
+        enemyTemplate: { name: 'Maintenance Spike', hp: 100, dmg: 9, kind: 'detonator' },
+        profiles: ['cosmetics', 'terminal-observers']
     });
-    for (const method of ['createDamageText', 'createExplosion', 'createFloatingText', 'createShockwave', 'createSparks']) {
-        vi.spyOn(ParticleSys, method).mockImplementation(() => {});
-    }
-    for (const method of ['playSound', 'playHit', 'playSting', 'duck']) {
-        vi.spyOn(AudioMgr, method).mockImplementation(() => {});
-    }
-    for (const method of ['shake', 'shakeFromDamage', 'hitStop', 'triggerScreenFlash', 'haptic', '_checkHiddenLoreTriggers']) {
-        vi.spyOn(Game, method).mockImplementation(() => {});
-    }
-    vi.spyOn(Game, 'showPhaseBanner').mockResolvedValue();
-    vi.spyOn(Game, '_isNewcomer').mockReturnValue(false);
-    // Keep terminal transitions observable without running reward/save screens.
-    vi.spyOn(Game, 'winCombat').mockImplementation(() => {
-        if (!Game._resolvingSelfDestruct) Game.currentState = STATE.COMBAT_WIN;
-    });
-    vi.spyOn(Game, 'gameOver').mockImplementation(() => { Game.currentState = STATE.GAMEOVER; });
-    Game.player = new Player(PLAYER_CLASSES.find(c => c.id === 'tactician'));
-    Game.player.classId = 'tactician';
-    Game.player.maxHp = 100;
-    Game.player.currentHp = 100;
-    Game.enemy = makeEnemy();
-    Game.invalidateStackCache();
 });
 
-afterEach(() => {
-    Game.clearTrackedTimers();
-    vi.restoreAllMocks();
-    vi.useRealTimers();
-    localStorage.clear();
-});
+afterEach(teardownCombatFixture);
+
 
 function useRealRevive(relicId) {
     vi.useFakeTimers();

@@ -7,8 +7,11 @@
 // - dice-drag in progress suppresses the gesture
 // - hack minigame can't be swiped out of
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest';
 import { Gesture } from '../services/gesture.js';
+import { trackBrowserListeners } from './helpers/browser-events.js';
+
+let cleanupListeners;
 
 function makeTouch(clientX, clientY) {
     return { clientX, clientY };
@@ -32,7 +35,16 @@ beforeEach(() => {
     document.body.innerHTML = '';
     delete window.Capacitor;
     window.Game = { dragState: { active: false } };
+    cleanupListeners = trackBrowserListeners();
     Gesture.init();
+});
+
+afterEach(() => {
+    document.dispatchEvent(new Event('touchcancel'));
+    cleanupListeners();
+    vi.restoreAllMocks();
+    delete window.Game;
+    delete window.Capacitor;
 });
 
 describe('Gesture (edge-swipe back)', () => {
@@ -40,13 +52,15 @@ describe('Gesture (edge-swipe back)', () => {
         const modal = buildModal('modal-glossary');
         const btn = document.createElement('button');
         btn.id = 'btn-glossary-close';
-        let clicked = false;
-        btn.addEventListener('click', () => { clicked = true; });
+        const clicked = vi.fn();
+        btn.addEventListener('click', clicked);
         modal.appendChild(btn);
 
         fire('touchstart', [makeTouch(10, 200)]);
         fire('touchmove',  [makeTouch(85, 205)]);
-        expect(clicked).toBe(true);
+        fire('touchmove', [makeTouch(120, 205)]);
+        fire('touchend', []);
+        expect(clicked).toHaveBeenCalledTimes(1);
     });
 
     it('ignores swipes that start away from the edge', () => {
@@ -115,12 +129,51 @@ describe('Gesture (edge-swipe back)', () => {
 
     it('calls a registered close function when set (custom-run)', () => {
         const modal = buildModal('custom-run-modal');
-        let called = false;
-        window.Game._closeCustomRunModal = () => { called = true; };
+        const called = vi.fn();
+        window.Game._closeCustomRunModal = called;
 
         fire('touchstart', [makeTouch(10, 200)]);
         fire('touchmove',  [makeTouch(85, 205)]);
-        expect(called).toBe(true);
+        expect(called).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['touchcancel', 'touchend'])('abandons a gesture after %s', type => {
+        const modal = buildModal('modal-glossary');
+        modal.innerHTML = '<button id="btn-glossary-close"></button>';
+        const close = vi.fn();
+        modal.firstChild.addEventListener('click', close);
+        fire('touchstart', [makeTouch(10, 200)]);
+        fire(type, []);
+        fire('touchmove', [makeTouch(100, 200)]);
+        expect(close).not.toHaveBeenCalled();
+    });
+
+    it.each(['start', 'move'])('abandons multi-touch at gesture %s', phase => {
+        const modal = buildModal('modal-glossary');
+        modal.innerHTML = '<button id="btn-glossary-close"></button>';
+        const close = vi.fn();
+        modal.firstChild.addEventListener('click', close);
+        fire('touchstart', phase === 'start'
+            ? [makeTouch(10, 200), makeTouch(15, 250)] : [makeTouch(10, 200)]);
+        if (phase === 'move') fire('touchmove', [makeTouch(20, 200), makeTouch(25, 250)]);
+        fire('touchmove', [makeTouch(100, 200)]);
+        expect(close).not.toHaveBeenCalled();
+    });
+
+    it('dismisses only the top modal during one continuous swipe', () => {
+        const settings = buildModal('modal-settings');
+        settings.innerHTML = '<button id="btn-resume"></button>';
+        const glossary = buildModal('modal-glossary');
+        glossary.innerHTML = '<button id="btn-glossary-close"></button>';
+        const closeSettings = vi.fn();
+        const closeGlossary = vi.fn(() => glossary.classList.add('hidden'));
+        settings.firstChild.addEventListener('click', closeSettings);
+        glossary.firstChild.addEventListener('click', closeGlossary);
+        fire('touchstart', [makeTouch(10, 200)]);
+        fire('touchmove', [makeTouch(85, 205)]);
+        fire('touchmove', [makeTouch(150, 205)]);
+        expect(closeGlossary).toHaveBeenCalledTimes(1);
+        expect(closeSettings).not.toHaveBeenCalled();
     });
 });
 
@@ -129,11 +182,8 @@ describe('Gesture (native platform skip)', () => {
         vi.resetModules();
         window.Capacitor = { isNativePlatform: () => true };
 
-        // Spy on document.addEventListener BEFORE importing the module
-        // so the init's listener registration is observable. Module-level
-        // listeners persist across tests in jsdom, so verifying side
-        // effects via add/dispatch doesn't work — pure spy is reliable.
         const addSpy = vi.spyOn(document, 'addEventListener');
+        addSpy.mockClear();
         const { Gesture: NativeGesture } = await import('../services/gesture.js');
         NativeGesture.init();
 

@@ -7,12 +7,21 @@ in `docs/archive/`.
 
 ## Status
 
-- **Current build:** v1.9.54 (combat recovery, support-action death
-  settlement, complete attack presentation and minion prompt fixes)
+- **Current build:** v1.9.55 (combat lifecycle, save recovery, consent,
+  offline coverage and standard menu effects)
 - **Last ship:** 2026-11-06
 - **Active branch:** main
-- **Test baseline:** 262/262 passing
+- **Test baseline:** 381/381 passing, repeated in shuffled order;
+  9/9 mobile browser journeys and regressions passing
 - **Frame metrics:** truthful (intervalBuf + workBuf split shipped v1.8.9)
+
+v1.9.55 also consolidates checks into seven shared areas and one release
+command. Regressions now cover lethal reroll costs, cancelled touch input,
+stale prompts and turn transitions, full attack presentation, Firmware Pin
+duration and run reset, legacy save import, offline module coverage, and
+first-install/update persistence. Glitch Overlay and Drift Echo are
+standard menu effects; earned streak styles remain rewards. Browser QA
+uses Chromium touch emulation, with visual menu checks at 360px and 390px.
 
 Live checklist of what was claimed open in the old docs but is actually
 shipped, removed during this consolidation:

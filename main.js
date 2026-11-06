@@ -17,6 +17,14 @@ ParticleSys.quality = Perf.particleQuality();
 // opts in (GDPR/CCPA-safe). Decline permanently disables the emitter until
 // re-toggled in Settings. Choice persisted in localStorage.
 const CONSENT_KEY = 'mvm_analytics_consent';
+let analyticsInitialized = false;
+function applyAnalyticsConsent(granted) {
+    Analytics.setEnabled(granted);
+    if (granted && !analyticsInitialized) {
+        analyticsInitialized = true;
+        Analytics.init();
+    }
+}
 function readConsent() {
     try {
         const v = localStorage.getItem(CONSENT_KEY);
@@ -27,14 +35,14 @@ function readConsent() {
 }
 function writeConsent(granted) {
     try { localStorage.setItem(CONSENT_KEY, granted ? 'granted' : 'denied'); } catch (e) {}
-    Analytics.setEnabled(granted);
+    applyAnalyticsConsent(granted);
     const banner = document.getElementById('analytics-consent-banner');
     if (banner) banner.remove();
 }
 
-// Init the emitter but respect the opt-in state immediately.
-Analytics.init();
+// Apply consent before initialization can record a session or install ID.
 const consent = readConsent();
+applyAnalyticsConsent(consent === true);
 
 function showConsentBanner() {
     if (readConsent() !== null) return;                        // already settled
@@ -79,10 +87,7 @@ function showConsentWhenReady() {
 }
 
 if (consent === null) {
-    Analytics.setEnabled(false); // silent until user decides
     showConsentWhenReady();
-} else {
-    Analytics.setEnabled(consent);
 }
 
 // Expose for the Settings panel (Privacy section will wire a toggle to these).

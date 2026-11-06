@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Game } from '../game.js';
 import { Enemy } from '../entities/enemy.js';
-import { Player } from '../entities/player.js';
-import { PLAYER_CLASSES, STATE } from '../constants.js';
+import { STATE } from '../constants.js';
 import { AudioMgr } from '../audio.js';
-import { ParticleSys } from '../effects/particles.js';
 import { ClassAbility } from '../ui/class-ability.js';
 import { Intel } from '../services/intel.js';
 import { CombatRecap } from '../services/combat-recap.js';
+import { ClassBriefing } from '../services/class-briefing.js';
+import { setupCombatFixture, teardownCombatFixture } from './helpers/combat-fixture.js';
+import { trackBrowserListeners } from './helpers/browser-events.js';
 
 function makeEnemy(boss = false) {
     return new Enemy({ name: 'Lifecycle Test', hp: 100, dmg: 5,
@@ -21,65 +22,39 @@ function deferred() {
 }
 
 beforeEach(() => {
-    vi.useFakeTimers();
-    vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
-    document.body.innerHTML = `
-        <div id="game-container"><div id="screen-flash"></div></div>
-        <div id="dice-container"></div><div id="reroll-badge"></div>
-        <div id="hud"></div><div id="screen-combat-win" class="screen"></div>
-        <div id="modal-settings" class="hidden"></div>
-        <button id="btn-end-turn"></button>
-    `;
-    localStorage.clear();
-    Object.assign(Game, {
-        currentState: STATE.COMBAT, turnCount: 3, sector: 1,
-        _combatGen: 10, _combatActionDepth: 0, _combatStartedAt: 0,
-        _endTurnRunning: false, _winCombatRunning: false, _resolvingSelfDestruct: false,
-        inputLocked: false, paused: false, godMode: false, assistDisabled: true,
-        challengeMode: false, archiveMode: false,
-        _ascEffects: {}, metaUpgrades: [], metaToggledOff: new Set(),
-        _disabledMetaThisRun: new Set(), _customDmgInMult: 1,
-        runStats: null, turnStats: null, effects: [], _activeSectorMech: null,
-        deadMinionsThisTurn: 0, sealedDie: null, techFragments: 0,
-        player: null, enemy: null
-    });
-    for (const method of ['createDamageText', 'createExplosion', 'createFloatingText',
-        'createShockwave', 'createSparks', 'clear']) {
-        vi.spyOn(ParticleSys, method).mockImplementation(() => {});
-    }
-    for (const method of ['playSound', 'playHit', 'playSting', 'duck',
-        'stopSectorAmbient', 'clearSectorMusic', 'startMusic']) {
-        vi.spyOn(AudioMgr, method).mockImplementation(() => {});
-    }
-    for (const method of ['shake', 'shakeFromDamage', 'hitStop', 'triggerScreenFlash',
-        'haptic', '_checkHiddenLoreTriggers', 'rollDice', 'updateHUD', 'renderRelics',
-        '_renderPactPills', '_resetRunCurrency', '_showVictoryTally', 'showCombatWin',
-        'saveGame', 'grantSparks']) {
+    setupCombatFixture({ enemyTemplate: { name: 'Lifecycle Test', hp: 100, dmg: 5 },
+        profiles: ['cosmetics', 'ui'] });
+    for (const method of ['rollDice', '_resetRunCurrency', '_showVictoryTally', 'showCombatWin', 'saveGame', 'grantSparks']) {
         vi.spyOn(Game, method).mockImplementation(() => {});
     }
-    vi.spyOn(Game, 'showPhaseBanner').mockResolvedValue();
-    vi.spyOn(Game, '_isNewcomer').mockReturnValue(false);
-    vi.spyOn(Game, '_recoverFromCombatError').mockImplementation((where, error) => { throw error; });
     vi.spyOn(ClassAbility, 'endCombat').mockImplementation(() => {});
     vi.spyOn(ClassAbility, 'onTurnStart').mockImplementation(() => {});
     vi.spyOn(Intel, 'recordKill').mockImplementation(() => {});
-    Game.player = new Player(PLAYER_CLASSES.find(c => c.id === 'tactician'));
-    Game.player.classId = 'tactician';
-    Game.player.maxHp = 100;
-    Game.player.currentHp = 100;
-    Game.enemy = makeEnemy();
-    Game.invalidateStackCache();
 });
 
-afterEach(() => {
-    Game.clearTrackedTimers();
-    vi.clearAllTimers();
-    vi.restoreAllMocks();
-    vi.useRealTimers();
-    localStorage.clear();
-});
+afterEach(teardownCombatFixture);
 
 describe('combat lifecycle cancellation', () => {
+    it.each([0, 100])('keeps the previous map screen hidden after entering combat at %s ms', async delay => {
+        const mapScreen = document.createElement('section');
+        mapScreen.id = 'screen-map';
+        mapScreen.className = 'screen hidden';
+        mapScreen.innerHTML = '<button>Combat node</button>';
+        document.getElementById('game-container').appendChild(mapScreen);
+        vi.spyOn(Game, 'renderMap').mockImplementation(() => {});
+        Game.currentState = STATE.MENU;
+
+        Game.changeState(STATE.MAP);
+        await vi.advanceTimersByTimeAsync(delay);
+        Game.changeState(STATE.COMBAT);
+        await vi.advanceTimersByTimeAsync(700);
+
+        expect(Game.currentState).toBe(STATE.COMBAT);
+        expect(document.getElementById('hud').classList.contains('hidden')).toBe(false);
+        expect(mapScreen.classList.contains('active')).toBe(false);
+        expect(mapScreen.classList.contains('hidden')).toBe(true);
+    });
+
     it('invalidates sleeping actions and resets presentation state on a real quit', () => {
         Game._combatActionDepth = 1;
         Game._endTurnRunning = true;
@@ -143,6 +118,153 @@ describe('combat lifecycle cancellation', () => {
         expect(win).not.toHaveBeenCalled();
         expect(Game.showPhaseBanner).not.toHaveBeenCalled();
         expect(Game.rollDice).not.toHaveBeenCalled();
+    });
+
+    it('rejects End Turn before combat has prepared its opening hand', async () => {
+        Game.turnCount = 0;
+        Game.dicePool = [];
+        Game._combatStartedAt = 0;
+        Game.inputLocked = false;
+        const banner = deferred();
+        Game.showPhaseBanner.mockReturnValueOnce(banner.promise);
+        const end = Game.endTurn();
+        try {
+            expect(Game.showPhaseBanner).not.toHaveBeenCalled();
+            expect(Game._endTurnRunning).toBe(false);
+        } finally {
+            Game._combatGen++;
+            banner.resolve();
+            await end;
+        }
+    });
+
+    it('locks real combat entry throughout briefing and prepares only its opening turn', async () => {
+        const briefing = deferred();
+        vi.spyOn(ClassBriefing, 'show').mockReturnValueOnce(briefing.promise);
+        for (const method of ['startSectorAmbient', 'setSectorMusic']) {
+            vi.spyOn(AudioMgr, method).mockImplementation(() => {});
+        }
+        const entry = Game.startCombat('combat');
+        expect(Game.currentState).toBe(STATE.COMBAT);
+        expect(Game.turnCount).toBe(0);
+        expect(Game.inputLocked).toBe(true);
+        await Game.endTurn();
+        expect(Game.showPhaseBanner).not.toHaveBeenCalled();
+        briefing.resolve();
+        await vi.advanceTimersByTimeAsync(700);
+        await entry;
+        expect(Game.turnCount).toBe(1);
+        expect(Game.inputLocked).toBe(false);
+        expect(Game.rollDice).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['quit', 'replacement'])('settles an old manual QTE on %s without damaging or unlocking the next fight', async route => {
+        for (const method of ['drawQTE', '_qteWindupAudio']) {
+            vi.spyOn(Game, method).mockImplementation(() => {});
+        }
+        for (const method of ['startSectorAmbient', 'setSectorMusic']) {
+            vi.spyOn(AudioMgr, method).mockImplementation(() => {});
+        }
+        const briefing = deferred();
+        vi.spyOn(ClassBriefing, 'show').mockReturnValueOnce(briefing.promise);
+        const oldEnemy = Game.enemy;
+        const damage = vi.fn(() => oldEnemy.takeDamage(25, Game.player));
+        const settled = vi.fn();
+        const oldTiming = Game.startQTE('ATTACK', oldEnemy.x, oldEnemy.y, damage);
+        oldTiming.then(settled);
+        if (route === 'quit') {
+            Game.quitRun();
+            expect(Game.qte.active).toBe(false);
+        }
+        const entry = Game.startCombat('combat');
+        expect(Game.qte.active).toBe(false);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toHaveBeenCalledTimes(1);
+        expect(damage).not.toHaveBeenCalled();
+        expect(Game.inputLocked).toBe(true);
+        briefing.resolve();
+        await vi.advanceTimersByTimeAsync(1000);
+        await entry;
+        await oldTiming;
+        expect(Game.turnCount).toBe(1);
+        expect(Game.rollDice).toHaveBeenCalledTimes(1);
+        expect(Game.inputLocked).toBe(false);
+        expect(oldEnemy.currentHp).toBe(100);
+        expect(damage).not.toHaveBeenCalled();
+    });
+
+    it('does not let a cancelled automatic QTE timer dismiss a newer prompt or entry lock', async () => {
+        for (const method of ['drawQTE', '_qteWindupAudio']) {
+            vi.spyOn(Game, method).mockImplementation(() => {});
+        }
+        for (const method of ['startSectorAmbient', 'setSectorMusic']) {
+            vi.spyOn(AudioMgr, method).mockImplementation(() => {});
+        }
+        const briefing = deferred();
+        vi.spyOn(ClassBriefing, 'show').mockReturnValueOnce(briefing.promise);
+        Game.autoQTE = true;
+        const oldDamage = vi.fn();
+        const oldTiming = Game.startQTE('ATTACK', Game.enemy.x, Game.enemy.y, oldDamage);
+        const entry = Game.startCombat('combat');
+        Game.autoQTE = false;
+        const newDamage = vi.fn();
+        const replacement = Game.startQTE('DEFEND', Game.player.x, Game.player.y, newDamage);
+        const replacementId = Game.qte.id;
+
+        await vi.advanceTimersByTimeAsync(350);
+        expect(Game.qte.id).toBe(replacementId);
+        expect(Game.qte.active).toBe(true);
+        expect(Game.inputLocked).toBe(true);
+        expect(oldDamage).not.toHaveBeenCalled();
+        expect(newDamage).not.toHaveBeenCalled();
+        Game.quitRun();
+        briefing.resolve();
+        await entry;
+        await oldTiming;
+        await replacement;
+        expect(newDamage).not.toHaveBeenCalled();
+    });
+
+    it('does not prepare a second hand while the same turn banner is pending', async () => {
+        const banner = deferred();
+        Game.showPhaseBanner.mockReturnValueOnce(banner.promise);
+        const first = Game.startTurn();
+        await Game.startTurn();
+        expect(Game.showPhaseBanner).toHaveBeenCalledTimes(1);
+        banner.resolve();
+        await first;
+        expect(Game.rollDice).toHaveBeenCalledTimes(1);
+        expect(Game.inputLocked).toBe(false);
+    });
+
+    it('does not restore a stale startup lock after an older attack QTE finishes', async () => {
+        Game.player.mana = 10;
+        const die = { id: 1, type: 'EARTHQUAKE', used: false, selected: false };
+        Game.dicePool = [die];
+        for (const method of ['triggerVFX', 'drawQTE', '_qteWindupAudio']) {
+            vi.spyOn(Game, method).mockImplementation(() => {});
+        }
+        Game.rollDice.mockRestore();
+        const banner = deferred();
+        Game.showPhaseBanner.mockReturnValueOnce(banner.promise);
+
+        Game.useDie(die, document.createElement('div'), Game.enemy);
+        expect(Game.qte.active).toBe(true);
+        const turn = Game.startTurn();
+        const resolution = Game.resolveQTE('good');
+        expect(Game._combatActionDepth).toBe(1);
+        banner.resolve();
+        await turn;
+        await vi.advanceTimersByTimeAsync(2000);
+        await resolution;
+
+        expect(Game.currentState).toBe(STATE.COMBAT);
+        expect(Game.player.currentHp).toBeGreaterThan(0);
+        expect(Game.enemy.currentHp).toBeGreaterThan(0);
+        expect(Game.qte.active).toBe(false);
+        expect(Game._combatActionDepth).toBe(0);
+        expect(Game._endTurnRunning).toBe(false);
+        expect(Game.inputLocked).toBe(false);
     });
 });
 
@@ -243,5 +365,89 @@ describe('victory continuation ownership', () => {
         expect(Game.grantSparks).not.toHaveBeenCalled();
         expect(Game.saveGame).not.toHaveBeenCalled();
         expect(Game.showCombatWin).not.toHaveBeenCalled();
+    });
+});
+
+describe('browser visibility and audio integration', () => {
+    let hidden;
+    let cleanupListeners;
+    let audio;
+
+    beforeEach(() => {
+        hidden = false;
+        vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden);
+        audio = { ctx: AudioMgr.ctx, bgm: AudioMgr.bgm, musicEnabled: AudioMgr.musicEnabled,
+            wasPlaying: AudioMgr._wasPlaying };
+        AudioMgr.ctx = { state: 'suspended', resume: vi.fn().mockResolvedValue() };
+        AudioMgr.bgm = { paused: false };
+        AudioMgr.musicEnabled = true;
+        AudioMgr._wasPlaying = false;
+        Game._audioResumeArmed = false;
+        vi.spyOn(AudioMgr, 'fadeMusicOut').mockImplementation(() => {});
+        vi.spyOn(AudioMgr, 'fadeMusicIn').mockImplementation(() => {});
+        cleanupListeners = trackBrowserListeners();
+        Game.bindTabVisibility();
+    });
+
+    afterEach(() => {
+        cleanupListeners();
+        Object.assign(AudioMgr, { ctx: audio.ctx, bgm: audio.bgm,
+            musicEnabled: audio.musicEnabled, _wasPlaying: audio.wasPlaying });
+        Game._audioResumeArmed = false;
+    });
+
+    function visibility(value) {
+        hidden = value;
+        document.dispatchEvent(new Event('visibilitychange'));
+    }
+
+    it('saves and pauses a hidden combat, then waits for an explicit resume touch', async () => {
+        visibility(true);
+        expect(Game.paused).toBe(true);
+        expect(Game.saveGame).toHaveBeenCalledTimes(1);
+        expect(AudioMgr.fadeMusicOut).toHaveBeenCalledWith(250);
+        visibility(false);
+        const overlay = document.getElementById('pause-overlay');
+        expect(overlay).not.toBeNull();
+        expect(overlay.classList.contains('hidden')).toBe(false);
+        expect(Game.paused).toBe(true);
+        expect(AudioMgr.ctx.resume).toHaveBeenCalledTimes(1);
+        expect(AudioMgr.fadeMusicIn).not.toHaveBeenCalled();
+        window.dispatchEvent(new Event('pointerdown'));
+        window.dispatchEvent(new Event('keydown'));
+        expect(AudioMgr.ctx.resume).toHaveBeenCalledTimes(2);
+        const leakedTouch = vi.fn();
+        document.addEventListener('touchstart', leakedTouch);
+        overlay.dispatchEvent(new Event('touchstart', { bubbles: true }));
+        expect(leakedTouch).not.toHaveBeenCalled();
+        expect(Game.paused).toBe(false);
+        expect(AudioMgr.fadeMusicIn).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(300);
+        expect(overlay.classList.contains('hidden')).toBe(true);
+    });
+
+    it('resumes the map without a combat gate and flushes pagehide only during an active run', () => {
+        Game.currentState = STATE.MAP;
+        visibility(true);
+        visibility(false);
+        expect(Game.paused).toBe(false);
+        expect(document.getElementById('pause-overlay')).toBeNull();
+        expect(AudioMgr.fadeMusicIn).toHaveBeenCalledTimes(1);
+        expect(Game.saveGame).toHaveBeenCalledTimes(1);
+        window.dispatchEvent(new Event('pagehide'));
+        expect(Game.saveGame).toHaveBeenCalledTimes(2);
+        Game.currentState = STATE.MENU;
+        window.dispatchEvent(new Event('pagehide'));
+        expect(Game.saveGame).toHaveBeenCalledTimes(2);
+    });
+
+    it('rearms interrupted audio on pageshow without duplicating the next-gesture listener', () => {
+        window.dispatchEvent(new Event('pageshow'));
+        window.dispatchEvent(new Event('pageshow'));
+        expect(AudioMgr.ctx.resume).toHaveBeenCalledTimes(2);
+        window.dispatchEvent(new Event('touchstart'));
+        window.dispatchEvent(new Event('click'));
+        expect(AudioMgr.ctx.resume).toHaveBeenCalledTimes(3);
+        expect(Game._audioResumeArmed).toBe(false);
     });
 });

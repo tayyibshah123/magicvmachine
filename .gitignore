@@ -7,6 +7,8 @@ node_modules/
 # Test runner caches
 .vitest/
 coverage/
+test-results/
+playwright-report/
 
 # Build / temp
 dist/
