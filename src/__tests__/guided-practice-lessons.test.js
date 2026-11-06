@@ -149,7 +149,8 @@ describe('lesson-specific reward-free drills', () => {
         await turn;
         expect(Breakout._practiceActions.has('enemy_turn')).toBe(true);
         expect(Game.startQTE).toHaveBeenCalledWith('ATTACK', expect.any(Number), expect.any(Number), null,
-            expect.objectContaining({ shortTiming: true, minionBoost: true }));
+            expect.objectContaining({ minionBoost: true, waves: 1,
+                volleyBoost: expect.objectContaining({ base: expect.any(Number), good: expect.any(Number), perfect: expect.any(Number) }) }));
     });
 
     it('deals the full scripted three-hit barrage through real endTurn and rejects a one-action skip', async () => {
