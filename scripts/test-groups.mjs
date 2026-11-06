@@ -1,7 +1,7 @@
 // Each automated check has one reporting owner. Files may retain distinct
 // unit, routing and real-renderer cases within that area.
 export const TEST_GROUPS = {
-  health: { label: 'Health and mechanics', files: ['damage-flow', 'self-destruct', 'support-action-deaths', 'combat-correctness'] },
+  health: { label: 'Health and mechanics', files: ['damage-flow', 'self-destruct', 'support-action-deaths', 'combat-correctness', 'target-damage'] },
   decisions: { label: 'Dice and enemy decisions', files: ['dice', 'boss-intent'] },
   actions: { label: 'Actions and turns', files: ['combat-lifecycle', 'settled-combat-actions', 'settled-secondary-effects', 'widget-combat-actions'] },
   timing: { label: 'Timing and presentation', files: ['combat-control-status', 'presentation-completion', 'sleep-pause'] },
