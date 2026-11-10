@@ -247,11 +247,11 @@ export async function playUntil(page, predicate, { timeout = 360000, events = []
     }
     if (s.state === s.states.MAP) {
       let node;
-      for (const type of ['combat', 'rest', 'event']) {
+      for (const type of ['combat', 'rest', 'event', 'boss']) {
         const candidates = page.locator('.map-node-abs.available[data-type="' + type + '"]');
         if (await candidates.count()) { node = candidates.first(); break; }
       }
-      if (!node) throw new Error('No available combat, rest or event route');
+      if (!node) throw new Error('No available combat, rest, event or boss route');
       const box = await node.boundingBox();
       if (!box) throw new Error('Available map node has no native touch target');
       await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);

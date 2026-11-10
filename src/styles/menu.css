@@ -1095,6 +1095,18 @@
 /* ──────────────────────────────────────────────────────────
  * 12. FOOTER
  * ────────────────────────────────────────────────────────── */
+.menu-v2.dropbay .db-gauntlet-preset {
+    align-self: center;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid rgba(var(--db-accent-rgb), 0.45);
+    border-radius: 5px;
+    background: #10182b;
+    color: var(--db-accent);
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
 .menu-v2.dropbay .db-footer {
     display: flex; align-items: center; justify-content: space-between;
     gap: 1.5cqw;

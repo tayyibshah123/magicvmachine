@@ -133,6 +133,7 @@ test('installed game cold-opens offline with HTTP cache cleared and resumes its 
     try {
         await openReturningMenu(page);
         await waitForInstalledWorker(page);
+        await expect.poll(() => page.evaluate(() => window.MVMOfflineAudio?.status.state)).toBe('available');
         const manifestStart = await page.evaluate(async () => {
             const manifest = await (await fetch('./manifest.json')).json();
             return new URL(manifest.start_url, document.baseURI).href;
@@ -158,6 +159,7 @@ test('installed game cold-opens offline with HTTP cache cleared and resumes its 
         await context.setOffline(true);
         offline = true;
         await openReturningMenu(page, manifestStart);
+        await expect.poll(() => page.evaluate(() => window.MVMOfflineAudio?.status.state)).toBe('available');
         // Version metadata is consumed by the update check rather than the
         // startup module graph. Load it explicitly while still offline.
         await page.evaluate(async () => { await import('/src/version.js'); });

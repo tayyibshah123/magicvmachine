@@ -9,6 +9,15 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="description" content="Magic v Machine. A Cyber-Roguelite. Infiltrate the Silicon Empire.">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Magic v Machine | Stable Edition">
+    <meta property="og:description" content="Roll your hand, read enemy intent and time your strikes in this cyberpunk dice roguelite.">
+    <meta property="og:url" content="https://tayyibshah123.github.io/magicvmachine/">
+    <meta property="og:image" content="https://tayyibshah123.github.io/magicvmachine/src/assets/share-preview.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Magic v Machine combat with an enemy intent and the player’s dice hand.">
+    <meta name="twitter:card" content="summary_large_image">
 
     <title>Magic v Machine</title>
     
@@ -184,6 +193,8 @@
                     </div>
                 </div>
 
+                <button id="btn-intro-continue" class="btn primary" hidden>CONTINUE RUN</button>
+
                 <!-- Corner tech brackets — pure CSS, scale via cqmin so they
                      stay the same visual weight on any device. -->
                 <span class="introv2-corner introv2-corner-tl" aria-hidden="true"></span>
@@ -191,6 +202,18 @@
                 <span class="introv2-corner introv2-corner-bl" aria-hidden="true"></span>
                 <span class="introv2-corner introv2-corner-br" aria-hidden="true"></span>
             </div>
+
+            <template id="gauntlet-intro-template">
+                <section class="onb-card gauntlet-intro">
+                    <h1 class="onb-title">Tactician Gauntlet</h1>
+                    <p>Five bosses, with rest stops between fights. Play as the Tactician on Operator difficulty with the Fortified twist.</p>
+                    <p>Each attempt starts with the same setup. Your campaign save stays separate.</p>
+                    <button id="btn-start-gauntlet-preset" class="btn primary">START GAUNTLET</button>
+                    <button id="btn-copy-gauntlet-preset" class="btn secondary">COPY PRESET LINK</button>
+                    <input id="gauntlet-preset-link" class="onb-input" aria-label="Gauntlet link" readonly hidden>
+                    <button id="btn-exit-gauntlet-preset" class="btn secondary">RETURN TO CLASSIC</button>
+                </section>
+            </template>
 
             <!-- Tooltip -->
             <div id="tooltip" class="tooltip hidden"></div>
@@ -448,6 +471,8 @@
                             <span class="ttl">TUTORIAL</span>
                         </button>
                     </div>
+
+                    <button id="btn-gauntlet-preset" class="db-gauntlet-preset feature-locked-hidden" type="button">TACTICIAN GAUNTLET</button>
 
                     <!-- FOOTER — streak chip + version stamp. -->
                     <div class="db-footer">
@@ -1155,6 +1180,13 @@
                                 <input type="range" id="sld-ambient-vol" min="0" max="100" step="5" value="60">
                                 <span class="setting-value" data-for="sld-ambient-vol">60</span>
                             </div>
+                            <div class="settings-section-label">Offline soundtrack</div>
+                            <p id="offline-audio-size" class="setting-help" hidden></p>
+                            <div class="setting-row">
+                                <button id="btn-offline-audio-download" type="button" class="btn secondary"
+                                    aria-describedby="offline-audio-size offline-audio-status" disabled>Download soundtrack</button>
+                            </div>
+                            <p id="offline-audio-status" class="setting-help" role="status">Soundtrack downloads are unavailable here.</p>
                         </div>
 
                         <!-- DISPLAY TAB -->
@@ -1243,6 +1275,10 @@
 
                         <!-- GAMEPLAY TAB -->
                         <div class="settings-pane" data-pane="gameplay">
+                            <div class="setting-row">
+                                <label for="chk-fast-phase-banners">Shorter turn banners</label>
+                                <input type="checkbox" id="chk-fast-phase-banners">
+                            </div>
                             <div class="setting-row">
                                 <label for="chk-tutorial-hints">Tutorial hints</label>
                                 <input type="checkbox" id="chk-tutorial-hints" checked>

@@ -147,6 +147,28 @@ describe('independent edition profiles', () => {
         expect(win.sessionStorage.getItem('mvm_analytics_session')).toBe('stable session');
     });
 
+    it('starts an empty practice profile and restores the original stores on exit', () => {
+        const stable = createEditionStorage(native, 'stable');
+        const transient = createEditionStorage(session, 'stable');
+        stable.setItem('mvm_save_v1__A', 'campaign');
+        stable.setItem('mvm_sparks', '75');
+        transient.setItem('mvm_session', 'real session');
+        const close = beginPracticeStorage(stable, transient, { empty: true });
+        expect(stable.getItem('mvm_save_v1__A')).toBeNull();
+        expect(Object.keys(stable)).toEqual([]);
+        expect(transient.length).toBe(0);
+        stable.setItem('mvm_save_v1__A', 'gauntlet');
+        transient.setItem('mvm_session', 'practice session');
+        expect(Object.keys(stable)).toEqual(['mvm_save_v1__A']);
+        expect(native.getItem('mvm_save_v1__A')).toBe('campaign');
+        stable.clear();
+        expect(stable.length).toBe(0);
+        close();
+        expect(stable.getItem('mvm_save_v1__A')).toBe('campaign');
+        expect(stable.getItem('mvm_sparks')).toBe('75');
+        expect(transient.getItem('mvm_session')).toBe('real session');
+    });
+
     it('keeps blocked storage errors visible to guarded callers without crashing installation', () => {
         const blocked = { document };
         const error = new DOMException('Blocked', 'SecurityError');

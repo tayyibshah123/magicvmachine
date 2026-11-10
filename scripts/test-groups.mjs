@@ -7,7 +7,7 @@ export const TEST_GROUPS = {
   timing: { label: 'Timing and presentation', files: ['combat-control-status', 'presentation-completion', 'sleep-pause'] },
   saves: { label: 'Saves and progression', files: ['combat-recovery', 'save-migration', 'save-storage', 'save-transactions', 'run-rules', 'run-mode-regressions', 'run-mode-persistence', 'streak'] },
   platform: { label: 'Browser and mobile behaviour', files: ['gesture', 'native-back', 'null-deref-guards', 'service-worker-lifecycle', 'edition-storage', 'ux-learning', 'cipher-practice'] },
-  services: { label: 'Supporting services', files: ['analytics', 'consent', 'sector-music', 'audio-assets', 'matchup-hints'] }
+  services: { label: 'Supporting services', files: ['analytics', 'consent', 'sector-music', 'audio-assets', 'matchup-hints', 'share'] }
 };
 
 export function groupFor(filename) {

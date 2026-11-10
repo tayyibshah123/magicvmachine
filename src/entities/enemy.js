@@ -1,3 +1,4 @@
+import { gameplayRandom } from '../services/gauntlet-preset.js';
 import { AudioMgr } from '../audio.js';
 import { ParticleSys } from '../effects/particles.js';
 import { Entity } from './entity.js';
@@ -65,7 +66,7 @@ class Enemy extends Entity {
             // resolver for the handlers.
             const pool = ['Shielded', 'Second Wind', 'Jammer', 'Reflector',
                           'Phase', 'Multiplier', 'Anchor', 'Vampiric', 'Brittle'];
-            this.affixes.push(pool[Math.floor(Math.random() * pool.length)]);
+            this.affixes.push(pool[Math.floor(gameplayRandom() * pool.length)]);
         }
         this.secondWindTriggered = false;
         this.phaseFlag = false; // Phase affix alternates HP/shield target
@@ -212,14 +213,14 @@ class Enemy extends Entity {
             const aggressive = pool.filter(m =>
                 m === 'attack' || m === 'multi_attack' || m === 'summon' || m === 'cataclysm'
             );
-            if (aggressive.length > 0 && Math.random() < 0.6) {
-                const pick = aggressive[Math.floor(Math.random() * aggressive.length)];
+            if (aggressive.length > 0 && gameplayRandom() < 0.6) {
+                const pick = aggressive[Math.floor(gameplayRandom() * aggressive.length)];
                 this._lastBossMove = pick;
                 return pick;
             }
         }
 
-        const pick = pool[Math.floor(Math.random() * pool.length)];
+        const pick = pool[Math.floor(gameplayRandom() * pool.length)];
         this._lastBossMove = pick;
         return pick;
     }
@@ -249,8 +250,8 @@ class Enemy extends Entity {
         const getTarget = () => {
             const minions = Game.player ? Game.player.minions : null;
             if (!minions || minions.length === 0) return Game.player;
-            if (Math.random() < 0.5) return Game.player;
-            if (Math.random() < 0.7) {
+            if (gameplayRandom() < 0.5) return Game.player;
+            if (gameplayRandom() < 0.7) {
                 // Pick lowest-HP minion (stable for equal HP via index).
                 let lowest = minions[0];
                 for (let i = 1; i < minions.length; i++) {
@@ -258,7 +259,7 @@ class Enemy extends Entity {
                 }
                 return lowest;
             }
-            return minions[Math.floor(Math.random() * minions.length)];
+            return minions[Math.floor(gameplayRandom() * minions.length)];
         };
 
         // Ascension 15 — Mirror World. Every enemy has a 28% chance per
@@ -268,7 +269,7 @@ class Enemy extends Entity {
         // as the base mirror enemy so the player reads one consistent
         // rule across every reflect surface.
         const cbMirrored = Game && Game._ascEffects && Game._ascEffects.enemyCopiesLastDie;
-        if (cbMirrored && Math.random() < 0.28) {
+        if (cbMirrored && gameplayRandom() < 0.28) {
             const sector = (Game && Game.sector) || 1;
             const pct = mirrorReflectPct(sector);
             const mirroredBase = (Game.player && Game.player._lastDamageDealt)
@@ -317,7 +318,7 @@ class Enemy extends Entity {
                 // Phase 4 enrage — alternating action slot becomes a hard
                 // multi-attack so the simultaneous-mechanic feeling lands.
                 if (this.phase === 4) {
-                    if (Math.random() < 0.5) {
+                    if (gameplayRandom() < 0.5) {
                         return { type: 'multi_attack', val: Math.floor(this.baseDmg * 0.7), hits: 3, target: getTarget() };
                     }
                 }
@@ -330,7 +331,7 @@ class Enemy extends Entity {
                     this.chargingPurge = false;
                     return { type: 'purge_attack', val: 100, target: Game.player };
                 }
-                if (!this.realityOverwritten && Math.random() < 0.15) {
+                if (!this.realityOverwritten && gameplayRandom() < 0.15) {
                     return { type: 'reality_overwrite', val: 0 };
                 }
             }
@@ -495,7 +496,7 @@ class Enemy extends Entity {
         }
         if (this.kind === 'frost') {
             // 50/50 frost AoE (Weak debuff) or basic attack.
-            if (Math.random() < 0.5) return { type: 'frost_aoe', val: Math.floor(this.baseDmg * 0.6), isAOE: true };
+            if (gameplayRandom() < 0.5) return { type: 'frost_aoe', val: Math.floor(this.baseDmg * 0.6), isAOE: true };
             return { type: 'attack', val: this.baseDmg, target: getTarget() };
         }
         if (this.kind === 'burrow') {
@@ -544,7 +545,7 @@ class Enemy extends Entity {
                 if (Game.enemy && Game.enemy !== this && Game.enemy.currentHp < Game.enemy.maxHp) wounded.push(Game.enemy);
                 if (wounded.length > 0) {
                     this._healCooldown = 2;
-                    const t = wounded[Math.floor(Math.random() * wounded.length)];
+                    const t = wounded[Math.floor(gameplayRandom() * wounded.length)];
                     return { type: 'heal_ally', val: Math.floor(t.maxHp * 0.15), target: t };
                 }
             }
@@ -586,7 +587,7 @@ class Enemy extends Entity {
 
         // Standard Enemy Logic
         const isLowHp = this.currentHp < this.maxHp * 0.3;
-        const roll = Math.random();
+        const roll = gameplayRandom();
 
         if (isLowHp) return { type: 'heal', val: Math.floor(this.maxHp * 0.1) };
         if (this.minions.length < 2 && roll < 0.2) return { type: 'summon', val: 0 };

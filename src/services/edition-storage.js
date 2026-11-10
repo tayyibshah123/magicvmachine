@@ -1,4 +1,5 @@
 import { APP_EDITION } from '../version.js';
+import { readGauntletPreset } from './gauntlet-preset.js';
 
 // Two editions can share a hosting origin without sharing a wallet, saves,
 // settings, learning records, imports or resets. Keep the native stores only
@@ -15,18 +16,24 @@ export function createEditionStorage(storage, edition) {
     const overlays = [];
     const read = key => {
         for (let i = overlays.length - 1; i >= 0; i--) {
-            if (overlays[i].has(key)) return overlays[i].get(key);
+            if (overlays[i].values.has(key)) return overlays[i].values.get(key);
+            if (overlays[i].empty) return null;
         }
         return storage.getItem(physicalName(key));
     };
     const names = () => {
         const result = new Set();
-        for (let i = 0; i < storage.length; i++) {
-            const key = storage.key(i);
-            if (key?.startsWith(prefix)) result.add(key.slice(prefix.length));
-            else if (key && established(key)) result.add(key);
+        const barrier = overlays.findLastIndex(layer => layer.empty);
+        if (barrier < 0) {
+            for (let i = 0; i < storage.length; i++) {
+                const key = storage.key(i);
+                if (key?.startsWith(prefix)) result.add(key.slice(prefix.length));
+                else if (key && established(key)) result.add(key);
+            }
         }
-        for (const layer of overlays) for (const key of layer.keys()) result.add(key);
+        for (const layer of overlays.slice(Math.max(0, barrier))) {
+            for (const key of layer.values.keys()) result.add(key);
+        }
         return [...result].filter(key => read(key) !== null);
     };
     const api = {
@@ -36,12 +43,12 @@ export function createEditionStorage(storage, edition) {
         },
         setItem(key, value) {
             key = String(key);
-            if (overlays.length) overlays.at(-1).set(key, String(value));
+            if (overlays.length) overlays.at(-1).values.set(key, String(value));
             else storage.setItem(physicalName(key), String(value));
         },
         removeItem(key) {
             key = String(key);
-            if (overlays.length) overlays.at(-1).set(key, null);
+            if (overlays.length) overlays.at(-1).values.set(key, null);
             else storage.removeItem(physicalName(key));
         },
         clear() {
@@ -68,8 +75,8 @@ export function createEditionStorage(storage, edition) {
         }
     });
     controllers.set(view, {
-        begin() {
-            const layer = new Map();
+        begin({ empty = false } = {}) {
+            const layer = { values: new Map(), empty };
             overlays.push(layer);
             return () => {
                 const index = overlays.indexOf(layer);
@@ -80,9 +87,9 @@ export function createEditionStorage(storage, edition) {
     return view;
 }
 
-export function beginPracticeStorage(local, session) {
-    const endLocal = controllers.get(local)?.begin();
-    const endSession = controllers.get(session)?.begin();
+export function beginPracticeStorage(local, session, options) {
+    const endLocal = controllers.get(local)?.begin(options);
+    const endSession = controllers.get(session)?.begin(options);
     return () => { endLocal?.(); endSession?.(); };
 }
 
@@ -107,7 +114,7 @@ export function installEditionStorage(win, edition = APP_EDITION) {
     });
     Object.defineProperty(win, '__MVM_STORAGE_EDITION__', { configurable: true, value: edition });
     Object.defineProperty(win, '__MVM_PROFILE_SCOPE__', { configurable: true, value: {
-        beginPractice: () => beginPracticeStorage(win.localStorage, win.sessionStorage)
+        beginPractice: options => beginPracticeStorage(win.localStorage, win.sessionStorage, options)
     } });
     const label = () => {
         const stamp = win.document.querySelector('.db-version');
@@ -125,4 +132,9 @@ export function installEditionStorage(win, edition = APP_EDITION) {
     return native;
 }
 
-if (typeof window !== 'undefined') installEditionStorage(window);
+if (typeof window !== 'undefined') {
+    installEditionStorage(window);
+    if (APP_EDITION === 'stable' && readGauntletPreset(window.location.href)) {
+        window.__MVM_PROFILE_SCOPE__.beginPractice({ empty: true });
+    }
+}

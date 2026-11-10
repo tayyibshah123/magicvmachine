@@ -39,8 +39,8 @@ export const Onboarding = {
     // the player finishing it or by skipping it). Non-destructive: the
     // existing tutorial/main-menu pipeline runs after.
     //
-    // `hooks` = { onFinished(), onStartTutorial() }
-    run({ onFinished, onStartTutorial } = {}) {
+    // `hooks` = { onFinished(), onStartTutorial(), onStartClassic() }
+    run({ onFinished, onStartTutorial, onStartClassic } = {}) {
         Analytics.emit('onboarding_stage_complete', { stage: 'start', seconds: 0 });
 
         const root = document.createElement('div');
@@ -104,7 +104,8 @@ export const Onboarding = {
                     <input type="text" id="onb-name" class="onb-input" maxlength="16" placeholder="OPERATOR" autocomplete="off">
                     <p class="onb-name-help">Leave this blank to play as OPERATOR. Continue when you are ready.</p>
                     <div class="onb-actions onb-actions-single">
-                        <button class="btn primary onb-next" id="onb-next-1">START</button>
+                        <button class="btn primary onb-next" id="onb-next-1">PLAY PROLOGUE</button>
+                        <button class="btn secondary" id="onb-start-classic">PLAY CLASSIC</button>
                     </div>
                 </div>
             `;
@@ -117,6 +118,12 @@ export const Onboarding = {
                 const input = document.getElementById('onb-name');
                 state.name = this.setName(input.value);
                 handoffToTutorial();
+            };
+            document.getElementById('onb-start-classic').onclick = () => {
+                state.name = this.setName(document.getElementById('onb-name').value);
+                emitStage('1_welcome');
+                finish();
+                onStartClassic?.();
             };
             // Enter-key on the input commits the same as tapping START.
             const nameInput = document.getElementById('onb-name');

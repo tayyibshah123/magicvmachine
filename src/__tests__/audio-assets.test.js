@@ -31,6 +31,7 @@ function containerHeader(path) {
 function workerHarness() {
     const listeners = new Map(), stores = new Map(), downloads = [];
     const failed = new Set();
+    const pauses = new Map();
     let online = true;
     const absolute = request => new URL(typeof request === 'string' ? request : request.url, origin + '/').href;
     const network = async request => {
@@ -51,7 +52,12 @@ function workerHarness() {
             return {
                 match: async request => store.get(absolute(request))?.clone(),
                 put: async (request, response) => { store.set(absolute(request), response.clone()); },
-                add: async request => { downloads.push(absolute(request)); store.set(absolute(request), await network(request)); }
+                add: async request => {
+                    const url = absolute(request);
+                    downloads.push(url);
+                    await pauses.get(url);
+                    store.set(url, await network(request));
+                }
             };
         }
     };
@@ -68,7 +74,7 @@ function workerHarness() {
         await Promise.all(pending);
         return response && await response;
     };
-    return { dispatch, caches, stores, downloads, failed, self,
+    return { dispatch, caches, stores, downloads, failed, pauses, self,
         offline: () => { online = false; }, online: () => { online = true; } };
 }
 
@@ -105,6 +111,38 @@ describe('published audio and offline codec compatibility', () => {
             const response = await worker.dispatch('fetch', { request: { url: origin + path, method: 'GET' } });
             expect(response?.status, path).toBe(200);
         }
+    });
+
+    it('only inspects the selected soundtrack on startup, even when offline', async () => {
+        const worker = workerHarness();
+        await worker.dispatch('install');
+        const urls = music.map(input => new URL(input, origin + '/').href);
+        worker.offline();
+        const replies = [];
+        await worker.dispatch('message', { data: { type: 'MUSIC_CACHE_STATUS', urls }, ports: [{ postMessage: data => replies.push(data) }] });
+        expect(replies).toEqual([{ type: 'MUSIC_CACHE_RESULT', ok: false, cached: [], missing: urls, pending: false }]);
+        expect(worker.downloads.filter(url => url.includes('/music/'))).toEqual([]);
+    });
+
+    it('shares one explicit download across tabs and reports its pending and ready states without extra transfers', async () => {
+        const worker = workerHarness();
+        const urls = music.map(input => new URL(input, origin + '/').href);
+        const replies = [];
+        const send = (type, urls) => worker.dispatch('message',
+            { data: { type, urls }, ports: [{ postMessage: data => replies.push(data) }] });
+        let resume;
+        worker.pauses.set(urls[0], new Promise(resolve => { resume = resolve; }));
+        const first = send('CACHE_MUSIC', urls);
+        const second = send('CACHE_MUSIC', [...urls].reverse());
+        await send('MUSIC_CACHE_STATUS', urls);
+        expect(replies[0]).toMatchObject({ pending: true, ok: false, missing: urls });
+        resume();
+        await Promise.all([first, second]);
+        expect(replies.slice(1).every(result => result.ok)).toBe(true);
+        worker.offline();
+        await send('MUSIC_CACHE_STATUS', urls);
+        expect(replies.at(-1)).toMatchObject({ pending: false, ok: true, cached: urls });
+        expect(worker.downloads).toEqual(urls);
     });
 
     it.each([['Vorbis', 'probably', '.ogg'], ['AAC', '', '.m4a']])('acknowledges only selected %s music and serves all resolved media on an offline cold request', async (name, ogg, extension) => {
@@ -161,63 +199,90 @@ describe('published audio and offline codec compatibility', () => {
         const worker = workerHarness();
         const previousName = '/|' + workerSource.match(/const CACHE_PREFIX = '([^']+)'/)[1] + '0-0-0';
         const guidedName = '/guided/|mvm-guided-shell-v0-0-0';
-        const url = origin + '/music/synth1.ogg';
-        await (await worker.caches.open(previousName)).put(url, new Response('old track'));
+        const urls = music.map(input => new URL(input, origin + '/').href);
+        const previous = await worker.caches.open(previousName);
+        for (const url of urls) await previous.put(url, new Response('old track'));
         await (await worker.caches.open(guidedName)).put(origin + '/guided/music/synth1.ogg', new Response('other edition'));
         await worker.dispatch('install');
         await worker.dispatch('activate');
         expect(await worker.caches.keys()).not.toContain(previousName);
         expect(await worker.caches.keys()).toContain(guidedName);
         worker.offline();
-        const response = await worker.dispatch('fetch', { request: { url, method: 'GET' } });
+        const replies = [];
+        await worker.dispatch('message', { data: { type: 'MUSIC_CACHE_STATUS', urls },
+            ports: [{ postMessage: data => replies.push(data) }] });
+        expect(replies[0]).toMatchObject({ ok: true, cached: urls, pending: false });
+        const response = await worker.dispatch('fetch', { request: { url: urls[0], method: 'GET' } });
         expect(await response.text()).toBe('old track');
         expect(worker.downloads.filter(download => download.includes('/music/'))).toEqual([]);
     });
 });
 
 describe('page-to-worker music readiness acknowledgement', () => {
-    it('uses the real resolver once, waits for worker acknowledgement and reuses its readiness promise', async () => {
+    it('checks the selected AAC cache on activation and sends one download only after explicit action', async () => {
         vi.resetModules();
         codecPolicy('', 'probably');
         vi.stubGlobal('MessageChannel', MessageChannel);
         const { OfflineAudio } = await import('../services/offline-audio.js');
         const postMessage = vi.fn((data, ports) => {
             expect(data.urls).toEqual(music.map(input => new URL(input.replace('.ogg', '.m4a'), origin + '/').href));
-            ports[0].postMessage({ type: 'MUSIC_CACHE_RESULT', ok: true, cached: data.urls, missing: [] });
+            const download = data.type === 'CACHE_MUSIC';
+            ports[0].postMessage({ type: 'MUSIC_CACHE_RESULT', ok: download,
+                cached: download ? data.urls : [], missing: download ? [] : data.urls });
             ports[0].close();
         });
         const registration = Object.assign(new EventTarget(), { active: { state: 'activated', postMessage } });
-        const ready = OfflineAudio.start(registration);
+        const startup = OfflineAudio.start(registration);
+        expect(OfflineAudio.status.state).toBe('checking');
+        expect(OfflineAudio.start(registration)).toBe(startup);
+        expect((await startup).state).toBe('available');
+        expect(postMessage.mock.calls.map(([data]) => data.type)).toEqual(['MUSIC_CACHE_STATUS']);
+        const download = OfflineAudio.download();
         expect(OfflineAudio.status.state).toBe('downloading');
-        expect(OfflineAudio.start(registration)).toBe(ready);
-        expect((await ready).state).toBe('ready');
+        expect(OfflineAudio.download()).toBe(download);
+        expect((await download).state).toBe('ready');
         expect(OfflineAudio.status.cached).toHaveLength(5);
-        expect(postMessage).toHaveBeenCalledOnce();
+        expect(postMessage.mock.calls.map(([data]) => data.type)).toEqual(['MUSIC_CACHE_STATUS', 'CACHE_MUSIC']);
     });
 
-    it('does not report music ready merely because the shell activated, and exposes an incomplete acknowledgement', async () => {
+    it('waits for activation, shows an incomplete download and lets the player retry', async () => {
         vi.resetModules();
         codecPolicy('probably', 'probably');
         vi.stubGlobal('MessageChannel', MessageChannel);
         const { OfflineAudio } = await import('../services/offline-audio.js');
-        let reply;
+        let attempts = 0;
         const worker = Object.assign(new EventTarget(), { state: 'installing', postMessage: vi.fn((data, ports) => {
-            reply = () => {
-                ports[0].postMessage({ type: 'MUSIC_CACHE_RESULT', ok: false, cached: data.urls.slice(0, 4), missing: [data.urls[4]] });
-                ports[0].close();
-            };
+            if (data.type === 'CACHE_MUSIC') attempts++;
+            const count = attempts === 0 ? 0 : attempts === 1 ? 4 : 5;
+            ports[0].postMessage({ type: 'MUSIC_CACHE_RESULT', ok: count === 5,
+                cached: data.urls.slice(0, count), missing: data.urls.slice(count) });
+            ports[0].close();
         }) });
         const registration = Object.assign(new EventTarget(), { installing: worker, active: null });
-        const ready = OfflineAudio.start(registration);
+        const startup = OfflineAudio.start(registration);
         expect(worker.postMessage).not.toHaveBeenCalled();
         registration.active = worker;
         worker.state = 'activated';
         worker.dispatchEvent(new Event('statechange'));
-        await Promise.resolve();
-        expect(OfflineAudio.status.state).toBe('downloading');
-        expect(worker.postMessage).toHaveBeenCalledOnce();
-        reply();
-        expect((await ready).state).toBe('incomplete');
+        expect((await startup).state).toBe('available');
+        expect((await OfflineAudio.download()).state).toBe('incomplete');
         expect(OfflineAudio.status.missing).toEqual([origin + '/music/lofi.ogg']);
+        expect((await OfflineAudio.download()).state).toBe('ready');
+        expect(attempts).toBe(2);
+    });
+
+    it('recognises an existing full soundtrack from cache status alone', async () => {
+        vi.resetModules();
+        codecPolicy('probably', 'probably');
+        vi.stubGlobal('MessageChannel', MessageChannel);
+        const { OfflineAudio } = await import('../services/offline-audio.js');
+        const postMessage = vi.fn((data, ports) => {
+            ports[0].postMessage({ type: 'MUSIC_CACHE_RESULT', ok: true, cached: data.urls, missing: [] });
+            ports[0].close();
+        });
+        const registration = Object.assign(new EventTarget(), { active: { state: 'activated', postMessage } });
+        expect((await OfflineAudio.start(registration)).state).toBe('ready');
+        expect((await OfflineAudio.download()).state).toBe('ready');
+        expect(postMessage.mock.calls.map(([data]) => data.type)).toEqual(['MUSIC_CACHE_STATUS']);
     });
 });

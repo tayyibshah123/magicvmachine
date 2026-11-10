@@ -277,6 +277,8 @@ describe('durable post-combat reward receipts', () => {
         Game.enemy.currentHp = 0;
         Game._ascEffects = { relicHpCost: 8, sectorCrossDamage: 12 };
         Game._customFragDrainPerSector = 0.10;
+        // Fix the real reward roll so an HP-costing module cannot change this transition assertion.
+        vi.spyOn(Math, 'random').mockReturnValue(0.5);
         vi.spyOn(Game, '_runBossDeathDissolve').mockResolvedValue();
         const won = Game.winCombat();
         await vi.advanceTimersByTimeAsync(1100);

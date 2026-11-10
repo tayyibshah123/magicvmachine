@@ -99,11 +99,19 @@ async function inspectActualAudio(page, extension) {
     return { tracks, sfx };
 }
 
-for (const codec of [{ name: 'native Chromium Vorbis', extension: '.ogg', forceAAC: false },
-    { name: 'AAC-only codec policy', extension: '.m4a', forceAAC: true }]) {
-    test(`published audio plays online and after an HTTP-cache-cleared offline cold launch (${codec.name})`, async ({ page, context }, testInfo) => {
+for (const codec of [{ name: 'native Chromium Vorbis', extension: '.ogg', forceAAC: false, width: 390, size: 'About 107 MB in Ogg Vorbis.' },
+    { name: 'AAC-only codec policy', extension: '.m4a', forceAAC: true, width: 360, size: 'About 72 MB in AAC.' }]) {
+    test(`music plays on demand and an explicit soundtrack download survives an offline cold launch (${codec.name})`, async ({ page, context }, testInfo) => {
+        await page.setViewportSize({ width: codec.width, height: 844 });
         await prepareProfile(context, codec.forceAAC);
         const failures = [], responses = [], cancellations = [];
+        const musicRequests = new Set();
+        context.on('request', request => {
+            const url = new URL(request.url());
+            if (url.origin === new URL(testInfo.project.use.baseURL).origin && /\/music\//.test(url.pathname)) {
+                musicRequests.add(url.pathname);
+            }
+        });
         const responseStatus = new WeakMap();
         let offline = false;
         page.on('response', response => {
@@ -132,14 +140,50 @@ for (const codec of [{ name: 'native Chromium Vorbis', extension: '.ogg', forceA
             await enterMenu(page);
             expect(await page.evaluate(() => window.__qaNativeAAC), 'Chromium must support the AAC media pipeline exercised by this case').toBeTruthy();
             await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.state), { timeout: 30000 }).toBe('activated');
+            await expect.poll(() => page.evaluate(() => window.MVMOfflineAudio?.status.state)).toBe('available');
+            await page.waitForFunction(async extension => {
+                const { AudioMgr } = await import('/src/audio.js');
+                return AudioMgr.bgm?.currentTime > 0 && AudioMgr.bgm.currentSrc.endsWith(extension) && !AudioMgr.bgm.error;
+            }, codec.extension);
+            const beforeDownload = [...musicRequests];
+            expect(beforeDownload, 'a fresh session requests only its currently playing track').toHaveLength(1);
+            const initial = await page.evaluate(() => window.MVMOfflineAudio.status);
+            expect(initial.cached.length).toBeLessThan(5);
+            await page.locator('#btn-settings-main').tap();
+            const download = page.locator('#btn-offline-audio-download');
+            await expect(download).toBeEnabled();
+            await expect(page.locator('#offline-audio-size')).toHaveText(codec.size);
+            await page.locator('#offline-audio-status').scrollIntoViewIfNeeded();
+            const bounds = await page.evaluate(() => Object.fromEntries(
+                ['offline-audio-size', 'btn-offline-audio-download', 'offline-audio-status']
+                    .map(id => [id, document.getElementById(id).getBoundingClientRect().toJSON()])));
+            const size = bounds['offline-audio-size'];
+            const button = bounds['btn-offline-audio-download'];
+            const status = bounds['offline-audio-status'];
+            expect(button.top).toBeGreaterThanOrEqual(size.bottom);
+            expect(status.top).toBeGreaterThanOrEqual(button.bottom);
+            expect(button.width).toBeGreaterThanOrEqual(44);
+            expect(button.height).toBeGreaterThanOrEqual(44);
+            expect(button.left).toBeGreaterThanOrEqual(0);
+            expect(button.right).toBeLessThanOrEqual(codec.width);
+            expect(button.top).toBeGreaterThanOrEqual(0);
+            expect(status.bottom).toBeLessThanOrEqual(844);
+            const screenshot = testInfo.outputPath(`offline-soundtrack-settings-${codec.width}.png`);
+            await page.screenshot({ path: screenshot });
+            await testInfo.attach(`offline-soundtrack-settings-${codec.width}`, { path: screenshot, contentType: 'image/png' });
+            await download.tap();
             await expect.poll(() => page.evaluate(() => window.MVMOfflineAudio?.status.state), {
-                timeout: 90000, message: 'the worker acknowledges the selected-format background music cache'
+                timeout: 90000, message: 'the worker acknowledges the explicit selected-format soundtrack download'
             }).toBe('ready');
-            await expect(page.locator('#offline-audio-status')).toHaveText('Offline audio: ready.');
+            await expect(page.locator('#offline-audio-status')).toHaveText('The full soundtrack is ready to play offline.');
+            await expect(download).toBeDisabled();
             const ready = await page.evaluate(() => window.MVMOfflineAudio.status);
             expect(ready.cached).toHaveLength(5);
             expect(ready.cached.every(url => url.endsWith(codec.extension))).toBe(true);
             expect(ready.missing).toEqual([]);
+            expect([...musicRequests].sort()).toEqual(ready.cached.map(url => new URL(url).pathname).sort());
+            await page.locator('#btn-resume').tap();
+            await expect(page.locator('#modal-settings')).toBeHidden();
             const online = await inspectActualAudio(page, codec.extension);
             const documentId = await page.evaluate(() => window.__qaAudioDocument);
             // Music and SFX live in CacheStorage, which this official CDP
@@ -171,7 +215,7 @@ for (const codec of [{ name: 'native Chromium Vorbis', extension: '.ogg', forceA
             }
             expect(failures, 'all music and SFX responses, including fallback attempts, must succeed').toEqual([]);
             await testInfo.attach('audio-playback-online-and-cold-offline', {
-                body: JSON.stringify({ codec, ready, online, cold, responses, failures, cancellations }, null, 2), contentType: 'application/json'
+                body: JSON.stringify({ codec, beforeDownload, initial, bounds, ready, online, cold, responses, failures, cancellations }, null, 2), contentType: 'application/json'
             });
         } finally {
             await testInfo.attach('audio-network-evidence', { body: JSON.stringify({ responses, failures, cancellations }, null, 2), contentType: 'application/json' });
