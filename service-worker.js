@@ -69,6 +69,7 @@ const SHELL_ASSETS = [
     './src/services/ascension.js',
     './src/services/assist.js',
     './src/services/breakout.js',
+    './src/services/shared-fight.js',
     './src/services/canvas-cache.js',
     './src/services/class-briefing.js',
     './src/services/class-vfx.js',

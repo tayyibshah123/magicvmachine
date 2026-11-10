@@ -61,6 +61,8 @@ import { CombatLog } from './combat-log.js';
 import { Hints } from './hints.js';
 import { Unlocks } from './unlocks.js';
 import { showObjective, hideObjective } from '../ui/learning-ui.js';
+import { getSharedFight, sharedFightIntent } from './shared-fight.js';
+import { makeRunRules } from './run-rules.js';
 
 // ────────────────────────────────────────────────────────────────────
 // STORYBOARD GLYPHS
@@ -1055,6 +1057,7 @@ export const Breakout = {
     _wardenStep: 0,
 
     isActive() { return !!this._active; },
+    isSharedFight() { return this._active && !!this._sharedFight; },
     currentRoomIdx() { return this._roomIdx; },
     totalRooms() { return this._practice ? 1 : this._guided ? 2 : ROOMS.length; },
 
@@ -1080,14 +1083,18 @@ export const Breakout = {
     start(game, options = {}) {
         const legacyPractice = Number.isInteger(options.practiceRoom) && options.practiceRoom >= 0 && options.practiceRoom < ROOMS.length;
         const lessonPractice = PRACTICE_LESSONS.has(options.practiceLesson);
+        const sharedFight = getSharedFight(options.sharedFight);
         if (options.practiceRoom != null && !legacyPractice) throw new RangeError('Unknown practice room');
         if (options.practiceLesson != null && !lessonPractice) throw new RangeError('Unknown practice lesson');
-        const practice = legacyPractice || lessonPractice;
+        if (options.sharedFight != null && !sharedFight) return false;
+        const practice = legacyPractice || lessonPractice || !!sharedFight;
         if (game._practiceSession || practice && (game._combatActionDepth > 0 || game.qte && game.qte.active || game._endTurnRunning)) return false;
         if (this._active) this.cancel({ returnToMenu: false });
         this._game = game;
         this._guided = !!options.guided && !practice;
         this._practice = practice;
+        this._sharedFight = sharedFight;
+        this._onSharedFightExit = sharedFight ? options.onExit : null;
         this._practiceLesson = lessonPractice ? options.practiceLesson : null;
         this._practiceActions = new Set();
         this._onPracticeComplete = practice && typeof options.onComplete === 'function' ? options.onComplete : null;
@@ -1098,13 +1105,24 @@ export const Breakout = {
         this._advancing = false;
         this._roomIdx = legacyPractice ? options.practiceRoom : this._guided && progress?.roomIndex === 1 ? 1 : 0;
         this._wardenStep = 0;
-        if (practice) this._beginPractice(game, options.classId);
+        if (practice) this._beginPractice(game, sharedFight ? 'tactician' : options.classId);
+        if (sharedFight) {
+            game.player.maxHp = sharedFight.playerHp;
+            game.player.traits = { ...game.player.traits, critChance: 0 };
+            Object.assign(game, {
+                _practiceFeatures: new Set(['attack', 'defend', 'timing', 'endTurn']),
+                _runRules: makeRunRules(), godMode: false, sealedDie: null,
+                momentum: 0, _momentumApexArmed: false, _pulseHammerCritThisHit: false,
+                _sigThornsActive: false, _nextDamageIsCrit: false
+            });
+        }
         this._active = true;
         // Body class drives Breakout-only CSS — narration pane becomes
         // pointer-events: none so drag drops pass through to the
         // canvas, and warden subtext styling activates.
         try { document.body.classList.add('breakout-active'); } catch (_) {}
         document.body.classList.toggle('guided-core', this._guided);
+        document.body.classList.toggle('shared-fight-active', !!sharedFight);
         try {
             game.changeState(STATE.BREAKOUT);
         } catch (_) {}
@@ -1180,6 +1198,7 @@ export const Breakout = {
 
     _roomForCurrent() {
         const game = this._game;
+        if (this._sharedFight) return this._sharedFight;
         if (game) game._guidedRhythmPractice = !!(this._practiceLesson || this._guided && this._roomIdx === 1);
         return this._practiceLesson ? practiceRoomFor(this._practiceLesson, game?.player?.classId)
             : this._guided ? guidedRoomFor(this._roomIdx, game?.player?.classId, game)
@@ -1195,7 +1214,7 @@ export const Breakout = {
         this._advancing = false;
         this._storyToken = (this._storyToken || 0) + 1;
         const game = this._game;
-        document.body.classList.remove('breakout-active', 'guided-core');
+        document.body.classList.remove('breakout-active', 'guided-core', 'shared-fight-active');
         if (this._tapHandler) document.removeEventListener('pointerdown', this._tapHandler, true);
         this._tapHandler = null;
         this._tapAdvanceArmed = false;
@@ -1218,6 +1237,7 @@ export const Breakout = {
     cancel({ returnToMenu = true } = {}) {
         if (!this._active && !this._restorePractice) return false;
         const game = this._game;
+        const onSharedFightExit = this._onSharedFightExit;
         this._sessionId = (this._sessionId || 0) + 1;
         if (game) {
             game._combatGen = (game._combatGen || 0) + 1;
@@ -1230,8 +1250,11 @@ export const Breakout = {
         this._practice = false;
         this._practiceLesson = null;
         this._onPracticeComplete = null;
+        this._sharedFight = null;
+        this._onSharedFightExit = null;
         this._guided = false;
-        if (returnToMenu) game?.changeState(STATE.MENU);
+        if (returnToMenu && typeof onSharedFightExit === 'function') onSharedFightExit();
+        else if (returnToMenu) game?.changeState(STATE.MENU);
         return true;
     },
 
@@ -1351,7 +1374,11 @@ export const Breakout = {
         }
         if (room.startWound && game.player) game.player.currentHp = Math.max(1, game.player.maxHp - room.startWound);
         if (this._guided) game._onGuidedCoreProgress?.(this.getProgress());
-        if (this._practice || this._guided) {
+        if (this._sharedFight) {
+            const sectorDisplay = document.getElementById('sector-display');
+            if (sectorDisplay) sectorDisplay.textContent = 'RELAY';
+            this.renderSharedFightObjective();
+        } else if (this._practice || this._guided) {
             showObjective({ title: this._practice ? 'PRACTICE ONLY' : 'CORE ' + (this._roomIdx + 1) + ' OF 2',
                 text: this._practice ? 'No rewards or checkpoint changes.' : 'Attack, defend, then End Turn.',
                 onHelp: this._practice ? () => this.cancel() : undefined, helpLabel: 'EXIT' });
@@ -1360,6 +1387,40 @@ export const Breakout = {
         // Run the first beat AFTER the combat is built so spotlights
         // can resolve to real entity/DOM positions.
         this._runBeat(0);
+    },
+
+    renderSharedFightObjective() {
+        if (!this.isSharedFight()) return false;
+        const game = this._game;
+        const turn = game.turnCount + 1;
+        const intent = sharedFightIntent(game.enemy?.nextIntents?.[0]);
+        const signature = turn + '|' + intent;
+        const card = document.getElementById('learning-objective');
+        if (card?.dataset.kind === 'shared-fight' && card.dataset.fightIntent === signature) return true;
+        const objective = showObjective({
+            title: 'Relay Drone',
+            text: turn === 1 ? 'Drag ATTACK to the drone or DEFEND to yourself.' : intent,
+            progress: turn === 1 ? intent : `Tactician · Turn ${turn} of ${this._sharedFight.turnLimit}`,
+            kind: 'shared-fight', helpLabel: 'Exit fight', onHelp: () => this.cancel()
+        });
+        if (objective) objective.dataset.fightIntent = signature;
+        return true;
+    },
+
+    settleSharedFightLimit() {
+        if (!this.isSharedFight() || this._game.turnCount + 1 < this._sharedFight.turnLimit) return false;
+        this._finishSharedFight('limit');
+        return true;
+    },
+
+    _finishSharedFight(outcome) {
+        const game = this._game;
+        const complete = this._onPracticeComplete;
+        const player = game.player;
+        const result = { outcome, turns: game.turnCount + 1, hp: player.currentHp, maxHp: player.maxHp,
+            className: player.name, classColor: player.classColor, killName: game.enemy.name };
+        this.cancel({ returnToMenu: false });
+        complete?.(result);
     },
 
     /* ────────────────────────────────────────────────────────────────
@@ -1812,6 +1873,10 @@ export const Breakout = {
         if (this._advancing) return;
         this._advancing = true;
         const game = this._game;
+        if (this._sharedFight) {
+            this._finishSharedFight('win');
+            return;
+        }
         if (this._practice) {
             if (this._practiceLesson) {
                 if (this._practiceHostile?.currentHp <= 0) this._practiceActions.add('hostile_removed');
@@ -1869,6 +1934,10 @@ export const Breakout = {
     onPlayerWouldDie() {
         const game = this._game;
         if (!game || !game.player || !this._active) return;
+        if (this._sharedFight) {
+            this._finishSharedFight('loss');
+            return;
+        }
         game.player.currentHp = Math.max(1, Math.floor(game.player.maxHp * 0.5));
         // Re-spawn the same room so the player can try again. Keeps run
         // intact (no death cinematic, no GAMEOVER state).

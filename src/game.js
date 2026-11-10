@@ -26,6 +26,7 @@ import { Analytics } from './services/analytics.js';
 import { CombatLog } from './services/combat-log.js';
 import { Unlocks } from './services/unlocks.js';
 import { Share } from './services/share.js';
+import { SHARED_FIGHT_ID, getSharedFight, campaignUrl, offerFirstFightShare, showSharedFightResult } from './services/shared-fight.js';
 import { Assist } from './services/assist.js';
 import { Intel } from './services/intel.js';
 import { SaveSync } from './services/save-sync.js';
@@ -194,19 +195,22 @@ const Game = {
         try { AudioMgr && AudioMgr._cancelFade && AudioMgr._cancelFade(); } catch (_) {}
     },
 
-    init() {
+    init({ sharedFightId = null } = {}) {
         this._modernPacing = APP_EDITION === 'guided';
-        if (!SaveSync.recoverImport()) {
-            this._showErrorOverlay(new Error(SaveSync.lastImportError));
-            return;
+        const sharedFight = this._modernPacing && getSharedFight(sharedFightId);
+        if (!sharedFight) {
+            if (!SaveSync.recoverImport()) {
+                this._showErrorOverlay(new Error(SaveSync.lastImportError));
+                return;
+            }
+            const refund = RetiredUpgrades.recoverAndRefund();
+            if (!refund.ok) {
+                this._showErrorOverlay(new Error(refund.error));
+                return;
+            }
+            this._retiredRefundNotice = refund.refunded;
+            if (APP_EDITION === 'guided') Learning.init({ enabled: true, practice: !!this._practiceSession });
         }
-        const refund = RetiredUpgrades.recoverAndRefund();
-        if (!refund.ok) {
-            this._showErrorOverlay(new Error(refund.error));
-            return;
-        }
-        this._retiredRefundNotice = refund.refunded;
-        if (APP_EDITION === 'guided') Learning.init({ enabled: true, practice: !!this._practiceSession });
         // Idempotency guard — Game.init is called once at boot in
         // production, but a debug reload, hot-module replacement during
         // development, or a third-party harness re-importing the module
@@ -360,7 +364,7 @@ const Game = {
             // 1:1 → 100:1 to Sparks the first time the new build boots,
             // then the key is purged. Without this a returning player's
             // fragment stockpile would silently vanish.
-            try {
+            if (!sharedFight) try {
                 const legacyFrags = parseInt(localStorage.getItem('mvm_fragments') || '0', 10);
                 const migrated   = localStorage.getItem('mvm_frag_to_spark_migrated');
                 if (legacyFrags > 0 && !migrated) {
@@ -421,7 +425,7 @@ const Game = {
             this.sparks = savedSparks ? parseInt(savedSparks) : 0;
             const savedSparkLifetime = localStorage.getItem('mvm_sparks_lifetime');
             this.sparksLifetime = savedSparkLifetime ? parseInt(savedSparkLifetime) : 0;
-            const saveFile = this._readSaveRaw();
+            const saveFile = sharedFight ? null : this._readSaveRaw();
             const btnLoad = document.getElementById('btn-load-save');
             if (saveFile && saveFile !== "null") {
                 if (btnLoad) {
@@ -480,7 +484,7 @@ const Game = {
 
         // Intro splash — tap-to-continue overlay. Fades out, starts music, reveals main menu.
         const intro = document.getElementById('intro-overlay');
-        if (intro) {
+        if (intro && !sharedFight) {
             // (Daily-seed preview element was removed during the intro declutter;
             // the population code that lived here is gone with it.)
             const dismissIntro = () => {
@@ -581,14 +585,17 @@ const Game = {
         this._MinionClass = Minion;
         this._EnemyClass = Enemy;
         this._PlayerClass = Player;
-        this.changeState(STATE.MENU);
+        if (sharedFight) {
+            intro?.remove();
+            this.startSharedFight(sharedFight.id, { fromLink: true });
+        } else this.changeState(STATE.MENU);
         // Process login streak. The streak service grants any milestone
         // Sparks itself (via Game.grantSparks). The legacy bonusFragments
         // value used to drop into techFragments here, but fragments are
         // run-only now and would be wiped at the next run start — so we
         // surface the streak banner without re-granting them. Sparks
         // already cover the meaningful daily reward.
-        try {
+        if (!sharedFight) try {
             const s = Streak.tick();
             if (s.claimedReward) {
                 this._streakBonusPending = { streak: s.newStreak, bonus: s.bonusFragments };
@@ -611,14 +618,14 @@ const Game = {
         // there) — a soft-reload would lose the visual.
         try { Cosmetics.applyToBody(); } catch (_) {}
         // Fire fragment milestone at boot
-        if (typeof Achievements !== 'undefined') {
+        if (!sharedFight && typeof Achievements !== 'undefined') {
             if (this.techFragments >= 10000) Achievements.unlock('FRAGMENTS_10K');
         }
         // Day 5 — 100k fragments share-trigger (one-shot per save). Checked
         // at boot AND every fragment grant via _checkFragmentMilestone so
         // a player who crosses the threshold mid-run sees the pulse on
         // the next victory or game-over screen.
-        try { this._checkFragmentMilestone(); } catch (_) {}
+        if (!sharedFight) try { this._checkFragmentMilestone(); } catch (_) {}
         // Bind the loop ONCE so requestAnimationFrame doesn't allocate a new
         // bound function every frame. That allocation was a steady source of
         // GC churn on mobile and correlated with the combat-lag drift
@@ -656,6 +663,10 @@ const Game = {
 
         // --- BUTTON BINDINGS ---
         attachButtonEvent('btn-load-save', () => this.loadGame());
+        if (APP_EDITION === 'guided') {
+            d.getElementById('btn-shared-fight')?.classList.remove('hidden');
+            attachButtonEvent('btn-shared-fight', () => this.startSharedFight(SHARED_FIGHT_ID));
+        }
         attachButtonEvent('btn-save-slots', () => this._openSaveSlotPicker());
         attachButtonEvent('btn-save-slot-close', () => this._closeSaveSlotPicker());
         attachButtonEvent('btn-resume', () => d.getElementById('modal-settings').classList.add('hidden'));
@@ -1461,7 +1472,7 @@ const Game = {
             // Skip if the press is on the storyboard slate (its own
             // tap-to-continue handler) or on a settings overlay button.
             const t = e.target;
-            if (t && t.closest && (t.closest('#breakout-storyboard') || t.closest('#modal-settings'))) return;
+            if (t?.closest?.('#breakout-storyboard, #modal-settings, [data-kind="shared-fight"] .learning-objective-help')) return;
             this.checkQTE();
             // Prevent the same tap from being read by other capture-
             // phase document handlers (Breakout tap-advance) or by
@@ -6740,6 +6751,11 @@ triggerPhaseGlitch() {
     // overlay where dismiss has special "abort" semantics, and a player
     // stuck in a maze should always be able to back out.
     dismissOpenOverlay() {
+        const fightResult = document.getElementById('shared-fight-result');
+        if (fightResult && !fightResult.classList.contains('hidden')) {
+            document.getElementById('shared-fight-campaign')?.click();
+            return true;
+        }
         if (this._learningUI?.dismissLearningOverlay?.()) return true;
         const cipherIntro = document.getElementById('cipher-intro');
         if (cipherIntro) {
@@ -24178,6 +24194,7 @@ drawEffects() {
         feedback.completed = true;
         feedback.damageTaken = Math.max(0,
             (this.runStats?.damageTaken ?? this.turnStats?.dmgTaken ?? 0) - feedback.damageTakenAtStart);
+        if (Breakout.settleSharedFightLimit()) return;
         this.startTurn();
       } catch (err) {
         this._recoverFromCombatError('endTurn', err, false);
@@ -25544,6 +25561,9 @@ drawEffects() {
         this.pendingReward = null;
         if (this.saveGame() === false) { this.pendingReward = receipt; return false; }
         this.changeState(STATE.MAP);
+        if (APP_EDITION === 'guided' && !this._practiceSession && !this.challengeMode && !this.archiveMode) {
+            offerFirstFightShare(receipt, Share);
+        }
         return true;
     },
 
@@ -26322,6 +26342,7 @@ drawEffects() {
     },
 
     _showLearningObjective() {
+        if (Breakout.renderSharedFightObjective()) return;
         document.body.classList.toggle('learning-basic-hand', this._isGuidedRun() && !this._canGuidedFeature('reroll'));
         const combat = [STATE.COMBAT, STATE.BREAKOUT, STATE.TUTORIAL_COMBAT].includes(this.currentState);
         const rules = APP_EDITION === 'guided' && combat ? this.getBossRules() : [];
@@ -26474,6 +26495,31 @@ drawEffects() {
                     else if (saved) begin();
                 } else begin();
             }, onClose: closeRead });
+    },
+
+    startSharedFight(id, { fromLink = false } = {}) {
+        const fight = APP_EDITION === 'guided' && getSharedFight(id);
+        if (!fight || this._practiceSession || ![STATE.BOOT, STATE.MENU, STATE.MAP].includes(this.currentState)) return false;
+        const exit = () => {
+            if (fromLink) window.location.replace(campaignUrl(window.location.href));
+            else this.changeState(STATE.MENU);
+        };
+        const start = () => this.startSharedFight(id, { fromLink });
+        return Breakout.start(this, { sharedFight: id, onExit: exit, onComplete: result => {
+            this.changeState(STATE.BOOT);
+            let hasCheckpoint = false;
+            if (!fromLink) try {
+                hasCheckpoint = !!(localStorage.getItem(this._saveKey()) ||
+                    this._activeSlot() === 'A' && localStorage.getItem('mvm_save_v1'));
+            } catch (_) {}
+            showSharedFightResult(result, {
+                onShare: () => Share.shareRun({ win: result.outcome === 'win',
+                    className: result.className, classColor: result.classColor, killName: result.killName,
+                    turns: result.turns, hp: result.hp, maxHp: result.maxHp }, { challengeId: id }),
+                onRetry: start, campaignLabel: hasCheckpoint ? 'Resume campaign' : 'Play campaign',
+                onCampaign: hasCheckpoint ? () => { this.changeState(STATE.MENU); this.loadGame(); } : exit
+            });
+        } });
     },
 
     saveAndReturn() {
@@ -29256,7 +29302,7 @@ drawEffects() {
             this._learningHUDAt = timestamp;
             this._showLearningObjective();
             const help = document.querySelector('#learning-objective .learning-objective-help');
-            if (help) help.disabled = !this._canReadLearningPanel();
+            if (help && !Breakout.isSharedFight()) help.disabled = !this._canReadLearningPanel();
         }
         // Bump the per-frame memo key so caches like _collectStatusDisplay
         // know they're seeing a fresh frame and rebuild on the first call.

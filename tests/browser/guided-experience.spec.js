@@ -1,6 +1,57 @@
 import { test, expect, storagePrefix } from './fixtures.js';
-import { openGame, configureEncounter, tap, dragDie, tapQTE, playUntil } from './game-driver.js';
+import { openGame, configureEncounter, tap, dragDie, tapQTE, playUntil, readState } from './game-driver.js';
 import { STATE } from '../../src/constants.js';
+
+test('a shared fight link offers native play before setup and leaves the campaign untouched', async ({ page }, info) => {
+  await page.goto('/?fight=tactician-v1');
+  const objective = page.locator('[data-kind="shared-fight"]');
+  await expect(objective).toBeVisible();
+  await expect(objective).toContainText('9 damage');
+  await expect(page.locator('#intro-overlay, #analytics-consent-banner')).toHaveCount(0);
+  await expect(page.locator('#screen-char-select')).toBeHidden();
+  await expect(page.locator('#btn-reroll')).toBeHidden();
+  const bounds = [];
+  for (const width of [360, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.evaluate(() => document.fonts.ready);
+    const layout = await objective.evaluate(card => {
+      const rect = node => {
+        const { x, y, top, right, bottom, left, width, height } = node.getBoundingClientRect();
+        return { x, y, top, right, bottom, left, width, height };
+      };
+      const exit = card.querySelector('button');
+      const exitRect = rect(exit);
+      const endTurn = document.getElementById('btn-end-turn');
+      const endTurnRect = rect(endTurn);
+      const hit = box => document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return { card: rect(card), exit: exitRect, endTurn: endTurnRect, exitHittable: exit.contains(hit(exitRect)),
+        endTurnHittable: endTurn.contains(hit(endTurnRect)),
+        intent: rect(card.querySelector('.learning-objective-progress')),
+        dice: [...document.querySelectorAll('#dice-container .die')].map(rect) };
+    });
+    bounds.push({ width, ...layout });
+    expect(layout.exitHittable).toBe(true);
+    expect(layout.endTurnHittable).toBe(true);
+    expect(layout.card.right).toBeLessThanOrEqual(layout.endTurn.left + 1);
+    expect(layout.intent.bottom).toBeLessThanOrEqual(layout.card.bottom + 1);
+    for (const die of layout.dice) expect(die.bottom).toBeLessThanOrEqual(layout.card.top + 1);
+    const path = info.outputPath(`shared-first-fight-${width}.png`);
+    await page.screenshot({ path });
+    await info.attach(`shared-first-fight-${width}`, { path, contentType: 'image/png' });
+  }
+  await info.attach('shared-first-fight-bounds', { body: JSON.stringify(bounds, null, 2), contentType: 'application/json' });
+  const first = await readState(page);
+  expect(first.dice.map(die => die.type)).toEqual(['TAC_ATTACK', 'TAC_ATTACK', 'TAC_DEFEND']);
+  await dragDie(page, first.dice[2].id, 'player');
+  await expect.poll(() => page.evaluate(() => ({ used: Game.dicePool[2].used, shield: Game.player.shield })))
+    .toEqual({ used: true, shield: 5 });
+  expect(await page.evaluate(prefix => Object.keys(window.__MVM_NATIVE_STORAGE__.local)
+    .filter(key => key.startsWith(prefix)), storagePrefix)).toEqual([]);
+  await tap(page, '[data-kind="shared-fight"] .learning-objective-help');
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator('#intro-overlay')).toBeVisible();
+  await expect(page.locator('[data-kind="shared-fight"]')).toHaveCount(0);
+});
 
 test('a fresh player can choose Full Rules without mandatory training or a changed difficulty choice', async ({ page }) => {
   await page.addInitScript(prefix => localStorage.setItem(prefix + 'mvm_difficulty', 'operator'), storagePrefix);

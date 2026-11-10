@@ -14,6 +14,13 @@ import * as LearningUI from './src/ui/learning-ui.js';
 import { Learning } from './src/services/learning.js';
 import { OfflineAudio } from './src/services/offline-audio.js';
 import { createConsentController } from './src/services/consent.js';
+import { sharedFightFromUrl } from './src/services/shared-fight.js';
+import { APP_EDITION } from './src/version.js';
+
+const sharedFight = APP_EDITION === 'guided' ? sharedFightFromUrl(window.location.href) : null;
+// The linked fight occupies this document until the player chooses the
+// campaign. Keep even incidental boot-time writes out of the real profile.
+if (sharedFight) window.__MVM_PROFILE_SCOPE__?.beginPractice();
 
 // Detect device perf tier BEFORE Game.init so the game can read `Perf.tier`.
 Perf.detect();
@@ -52,7 +59,7 @@ function writeConsent(granted) {
 
 // Apply consent before initialization can record a session or install ID.
 const consent = readConsent();
-applyAnalyticsConsent(consent === true);
+applyAnalyticsConsent(consent === true && !sharedFight);
 
 function showConsentBanner(onChoice) {
     if (readConsent() !== null) return;                        // already settled
@@ -91,7 +98,7 @@ function showConsentWhenReady() {
     } else start();
 }
 
-if (consent === null) {
+if (consent === null && !sharedFight) {
     showConsentWhenReady();
 }
 
@@ -146,7 +153,7 @@ function wireLandscapeHint() {
 
 function bootGame() {
   Game._learningUI = LearningUI;
-  Game.init();
+  Game.init({ sharedFightId: sharedFight?.id });
   wireLearningSettings();
   wireLandscapeHint();
   Gesture.init();
