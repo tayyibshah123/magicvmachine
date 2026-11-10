@@ -15883,6 +15883,41 @@ body.perf-low      .go-cause.stutter { animation: none; }
    Hint label sits above the share button; pulse is a soft gold halo
    that decays after a few seconds so it draws the eye without strobing.
 */
+#run-share-dialog {
+    width: min(92vw, 480px);
+    max-height: 85dvh;
+    overflow-y: auto;
+    padding: 20px;
+    color: #f4fbff;
+    background: #101024;
+    border: 1px solid var(--neon-blue);
+    border-radius: 12px;
+    font: 1rem/1.4 var(--font-main);
+    z-index: 22000;
+}
+#run-share-dialog::backdrop { background: rgba(0, 0, 0, .85); }
+#run-share-dialog h2 { margin: 0 0 10px; }
+#run-share-dialog a { color: #9ceaff; }
+#run-share-dialog input {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    margin: 8px 0;
+    padding: 8px;
+    color: #fff;
+    background: #070719;
+    border: 1px solid #66758c;
+    font: inherit;
+}
+#run-share-dialog .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    margin: 4px;
+    text-decoration: none;
+}
+
 .share-trigger-hint {
     margin: 6px auto 4px;
     padding: 4px 10px;

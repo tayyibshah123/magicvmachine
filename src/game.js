@@ -843,18 +843,8 @@ const Game = {
         attachButtonEvent('btn-retry-class', () => this.retrySameClass());
         attachButtonEvent('btn-combat-log', () => CombatLog.toggle());
         attachButtonEvent('btn-share-run', () => {
-            const summary = {
-                win: false,
-                operator: Onboarding.getName && Onboarding.getName(),
-                className: this.player && PLAYER_CLASSES.find(c => c.id === this.player.classId)?.name,
-                classColor: this.player && PLAYER_CLASSES.find(c => c.id === this.player.classId)?.color,
-                sector: this.sector || 1,
-                turns: this.turnCount || 0,
-                fragments: this.techFragments || 0,
-                killName: this.enemy ? this.enemy.name : null,
-                synergies: (this.runStats && this.runStats.synergies) || []
-            };
-            Share.shareRun(summary);
+            Share.shareRun(this._resultShareSummary?.win === false
+                ? this._resultShareSummary : this._buildShareSummary({ win: false }));
         });
         d.getElementById('chk-music').onchange = (e) => { AudioMgr.toggleMusic(e.target.checked); this.saveSettings(); };
         d.getElementById('chk-sfx').onchange = (e) => { AudioMgr.toggleSFX(e.target.checked); this.saveSettings(); };
@@ -1202,9 +1192,10 @@ const Game = {
             document.getElementById('screen-rest').classList.remove('hidden');
             document.getElementById('screen-rest').classList.add('active');
         });
-        attachButtonEvent('btn-finish-ending', () => { this._renderVictoryCard(); this.changeState(STATE.VICTORY); });
+        attachButtonEvent('btn-finish-ending', () => this.changeState(STATE.VICTORY));
         attachButtonEvent('btn-share-victory', () => {
-            if (typeof Share !== 'undefined' && Share.shareRun) Share.shareRun(this);
+            Share.shareRun(this._resultShareSummary?.win === true
+                ? this._resultShareSummary : this._buildShareSummary({ win: true }));
         });
         attachButtonEvent('btn-victory-sanctuary', () => {
             const goSanctuary = () => {
@@ -4108,6 +4099,7 @@ startQTE(type, x, y, callback, opts) {
         this.playEndingCinematic(); // We will define this helper
         break;
     case STATE.VICTORY:
+        this._renderVictoryCard();
         activate('screen-victory');
         break;
         }
@@ -5922,6 +5914,7 @@ startQTE(type, x, y, callback, opts) {
         // Reset the Archivist gate flag so a fresh run can route into the
         // Sector X arena after Sector 5 even if the prior run already did.
         this._archivistFacedThisRun = false;
+        this._resultShareSummary = null;
         // Wipe last run's fragment stash before applying the new run's
         // starting bonuses. Fragments are now run-only — without this
         // explicit reset, a quitRun → startNew chain would carry over.
@@ -6687,6 +6680,7 @@ triggerPhaseGlitch() {
     // overlay where dismiss has special "abort" semantics, and a player
     // stuck in a maze should always be able to back out.
     dismissOpenOverlay() {
+        if (Share.closeFallback()) return true;
         const cipherIntro = document.getElementById('cipher-intro');
         if (cipherIntro) {
             cipherIntro.remove();
@@ -24313,6 +24307,7 @@ drawEffects() {
         if (this.enemy && this.enemy.name === "THE ARCHIVIST") {
             this._logRunHistory && this._logRunHistory('win', { defeatedBy: null, archivist: true });
             this.techFragments += 500;
+            this._resultShareSummary = this._buildShareSummary({ win: true, achievement: 'Archivist slain' });
             this.encryptedFiles += 1;
             try { localStorage.setItem('mvm_archivist_slain', 'true'); } catch (_) {}
             // Track the highest Ascension level the player has ever cleared
@@ -24353,6 +24348,7 @@ drawEffects() {
         // --- UPDATED: VICTORY SEQUENCE FOR TESSERACT PRIME ---
         if (this.enemy && this.enemy.name === "TESSERACT PRIME") {
             const wasChallenge = !!this.challengeMode;
+            const shareUrl = this._resultShareUrl?.();
             // Chronicle entry for the win (Roadmap Part 27).
             this._logRunHistory('win', { defeatedBy: null });
             // 1. Cinematic Crash
@@ -24439,6 +24435,7 @@ drawEffects() {
             // Run ended in victory — wipe run-only fragments. Sparks /
             // sparksLifetime / sanctuary upgrades all persist.
             this._lastRunFinalFrags = this.techFragments || 0;
+            this._resultShareSummary = this._buildShareSummary({ win: true, url: shareUrl });
             this._resetRunCurrency();
 
             // Run ended in victory — release the sector music lock so a
@@ -25367,7 +25364,7 @@ drawEffects() {
             fragments: this.techFragments || 0
         });
         ClassAbility.endCombat();
-        if (typeof Achievements !== 'undefined') Achievements.unlock('GAMEOVER_FIRST');
+        const firstDefeat = typeof Achievements !== 'undefined' && Achievements.unlock('GAMEOVER_FIRST');
         // FUSION: PHOENIX PROTOCOL (second_life × emergency_kit). Revives
         // at full HP, clears every active debuff/effect, and refunds the
         // emergency-kit charge counter so the heal-on-low-HP affordance
@@ -25425,6 +25422,7 @@ drawEffects() {
 
         // Challenge attempt ended in death — drop the active flag so the
         // menu chip + next start don't think the player is still in one.
+        const shareUrl = this._resultShareUrl?.();
         if (this.challengeMode) {
             Challenge.markActive(false);
             this.challengeMode = false;
@@ -25445,14 +25443,14 @@ drawEffects() {
         // wiping. The card surfaces "this run earned X fragments";
         // after the wipe, techFragments is 0 and the line would read 0.
         this._lastRunFinalFrags = this.techFragments || 0;
+        try { this._checkSparkMilestone(); } catch (_) {}
+        const achievement = this._shareTriggerPending?.label
+            || (firstDefeat ? ACHIEVEMENTS.find(item => item.id === 'GAMEOVER_FIRST')?.name : null);
+        this._resultShareSummary = this._buildShareSummary({ win: false, url: shareUrl, achievement });
         // Run-end currency wipe — fragments are run-only, so a death
         // zeroes them out before the death screen renders. Sparks
         // (persistent) are untouched.
         this._resetRunCurrency();
-        // Sparks-lifetime milestones replace the old fragment-hoard
-        // milestones (those tracked cumulative fragments which no
-        // longer make sense post-wipe).
-        try { this._checkSparkMilestone(); } catch (_) {}
         this.renderDeathCards();
         this.renderRunSummary('screen-gameover');
         this.changeState(STATE.GAMEOVER);
@@ -25669,18 +25667,20 @@ drawEffects() {
             screen.appendChild(container);
         }
         const s = this.runStats || {};
+        const result = this._resultShareSummary?.win === false
+            ? this._resultShareSummary : this._buildShareSummary({ win: false });
         const synergies = (s.synergies && s.synergies.length > 0)
             ? s.synergies.map(n => `<span class="run-synergy">${n}</span>`).join('')
             : '<span class="run-synergy-none">None discovered</span>';
         container.innerHTML = `
             <div class="run-summary-title">RUN DIAGNOSTICS</div>
             <div class="run-summary-grid">
-                <div class="rs-row"><span>Turns</span><b>${s.turns || 0}</b></div>
+                <div class="rs-row"><span>Turns</span><b>${result.turns}</b></div>
                 <div class="rs-row"><span>Total Damage</span><b>${s.totalDamage || 0}</b></div>
                 <div class="rs-row"><span>Highest Hit</span><b class="rs-highlight">${s.highestHit || 0}</b></div>
                 <div class="rs-row"><span>Kills</span><b>${s.kills || 0}</b></div>
-                <div class="rs-row"><span>Fragments</span><b class="rs-gold">${this.techFragments}</b></div>
-                <div class="rs-row"><span>Sector Reached</span><b>${this.sector || 1}</b></div>
+                <div class="rs-row"><span>Fragments</span><b class="rs-gold">${result.fragments}</b></div>
+                <div class="rs-row"><span>Sector Reached</span><b>${result.sectorLabel || result.sector}</b></div>
             </div>
             <div class="run-summary-synergies">
                 <div class="rs-subtitle">Synergies Triggered</div>
@@ -25791,18 +25791,38 @@ drawEffects() {
         }
     },
 
+    _buildShareSummary({ win = false, achievement, killName = this.enemy?.name, url = this._resultShareUrl?.() } = {}) {
+        const operatorClass = PLAYER_CLASSES.find(candidate => candidate.id === this.player?.classId);
+        return {
+            win,
+            operator: Onboarding.getName?.(),
+            className: operatorClass?.name || 'Operator',
+            classColor: operatorClass?.color,
+            sector: this.sector ?? 1,
+            sectorLabel: this.sector === 6 && killName === 'THE ARCHIVIST' ? 'X' : undefined,
+            turns: this.runStats?.turns ?? this.turnCount ?? 0,
+            fragments: this.techFragments ?? 0,
+            killName,
+            synergies: Array.isArray(this.runStats?.synergies) ? [...this.runStats.synergies] : [],
+            achievement: achievement ?? this._shareTriggerPending?.label ?? null,
+            url
+        };
+    },
+
     _renderVictoryCard() {
         // Day 5 — refresh the 100k milestone check at the moment the
         // victory card is built; if a player crossed 100k on this run's
         // fragment payouts the pulse should be on the same screen.
         try { this._checkFragmentMilestone(); } catch (_) {}
         const s = this.runStats || {};
-        const turns = s.turns || this.turnCount || 0;
+        const result = this._resultShareSummary?.win === true
+            ? this._resultShareSummary : this._buildShareSummary({ win: true });
+        const turns = result.turns;
         const dmg   = s.totalDamage || 0;
         const kills = s.kills || 0;
-        const frags = this.techFragments || 0;
+        const frags = result.fragments;
         const relics = (this.player && this.player.relics) ? this.player.relics.length : 0;
-        const cls = (this.player && this.player.classId) ? this.player.classId.toUpperCase() : '???';
+        const cls = result.className.toUpperCase();
         const sparks = this.sparks || 0;
 
         const biggestHit  = s.highestHit || 0;
@@ -25839,6 +25859,7 @@ drawEffects() {
         else if (totalScore >= 60) grade = 'B';
         else if (totalScore >= 40) grade = 'C';
         else grade = 'D';
+        this._resultShareSummary = { ...result, achievement: result.achievement || this._shareTriggerPending?.label || `Rank ${grade} clear` };
 
         const gradeEl = document.getElementById('victory-grade');
         if (gradeEl) gradeEl.textContent = grade;

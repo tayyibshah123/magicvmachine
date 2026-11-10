@@ -27,6 +27,7 @@ const SHELL_ASSETS = [
     './src/styles/bracket-screens.css',
     './src/styles/vfx.css',
     './intro.png',
+    './src/assets/share-preview.png',
     './icon.svg',
     './icon-maskable.svg',
     './manifest.json',
