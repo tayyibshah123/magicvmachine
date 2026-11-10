@@ -1155,6 +1155,13 @@
                                 <input type="range" id="sld-ambient-vol" min="0" max="100" step="5" value="60">
                                 <span class="setting-value" data-for="sld-ambient-vol">60</span>
                             </div>
+                            <div class="settings-section-label">Offline soundtrack</div>
+                            <p id="offline-audio-size" class="setting-help" hidden></p>
+                            <div class="setting-row">
+                                <button id="btn-offline-audio-download" type="button" class="btn secondary"
+                                    aria-describedby="offline-audio-size offline-audio-status" disabled>Download soundtrack</button>
+                            </div>
+                            <p id="offline-audio-status" class="setting-help" role="status">Soundtrack downloads are unavailable here.</p>
                         </div>
 
                         <!-- DISPLAY TAB -->

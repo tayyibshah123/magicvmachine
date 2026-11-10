@@ -144,6 +144,7 @@ function wireLandscapeHint() {
 
 function bootGame() {
   Game.init();
+  OfflineAudio.init();
   wireLandscapeHint();
   Gesture.init();
   NativeBack.init();

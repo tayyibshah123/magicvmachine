@@ -117,6 +117,28 @@ const MUSIC_ASSETS = [
     './music/synth4.m4a', './music/lofi.m4a'
 ];
 const MUSIC_URLS = new Set(MUSIC_ASSETS.map(asset => new URL(asset, SCOPE).href));
+const musicJobs = new Map();
+
+async function musicCacheResult(urls, download = false) {
+    const cached = [], missing = [];
+    let cache;
+    try { cache = await caches.open(ACTIVE_CACHE); }
+    catch (_) {
+        return { type: 'MUSIC_CACHE_RESULT', ok: false, cached, missing: urls, error: 'Music cache unavailable' };
+    }
+    // Serial downloads avoid competing with gameplay resources and keep peak
+    // network and memory pressure small on phones. Status checks only read.
+    for (const url of urls) {
+        try {
+            if (!(await cache.match(url))) {
+                if (!download) { missing.push(url); continue; }
+                await cache.add(url);
+            }
+            cached.push(url);
+        } catch (_) { missing.push(url); }
+    }
+    return { type: 'MUSIC_CACHE_RESULT', ok: missing.length === 0, cached, missing };
+}
 
 self.addEventListener('install', event => {
     // Don't auto-skipWaiting any more — the user-facing update
@@ -144,7 +166,7 @@ self.addEventListener('message', event => {
     if (event.data && event.data.type === 'SKIP_WAITING') {
         self.skipWaiting();
     }
-    if (event.data && event.data.type === 'CACHE_MUSIC') {
+    if (event.data && ['CACHE_MUSIC', 'MUSIC_CACHE_STATUS'].includes(event.data.type)) {
         const urls = event.data.urls;
         const valid = Array.isArray(urls) && urls.length > 0 && urls.length <= 5
             && new Set(urls).size === urls.length && urls.every(url => MUSIC_URLS.has(url));
@@ -152,21 +174,18 @@ self.addEventListener('message', event => {
             event.ports?.[0]?.postMessage({ type: 'MUSIC_CACHE_RESULT', ok: false, cached: [], missing: [], error: 'Invalid music request' });
             return;
         }
-        event.waitUntil((async () => {
-            const cached = [], missing = [];
-            try {
-                const cache = await caches.open(ACTIVE_CACHE);
-                // Serial downloads avoid competing with onboarding resources
-                // and keep peak network/memory pressure small on phones.
-                for (const url of urls) {
-                    try {
-                        if (!(await cache.match(url))) await cache.add(url);
-                        cached.push(url);
-                    } catch (_) { missing.push(url); }
-                }
-            } catch (_) { missing.push(...urls); }
-            event.ports?.[0]?.postMessage({ type: 'MUSIC_CACHE_RESULT', ok: missing.length === 0, cached, missing });
-        })());
+        const key = JSON.stringify([...urls].sort());
+        const reply = result => event.ports?.[0]?.postMessage(result);
+        let job = musicJobs.get(key);
+        if (event.data.type === 'MUSIC_CACHE_STATUS') {
+            event.waitUntil(musicCacheResult(urls).then(result => reply({ ...result, pending: !!job && !result.ok })));
+            return;
+        }
+        if (!job) {
+            job = musicCacheResult(urls, true).finally(() => musicJobs.delete(key));
+            musicJobs.set(key, job);
+        }
+        event.waitUntil(job.then(reply));
     }
 });
 
