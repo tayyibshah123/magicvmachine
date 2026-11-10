@@ -11,6 +11,7 @@ import { Gesture } from './src/services/gesture.js';
 import { NativeBack } from './src/services/native-back.js';
 import { NativeSplash } from './src/services/native-splash.js';
 import { OfflineAudio } from './src/services/offline-audio.js';
+import { readGauntletPreset } from './src/services/gauntlet-preset.js';
 import { createConsentController } from './src/services/consent.js';
 
 // Detect device perf tier BEFORE Game.init so the game can read `Perf.tier`.
@@ -89,7 +90,7 @@ function showConsentWhenReady() {
     } else start();
 }
 
-if (consent === null) {
+if (consent === null && !readGauntletPreset(window.location.href)) {
     showConsentWhenReady();
 }
 
@@ -144,6 +145,7 @@ function wireLandscapeHint() {
 
 function bootGame() {
   Game.init();
+  OfflineAudio.init();
   wireLandscapeHint();
   Gesture.init();
   NativeBack.init();

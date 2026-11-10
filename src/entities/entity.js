@@ -1,3 +1,4 @@
+import { gameplayRandom } from '../services/gauntlet-preset.js';
 import { COLORS, STATE } from '../constants.js';
 import { AudioMgr } from '../audio.js';
 import { ParticleSys } from '../effects/particles.js';
@@ -145,7 +146,7 @@ class Entity {
         }
 
         if (this instanceof Enemy && this.glitchMod && this.glitchMod.id === 'evasive') {
-            if (Math.random() < 0.2) {
+            if (gameplayRandom() < 0.2) {
                 ParticleSys.createFloatingText(this.x, this.y - 60, "GLITCH DODGE", "#ff00ff");
                 AudioMgr.playSound('defend');
                 return false;
@@ -162,7 +163,7 @@ class Entity {
         // (Previously this block read `actualDmg` BEFORE the `let`
         // initialised it — temporal dead zone, ReferenceError, every
         // attack against a Phase Stalker crashed the game.)
-        if (this instanceof Enemy && this.kind === 'phase_shift' && actualDmg > 0 && Math.random() < 0.35) {
+        if (this instanceof Enemy && this.kind === 'phase_shift' && actualDmg > 0 && gameplayRandom() < 0.35) {
             ParticleSys.createFloatingText(this.x, this.y - 80, "PHASE MISS", "#bc13fe");
             ParticleSys.createSparks(this.x, this.y, "#bc13fe", 10);
             AudioMgr.playSound('defend');
@@ -207,7 +208,7 @@ class Entity {
         // override picked up from the phase-3 mechanic block (currently 35%).
         if (Game.enemy && Game.enemy.blindProtocol) {
             const rate = (typeof Game.enemy.blindRate === 'number') ? Game.enemy.blindRate : 0.2;
-            if (Math.random() < rate) {
+            if (gameplayRandom() < rate) {
                 ParticleSys.createFloatingText(this.x, this.y - 90, "BLIND MISS", "#88eaff");
                 return false;
             }
@@ -754,7 +755,7 @@ class Entity {
                     if (Game.enemy && Game._enemyMinions) {
                         const pool = [Game.enemy, ...Game._enemyMinions()].filter(e => e && e !== target && e.currentHp > 0);
                         if (pool.length > 0) {
-                            const splashTarget = pool[Math.floor(Math.random() * pool.length)];
+                            const splashTarget = pool[Math.floor(gameplayRandom() * pool.length)];
                             const splashDmg = Math.max(1, Math.floor(reflectDmg * 0.3));
                             ParticleSys.createFloatingText(splashTarget.x, splashTarget.y - 90, `SPLASH ${splashDmg}`, '#ffd76a');
                             splashTarget.takeDamage(splashDmg);
@@ -790,7 +791,7 @@ class Entity {
             if (this.hasRelic('c_mirror_shard') && actualDmg > 0 && Game) {
                 const pool = [Game.enemy, ...(Game._enemyMinions ? Game._enemyMinions() : [])].filter(e => e && e.currentHp > 0);
                 if (pool.length > 0) {
-                    const victim = pool[Math.floor(Math.random() * pool.length)];
+                    const victim = pool[Math.floor(gameplayRandom() * pool.length)];
                     const mirror = Math.max(1, Math.floor(actualDmg * 0.5));
                     ParticleSys.createFloatingText(victim.x, victim.y - 110, `MIRROR ${mirror}`, "#cc00ff");
                     if (victim.takeDamage(mirror)) _resolveEnemyKill(victim);
@@ -1386,7 +1387,7 @@ class Entity {
                         // FIX: Updated Base to 150
                         let base = 150; 
                         // Logic: 50% chance for 500 (Critical Curse)
-                        if (Math.random() < 0.5) {
+                        if (gameplayRandom() < 0.5) {
                             base = 500;
                             ParticleSys.createFloatingText(this.x, this.y - 50, "VOID CRUSH!", "#f00");
                         }

@@ -9,6 +9,15 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="description" content="Magic v Machine. A Cyber-Roguelite. Infiltrate the Silicon Empire.">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Magic v Machine | Guided Edition">
+    <meta property="og:description" content="Roll your hand, read enemy intent and time your strikes in this cyberpunk dice roguelite.">
+    <meta property="og:url" content="https://tayyibshah123.github.io/magicvmachine/guided/">
+    <meta property="og:image" content="https://tayyibshah123.github.io/magicvmachine/guided/src/assets/share-preview.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Magic v Machine combat with an enemy intent and the player’s dice hand.">
+    <meta name="twitter:card" content="summary_large_image">
 
     <title>Magic v Machine</title>
     
@@ -393,6 +402,7 @@
                             <span id="btn-start-warn" class="btn-start-warn hidden">DISCARDS CURRENT RUN</span>
                             <span class="arrow" aria-hidden="true">▶</span>
                         </button>
+                        <button id="btn-shared-fight" class="btn secondary hidden" type="button">Try a quick fight</button>
                     </div>
 
                     <!-- ENERGY BAR — class-color pulse sweep above the
@@ -802,6 +812,14 @@
                     <button id="btn-map-return" class="btn secondary" type="button">SAVE AND RETURN</button>
                 </nav>
                 <h2 class="neon-text-blue map-title"><span id="map-title-text">SECTOR MAP</span> <span id="map-sector-display" style="font-size: 0.6em; color: var(--neon-gold); margin-left: 15px;"></span></h2>
+                <aside id="first-fight-share" class="learning-outcome-note hidden" aria-labelledby="first-fight-share-title">
+                    <h3 id="first-fight-share-title"></h3>
+                    <p>Give a friend a quick fight of their own.</p>
+                    <div class="learning-note-actions">
+                        <button id="first-fight-share-copy" type="button" class="btn secondary">Copy fight link</button>
+                        <button id="first-fight-share-dismiss" type="button" class="btn secondary">Dismiss</button>
+                    </div>
+                </aside>
                 <div id="map-legend-top" class="map-legend-top"></div>
                 <div id="map-nodes" class="map-container"></div>
             </div>
@@ -1156,6 +1174,13 @@
                                 <input type="range" id="sld-ambient-vol" min="0" max="100" step="5" value="60">
                                 <span class="setting-value" data-for="sld-ambient-vol">60</span>
                             </div>
+                            <div class="settings-section-label">Offline soundtrack</div>
+                            <p id="offline-audio-size" class="setting-help" hidden></p>
+                            <div class="setting-row">
+                                <button id="btn-offline-audio-download" type="button" class="btn secondary"
+                                    aria-describedby="offline-audio-size offline-audio-status" disabled>Download soundtrack</button>
+                            </div>
+                            <p id="offline-audio-status" class="setting-help" role="status">Soundtrack downloads are unavailable here.</p>
                         </div>
 
                         <!-- DISPLAY TAB -->
@@ -1498,6 +1523,19 @@
             </div>
             <div class="hack-result" id="hack-result"></div>
         </div>
+    </div>
+
+    <div id="shared-fight-result" class="learning-modal hidden" role="dialog" aria-modal="true" aria-labelledby="shared-fight-title">
+        <section class="learning-modal-panel">
+            <h2 id="shared-fight-title" class="learning-modal-title" tabindex="-1"></h2>
+            <p id="shared-fight-stats" class="learning-modal-intro"></p>
+            <div class="learning-mode-actions">
+                <button id="shared-fight-share" type="button" class="btn primary">Send this fight</button>
+                <button id="shared-fight-retry" type="button" class="btn secondary">Try again</button>
+                <button id="shared-fight-campaign" type="button" class="btn secondary">Play campaign</button>
+            </div>
+            <p id="shared-fight-share-feedback" role="status"></p>
+        </section>
     </div>
 
     <script type="module" src="main.js"></script>

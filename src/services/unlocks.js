@@ -84,6 +84,8 @@ export const Unlocks = {
             el.classList.toggle('feature-locked-hidden', !unlocked);
             el.classList.toggle('locked-feature', !unlocked); // legacy hook for any styling
         }
+        const preset = document.getElementById('btn-gauntlet-preset');
+        preset?.classList.toggle('feature-locked-hidden', !this.has('daily'));
         // Daily-twist pill is conditional on Challenge being unlocked.
         const twist = document.getElementById('challenge-daily-twist');
         if (twist) twist.classList.toggle('feature-locked-hidden', !this.has('daily'));

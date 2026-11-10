@@ -1,3 +1,4 @@
+import { gameplayRandom } from '../services/gauntlet-preset.js';
 import { UPGRADES_POOL, COLORS } from '../constants.js';
 import { ICONS } from '../ui/icons.js';
 import { ParticleSys } from '../effects/particles.js';
@@ -69,7 +70,7 @@ class Player extends Entity {
         if(Game.hasMetaUpgrade('m_relic')) {
             const cid = this.classId || (classConfig && classConfig.id);
             const pool = UPGRADES_POOL.filter(r => !r.classLocked || r.classLocked === cid);
-            const randomRelic = pool[Math.floor(Math.random() * pool.length)];
+            const randomRelic = pool[Math.floor(gameplayRandom() * pool.length)];
             this.addRelic(randomRelic);
         }
         

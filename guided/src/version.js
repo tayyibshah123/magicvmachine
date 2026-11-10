@@ -6,7 +6,7 @@
 // Format: "major.minor.patch". When this bumps, the service-worker cache
 // invalidates on next launch and the "About" section in Settings shows the
 // new number so players know what they're running.
-export const APP_VERSION = '1.10.1';
+export const APP_VERSION = '1.11.0';
 export const APP_EDITION = 'guided';
 export const APP_CACHE_PREFIX = 'mvm-guided-shell-v';
 export const APP_CACHE_KEY = APP_CACHE_PREFIX + APP_VERSION.replace(/\./g, '-');

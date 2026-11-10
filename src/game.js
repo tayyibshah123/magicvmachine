@@ -25,6 +25,7 @@ import { Analytics } from './services/analytics.js';
 import { CombatLog } from './services/combat-log.js';
 import { Unlocks } from './services/unlocks.js';
 import { Share } from './services/share.js';
+import { readGauntletPreset, gauntletPresetUrl, startGauntletRolls, gameplayRandom } from './services/gauntlet-preset.js';
 import { Assist } from './services/assist.js';
 import { Intel } from './services/intel.js';
 import { SaveSync } from './services/save-sync.js';
@@ -192,6 +193,7 @@ const Game = {
     },
 
     init() {
+        this._sharedGauntlet = readGauntletPreset(window.location.href);
         if (!SaveSync.recoverImport()) {
             this._showErrorOverlay(new Error(SaveSync.lastImportError));
             return;
@@ -475,10 +477,12 @@ const Game = {
 
         // Intro splash — tap-to-continue overlay. Fades out, starts music, reveals main menu.
         const intro = document.getElementById('intro-overlay');
-        if (intro) {
+        if (intro && this._sharedGauntlet) {
+            this._renderGauntletIntro(intro);
+        } else if (intro) {
             // (Daily-seed preview element was removed during the intro declutter;
             // the population code that lived here is gone with it.)
-            const dismissIntro = () => {
+            const dismissIntro = (resume = false) => {
                 if (intro.dataset.dismissed) return;
                 intro.dataset.dismissed = '1';
                 AudioMgr.init();
@@ -506,6 +510,11 @@ const Game = {
                     }
                 }, 620);
 
+                if (resume) {
+                    this.loadGame();
+                    return;
+                }
+
                 // First-launch onboarding (§1.1). Skipped on subsequent launches.
                 if (!Onboarding.isComplete()) {
                     Onboarding.run({
@@ -528,6 +537,11 @@ const Game = {
                                 }
                             }
                         },
+                        onStartClassic: () => {
+                            this._skipClassicPrologue = true;
+                            this.tutorialAutoRun = false;
+                            this.goToCharSelect();
+                        },
                         onStartTutorial: () => {
                             // Ensure the tutorial auto-runs after class selection.
                             try { localStorage.removeItem('mvm_first_run_done'); } catch (e) {}
@@ -540,10 +554,25 @@ const Game = {
                     });
                 }
             };
-            intro.addEventListener('click', dismissIntro);
-            intro.addEventListener('touchstart', (e) => { e.preventDefault(); dismissIntro(); }, { passive: false });
+            const resumeButton = document.getElementById('btn-intro-continue');
+            if (this._readSaveRaw() && resumeButton) {
+                intro.removeAttribute('role');
+                resumeButton.hidden = false;
+                resumeButton.addEventListener('click', () => dismissIntro(true));
+            }
+            intro.addEventListener('click', (e) => {
+                if (e.target !== resumeButton) dismissIntro();
+            });
+            intro.addEventListener('touchstart', (e) => {
+                if (e.target === resumeButton) return;
+                e.preventDefault();
+                dismissIntro();
+            }, { passive: false });
             intro.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dismissIntro(); }
+                if (e.target === intro && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    dismissIntro();
+                }
             });
         }
 
@@ -704,6 +733,9 @@ const Game = {
             localStorage.setItem('mvm_seen', JSON.stringify(this.seenFlags));
             this.playIntro();
         });
+        attachButtonEvent('btn-gauntlet-preset', () => {
+            window.location.assign(gauntletPresetUrl(window.location.href));
+        });
         attachButtonEvent('btn-challenge', () => {
             if (!this._confirmNewRun('start a Challenge')) return;
             if (!this._clearSave()) { this.showHintToast?.('Could not replace the checkpoint. Existing progress is preserved.', 3000); return; }
@@ -843,18 +875,8 @@ const Game = {
         attachButtonEvent('btn-retry-class', () => this.retrySameClass());
         attachButtonEvent('btn-combat-log', () => CombatLog.toggle());
         attachButtonEvent('btn-share-run', () => {
-            const summary = {
-                win: false,
-                operator: Onboarding.getName && Onboarding.getName(),
-                className: this.player && PLAYER_CLASSES.find(c => c.id === this.player.classId)?.name,
-                classColor: this.player && PLAYER_CLASSES.find(c => c.id === this.player.classId)?.color,
-                sector: this.sector || 1,
-                turns: this.turnCount || 0,
-                fragments: this.techFragments || 0,
-                killName: this.enemy ? this.enemy.name : null,
-                synergies: (this.runStats && this.runStats.synergies) || []
-            };
-            Share.shareRun(summary);
+            Share.shareRun(this._resultShareSummary?.win === false
+                ? this._resultShareSummary : this._buildShareSummary({ win: false }));
         });
         d.getElementById('chk-music').onchange = (e) => { AudioMgr.toggleMusic(e.target.checked); this.saveSettings(); };
         d.getElementById('chk-sfx').onchange = (e) => { AudioMgr.toggleSFX(e.target.checked); this.saveSettings(); };
@@ -1008,6 +1030,7 @@ const Game = {
             const v = d.querySelector('.setting-value[data-for="sld-text-scale"]');
             if (v) v.textContent = el.value + '%';
         });
+        hookSetting('chk-fast-phase-banners', (el) => { this.fastPhaseBanners = el.checked; });
         hookSetting('chk-reduced-motion', (el) => {
             // User toggle is the "always apply" knob. Combat-scope auto-mode
             // still kicks in regardless; this lets the player force reduced
@@ -1202,11 +1225,13 @@ const Game = {
             document.getElementById('screen-rest').classList.remove('hidden');
             document.getElementById('screen-rest').classList.add('active');
         });
-        attachButtonEvent('btn-finish-ending', () => { this._renderVictoryCard(); this.changeState(STATE.VICTORY); });
+        attachButtonEvent('btn-finish-ending', () => this.changeState(STATE.VICTORY));
         attachButtonEvent('btn-share-victory', () => {
-            if (typeof Share !== 'undefined' && Share.shareRun) Share.shareRun(this);
+            Share.shareRun(this._resultShareSummary?.win === true
+                ? this._resultShareSummary : this._buildShareSummary({ win: true }));
         });
         attachButtonEvent('btn-victory-sanctuary', () => {
+            if (this._sharedGauntletStarted) return this.changeState(STATE.MENU);
             const goSanctuary = () => {
                 this.renderMeta();
                 this.changeState(STATE.META);
@@ -1396,7 +1421,7 @@ const Game = {
                      const _ndx = this.mouseX - eff.x, _ndy = this.mouseY - eff.y;
                      if (_ndx * _ndx + _ndy * _ndy < 3600 /* 60² */) {
                          eff.empowered = true;
-                         eff.dmgMultiplier = 1.1 + Math.random() * 0.3; 
+                         eff.dmgMultiplier = 1.1 + gameplayRandom() * 0.3;
                          eff.speed *= 2.5; 
                          eff.color = COLORS.GOLD; 
                          AudioMgr.playSound('upgrade'); 
@@ -1872,9 +1897,9 @@ const Game = {
         if (p <= 0) return false;
         if (p >= 1) return true;
         if (this._ascEffects && this._ascEffects.doubleRollWorse) {
-            return (Math.random() < p) && (Math.random() < p);
+            return (gameplayRandom() < p) && (gameplayRandom() < p);
         }
-        return Math.random() < p;
+        return gameplayRandom() < p;
     },
 
     // Bind a long-press → TooltipMgr.show on a DOM element so mobile
@@ -3738,7 +3763,70 @@ startQTE(type, x, y, callback, opts) {
         if (haloEl)  haloEl.style.setProperty('--title-beat', '0');
     },
 
+    _renderGauntletIntro(intro) {
+        intro.removeAttribute('role');
+        intro.removeAttribute('tabindex');
+        intro.setAttribute('aria-label', 'Tactician Gauntlet');
+        intro.replaceChildren(document.getElementById('gauntlet-intro-template').content.cloneNode(true));
+        const start = intro.querySelector('#btn-start-gauntlet-preset');
+        start.addEventListener('click', () => {
+            if (start.disabled) return;
+            start.disabled = true;
+            AudioMgr.init();
+            AudioMgr.startMusic();
+            intro.remove();
+
+            const preset = this._sharedGauntlet;
+            this._sharedGauntletStarted = true;
+            this.challengeMode = true;
+            this._challengeTwist = Challenge.twists.find(twist => twist.id === preset.twistId);
+            Challenge.markActive(true);
+            this.tutorialAutoRun = false;
+            this._skipClassicPrologue = true;
+            try {
+                localStorage.setItem('mvm_onboarding_done', '1');
+                localStorage.setItem('mvm_difficulty', preset.difficulty);
+            } catch (_) {}
+            startGauntletRolls(preset);
+            this.selectClass(PLAYER_CLASSES.find(cls => cls.id === preset.classId));
+
+            for (const id of ['btn-map-return', 'btn-menu', 'btn-quit', 'btn-victory-sanctuary']) {
+                const button = document.getElementById(id);
+                if (button) button.textContent = 'RETURN TO CLASSIC';
+            }
+            document.getElementById('btn-retry-class').textContent = 'RETRY GAUNTLET';
+        });
+        intro.querySelector('#btn-exit-gauntlet-preset').addEventListener('click', () => {
+            window.location.replace(new URL('./', window.location.href));
+        });
+        const copy = intro.querySelector('#btn-copy-gauntlet-preset');
+        copy.addEventListener('click', async () => {
+            const url = Share.buildPlayUrl({ gauntletId: this._sharedGauntlet.id });
+            const copied = await Share.copyLink(url);
+            if (copied) {
+                copy.textContent = 'LINK COPIED';
+            } else {
+                const field = intro.querySelector('#gauntlet-preset-link');
+                field.hidden = false;
+                field.value = url;
+                field.focus();
+                field.select();
+            }
+        });
+    },
+
+    _resultShareUrl() {
+        if (this._sharedGauntletStarted) return Share.buildPlayUrl({ gauntletId: this._sharedGauntlet.id });
+    },
+
     changeState(newState) {
+        if (newState === STATE.MENU) {
+            this._skipClassicPrologue = false;
+            if (this._sharedGauntletStarted) {
+                window.location.replace(new URL('./', window.location.href));
+                return;
+            }
+        }
         const transition = this._screenTransitionGen = (this._screenTransitionGen || 0) + 1;
         // Stop the menu beat-pulse rAF whenever we leave MENU. The tick
         // self-stops on its next frame too, but explicit cleanup here
@@ -4108,6 +4196,7 @@ startQTE(type, x, y, callback, opts) {
         this.playEndingCinematic(); // We will define this helper
         break;
     case STATE.VICTORY:
+        this._renderVictoryCard();
         activate('screen-victory');
         break;
         }
@@ -5898,7 +5987,7 @@ startQTE(type, x, y, callback, opts) {
         const ascNow = (typeof Ascension !== 'undefined' && Ascension.activeEffects) ? Ascension.activeEffects(ascSelected) : null;
         if (ascNow && ascNow.loseOneMeta && this.metaUpgrades && this.metaUpgrades.length > 0) {
             const owned = this.metaUpgrades.slice();
-            const drop = owned[Math.floor(Math.random() * owned.length)];
+            const drop = owned[Math.floor(gameplayRandom() * owned.length)];
             this._disabledMetaThisRun.add(drop);
             this._runRules.disabledMeta = [...this._disabledMetaThisRun];
             const meta = (typeof META_UPGRADES !== 'undefined') ? META_UPGRADES.find(m => m.id === drop) : null;
@@ -5922,6 +6011,7 @@ startQTE(type, x, y, callback, opts) {
         // Reset the Archivist gate flag so a fresh run can route into the
         // Sector X arena after Sector 5 even if the prior run already did.
         this._archivistFacedThisRun = false;
+        this._resultShareSummary = null;
         // Wipe last run's fragment stash before applying the new run's
         // starting bonuses. Fragments are now run-only — without this
         // explicit reset, a quitRun → startNew chain would carry over.
@@ -6011,7 +6101,13 @@ startQTE(type, x, y, callback, opts) {
         this.renderRelics();
 
         // First-run auto-tutorial (Phase 3). Profile-level flag (persists across runs).
-        const firstRunDone = localStorage.getItem('mvm_first_run_done') === '1';
+        const skipPrologue = !!this._skipClassicPrologue;
+        this._skipClassicPrologue = false;
+        let firstRunDone = skipPrologue;
+        try {
+            if (skipPrologue) localStorage.setItem('mvm_first_run_done', '1');
+            firstRunDone ||= localStorage.getItem('mvm_first_run_done') === '1';
+        } catch (_) {}
         if (!firstRunDone) {
             // Sector 0 — The Breakout. New cyber-prison prologue replaces
             // the legacy auto-tutorial for fresh installs. Walks the
@@ -6687,6 +6783,7 @@ triggerPhaseGlitch() {
     // overlay where dismiss has special "abort" semantics, and a player
     // stuck in a maze should always be able to back out.
     dismissOpenOverlay() {
+        if (Share.closeFallback()) return true;
         const cipherIntro = document.getElementById('cipher-intro');
         if (cipherIntro) {
             cipherIntro.remove();
@@ -10049,6 +10146,16 @@ triggerSystemCrash() {
         // "currentIdx" tracks the node most recently entered; if we've left combat it's completed.
         const currentNodeId = this.map.currentIdx;
 
+        // Stagger Challenge's dense route so adjacent touch targets have room.
+        // Apply at render time so existing gauntlet checkpoints get the same layout.
+        const mapX = node => {
+            if (!this.challengeMode) return node.x;
+            if (node.type === 'start') return 22;
+            if (node.type === 'pact') return 73;
+            if (node.type === 'rest') return node.layer % 3 === 2 ? 22 : 47;
+            return node.x;
+        };
+
         // Group nodes by layer for richer typed icons + shifting indicator.
         this.map.nodes.forEach((node, idx) => {
             const el = document.createElement('div');
@@ -10063,7 +10170,7 @@ triggerSystemCrash() {
                 (node.infested ? ' map-special-infested' : '');
             const extraClass = (node.shifting ? ' shifting' : '') + (node.justShifted ? ' just-shifted' : '') + sectorSpecialClass;
             el.className = `map-node-abs ${node.status}${isCurrent ? ' current' : ''}${extraClass} node-entering`;
-            el.style.left = `${node.x}%`;
+            el.style.left = `${mapX(node)}%`;
             el.style.top = `${node.y}%`;
             // Stagger the reveal based on node order.
             setTimeout(() => el.classList.remove('node-entering'), 20 + idx * 28);
@@ -10118,10 +10225,10 @@ triggerSystemCrash() {
 
         // Helper to build one connection path string
         const pathD = (node, target) => {
-            const midX = (node.x + target.x) / 2;
+            const midX = (mapX(node) + mapX(target)) / 2;
             const midY = (node.y + target.y) / 2;
             const perpOffset = ((node.id.charCodeAt(0) || 0) % 2 === 0 ? 1 : -1) * 3;
-            return `M ${node.x} ${node.y} Q ${midX + perpOffset} ${midY} ${target.x} ${target.y}`;
+            return `M ${mapX(node)} ${node.y} Q ${midX + perpOffset} ${midY} ${mapX(target)} ${target.y}`;
         };
 
         // Pass 1 — dim base lines for all connections (structural "map wire")
@@ -10412,7 +10519,7 @@ triggerSystemCrash() {
             if (available.length > 0) {
                 document.getElementById('screen-rest').classList.remove('active');
                 document.getElementById('screen-rest').classList.add('hidden');
-                const up = available[Math.floor(Math.random() * available.length)];
+                const up = available[Math.floor(gameplayRandom() * available.length)];
                 this.player.diceUpgrades.push(up);
                 const upName = (DICE_UPGRADES[up] && DICE_UPGRADES[up].name) || up;
                 ParticleSys.createFloatingText(CONFIG.CANVAS_WIDTH/2, CONFIG.CANVAS_HEIGHT/2, `UPGRADE: ${upName}`, COLORS.GOLD);
@@ -10471,7 +10578,7 @@ triggerSystemCrash() {
 
         // Fisher-Yates shuffle, then slice the first three.
         for (let i = pool.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = Math.floor(gameplayRandom() * (i + 1));
             [pool[i], pool[j]] = [pool[j], pool[i]];
         }
         const options = pool.slice(0, 3);
@@ -10937,6 +11044,7 @@ triggerSystemCrash() {
                 ambientVol: Number(get('sld-ambient-vol', 'value')) || 60,
                 textScale: Number(get('sld-text-scale', 'value')) || 100,
                 reducedMotion: get('chk-reduced-motion'),
+                fastPhaseBanners: get('chk-fast-phase-banners'),
                 highContrast: get('chk-high-contrast'),
                 dyslexicFont: get('chk-dyslexic-font'),
                 colorblind: get('sel-colorblind', 'value') || 'none',
@@ -10958,6 +11066,7 @@ triggerSystemCrash() {
     },
 
     loadSettings() {
+        this.fastPhaseBanners = false;
         try {
             const raw = localStorage.getItem('mvm_settings_v1');
             if (!raw) {
@@ -10984,6 +11093,8 @@ triggerSystemCrash() {
             setCheck('chk-sfx', s.sfx);
             setCheck('chk-godmode', s.godMode);
             setCheck('chk-reduced-motion', s.reducedMotion);
+            this.fastPhaseBanners = s.fastPhaseBanners === true;
+            setCheck('chk-fast-phase-banners', this.fastPhaseBanners);
             setCheck('chk-high-contrast', s.highContrast);
             setCheck('chk-dyslexic-font', !!s.dyslexicFont);
             setCheck('chk-tutorial-hints', s.tutorialHints !== false);
@@ -11629,7 +11740,7 @@ triggerSystemCrash() {
         const fresh = validEvents.filter(e => !this._recentEvents.includes(e.title));
         const pool = fresh.length > 0 ? fresh : (validEvents.length > 0 ? validEvents : EVENTS_DB);
 
-        const event = pool[Math.floor(Math.random() * pool.length)];
+        const event = pool[Math.floor(gameplayRandom() * pool.length)];
         if (event && event.title) {
             this._recentEvents.push(event.title);
             if (this._recentEvents.length > 2) this._recentEvents.shift();
@@ -11809,7 +11920,7 @@ triggerSystemCrash() {
         }
 
         for (let i = items.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = Math.floor(gameplayRandom() * (i + 1));
             [items[i], items[j]] = [items[j], items[i]];
         }
         
@@ -11828,12 +11939,12 @@ triggerSystemCrash() {
         const availableUpgrades = this._availableDiceUpgrades();
 
         for (let i = availableUpgrades.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = Math.floor(gameplayRandom() * (i + 1));
             [availableUpgrades[i], availableUpgrades[j]] = [availableUpgrades[j], availableUpgrades[i]];
         }
         
         const shopUpgrades = availableUpgrades.slice(0, 3);
-        let discountIndex = shopUpgrades.length > 0 ? Math.floor(Math.random() * shopUpgrades.length) : -1;
+        let discountIndex = shopUpgrades.length > 0 ? Math.floor(gameplayRandom() * shopUpgrades.length) : -1;
 
         shopUpgrades.forEach((key, idx) => {
             const up = DICE_UPGRADES[key];
@@ -11880,7 +11991,7 @@ triggerSystemCrash() {
         // hard maze. After that, each subsequent hack rolls 25% hard.
         const firstHackThisRun = !this._hasHackedThisRun;
         this._hasHackedThisRun = true;
-        const hard = !firstHackThisRun && Math.random() < 0.25;
+        const hard = !firstHackThisRun && gameplayRandom() < 0.25;
         const won = await this._playHackMinigame(hard);
 
         // Apply outcome to unpurchased items. Store both the pre-hack price
@@ -11990,7 +12101,7 @@ triggerSystemCrash() {
             }
             const shuffle = (arr) => {
                 for (let i = arr.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
+                    const j = Math.floor(gameplayRandom() * (i + 1));
                     [arr[i], arr[j]] = [arr[j], arr[i]];
                 }
             };
@@ -13354,7 +13465,7 @@ triggerSystemCrash() {
             // for a meaningful payout — net would otherwise hover near 100%.
             const pool = [...CUSTOM_RUN_MODIFIERS];
             for (let i = pool.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
+                const j = Math.floor(gameplayRandom() * (i + 1));
                 [pool[i], pool[j]] = [pool[j], pool[i]];
             }
             pool.slice(0, 3).forEach(m => this.customRunModifiers.add(m.id));
@@ -13462,7 +13573,7 @@ triggerSystemCrash() {
                     r && !r.instant && r.rarity !== 'gold' && r.rarity !== 'red' && r.rarity !== 'corrupted'
                     && (!r.classLocked || r.classLocked === cidStart));
                 for (let i = 0; i < m.startRelicCount && eligible.length > 0; i++) {
-                    const pick = eligible[Math.floor(Math.random() * eligible.length)];
+                    const pick = eligible[Math.floor(gameplayRandom() * eligible.length)];
                     if (pick && this.player.addRelic) {
                         this.player.addRelic({ id: pick.id, name: pick.name, desc: pick.desc, icon: pick.icon });
                     }
@@ -13497,7 +13608,7 @@ triggerSystemCrash() {
         this.hex = {
             practice,
             round: 1,
-            maxRounds: practice ? 3 : Math.floor(Math.random() * 3) + 3,
+            maxRounds: practice ? 3 : Math.floor(gameplayRandom() * 3) + 3,
             sequence: [],
             playerInput: [],
             acceptingInput: false
@@ -13672,7 +13783,7 @@ updateHexBreach(dt) {
         document.getElementById('hex-status').className = "neon-text-blue";
         
         if (!this.hex.retrying) {
-            this.hex.sequence.push(Math.floor(Math.random() * 9));
+            this.hex.sequence.push(Math.floor(gameplayRandom() * 9));
         }
         this.hex.retrying = false;
         
@@ -14171,8 +14282,9 @@ updateHexBreach(dt) {
             return this._showDramaticBanner(text, subtext, variant, opts);
         }
 
-        const duration = opts.duration ?? 2200;
-        const exitMs = opts.exitMs ?? 600;
+        const fast = this.fastPhaseBanners && opts.routine;
+        const duration = opts.duration ?? (fast ? 600 : 2200);
+        const exitMs = opts.exitMs ?? (fast ? 200 : 600);
         AudioMgr.duck(0.12, duration + exitMs + 100);
         return new Promise(resolve => {
             const banner = document.getElementById('phase-banner');
@@ -14478,7 +14590,7 @@ async startCombat(type) {
             let pool = ENEMIES.filter(e => e.sector === this.sector);
             if (pool.length === 0) pool = ENEMIES.filter(e => e.sector === 3); 
             if (pool.length === 0) pool = ENEMIES.filter(e => e.sector === 1); 
-            template = pool[Math.floor(Math.random() * pool.length)];
+            template = pool[Math.floor(gameplayRandom() * pool.length)];
         }
 
         let level = 1; 
@@ -14853,7 +14965,7 @@ async startCombat(type) {
         // --- PANOPTICON: "Analyse" nullify mechanic ---
         if (this.enemy.name === "THE PANOPTICON") {
             this.enemy.analyzing = false;
-            this.enemy.analyzeCooldown = 2 + Math.floor(Math.random() * 4); // 2..5 turns
+            this.enemy.analyzeCooldown = 2 + Math.floor(gameplayRandom() * 4); // 2..5 turns
         }
 
         // --- NULL_POINTER: Pull of Void / Void Spawns / Void Crush ---
@@ -15009,8 +15121,8 @@ async startCombat(type) {
 
         // Apply Glitch Modifiers
         if (this._getRunCorruption() > 0 && !isBoss) {
-            if (Math.random() < (0.3 + this._getRunCorruption() * 0.1)) {
-                const mod = GLITCH_MODIFIERS[Math.floor(Math.random() * GLITCH_MODIFIERS.length)];
+            if (gameplayRandom() < (0.3 + this._getRunCorruption() * 0.1)) {
+                const mod = GLITCH_MODIFIERS[Math.floor(gameplayRandom() * GLITCH_MODIFIERS.length)];
                 this.enemy.affixes.push(mod.id);
                 this.enemy.glitchMod = mod; 
                 setTimeout(() => {
@@ -15659,7 +15771,7 @@ async startTurn() {
         this._voltPrimerUsedThisTurn = false;
         this._pulseHammerUsedThisTurn = false;
 
-        await this.showPhaseBanner("PLAYER PHASE", "COMMAND LINK ESTABLISHED", 'player');
+        await this.showPhaseBanner("PLAYER PHASE", "COMMAND LINK ESTABLISHED", { variant: 'player', routine: true });
         if (settleDeath()) return;
 
         // --- PANOPTICON ANALYSE ---
@@ -15973,7 +16085,7 @@ async startTurn() {
         if (this.player.hasRelic('static_capacitor') && this.player.mana >= 3 && this.enemy) {
             const pool = [this.enemy, ...this._enemyMinions()].filter(e => e && e.currentHp > 0);
             if (pool.length > 0) {
-                const t = pool[Math.floor(Math.random() * pool.length)];
+                const t = pool[Math.floor(gameplayRandom() * pool.length)];
                 const stacks = this.stackCount('static_capacitor');
                 const dmg = 10 * stacks;
                 ParticleSys.createFloatingText(t.x, t.y - 80, `CAPACITOR ${dmg}`, "#00f3ff");
@@ -15989,7 +16101,7 @@ async startTurn() {
         if (this.player.hasRelic('fusion_tesla_lens') && this.player.mana >= 3 && this.enemy) {
             const pool = [this.enemy, ...this._enemyMinions()].filter(e => e && e.currentHp > 0);
             if (pool.length > 0) {
-                const t = pool[Math.floor(Math.random() * pool.length)];
+                const t = pool[Math.floor(gameplayRandom() * pool.length)];
                 ParticleSys.createFloatingText(t.x, t.y - 80, `TESLA CRIT 25`, '#ffd76a');
                 if (this.triggerScreenFlash) this.triggerScreenFlash('rgba(255, 215, 106, 0.35)', 240);
                 if (t.takeDamage(25)) {
@@ -16017,7 +16129,7 @@ async startTurn() {
 
         if (this.player.hasRelic('static_field') && this.enemy) {
              const targets = [this.enemy, ...this._enemyMinions()];
-             const t = targets[Math.floor(Math.random() * targets.length)];
+             const t = targets[Math.floor(gameplayRandom() * targets.length)];
              if (t) {
                  const isDead = t.takeDamage(15);
                  ParticleSys.createFloatingText(t.x, t.y - 80, "STATIC", "#00f3ff");
@@ -16033,7 +16145,7 @@ async startTurn() {
         // pickup so neither static_field nor venom_edge fire normally.
         if (this.player.hasRelic('fusion_toxic_coil') && this.enemy) {
             const targets = [this.enemy, ...this._enemyMinions()].filter(e => e && e.currentHp > 0);
-            const t = targets[Math.floor(Math.random() * targets.length)];
+            const t = targets[Math.floor(gameplayRandom() * targets.length)];
             if (t) {
                 const isDead = t.takeDamage(18);
                 if (t.addEffect) t.addEffect('poison', 3, 2, '☣', 'Poison ticks 2 DMG/turn for 3 turns', 'POISON');
@@ -16417,7 +16529,7 @@ async startTurn() {
                 ParticleSys.createFloatingText(player.x, player.y - 80, 'MANA DRAIN -1', '#bc13fe');
             }
             if (target !== player && target.currentHp <= 0) {
-                if (player.traits.maxMinions === 4 && Math.random() < 0.3) {
+                if (player.traits.maxMinions === 4 && gameplayRandom() < 0.3) {
                     target.currentHp = Math.floor(target.maxHp / 2);
                     ParticleSys.createFloatingText(target.x, target.y, 'REVIVED!', '#00ff99');
                 } else {
@@ -16682,7 +16794,7 @@ async startTurn() {
         if (!peek && this._customCritVariance === 'double_or_none' && this._dieSlot(type) === 'attack') {
             // 50/50 variance — double the hit or whiff for zero. Flagged so
             // the player feels the gamble they opted into.
-            dmg = Math.random() < 0.5 ? dmg * 2 : 0;
+            dmg = gameplayRandom() < 0.5 ? dmg * 2 : 0;
         }
 
         // Sector 5 — Reality Glitch. Player attacks roll ±damageNoiseRange.
@@ -16690,7 +16802,7 @@ async startTurn() {
         // with each hover; the live cast is where the chaos lands.
         if (!peek && this._activeSectorMech && this._activeSectorMech.damageNoiseRange && this._dieSlot(type) === 'attack' && dmg > 0) {
             const r = this._activeSectorMech.damageNoiseRange;
-            const noise = 1 + ((Math.random() * 2 - 1) * r);
+            const noise = 1 + ((gameplayRandom() * 2 - 1) * r);
             const before = dmg;
             dmg = Math.max(1, Math.floor(dmg * noise));
             // Reality Glitch was silent — players got mystery low/high rolls
@@ -16760,7 +16872,7 @@ async startTurn() {
             const m = arr[i];
             if (!m) continue;
             if (m.currentHp <= 0) {
-                if (summonerRevive && Math.random() < 0.3) {
+                if (summonerRevive && gameplayRandom() < 0.3) {
                     m.currentHp = Math.max(1, Math.floor(m.maxHp / 2));
                     ParticleSys.createFloatingText(m.x, m.y, "REVIVED!", "#00ff99");
                     survivors.push(m);
@@ -17083,7 +17195,7 @@ async startTurn() {
                 }
             }
         }
-        const pick = weighted[Math.floor(Math.random() * weighted.length)];
+        const pick = weighted[Math.floor(gameplayRandom() * weighted.length)];
         if (this.UNIQUE_PER_HAND.has(pick) && reserved) reserved.add(pick);
         return pick;
     },
@@ -17227,8 +17339,8 @@ async startTurn() {
                 _pityType = null; // single placement only, even if multiple slots over threshold
             } else if (hasSignature && !sigPlaced && (
                 sigPity ||
-                Math.random() < SIG_RATE ||
-                (i === count - 1 && count <= 5 && Math.random() < 0.5)
+                gameplayRandom() < SIG_RATE ||
+                (i === count - 1 && count <= 5 && gameplayRandom() < 0.5)
             )) {
                 k = 'SIGNATURE';
                 sigPlaced = true;
@@ -17237,7 +17349,7 @@ async startTurn() {
                 // if nothing base has landed yet. Prevents mana-starved hands.
                 const baseCandidates = availableTypes.filter(t => this.BASE_DICE.has(t));
                 k = baseCandidates.length > 0
-                    ? baseCandidates[Math.floor(Math.random() * baseCandidates.length)]
+                    ? baseCandidates[Math.floor(gameplayRandom() * baseCandidates.length)]
                     : this._pickDiceType(availableTypes, reserved);
             } else {
                 k = this._pickDiceType(availableTypes, reserved);
@@ -18218,7 +18330,7 @@ async startTurn() {
             // ... (Tutorial Logic Removed for brevity, keep if existing) ...
 
             // Corrupted: UNSTABLE CORE — 25% chance skill dice fizzle (mana still spent).
-            if (data.isSkill && this.player.hasRelic('c_unstable_core') && Math.random() < 0.25) {
+            if (data.isSkill && this.player.hasRelic('c_unstable_core') && gameplayRandom() < 0.25) {
                 ParticleSys.createFloatingText(this.player.x, this.player.y - 140, "FIZZLE!", "#ff4400");
                 AudioMgr.playSound('defend');
                 return;
@@ -18395,7 +18507,7 @@ async startTurn() {
                 // Corrupted: GLITCH BLADE — random 1x to 3x base multiplier.
                 let glitchMult = 1.0;
                 if (this.player.hasRelic('c_glitch_blade')) {
-                    glitchMult = 1 + Math.random() * 2;
+                    glitchMult = 1 + gameplayRandom() * 2;
                     ParticleSys.createFloatingText(this.player.x, this.player.y - 140, `GLITCH x${glitchMult.toFixed(1)}`, "#ff00ff");
                 }
                 dmg = Math.floor(dmg * qteMultiplier * chargeMult * dawnBonus * duskBonus * pyreMult * glitchMult * lastStandBonus * apexBonus * glassLensBonus);
@@ -18415,14 +18527,14 @@ async startTurn() {
 
                 if(this.player.hasRelic('crit_lens')) {
                     const stacks = this.stackCount('crit_lens');
-                    if(Math.random() < (0.15 * stacks)) {
+                    if(gameplayRandom() < (0.15 * stacks)) {
                         dmg *= 2;
                         ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 80, "LENS CRIT!", COLORS.ORANGE);
                     }
                 }
                 // FUSION: TESLA LENS — flat +25% crit roll on every attack.
                 if(this.player.hasRelic('fusion_tesla_lens')) {
-                    if(Math.random() < 0.25) {
+                    if(gameplayRandom() < 0.25) {
                         dmg *= 2;
                         ParticleSys.createFloatingText(finalEnemy.x, finalEnemy.y - 80, "TESLA CRIT!", '#ffd76a');
                     }
@@ -18493,7 +18605,7 @@ async startTurn() {
                 };
 
                 // Blade Storm: 30% Chance (or combo FLURRY, guaranteed AoE).
-                const aoeThisHit = (isUpgraded && Math.random() < 0.30) || flurryActive;
+                const aoeThisHit = (isUpgraded && gameplayRandom() < 0.30) || flurryActive;
                 if (aoeThisHit) {
                     if (flurryActive) {
                         this.comboFlurry = false;
@@ -18556,7 +18668,7 @@ async startTurn() {
                 if (echoRoundActive && finalEnemy && finalEnemy.currentHp > 0) {
                     const candidates = [this.enemy, ...this._enemyMinions()].filter(e => e && e !== finalEnemy && e.currentHp > 0);
                     if (candidates.length > 0) {
-                        const echo = candidates[Math.floor(Math.random() * candidates.length)];
+                        const echo = candidates[Math.floor(gameplayRandom() * candidates.length)];
                         const echoDmg = Math.max(1, Math.floor(dmg * 0.5));
                         const dead = echo.takeDamage(echoDmg, this.player);
                         ParticleSys.createFloatingText(echo.x, echo.y - 100, `ECHO ${echoDmg}`, COLORS.MANA);
@@ -18917,7 +19029,7 @@ async startTurn() {
                         this._triggerSummonVfx(m);
                     } else {
                         if(this.player.minions.length > 0) {
-                            const m = this.player.minions[Math.floor(Math.random() * this.player.minions.length)];
+                            const m = this.player.minions[Math.floor(gameplayRandom() * this.player.minions.length)];
                             m.upgrade();
                         }
                         // Minion die used while grove is full — the spawn was
@@ -19623,7 +19735,7 @@ async startTurn() {
                 const face = el.querySelector('.die-face');
                 if (face) {
                     const id = setInterval(() => {
-                        const pick = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+                        const pick = availableTypes[Math.floor(gameplayRandom() * availableTypes.length)];
                         const data = DICE_TYPES[pick];
                         face.innerHTML = data.icon;
                         el.style.borderColor = data.color;
@@ -22849,7 +22961,7 @@ drawEffects() {
                 const candidates = [this.enemy, ...this._enemyMinions()].filter(e => e && e.currentHp > 0);
                 if (candidates.length > 0) {
                     const dmg = unspent * 4;
-                    const target = candidates[Math.floor(Math.random() * candidates.length)];
+                    const target = candidates[Math.floor(gameplayRandom() * candidates.length)];
                     ParticleSys.createFloatingText(target.x, target.y - 100, `VALVE ${dmg}`, '#ff8800');
                     const dead = target.takeDamage(dmg, this.player);
                     if (dead && target === this.enemy) { this.winCombat(); this._endTurnRunning = false; return; }
@@ -22957,7 +23069,7 @@ drawEffects() {
 
         const alliesAct = this.player.minions.some(minion => minion && minion.currentHp > 0);
         await this.showPhaseBanner(alliesAct ? 'ALLIES ACT' : 'ENEMY ACTS',
-            alliesAct ? 'FRIENDLY REINFORCEMENTS' : 'INCOMING DATA STREAM', 'enemy');
+            alliesAct ? 'FRIENDLY REINFORCEMENTS' : 'INCOMING DATA STREAM', { variant: 'enemy', routine: true });
         if (!stillLive()) return;
 
         // --- PLAYER MINION PHASE ---
@@ -22977,7 +23089,7 @@ drawEffects() {
             if (!this.player.minions.includes(m) || m.currentHp <= 0) continue;
             m.playAnim('lunge');
             const targets = [this.enemy, ...this._enemyMinions()];
-            const t = targets[Math.floor(Math.random() * targets.length)];
+            const t = targets[Math.floor(gameplayRandom() * targets.length)];
             if(t && t.currentHp > 0) {
                 if (this.player.traits.minionName === "Bomb Bot") {
                     // Snapshot the bomb's on-screen position BEFORE we mutate
@@ -23325,8 +23437,8 @@ drawEffects() {
                     ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 100, "VOID HOLDS", "#ff00ff");
                 } else {
                     voids.forEach(v => {
-                        const hpBuff  = 1 + Math.floor(Math.random() * 10); // 1-10
-                        const dmgBuff = 1 + Math.floor(Math.random() * 5);  // 1-5
+                        const hpBuff  = 1 + Math.floor(gameplayRandom() * 10); // 1-10
+                        const dmgBuff = 1 + Math.floor(gameplayRandom() * 5);  // 1-5
                         v.maxHp     += hpBuff;
                         v.currentHp += hpBuff;
                         v.dmg        = (v.dmg || 0) + dmgBuff;
@@ -23438,7 +23550,7 @@ drawEffects() {
             }
             else if (intent.type === 'chaotic_act') {
                 // Random self-buff, then fall through to standard attack.
-                const pick = this.enemy.chaoticBuffList[Math.floor(Math.random() * this.enemy.chaoticBuffList.length)];
+                const pick = this.enemy.chaoticBuffList[Math.floor(gameplayRandom() * this.enemy.chaoticBuffList.length)];
                 if (pick === 'empower')    { this.enemy.baseDmg += 3; ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, "EMPOWER +3 DMG", "#ffd76a"); }
                 else if (pick === 'thorns') { this.enemy.thorns = (this.enemy.thorns || 0) + 4; ParticleSys.createFloatingText(this.enemy.x, this.enemy.y - 140, "THORNS +4", "#ffffff"); }
                 else if (pick === 'regen')  { this.enemy.heal && this.enemy.heal(Math.floor(this.enemy.maxHp * 0.08)); }
@@ -23465,11 +23577,11 @@ drawEffects() {
                 // mis-targets to a random player-side entity (player or minion).
                 // Makes the boss feel genuinely 4-dimensional; sometimes the
                 // hit lands on a minion instead of the telegraphed target.
-                if (this.enemy && this.enemy.dimensionActive && Math.random() < 0.3) {
+                if (this.enemy && this.enemy.dimensionActive && gameplayRandom() < 0.3) {
                     const pool = [this.player, ...(this.player.minions || [])]
                         .filter(e => e && e.currentHp > 0);
                     if (pool.length > 1) {
-                        const rerolled = pool[Math.floor(Math.random() * pool.length)];
+                        const rerolled = pool[Math.floor(gameplayRandom() * pool.length)];
                         if (rerolled !== target) {
                             target = rerolled;
                             ParticleSys.createFloatingText(target.x, target.y - 140, "4D SHIFT", "#ff3355");
@@ -23615,7 +23727,7 @@ drawEffects() {
                     } else {
                             let dmg = intent.effectiveVal !== undefined ? intent.effectiveVal : intent.val;
                             if (validTarget.takeDamage(dmg, this.enemy)) {
-                                 if (this.player.traits.maxMinions === 4 && Math.random() < 0.3) {
+                                 if (this.player.traits.maxMinions === 4 && gameplayRandom() < 0.3) {
                                      validTarget.currentHp = Math.floor(validTarget.maxHp / 2);
                                      ParticleSys.createFloatingText(validTarget.x, validTarget.y, "REVIVED!", "#00ff99");
                                  } else {
@@ -23843,7 +23955,7 @@ drawEffects() {
             const targets = _mirrorMinion
                 ? [this.player]
                 : [this.player, ...this.player.minions];
-            const t = _mirrorMinion ? this.player : targets[Math.floor(Math.random() * targets.length)];
+            const t = _mirrorMinion ? this.player : targets[Math.floor(gameplayRandom() * targets.length)];
             if (_mirrorMinion) {
                 ParticleSys.createFloatingText(min.x, min.y - 100, "REFLECT", "#88eaff");
             }
@@ -24313,6 +24425,7 @@ drawEffects() {
         if (this.enemy && this.enemy.name === "THE ARCHIVIST") {
             this._logRunHistory && this._logRunHistory('win', { defeatedBy: null, archivist: true });
             this.techFragments += 500;
+            this._resultShareSummary = this._buildShareSummary({ win: true, achievement: 'Archivist slain' });
             this.encryptedFiles += 1;
             try { localStorage.setItem('mvm_archivist_slain', 'true'); } catch (_) {}
             // Track the highest Ascension level the player has ever cleared
@@ -24353,6 +24466,7 @@ drawEffects() {
         // --- UPDATED: VICTORY SEQUENCE FOR TESSERACT PRIME ---
         if (this.enemy && this.enemy.name === "TESSERACT PRIME") {
             const wasChallenge = !!this.challengeMode;
+            const shareUrl = this._resultShareUrl?.();
             // Chronicle entry for the win (Roadmap Part 27).
             this._logRunHistory('win', { defeatedBy: null });
             // 1. Cinematic Crash
@@ -24439,6 +24553,7 @@ drawEffects() {
             // Run ended in victory — wipe run-only fragments. Sparks /
             // sparksLifetime / sanctuary upgrades all persist.
             this._lastRunFinalFrags = this.techFragments || 0;
+            this._resultShareSummary = this._buildShareSummary({ win: true, url: shareUrl });
             this._resetRunCurrency();
 
             // Run ended in victory — release the sector music lock so a
@@ -24512,10 +24627,10 @@ drawEffects() {
             frags = 95;
             droppedFile = true;
         } else if (this.enemy.isElite) {
-            frags = Math.floor(Math.random() * (37 - 21 + 1)) + 21;
+            frags = Math.floor(gameplayRandom() * (37 - 21 + 1)) + 21;
             if (this._luckyChance(0.10)) droppedFile = true;
         } else {
-            frags = Math.floor(Math.random() * (27 - 11 + 1)) + 11;
+            frags = Math.floor(gameplayRandom() * (27 - 11 + 1)) + 11;
         }
 
         // Data Miner: end combat at full HP → +20 fragments per stack.
@@ -24935,7 +25050,7 @@ drawEffects() {
 
         // Shuffle pool
         for (let i = pool.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = Math.floor(gameplayRandom() * (i + 1));
             [pool[i], pool[j]] = [pool[j], pool[i]];
         }
 
@@ -25367,7 +25482,7 @@ drawEffects() {
             fragments: this.techFragments || 0
         });
         ClassAbility.endCombat();
-        if (typeof Achievements !== 'undefined') Achievements.unlock('GAMEOVER_FIRST');
+        const firstDefeat = typeof Achievements !== 'undefined' && Achievements.unlock('GAMEOVER_FIRST');
         // FUSION: PHOENIX PROTOCOL (second_life × emergency_kit). Revives
         // at full HP, clears every active debuff/effect, and refunds the
         // emergency-kit charge counter so the heal-on-low-HP affordance
@@ -25425,6 +25540,7 @@ drawEffects() {
 
         // Challenge attempt ended in death — drop the active flag so the
         // menu chip + next start don't think the player is still in one.
+        const shareUrl = this._resultShareUrl?.();
         if (this.challengeMode) {
             Challenge.markActive(false);
             this.challengeMode = false;
@@ -25445,14 +25561,14 @@ drawEffects() {
         // wiping. The card surfaces "this run earned X fragments";
         // after the wipe, techFragments is 0 and the line would read 0.
         this._lastRunFinalFrags = this.techFragments || 0;
+        try { this._checkSparkMilestone(); } catch (_) {}
+        const achievement = this._shareTriggerPending?.label
+            || (firstDefeat ? ACHIEVEMENTS.find(item => item.id === 'GAMEOVER_FIRST')?.name : null);
+        this._resultShareSummary = this._buildShareSummary({ win: false, url: shareUrl, achievement });
         // Run-end currency wipe — fragments are run-only, so a death
         // zeroes them out before the death screen renders. Sparks
         // (persistent) are untouched.
         this._resetRunCurrency();
-        // Sparks-lifetime milestones replace the old fragment-hoard
-        // milestones (those tracked cumulative fragments which no
-        // longer make sense post-wipe).
-        try { this._checkSparkMilestone(); } catch (_) {}
         this.renderDeathCards();
         this.renderRunSummary('screen-gameover');
         this.changeState(STATE.GAMEOVER);
@@ -25669,18 +25785,20 @@ drawEffects() {
             screen.appendChild(container);
         }
         const s = this.runStats || {};
+        const result = this._resultShareSummary?.win === false
+            ? this._resultShareSummary : this._buildShareSummary({ win: false });
         const synergies = (s.synergies && s.synergies.length > 0)
             ? s.synergies.map(n => `<span class="run-synergy">${n}</span>`).join('')
             : '<span class="run-synergy-none">None discovered</span>';
         container.innerHTML = `
             <div class="run-summary-title">RUN DIAGNOSTICS</div>
             <div class="run-summary-grid">
-                <div class="rs-row"><span>Turns</span><b>${s.turns || 0}</b></div>
+                <div class="rs-row"><span>Turns</span><b>${result.turns}</b></div>
                 <div class="rs-row"><span>Total Damage</span><b>${s.totalDamage || 0}</b></div>
                 <div class="rs-row"><span>Highest Hit</span><b class="rs-highlight">${s.highestHit || 0}</b></div>
                 <div class="rs-row"><span>Kills</span><b>${s.kills || 0}</b></div>
-                <div class="rs-row"><span>Fragments</span><b class="rs-gold">${this.techFragments}</b></div>
-                <div class="rs-row"><span>Sector Reached</span><b>${this.sector || 1}</b></div>
+                <div class="rs-row"><span>Fragments</span><b class="rs-gold">${result.fragments}</b></div>
+                <div class="rs-row"><span>Sector Reached</span><b>${result.sectorLabel || result.sector}</b></div>
             </div>
             <div class="run-summary-synergies">
                 <div class="rs-subtitle">Synergies Triggered</div>
@@ -25791,18 +25909,39 @@ drawEffects() {
         }
     },
 
+    _buildShareSummary({ win = false, achievement, killName = this.enemy?.name, url = this._resultShareUrl?.() } = {}) {
+        const operatorClass = PLAYER_CLASSES.find(candidate => candidate.id === this.player?.classId);
+        return {
+            win,
+            operator: Onboarding.getName?.(),
+            className: operatorClass?.name || 'Operator',
+            classColor: operatorClass?.color,
+            sector: this.sector ?? 1,
+            sectorLabel: this.sector === 6 && killName === 'THE ARCHIVIST' ? 'X' : undefined,
+            turns: this.runStats?.turns ?? this.turnCount ?? 0,
+            fragments: this.techFragments ?? 0,
+            highestHit: this.runStats?.highestHit ?? 0,
+            killName,
+            synergies: Array.isArray(this.runStats?.synergies) ? [...this.runStats.synergies] : [],
+            achievement: achievement ?? this._shareTriggerPending?.label ?? null,
+            url
+        };
+    },
+
     _renderVictoryCard() {
         // Day 5 — refresh the 100k milestone check at the moment the
         // victory card is built; if a player crossed 100k on this run's
         // fragment payouts the pulse should be on the same screen.
         try { this._checkFragmentMilestone(); } catch (_) {}
         const s = this.runStats || {};
-        const turns = s.turns || this.turnCount || 0;
+        const result = this._resultShareSummary?.win === true
+            ? this._resultShareSummary : this._buildShareSummary({ win: true });
+        const turns = result.turns;
         const dmg   = s.totalDamage || 0;
         const kills = s.kills || 0;
-        const frags = this.techFragments || 0;
+        const frags = result.fragments;
         const relics = (this.player && this.player.relics) ? this.player.relics.length : 0;
-        const cls = (this.player && this.player.classId) ? this.player.classId.toUpperCase() : '???';
+        const cls = result.className.toUpperCase();
         const sparks = this.sparks || 0;
 
         const biggestHit  = s.highestHit || 0;
@@ -25839,6 +25978,7 @@ drawEffects() {
         else if (totalScore >= 60) grade = 'B';
         else if (totalScore >= 40) grade = 'C';
         else grade = 'D';
+        this._resultShareSummary = { ...result, achievement: result.achievement || this._shareTriggerPending?.label || `Rank ${grade} clear` };
 
         const gradeEl = document.getElementById('victory-grade');
         if (gradeEl) gradeEl.textContent = grade;
@@ -25916,7 +26056,7 @@ drawEffects() {
         // grade card before deciding whether to push deeper.
         const endlessBtn = document.getElementById('btn-victory-endless');
         if (endlessBtn) {
-            const eligible = !this.challengeMode && !this.archiveMode
+            const eligible = !this._sharedGauntletStarted && !this.challengeMode && !this.archiveMode
                 && this.bossDefeated && this.hasMetaUpgrade('s_endless');
             if (eligible) endlessBtn.classList.remove('hidden');
             else          endlessBtn.classList.add('hidden');
@@ -25949,6 +26089,10 @@ drawEffects() {
     
     // Retry the run with the same class (skip character select)
     retrySameClass() {
+        if (this._sharedGauntletStarted) {
+            window.location.reload();
+            return;
+        }
         const cls = (this.player && this.player.classId)
             ? PLAYER_CLASSES.find(c => c.id === this.player.classId)
             : null;
