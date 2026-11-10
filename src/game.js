@@ -26,6 +26,7 @@ import { Analytics } from './services/analytics.js';
 import { CombatLog } from './services/combat-log.js';
 import { Unlocks } from './services/unlocks.js';
 import { Share } from './services/share.js';
+import { SHARED_FIGHT_ID, getSharedFight, campaignUrl, offerFirstFightShare, showSharedFightResult } from './services/shared-fight.js';
 import { Assist } from './services/assist.js';
 import { Intel } from './services/intel.js';
 import { SaveSync } from './services/save-sync.js';
@@ -194,19 +195,22 @@ const Game = {
         try { AudioMgr && AudioMgr._cancelFade && AudioMgr._cancelFade(); } catch (_) {}
     },
 
-    init() {
+    init({ sharedFightId = null } = {}) {
         this._modernPacing = APP_EDITION === 'guided';
-        if (!SaveSync.recoverImport()) {
-            this._showErrorOverlay(new Error(SaveSync.lastImportError));
-            return;
+        const sharedFight = this._modernPacing && getSharedFight(sharedFightId);
+        if (!sharedFight) {
+            if (!SaveSync.recoverImport()) {
+                this._showErrorOverlay(new Error(SaveSync.lastImportError));
+                return;
+            }
+            const refund = RetiredUpgrades.recoverAndRefund();
+            if (!refund.ok) {
+                this._showErrorOverlay(new Error(refund.error));
+                return;
+            }
+            this._retiredRefundNotice = refund.refunded;
+            if (APP_EDITION === 'guided') Learning.init({ enabled: true, practice: !!this._practiceSession });
         }
-        const refund = RetiredUpgrades.recoverAndRefund();
-        if (!refund.ok) {
-            this._showErrorOverlay(new Error(refund.error));
-            return;
-        }
-        this._retiredRefundNotice = refund.refunded;
-        if (APP_EDITION === 'guided') Learning.init({ enabled: true, practice: !!this._practiceSession });
         // Idempotency guard — Game.init is called once at boot in
         // production, but a debug reload, hot-module replacement during
         // development, or a third-party harness re-importing the module
@@ -360,7 +364,7 @@ const Game = {
             // 1:1 → 100:1 to Sparks the first time the new build boots,
             // then the key is purged. Without this a returning player's
             // fragment stockpile would silently vanish.
-            try {
+            if (!sharedFight) try {
                 const legacyFrags = parseInt(localStorage.getItem('mvm_fragments') || '0', 10);
                 const migrated   = localStorage.getItem('mvm_frag_to_spark_migrated');
                 if (legacyFrags > 0 && !migrated) {
@@ -421,7 +425,7 @@ const Game = {
             this.sparks = savedSparks ? parseInt(savedSparks) : 0;
             const savedSparkLifetime = localStorage.getItem('mvm_sparks_lifetime');
             this.sparksLifetime = savedSparkLifetime ? parseInt(savedSparkLifetime) : 0;
-            const saveFile = this._readSaveRaw();
+            const saveFile = sharedFight ? null : this._readSaveRaw();
             const btnLoad = document.getElementById('btn-load-save');
             if (saveFile && saveFile !== "null") {
                 if (btnLoad) {
@@ -480,7 +484,7 @@ const Game = {
 
         // Intro splash — tap-to-continue overlay. Fades out, starts music, reveals main menu.
         const intro = document.getElementById('intro-overlay');
-        if (intro) {
+        if (intro && !sharedFight) {
             // (Daily-seed preview element was removed during the intro declutter;
             // the population code that lived here is gone with it.)
             const dismissIntro = () => {
@@ -581,14 +585,17 @@ const Game = {
         this._MinionClass = Minion;
         this._EnemyClass = Enemy;
         this._PlayerClass = Player;
-        this.changeState(STATE.MENU);
+        if (sharedFight) {
+            intro?.remove();
+            this.startSharedFight(sharedFight.id, { fromLink: true });
+        } else this.changeState(STATE.MENU);
         // Process login streak. The streak service grants any milestone
         // Sparks itself (via Game.grantSparks). The legacy bonusFragments
         // value used to drop into techFragments here, but fragments are
         // run-only now and would be wiped at the next run start — so we
         // surface the streak banner without re-granting them. Sparks
         // already cover the meaningful daily reward.
-        try {
+        if (!sharedFight) try {
             const s = Streak.tick();
             if (s.claimedReward) {
                 this._streakBonusPending = { streak: s.newStreak, bonus: s.bonusFragments };
@@ -611,14 +618,14 @@ const Game = {
         // there) — a soft-reload would lose the visual.
         try { Cosmetics.applyToBody(); } catch (_) {}
         // Fire fragment milestone at boot
-        if (typeof Achievements !== 'undefined') {
+        if (!sharedFight && typeof Achievements !== 'undefined') {
             if (this.techFragments >= 10000) Achievements.unlock('FRAGMENTS_10K');
         }
         // Day 5 — 100k fragments share-trigger (one-shot per save). Checked
         // at boot AND every fragment grant via _checkFragmentMilestone so
         // a player who crosses the threshold mid-run sees the pulse on
         // the next victory or game-over screen.
-        try { this._checkFragmentMilestone(); } catch (_) {}
+        if (!sharedFight) try { this._checkFragmentMilestone(); } catch (_) {}
         // Bind the loop ONCE so requestAnimationFrame doesn't allocate a new
         // bound function every frame. That allocation was a steady source of
         // GC churn on mobile and correlated with the combat-lag drift
@@ -656,6 +663,10 @@ const Game = {
 
         // --- BUTTON BINDINGS ---
         attachButtonEvent('btn-load-save', () => this.loadGame());
+        if (APP_EDITION === 'guided') {
+            d.getElementById('btn-shared-fight')?.classList.remove('hidden');
+            attachButtonEvent('btn-shared-fight', () => this.startSharedFight(SHARED_FIGHT_ID));
+        }
         attachButtonEvent('btn-save-slots', () => this._openSaveSlotPicker());
         attachButtonEvent('btn-save-slot-close', () => this._closeSaveSlotPicker());
         attachButtonEvent('btn-resume', () => d.getElementById('modal-settings').classList.add('hidden'));
@@ -834,18 +845,8 @@ const Game = {
         attachButtonEvent('btn-retry-class', () => this.retrySameClass());
         attachButtonEvent('btn-combat-log', () => CombatLog.toggle());
         attachButtonEvent('btn-share-run', () => {
-            const summary = {
-                win: false,
-                operator: Onboarding.getName && Onboarding.getName(),
-                className: this.player && PLAYER_CLASSES.find(c => c.id === this.player.classId)?.name,
-                classColor: this.player && PLAYER_CLASSES.find(c => c.id === this.player.classId)?.color,
-                sector: this.sector || 1,
-                turns: this.turnCount || 0,
-                fragments: this.techFragments || 0,
-                killName: this.enemy ? this.enemy.name : null,
-                synergies: (this.runStats && this.runStats.synergies) || []
-            };
-            Share.shareRun(summary);
+            Share.shareRun(this._resultShareSummary?.win === false
+                ? this._resultShareSummary : this._buildShareSummary({ win: false }));
         });
         d.getElementById('chk-music').onchange = (e) => { AudioMgr.toggleMusic(e.target.checked); this.saveSettings(); };
         d.getElementById('chk-sfx').onchange = (e) => { AudioMgr.toggleSFX(e.target.checked); this.saveSettings(); };
@@ -1193,9 +1194,10 @@ const Game = {
             document.getElementById('screen-rest').classList.remove('hidden');
             document.getElementById('screen-rest').classList.add('active');
         });
-        attachButtonEvent('btn-finish-ending', () => { this._renderVictoryCard(); this.changeState(STATE.VICTORY); });
+        attachButtonEvent('btn-finish-ending', () => this.changeState(STATE.VICTORY));
         attachButtonEvent('btn-share-victory', () => {
-            if (typeof Share !== 'undefined' && Share.shareRun) Share.shareRun(this);
+            Share.shareRun(this._resultShareSummary?.win === true
+                ? this._resultShareSummary : this._buildShareSummary({ win: true }));
         });
         attachButtonEvent('btn-victory-sanctuary', () => {
             const goSanctuary = () => {
@@ -1461,7 +1463,7 @@ const Game = {
             // Skip if the press is on the storyboard slate (its own
             // tap-to-continue handler) or on a settings overlay button.
             const t = e.target;
-            if (t && t.closest && (t.closest('#breakout-storyboard') || t.closest('#modal-settings'))) return;
+            if (t?.closest?.('#breakout-storyboard, #modal-settings, [data-kind="shared-fight"] .learning-objective-help')) return;
             this.checkQTE();
             // Prevent the same tap from being read by other capture-
             // phase document handlers (Breakout tap-advance) or by
@@ -4132,6 +4134,7 @@ startQTE(type, x, y, callback, opts) {
         this.playEndingCinematic(); // We will define this helper
         break;
     case STATE.VICTORY:
+        this._renderVictoryCard();
         activate('screen-victory');
         break;
         }
@@ -5963,6 +5966,7 @@ startQTE(type, x, y, callback, opts) {
         // Reset the Archivist gate flag so a fresh run can route into the
         // Sector X arena after Sector 5 even if the prior run already did.
         this._archivistFacedThisRun = false;
+        this._resultShareSummary = null;
         // Wipe last run's fragment stash before applying the new run's
         // starting bonuses. Fragments are now run-only — without this
         // explicit reset, a quitRun → startNew chain would carry over.
@@ -6740,6 +6744,12 @@ triggerPhaseGlitch() {
     // overlay where dismiss has special "abort" semantics, and a player
     // stuck in a maze should always be able to back out.
     dismissOpenOverlay() {
+        if (Share.closeFallback()) return true;
+        const fightResult = document.getElementById('shared-fight-result');
+        if (fightResult && !fightResult.classList.contains('hidden')) {
+            document.getElementById('shared-fight-campaign')?.click();
+            return true;
+        }
         if (this._learningUI?.dismissLearningOverlay?.()) return true;
         const cipherIntro = document.getElementById('cipher-intro');
         if (cipherIntro) {
@@ -10115,6 +10125,16 @@ triggerSystemCrash() {
         // "currentIdx" tracks the node most recently entered; if we've left combat it's completed.
         const currentNodeId = this.map.currentIdx;
 
+        // Stagger Challenge's dense route so adjacent touch targets have room.
+        // Apply at render time so existing gauntlet checkpoints get the same layout.
+        const mapX = node => {
+            if (!this.challengeMode) return node.x;
+            if (node.type === 'start') return 22;
+            if (node.type === 'pact') return 73;
+            if (node.type === 'rest') return node.layer % 3 === 2 ? 22 : 47;
+            return node.x;
+        };
+
         // Group nodes by layer for richer typed icons + shifting indicator.
         this.map.nodes.forEach((node, idx) => {
             const el = document.createElement('div');
@@ -10129,7 +10149,7 @@ triggerSystemCrash() {
                 (node.infested ? ' map-special-infested' : '');
             const extraClass = (node.shifting ? ' shifting' : '') + (node.justShifted ? ' just-shifted' : '') + sectorSpecialClass;
             el.className = `map-node-abs ${node.status}${isCurrent ? ' current' : ''}${extraClass} node-entering`;
-            el.style.left = `${node.x}%`;
+            el.style.left = `${mapX(node)}%`;
             el.style.top = `${node.y}%`;
             // Stagger the reveal based on node order.
             setTimeout(() => el.classList.remove('node-entering'), 20 + idx * 28);
@@ -10184,10 +10204,10 @@ triggerSystemCrash() {
 
         // Helper to build one connection path string
         const pathD = (node, target) => {
-            const midX = (node.x + target.x) / 2;
+            const midX = (mapX(node) + mapX(target)) / 2;
             const midY = (node.y + target.y) / 2;
             const perpOffset = ((node.id.charCodeAt(0) || 0) % 2 === 0 ? 1 : -1) * 3;
-            return `M ${node.x} ${node.y} Q ${midX + perpOffset} ${midY} ${target.x} ${target.y}`;
+            return `M ${mapX(node)} ${node.y} Q ${midX + perpOffset} ${midY} ${mapX(target)} ${target.y}`;
         };
 
         // Pass 1 — dim base lines for all connections (structural "map wire")
@@ -24178,6 +24198,7 @@ drawEffects() {
         feedback.completed = true;
         feedback.damageTaken = Math.max(0,
             (this.runStats?.damageTaken ?? this.turnStats?.dmgTaken ?? 0) - feedback.damageTakenAtStart);
+        if (Breakout.settleSharedFightLimit()) return;
         this.startTurn();
       } catch (err) {
         this._recoverFromCombatError('endTurn', err, false);
@@ -24585,6 +24606,7 @@ drawEffects() {
         if (this.enemy && this.enemy.name === "THE ARCHIVIST") {
             this._logRunHistory && this._logRunHistory('win', { defeatedBy: null, archivist: true });
             this.techFragments += 500;
+            this._resultShareSummary = this._buildShareSummary({ win: true, achievement: 'Archivist slain' });
             this.encryptedFiles += 1;
             try { localStorage.setItem('mvm_archivist_slain', 'true'); } catch (_) {}
             // Track the highest Ascension level the player has ever cleared
@@ -24625,6 +24647,7 @@ drawEffects() {
         // --- UPDATED: VICTORY SEQUENCE FOR TESSERACT PRIME ---
         if (this.enemy && this.enemy.name === "TESSERACT PRIME") {
             const wasChallenge = !!this.challengeMode;
+            const shareUrl = this._resultShareUrl?.();
             // Chronicle entry for the win (Roadmap Part 27).
             this._logRunHistory('win', { defeatedBy: null });
             // 1. Cinematic Crash
@@ -24711,6 +24734,7 @@ drawEffects() {
             // Run ended in victory — wipe run-only fragments. Sparks /
             // sparksLifetime / sanctuary upgrades all persist.
             this._lastRunFinalFrags = this.techFragments || 0;
+            this._resultShareSummary = this._buildShareSummary({ win: true, url: shareUrl });
             this._resetRunCurrency();
 
             // Run ended in victory — release the sector music lock so a
@@ -25544,6 +25568,9 @@ drawEffects() {
         this.pendingReward = null;
         if (this.saveGame() === false) { this.pendingReward = receipt; return false; }
         this.changeState(STATE.MAP);
+        if (APP_EDITION === 'guided' && !this._practiceSession && !this.challengeMode && !this.archiveMode) {
+            offerFirstFightShare(receipt, Share);
+        }
         return true;
     },
 
@@ -25645,7 +25672,7 @@ drawEffects() {
             fragments: this.techFragments || 0
         });
         ClassAbility.endCombat();
-        if (typeof Achievements !== 'undefined') Achievements.unlock('GAMEOVER_FIRST');
+        const firstDefeat = typeof Achievements !== 'undefined' && Achievements.unlock('GAMEOVER_FIRST');
         // FUSION: PHOENIX PROTOCOL (second_life × emergency_kit). Revives
         // at full HP, clears every active debuff/effect, and refunds the
         // emergency-kit charge counter so the heal-on-low-HP affordance
@@ -25703,6 +25730,7 @@ drawEffects() {
 
         // Challenge attempt ended in death — drop the active flag so the
         // menu chip + next start don't think the player is still in one.
+        const shareUrl = this._resultShareUrl?.();
         if (this.challengeMode) {
             Challenge.markActive(false);
             this.challengeMode = false;
@@ -25723,14 +25751,14 @@ drawEffects() {
         // wiping. The card surfaces "this run earned X fragments";
         // after the wipe, techFragments is 0 and the line would read 0.
         this._lastRunFinalFrags = this.techFragments || 0;
+        try { this._checkSparkMilestone(); } catch (_) {}
+        const achievement = this._shareTriggerPending?.label
+            || (firstDefeat ? ACHIEVEMENTS.find(item => item.id === 'GAMEOVER_FIRST')?.name : null);
+        this._resultShareSummary = this._buildShareSummary({ win: false, url: shareUrl, achievement });
         // Run-end currency wipe — fragments are run-only, so a death
         // zeroes them out before the death screen renders. Sparks
         // (persistent) are untouched.
         this._resetRunCurrency();
-        // Sparks-lifetime milestones replace the old fragment-hoard
-        // milestones (those tracked cumulative fragments which no
-        // longer make sense post-wipe).
-        try { this._checkSparkMilestone(); } catch (_) {}
         this.renderDeathCards();
         this.renderRunSummary('screen-gameover');
         this.changeState(STATE.GAMEOVER);
@@ -25947,18 +25975,20 @@ drawEffects() {
             screen.appendChild(container);
         }
         const s = this.runStats || {};
+        const result = this._resultShareSummary?.win === false
+            ? this._resultShareSummary : this._buildShareSummary({ win: false });
         const synergies = (s.synergies && s.synergies.length > 0)
             ? s.synergies.map(n => `<span class="run-synergy">${n}</span>`).join('')
             : '<span class="run-synergy-none">None discovered</span>';
         container.innerHTML = `
             <div class="run-summary-title">RUN DIAGNOSTICS</div>
             <div class="run-summary-grid">
-                <div class="rs-row"><span>Turns</span><b>${s.turns || 0}</b></div>
+                <div class="rs-row"><span>Turns</span><b>${result.turns}</b></div>
                 <div class="rs-row"><span>Total Damage</span><b>${s.totalDamage || 0}</b></div>
                 <div class="rs-row"><span>Highest Hit</span><b class="rs-highlight">${s.highestHit || 0}</b></div>
                 <div class="rs-row"><span>Kills</span><b>${s.kills || 0}</b></div>
-                <div class="rs-row"><span>Fragments</span><b class="rs-gold">${this.techFragments}</b></div>
-                <div class="rs-row"><span>Sector Reached</span><b>${this.sector || 1}</b></div>
+                <div class="rs-row"><span>Fragments</span><b class="rs-gold">${result.fragments}</b></div>
+                <div class="rs-row"><span>Sector Reached</span><b>${result.sectorLabel || result.sector}</b></div>
             </div>
             <div class="run-summary-synergies">
                 <div class="rs-subtitle">Synergies Triggered</div>
@@ -26069,18 +26099,39 @@ drawEffects() {
         }
     },
 
+    _buildShareSummary({ win = false, achievement, killName = this.enemy?.name, url = this._resultShareUrl?.() } = {}) {
+        const operatorClass = PLAYER_CLASSES.find(candidate => candidate.id === this.player?.classId);
+        return {
+            win,
+            operator: Onboarding.getName?.(),
+            className: operatorClass?.name || 'Operator',
+            classColor: operatorClass?.color,
+            sector: this.sector ?? 1,
+            sectorLabel: this.sector === 6 && killName === 'THE ARCHIVIST' ? 'X' : undefined,
+            turns: this.runStats?.turns ?? this.turnCount ?? 0,
+            fragments: this.techFragments ?? 0,
+            highestHit: this.runStats?.highestHit ?? 0,
+            killName,
+            synergies: Array.isArray(this.runStats?.synergies) ? [...this.runStats.synergies] : [],
+            achievement: achievement ?? this._shareTriggerPending?.label ?? null,
+            url
+        };
+    },
+
     _renderVictoryCard() {
         // Day 5 — refresh the 100k milestone check at the moment the
         // victory card is built; if a player crossed 100k on this run's
         // fragment payouts the pulse should be on the same screen.
         try { this._checkFragmentMilestone(); } catch (_) {}
         const s = this.runStats || {};
-        const turns = s.turns || this.turnCount || 0;
+        const result = this._resultShareSummary?.win === true
+            ? this._resultShareSummary : this._buildShareSummary({ win: true });
+        const turns = result.turns;
         const dmg   = s.totalDamage || 0;
         const kills = s.kills || 0;
-        const frags = this.techFragments || 0;
+        const frags = result.fragments;
         const relics = (this.player && this.player.relics) ? this.player.relics.length : 0;
-        const cls = (this.player && this.player.classId) ? this.player.classId.toUpperCase() : '???';
+        const cls = result.className.toUpperCase();
         const sparks = this.sparks || 0;
 
         const biggestHit  = s.highestHit || 0;
@@ -26117,6 +26168,7 @@ drawEffects() {
         else if (totalScore >= 60) grade = 'B';
         else if (totalScore >= 40) grade = 'C';
         else grade = 'D';
+        this._resultShareSummary = { ...result, achievement: result.achievement || this._shareTriggerPending?.label || `Rank ${grade} clear` };
 
         const gradeEl = document.getElementById('victory-grade');
         if (gradeEl) gradeEl.textContent = grade;
@@ -26322,6 +26374,7 @@ drawEffects() {
     },
 
     _showLearningObjective() {
+        if (Breakout.renderSharedFightObjective()) return;
         document.body.classList.toggle('learning-basic-hand', this._isGuidedRun() && !this._canGuidedFeature('reroll'));
         const combat = [STATE.COMBAT, STATE.BREAKOUT, STATE.TUTORIAL_COMBAT].includes(this.currentState);
         const rules = APP_EDITION === 'guided' && combat ? this.getBossRules() : [];
@@ -26474,6 +26527,31 @@ drawEffects() {
                     else if (saved) begin();
                 } else begin();
             }, onClose: closeRead });
+    },
+
+    startSharedFight(id, { fromLink = false } = {}) {
+        const fight = APP_EDITION === 'guided' && getSharedFight(id);
+        if (!fight || this._practiceSession || ![STATE.BOOT, STATE.MENU, STATE.MAP].includes(this.currentState)) return false;
+        const exit = () => {
+            if (fromLink) window.location.replace(campaignUrl(window.location.href));
+            else this.changeState(STATE.MENU);
+        };
+        const start = () => this.startSharedFight(id, { fromLink });
+        return Breakout.start(this, { sharedFight: id, onExit: exit, onComplete: result => {
+            this.changeState(STATE.BOOT);
+            let hasCheckpoint = false;
+            if (!fromLink) try {
+                hasCheckpoint = !!(localStorage.getItem(this._saveKey()) ||
+                    this._activeSlot() === 'A' && localStorage.getItem('mvm_save_v1'));
+            } catch (_) {}
+            showSharedFightResult(result, {
+                onShare: () => Share.shareRun({ win: result.outcome === 'win',
+                    className: result.className, classColor: result.classColor, killName: result.killName,
+                    turns: result.turns, hp: result.hp, maxHp: result.maxHp }, { challengeId: id }),
+                onRetry: start, campaignLabel: hasCheckpoint ? 'Resume campaign' : 'Play campaign',
+                onCampaign: hasCheckpoint ? () => { this.changeState(STATE.MENU); this.loadGame(); } : exit
+            });
+        } });
     },
 
     saveAndReturn() {
@@ -29256,7 +29334,7 @@ drawEffects() {
             this._learningHUDAt = timestamp;
             this._showLearningObjective();
             const help = document.querySelector('#learning-objective .learning-objective-help');
-            if (help) help.disabled = !this._canReadLearningPanel();
+            if (help && !Breakout.isSharedFight()) help.disabled = !this._canReadLearningPanel();
         }
         // Bump the per-frame memo key so caches like _collectStatusDisplay
         // know they're seeing a fresh frame and rebuild on the first call.

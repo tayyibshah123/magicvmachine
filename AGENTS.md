@@ -86,8 +86,8 @@ No bundler, no transpiler. Browsers load `src/*.js` directly as ES modules.
 Browser publication retains both audio formats. Validate native builds with
 `node scripts/validate-build.mjs --native`; a compact native bundle must never
 be published as the browser edition. Keep required code and both small SFX
-formats in the worker shell. Music uses the acknowledged selected-format
-background download; Settings shows when offline audio is ready.
+formats in the worker shell. Music streams on demand. The optional Settings download caches the full
+soundtrack in the selected format and reports when it is ready.
 
 There is no dev-server script. To preview locally, serve the repo root
 with any static server (e.g. `npx http-server -p 8080`) and open
@@ -161,6 +161,11 @@ session re-discover them.
     and URL scope. Keep `APP_EDITION`, `APP_CACHE_PREFIX`, worker constants
     and the PWA identity consistent when preparing an edition.
 
+12. **Share links point to the matching edition.** Keep static preview metadata
+    aligned with the public play URLs. Versioned encounter links replay an
+    isolated attempt. Capture terminal run data before clearing currency,
+    changing modes or consuming the achievement highlight.
+
 ---
 
 ## Versioning + ship checklist
@@ -176,7 +181,7 @@ can reuse results if the tested source has not changed.
 The approved two-edition release uses `npm run check:editions -- --stable
 PATH --guided PATH`. It verifies independent saves, updates and cold offline
 launches in one browser profile. Keep Stable source on `main`, Guided source
-on `codex/guided-v1.10.1`, and publish the validated dual bundle on `gh-pages`.
+on `codex/guided-v1.11.0`, and publish the validated dual bundle on `gh-pages`.
 Never commit `release-site/` or `www/` to a source branch. Reused evidence must
 match the full source fingerprint. Preserve the frozen v1.9.55 and
 v1.9.56 refs when publishing later fixes.

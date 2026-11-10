@@ -5,10 +5,24 @@ quarter. Replaces AUDIT_2026-05.md, SESSION_NOTES_2026-05.md,
 WEEKLY_ROADMAP.md, and PRODUCTION_ROADMAP.md, all of which are now
 in `docs/archive/`.
 
-## Status
+## Stable v1.9.58 and Guided v1.11.0
+
+Both editions share the final run result with an edition-specific play link.
+The share panel supports copying the link and saving a result image.
+Public play links have a gameplay preview, and the full offline soundtrack
+is available as an optional Settings download.
+
+Stable adds a Play Classic shortcut, Continue Run from the splash screen,
+optional shorter turn banners and a fixed Tactician Gauntlet. The gauntlet
+uses a separate temporary profile.
+
+Guided adds a short Tactician encounter with its own replay link. It opens
+directly into combat and offers the campaign after the result.
+
+## Previous release evidence
 
 - **Implementation complete:** Stable v1.9.57 and Guided v1.10.1.
-- **Release status:** both final versions are published and verified on
+- **Previous publication:** both versions were published and verified on
   6 November 2026. Stable v1.9.57 and Guided v1.10.1 are independently playable.
 - **Earlier Stable reference:** v1.9.56 remains frozen at `d51d8b1` with
   552 normal checks, 552 shuffled checks, 15 browser cases and 150 layout

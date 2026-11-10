@@ -24,6 +24,13 @@ test('fresh profile completes the tutorial and a normal combat through touch con
     expect(enteredCombat).toBe(true);
     expect(reachedReward).toBe(true);
     expect(await page.evaluate(id => Game.map.nodes.find(node => node.id === id)?.status, combatNode)).toBe('completed');
+    if (edition === 'guided') {
+      const milestone = page.locator('#first-fight-share');
+      await expect(milestone).toBeVisible();
+      await expect(milestone).toContainText('Defeated');
+      await tap(page, '#first-fight-share-dismiss');
+      await expect(milestone).toBeHidden();
+    }
     if (!await page.evaluate(() => localStorage.getItem('mvm_analytics_consent'))) {
       await tap(page, '[data-consent="denied"]');
     }
