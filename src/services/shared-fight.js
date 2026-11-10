@@ -34,8 +34,8 @@ export function campaignUrl(url) {
 }
 
 export function sharedFightIntent(intent) {
-    if (intent?.type === 'shield') return `The drone gains ${intent.val} shield when you end your turn.`;
-    if (intent?.type === 'attack') return `The drone attacks you for ${intent.effectiveVal ?? intent.val} damage when you end your turn.`;
+    if (intent?.type === 'shield') return `Drone gains ${intent.val} shield on End Turn.`;
+    if (intent?.type === 'attack') return `Drone deals ${intent.effectiveVal ?? intent.val} damage on End Turn.`;
     return '';
 }
 

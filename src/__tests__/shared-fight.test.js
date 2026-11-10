@@ -97,7 +97,7 @@ describe('shared Relay Drone fight', () => {
         expect(Game.godMode).toBe(false);
         expect(Game.momentum).toBe(0);
         expect(Game.dicePool.map(card => card.type)).toEqual(['TAC_ATTACK', 'TAC_ATTACK', 'TAC_DEFEND']);
-        expect(byId('learning-objective').textContent).toContain('attacks you for 9 damage');
+        expect(byId('learning-objective').textContent).toContain('deals 9 damage');
         for (let turn = 0; turn < 6 && Breakout.isSharedFight(); turn++) {
             await play('TAC_ATTACK', Game.enemy);
             if (!Breakout.isSharedFight()) break;
@@ -107,7 +107,7 @@ describe('shared Relay Drone fight', () => {
             await endTurn('good');
             Breakout.renderSharedFightObjective();
             if (turn === 0) expect(byId('learning-objective').textContent).toContain('gains 4 shield');
-            if (turn === 1) expect(byId('learning-objective').textContent).toContain('attacks you for 12 damage');
+            if (turn === 1) expect(byId('learning-objective').textContent).toContain('deals 12 damage');
         }
         expect(byId('shared-fight-title').textContent).toBe('Drone defeated');
         expect(byId('shared-fight-stats').textContent).toMatch(/^[2-6] turns · [1-9]\d?\/24 HP$/);

@@ -26,6 +26,7 @@ test('a shared fight link offers native play before setup and leaves the campaig
       const hit = box => document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
       return { card: rect(card), exit: exitRect, endTurn: endTurnRect, exitHittable: exit.contains(hit(exitRect)),
         endTurnHittable: endTurn.contains(hit(endTurnRect)),
+        title: rect(card.querySelector('.learning-objective-title')),
         intent: rect(card.querySelector('.learning-objective-progress')),
         dice: [...document.querySelectorAll('#dice-container .die')].map(rect) };
     });
@@ -33,8 +34,10 @@ test('a shared fight link offers native play before setup and leaves the campaig
     expect(layout.exitHittable).toBe(true);
     expect(layout.endTurnHittable).toBe(true);
     expect(layout.card.right).toBeLessThanOrEqual(layout.endTurn.left + 1);
+    expect(layout.title.top).toBeGreaterThanOrEqual(layout.card.top - 1);
     expect(layout.intent.bottom).toBeLessThanOrEqual(layout.card.bottom + 1);
-    for (const die of layout.dice) expect(die.bottom).toBeLessThanOrEqual(layout.card.top + 1);
+    expect(layout.dice).toHaveLength(3);
+    for (const die of layout.dice) expect(die.top).toBeGreaterThanOrEqual(layout.card.bottom - 1);
     const path = info.outputPath(`shared-first-fight-${width}.png`);
     await page.screenshot({ path });
     await info.attach(`shared-first-fight-${width}`, { path, contentType: 'image/png' });
